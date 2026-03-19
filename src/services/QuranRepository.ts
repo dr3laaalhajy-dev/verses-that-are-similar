@@ -1,5 +1,7 @@
-import quranData from 'quran-json/dist/quran.json';
+import quranDataRaw from 'quran-json/dist/quran.json';
+export const quranData = quranDataRaw as any[];
 import { normalizeArabicText } from '../utils/arabic';
+import { getPageNumber } from './PageRepository';
 
 export interface Ayah {
   id: string;
@@ -7,6 +9,7 @@ export interface Ayah {
   text: string;
   surah: string;
   surahId: number;
+  page: number;
 }
 
 /**
@@ -21,7 +24,7 @@ export const searchAyahsByStart = (keyword: string): Ayah[] => {
   const results: Ayah[] = [];
 
   // quranData هو مصفوفة من السور
-  for (const surah of quranData as any[]) {
+  for (const surah of quranData) {
     for (const verse of surah.verses) {
       const normalizedVerse = normalizeArabicText(verse.text);
       if (normalizedVerse.startsWith(normalizedKeyword)) {
@@ -31,6 +34,7 @@ export const searchAyahsByStart = (keyword: string): Ayah[] => {
           text: verse.text,
           surah: surah.name,
           surahId: surah.id,
+          page: getPageNumber(surah.id, verse.id),
         });
       }
     }

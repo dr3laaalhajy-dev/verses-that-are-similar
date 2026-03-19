@@ -6,8 +6,8 @@ export const normalizeArabicText = (text: string): string => {
   // This range covers vowels, tanween, shadda, sukun, and small quranic marks
   t = t.replace(/[\u064B-\u065F\u06D6-\u06ED\u0617-\u061A]/g, '');
 
-  // 2. Normalize Alif Khanjariyah (Small Alif) to regular Alif
-  t = t.replace(/\u0670/g, 'ا');
+  // 2. Remove Alif Khanjariyah (Small Alif) - often hidden in modern typing
+  t = t.replace(/\u0670/g, '');
 
   // 3. Normalize Alifs and Hamzas
   // We treat different Alif forms as plain Alif.
@@ -42,6 +42,9 @@ export const normalizeArabicText = (text: string): string => {
   t = t.replace(/(^|\s)الزكوه(?=\s|$)/g, '$1الزكاه');
   t = t.replace(/(^|\s)الحيوه(?=\s|$)/g, '$1الحياه');
   t = t.replace(/(^|\s)الربوا(?=\s|$)/g, '$1الربا');
+  t = t.replace(/(^|\s)مشكوه(?=\s|$)/g, '$1مشكاه');
+  t = t.replace(/(^|\s)النجوه(?=\s|$)/g, '$1النجاه');
+  t = t.replace(/(^|\s)الغدوه(?=\s|$)/g, '$1الغداه');
   t = t.replace(/(^|\s)داوود(?=\s|$)/g, '$1داود');
   
   // 8. Handle open Taa in Uthmani script that are closed Taa in standard Arabic
@@ -50,9 +53,53 @@ export const normalizeArabicText = (text: string): string => {
   // 9. Remove duplicate Alifs that might result from normalization
   t = t.replace(/اا+/g, 'ا');
 
-  // 10. Clean up extra spaces and non-Arabic chars
+  // 10. Remove punctuation and literal dots
+  t = t.replace(/[.\u06D4،؛؟!,:;"'()<>{}\[\]\\/|_+=*-]/g, '');
+
+  // 11. Clean up extra spaces and non-Arabic chars
   t = t.replace(/[^\u0600-\u06FF\s]/g, '');
   t = t.replace(/\s+/g, ' ');
 
   return t.trim();
+};
+
+export const getLevenshteinDistance = (a: string, b: string): number => {
+  const matrix: number[][] = [];
+
+  for (let i = 0; i <= b.length; i++) {
+    matrix[i] = [i];
+  }
+
+  for (let j = 0; j <= a.length; j++) {
+    matrix[0][j] = j;
+  }
+
+  for (let i = 1; i <= b.length; i++) {
+    for (let j = 1; j <= a.length; j++) {
+      if (b.charAt(i - 1) === a.charAt(j - 1)) {
+        matrix[i][j] = matrix[i - 1][j - 1];
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j - 1] + 1,
+          Math.min(matrix[i][j - 1] + 1, matrix[i - 1][j] + 1)
+        );
+      }
+    }
+  }
+
+  return matrix[b.length][a.length];
+};
+
+export const getSimilarity = (a: string, b: string): number => {
+  const distance = getLevenshteinDistance(a, b);
+  const maxLength = Math.max(a.length, b.length);
+  if (maxLength === 0) return 1.0;
+  return 1.0 - distance / maxLength;
+};
+
+/**
+ * Converts Arabic numerals (٠-٩) to English numerals (0-9).
+ */
+export const convertArabicNumbersToEnglish = (str: string): string => {
+  return str.replace(/[٠-٩]/g, (d) => (d.charCodeAt(0) - 1632).toString());
 };
