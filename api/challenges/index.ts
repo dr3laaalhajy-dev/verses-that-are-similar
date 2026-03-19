@@ -12,8 +12,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         orderBy: { createdAt: 'desc' }
       })
       return res.status(200).json(challenges)
-    } catch (error) {
-      return res.status(500).json({ message: 'Failed to fetch challenges' })
+    } catch (error: any) {
+      console.error('Fetch Challenges Error:', error)
+      return res.status(500).json({ 
+        message: 'Failed to fetch challenges',
+        error: error.message 
+      })
     }
   }
 
@@ -41,8 +45,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         data: { keyword, verses }
       })
       return res.status(201).json(challenge)
-    } catch (error) {
-      return res.status(500).json({ message: 'Failed to create challenge' })
+    } catch (error: any) {
+      console.error('Create Challenge Error:', error)
+      return res.status(500).json({ 
+        message: 'Failed to create challenge',
+        error: error.message 
+      })
     }
   }
 

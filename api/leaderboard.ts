@@ -21,8 +21,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     })
 
     return res.status(200).json({ leaderboard: players })
-  } catch (error) {
-    console.error(error)
-    return res.status(500).json({ message: 'Internal server error' })
+  } catch (error: any) {
+    console.error('Leaderboard Error:', error)
+    return res.status(500).json({ 
+      message: 'Internal server error',
+      error: error.message,
+      code: error.code
+    })
   }
 }

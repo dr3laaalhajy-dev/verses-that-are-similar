@@ -20,8 +20,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     })
 
     return res.status(200).json(player)
-  } catch (error) {
-    console.error(error)
-    return res.status(500).json({ message: 'Internal server error' })
+  } catch (error: any) {
+    console.error('Registration Error:', error)
+    return res.status(500).json({ 
+      message: 'Internal server error',
+      error: error.message,
+      code: error.code
+    })
   }
 }

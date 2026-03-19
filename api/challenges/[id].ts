@@ -29,8 +29,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         data: { keyword, verses }
       })
       return res.status(200).json(challenge)
-    } catch (error) {
-      return res.status(500).json({ message: 'Failed to update challenge' })
+    } catch (error: any) {
+      console.error('Update Challenge Error:', error)
+      return res.status(500).json({ 
+        message: 'Failed to update challenge',
+        error: error.message 
+      })
     }
   }
 
@@ -41,8 +45,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         where: { id: Number(id) }
       })
       return res.status(204).end()
-    } catch (error) {
-      return res.status(500).json({ message: 'Failed to delete challenge' })
+    } catch (error: any) {
+      console.error('Delete Challenge Error:', error)
+      return res.status(500).json({ 
+        message: 'Failed to delete challenge',
+        error: error.message 
+      })
     }
   }
 
