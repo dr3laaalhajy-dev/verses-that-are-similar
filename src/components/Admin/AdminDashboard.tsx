@@ -37,10 +37,15 @@ export default function AdminDashboard({ token, onLogout }: AdminDashboardProps)
   const fetchChallenges = async () => {
     try {
       const res = await fetch('/api/challenges');
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Failed to fetch challenges: ${text.substring(0, 100)}`);
+      }
       const data = await res.json();
       setChallenges(data);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      alert(err.message || 'حدث خطأ أثناء تحميل البيانات');
     } finally {
       setLoading(false);
     }
@@ -61,12 +66,16 @@ export default function AdminDashboard({ token, onLogout }: AdminDashboardProps)
         body: JSON.stringify({ keyword, verses }),
       });
 
-      if (res.ok) {
-        fetchChallenges();
-        resetForm();
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Save failed: ${text.substring(0, 100)}`);
       }
-    } catch (err) {
+
+      fetchChallenges();
+      resetForm();
+    } catch (err: any) {
       console.error(err);
+      alert(err.message || 'حدث خطأ أثناء الحفظ');
     }
   };
 
@@ -79,9 +88,15 @@ export default function AdminDashboard({ token, onLogout }: AdminDashboardProps)
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
-      if (res.ok) fetchChallenges();
-    } catch (err) {
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Delete failed: ${text.substring(0, 100)}`);
+      }
+
+      fetchChallenges();
+    } catch (err: any) {
       console.error(err);
+      alert(err.message || 'حدث خطأ أثناء الحذف');
     }
   };
 

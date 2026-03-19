@@ -381,7 +381,7 @@ export default function App() {
   const [challenges, setChallenges] = useState<any[]>([]);
   const [challengesLoading, setChallengesLoading] = useState(true);
 
-  const [playerName, setPlayerName] = useState<string | null>(localStorage.getItem('mushaf_player_name'));
+  const [playerName, setPlayerName] = useState<string | null>(localStorage.getItem('quran_player_name'));
   const [deviceId] = useState<string>(() => {
     let id = localStorage.getItem('quran_device_id');
     if (!id) {
@@ -394,7 +394,7 @@ export default function App() {
   const [cups, setCups] = useState<number>(() => Number(localStorage.getItem('quran_cups')) || 0);
   const [leaderboard, setLeaderboard] = useState<{ name: string, cups: number, points: number }[]>(() => {
     try {
-      return JSON.parse(localStorage.getItem('mushaf_leaderboard') || '[]');
+      return JSON.parse(localStorage.getItem('quran_leaderboard') || '[]');
     } catch {
       return [];
     }
@@ -411,12 +411,17 @@ export default function App() {
   const [selectedHadith, setSelectedHadith] = useState<Hadith | null>(null);
   const [nameInput, setNameInput] = useState('');
   const [isRegistering, setIsRegistering] = useState(false);
+  const [registrationError, setRegistrationError] = useState<string | null>(null);
 
   // Fetch challenges from API
   useEffect(() => {
     const fetchChallenges = async () => {
       try {
         const res = await fetch('/api/challenges');
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`Server error: ${text.substring(0, 100)}`);
+        }
         const data = await res.json();
         setChallenges(data);
       } catch (err) {
@@ -443,18 +448,34 @@ export default function App() {
     e.preventDefault();
     if (!nameInput.trim()) return;
     setIsRegistering(true);
+    setRegistrationError(null);
     try {
-      const res = await fetch('/api/player/register', {
+      const res = await fetch('/api/player-register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ deviceId, name: nameInput.trim() })
       });
+      
+      const text = await res.text();
+      let data: any = {};
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch (e) {
+        console.error('JSON Parse Error:', text);
+        setRegistrationError(`فشل الاتصال: السيرفر أرجع رداً غير صالح. الرد: ${text.substring(0, 50) || '(فارغ)'}...`);
+        return;
+      }
+      
       if (res.ok) {
         setPlayerName(nameInput.trim());
-        localStorage.setItem('mushaf_player_name', nameInput.trim());
+        localStorage.setItem('quran_player_name', nameInput.trim());
+      } else {
+        const detail = data.error || data.message || '';
+        setRegistrationError(`فشل الاتصال: ${detail || 'خطأ غير معروف في السيرفر'}`);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Registration failed:', err);
+      setRegistrationError(`خطأ في الاتصال: ${err.message || 'تعذر الوصول إلى السيرفر'}. تأكد من تشغيل المشروع عبر 'vercel dev'.`);
     } finally {
       setIsRegistering(false);
     }
@@ -463,7 +484,7 @@ export default function App() {
   // Library Settings (Shared across Mushaf, Adhkar, Hadith)
   const [librarySettings, setLibrarySettings] = useState(() => {
     try {
-      const saved = localStorage.getItem('mushaf_settings');
+      const saved = localStorage.getItem('quran_settings');
       if (saved) return JSON.parse(saved);
     } catch (e) { }
     return {
@@ -684,10 +705,14 @@ export default function App() {
     setIsSyncing(true);
     try {
       const response = await fetch('/api/leaderboard');
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Leaderboard sync failed: ${text.substring(0, 100)}`);
+      }
       const data = await response.json();
       if (data.leaderboard) {
         setLeaderboard(data.leaderboard);
-        localStorage.setItem('mushaf_leaderboard', JSON.stringify(data.leaderboard));
+        localStorage.setItem('quran_leaderboard', JSON.stringify(data.leaderboard));
       }
     } catch (error) {
       console.error('Leaderboard sync failed:', error);
@@ -697,11 +722,12 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem('mushaf_total_points', totalPoints.toString());
-    localStorage.setItem('mushaf_cups', cups.toString());
-    localStorage.setItem('mushaf_leaderboard', JSON.stringify(leaderboard));
-    if (playerName) localStorage.setItem('mushaf_player_name', playerName);
-  }, [totalPoints, cups, leaderboard, playerName]);
+    localStorage.setItem('quran_total_points', totalPoints.toString());
+    localStorage.setItem('quran_cups', cups.toString());
+    localStorage.setItem('quran_leaderboard', JSON.stringify(leaderboard));
+    if (playerName) localStorage.setItem('quran_player_name', playerName);
+    localStorage.setItem('quran_settings', JSON.stringify(librarySettings));
+  }, [totalPoints, cups, leaderboard, playerName, librarySettings]);
 
   useEffect(() => {
     syncLeaderboard();
@@ -732,11 +758,18 @@ export default function App() {
     setTotalPoints(newPoints);
 
     // Sync with backend using deviceId
-    fetch('/api/player/score', {
+    fetch('/api/player-score', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ deviceId, points: newPoints, cups: newCups })
-    }).catch(err => console.error('Failed to sync score:', err));
+    })
+    .then(async (res) => {
+      if (!res.ok) {
+        const text = await res.text();
+        console.error('Score sync failed:', text);
+      }
+    })
+    .catch(err => console.error('Failed to sync score:', err));
 
     // Update leaderboard entry & sync
     syncLeaderboard();
@@ -1158,6 +1191,16 @@ ${versesList}
               </div>
               <h2 className="text-3xl font-black text-brand-emerald mb-4">أهلاً بك في تحدي المتشابهات</h2>
               <p className="text-slate-500 font-bold mb-8">يرجى إدخال اسمك لحفظ تقدمك في لوحة المتصدرين</p>
+              
+              {registrationError && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="mb-6 p-4 bg-red-50 text-red-600 rounded-2xl text-sm font-bold border border-red-100"
+                >
+                  {registrationError}
+                </motion.div>
+              )}
               
               <form onSubmit={handleRegisterPlayer} className="space-y-4">
                 <input

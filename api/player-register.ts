@@ -1,5 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { prisma } from '../../src/lib/prisma'
+import { PrismaClient } from '@prisma/client'
+
+const prisma = new PrismaClient()
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') {
@@ -7,9 +9,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const { deviceId, name } = req.body
+  console.log('Registration attempt:', { deviceId, name })
 
   if (!deviceId || !name) {
-    return res.status(400).json({ message: 'Missing deviceId or name' })
+    return res.status(400).json({ 
+      message: 'Missing deviceId or name',
+      received: { deviceId: !!deviceId, name: !!name, body: req.body }
+    })
   }
 
   try {
