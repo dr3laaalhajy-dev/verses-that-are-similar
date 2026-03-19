@@ -41,6 +41,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     try {
+      // Check if keyword already exists
+      const existing = await prisma.challenge.findUnique({
+        where: { keyword }
+      })
+      if (existing) {
+        return res.status(409).json({ message: 'هذه الكلمة المفتاحية موجودة مسبقاً في تحدي آخر' })
+      }
+
       const challenge = await prisma.challenge.create({
         data: { keyword, verses }
       })
