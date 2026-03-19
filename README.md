@@ -19,3 +19,4 @@ View your app in AI Studio: https://ai.studio/apps/79346631-6771-4243-a19b-79d4e
 3. Run the app:
    `npm run dev`
 # Quranic-verses-that-are-similar
+# verses-that-are-similar
