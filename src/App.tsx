@@ -393,11 +393,12 @@ export default function App() {
   const [adminToken, setAdminToken] = useState<string | null>(localStorage.getItem('quran_admin_token'));
   const [isSuperAdmin, setIsSuperAdmin] = useState<boolean>(localStorage.getItem('quran_admin_super') === 'true');
   const [challenges, setChallenges] = useState<any[]>([]);
-  const [completedIds, setCompletedIds] = useState<number[]>(() => {
+  const [completedChallengeIds, setCompletedChallengeIds] = useState<Set<number>>(() => {
     try {
-      return JSON.parse(localStorage.getItem('quran_completed_ids') || '[]');
+      const saved = localStorage.getItem('quran_completed_ids');
+      return saved ? new Set(JSON.parse(saved)) : new Set();
     } catch {
-      return [];
+      return new Set();
     }
   });
   const [activeListTab, setActiveListTab] = useState<'available' | 'completed'>('available');
@@ -414,7 +415,7 @@ export default function App() {
     return id;
   });
   const [totalPoints, setTotalPoints] = useState<number>(() => Number(localStorage.getItem('quran_total_points')) || 0);
-  const [cups, setCups] = useState<number>(() => Number(localStorage.getItem('quran_cups')) || 0);
+  const [cups, setCups] = useState(() => parseInt(localStorage.getItem('quran_total_cups') || '0'));
   const [leaderboard, setLeaderboard] = useState<{ name: string, cups: number, points: number }[]>(() => {
     try {
       return JSON.parse(localStorage.getItem('quran_leaderboard') || '[]');
@@ -677,10 +678,13 @@ export default function App() {
     // Record completed challenge ID
     if (challengeMode === 'normal') {
       const currentId = challenges[currentChallengeIndex]?.id;
-      if (currentId && !completedIds.includes(currentId)) {
-        const newCompleted = [...completedIds, currentId];
-        setCompletedIds(newCompleted);
-        localStorage.setItem('quran_completed_ids', JSON.stringify(newCompleted));
+      if (currentId && !completedChallengeIds.has(currentId)) {
+        setCompletedChallengeIds(prev => {
+          const newSet = new Set(prev);
+          newSet.add(currentId);
+          localStorage.setItem('quran_completed_ids', JSON.stringify(Array.from(newSet)));
+          return newSet;
+        });
       }
     }
 
@@ -762,8 +766,27 @@ export default function App() {
 
   const handleSkip = () => {
     if (challengeMode === 'daily') return;
-    if (challenges.length > 0) {
-      setCurrentChallengeIndex((prev) => (prev + 1) % challenges.length);
+    if (challenges.length > 1) {
+      let nextIndex = (currentChallengeIndex + 1) % challenges.length;
+      let found = false;
+
+      // Try to find the next uncompleted challenge
+      for (let i = 0; i < challenges.length; i++) {
+        const idx = (currentChallengeIndex + 1 + i) % challenges.length;
+        if (!completedChallengeIds.has(challenges[idx].id)) {
+          nextIndex = idx;
+          found = true;
+          break;
+        }
+      }
+
+      setCurrentChallengeIndex(nextIndex);
+      resetTranscript();
+
+      if (!found) {
+        console.log("All challenges completed! Looping back to start.");
+      }
+    } else if (challenges.length === 1) {
       resetTranscript();
     }
   };
@@ -822,23 +845,39 @@ export default function App() {
       return prev;
     });
 
-    const newPoints = totalPoints + score;
-    setTotalPoints(newPoints);
-    localStorage.setItem('quran_total_points', newPoints.toString());
+    const isNewCompletion = currentChallenge?.id && !completedChallengeIds.has(currentChallenge.id);
 
-    // Sync with backend using deviceId
-    fetch('/api/player-score', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ deviceId, points: newPoints, cups: newCups })
-    })
-      .then(async (res) => {
-        if (!res.ok) {
-          const text = await res.text();
-          console.error('Score sync failed:', text);
-        }
+    if (isNewCompletion) {
+      setCompletedChallengeIds(prev => {
+        const newSet = new Set(prev);
+        newSet.add(currentChallenge!.id);
+        localStorage.setItem('quran_completed_ids', JSON.stringify(Array.from(newSet)));
+        return newSet;
+      });
+      const newPoints = totalPoints + score;
+      setTotalPoints(newPoints);
+      localStorage.setItem('quran_total_points', newPoints.toString());
+
+      const newCupsCount = cups + 1;
+      setCups(newCupsCount);
+      localStorage.setItem('quran_total_cups', newCupsCount.toString());
+
+      // Sync with backend using deviceId
+      fetch('/api/player-score', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deviceId, points: score, challengeId: currentChallenge?.id })
       })
-      .catch(err => console.error('Failed to sync score:', err));
+        .then(async (res) => {
+          if (!res.ok) {
+            const text = await res.text();
+            console.error('Score sync failed:', text);
+          }
+        })
+        .catch(err => console.error('Failed to sync score:', err));
+    } else {
+      console.log('Challenge already completed previously. No new points/cups awarded.');
+    }
 
     // Update leaderboard entry & sync
     syncLeaderboard();
@@ -1097,7 +1136,18 @@ export default function App() {
     saveScore(KEYWORD, score);
     if (challenges.length > 0) {
       setChallengeMode('normal');
-      setCurrentChallengeIndex((prev) => (prev + 1) % challenges.length);
+
+      let nextIndex = (currentChallengeIndex + 1) % challenges.length;
+      // Find the next uncompleted challenge
+      for (let i = 0; i < challenges.length; i++) {
+        const idx = (currentChallengeIndex + 1 + i) % challenges.length;
+        if (!completedChallengeIds.has(challenges[idx].id)) {
+          nextIndex = idx;
+          break;
+        }
+      }
+
+      setCurrentChallengeIndex(nextIndex);
     }
   };
 
@@ -1233,10 +1283,10 @@ ${versesList}
   const isComplete = targetVerses.length > 0 && matchedIds.size === targetVerses.length;
 
   return (
-    <div className={`min-h-screen relative text-slate-900 font-sans selection:bg-brand-emerald/10 transition-colors duration-700 ${librarySettings.darkMode ? 'lib-dark' : 'bg-slate-50'}`} dir="rtl">
+    <div className={`min-h-screen relative text-slate-900 font-sans selection:bg-brand-emerald/10 ${librarySettings.darkMode ? 'lib-dark' : 'bg-slate-50'}`} dir="rtl">
       {/* Background with Generated Pattern */}
       <div
-        className={`fixed inset-0 z-0 opacity-10 pointer-events-none transition-opacity duration-700 ${librarySettings.darkMode ? 'mix-blend-soft-light opacity-5' : 'mix-blend-multiply opacity-10'}`}
+        className={`absolute inset-0 z-0 opacity-10 pointer-events-none transition-opacity duration-700 ${librarySettings.darkMode ? 'mix-blend-soft-light opacity-5' : 'mix-blend-multiply opacity-10'}`}
         style={{
           backgroundImage: `url('/islamic_pattern.png')`,
           backgroundSize: '400px',
@@ -1264,7 +1314,7 @@ ${versesList}
       ) : (
         <>
           {/* Header */}
-          <header className="sticky top-0 z-50 glass-dark text-white shadow-2xl overflow-hidden">
+          <header className="relative z-50 glass-dark text-white shadow-2xl overflow-hidden">
             <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32 blur-3xl pointer-events-none" />
             <div className="max-w-6xl mx-auto px-6 py-5 flex items-center justify-between relative z-10">
               <motion.div
@@ -1375,7 +1425,7 @@ ${versesList}
           </AnimatePresence>
 
           {/* Main Content */}
-          <main className="max-w-6xl mx-auto px-6 py-12 relative z-10">
+          <main className="max-w-6xl mx-auto px-6 pt-12 pb-40 relative z-10">
             {challengesLoading ? (
 
               <div className="flex flex-col items-center justify-center py-40">
@@ -1454,7 +1504,7 @@ ${versesList}
                         <p className="text-slate-400 font-bold uppercase tracking-widest text-sm">كن أول من يسجل اسمه هنا</p>
                       </div>
                     ) : (
-                      <div className="space-y-4">
+                      <div className="space-y-4 pr-3 custom-scrollbar">
                         {leaderboard.map((player, index) => (
                           <motion.div
                             initial={{ x: 20, opacity: 0 }}
@@ -1510,8 +1560,8 @@ ${versesList}
                           <h2 className="text-2xl md:text-5xl lg:text-6xl font-black text-brand-emerald mb-2 md:mb-4 tracking-tight leading-tight">
                             مرحباً بك يا <span className="text-brand-gold">{playerName}</span>
                           </h2>
-                          <p className="text-slate-500 font-bold text-sm md:text-xl italic opacity-80">
-                            "وَمَا تَوْفِيقِي إِلَّا بِاللَّهِ ۚ عَلَيْهِ تَوَكَّلْتُ وَإِلَيْهِ أُنِيبُ"
+                          <p className="text-slate-700 font-bold text-sm md:text-xl italic max-w-2xl mx-auto md:mx-0">
+                            {motivationalQuote || '"وَمَا تَوْفِيقِي إِلَّا بِاللَّهِ ۚ عَلَيْهِ تَوَكَّلْتُ وَإِلَيْهِ أُنِيبُ"'}
                           </p>
                         </div>
 
@@ -1746,19 +1796,19 @@ ${versesList}
                         onClick={() => setActiveListTab('available')}
                         className={`px-6 md:px-8 py-3 rounded-[1.5rem] font-black text-xs md:text-sm transition-all ${activeListTab === 'available' ? 'bg-brand-emerald text-white shadow-xl' : 'text-slate-400 hover:text-slate-600'}`}
                       >
-                        المسابقات المتاحة ({challenges.filter(c => !completedIds.includes(c.id)).length})
+                        المسابقات المتاحة ({challenges.filter(c => !completedChallengeIds.has(c.id)).length})
                       </button>
                       <button
                         onClick={() => setActiveListTab('completed')}
                         className={`px-6 md:px-8 py-3 rounded-[1.5rem] font-black text-xs md:text-sm transition-all ${activeListTab === 'completed' ? 'bg-brand-gold text-brand-emerald shadow-xl' : 'text-slate-400 hover:text-slate-600'}`}
                       >
-                        تحديات تم اجتيازها ({challenges.filter(c => completedIds.includes(c.id)).length})
+                        تحديات تم اجتيازها ({challenges.filter(c => completedChallengeIds.has(c.id)).length})
                       </button>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       {challenges
-                        .filter(c => activeListTab === 'available' ? !completedIds.includes(c.id) : completedIds.includes(c.id))
+                        .filter(c => activeListTab === 'available' ? !completedChallengeIds.has(c.id) : completedChallengeIds.has(c.id))
                         .map((c, idx) => {
                           const originalIndex = challenges.findIndex(orig => orig.id === c.id);
                           return (
@@ -1810,7 +1860,7 @@ ${versesList}
                         })}
                     </div>
 
-                    {challenges.filter(c => activeListTab === 'available' ? !completedIds.includes(c.id) : completedIds.includes(c.id)).length === 0 && (
+                    {challenges.filter(c => activeListTab === 'available' ? !completedChallengeIds.has(c.id) : completedChallengeIds.has(c.id)).length === 0 && (
                       <motion.div
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
@@ -2746,12 +2796,12 @@ ${versesList}
                         <motion.div
                           initial={{ opacity: 0, scale: 0.9, y: 20 }}
                           animate={{ opacity: 1, scale: 1, y: 0 }}
-                          className="p-10 glass bg-brand-emerald text-white rounded-[3rem] text-center shadow-[0_30px_60px_-15px_rgba(6,78,59,0.4)] border-white/20 relative overflow-hidden"
+                          className="p-10 glass border-brand-emerald/10 text-brand-emerald rounded-[3rem] text-center shadow-[0_30px_60px_-15px_rgba(6,78,59,0.1)] relative overflow-hidden"
                         >
-                          <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -mr-32 -mt-32 blur-3xl" />
+                          <div className="absolute top-0 right-0 w-64 h-64 bg-brand-emerald/5 rounded-full -mr-32 -mt-32 blur-3xl" />
                           <Trophy className="w-20 h-20 mb-6 text-brand-gold mx-auto drop-shadow-lg" />
-                          <h3 className="text-4xl font-black mb-4">فتح الله عليك!</h3>
-                          <p className="mb-10 text-emerald-100 text-xl font-medium">أتقنت جميع المتشابهات في هذا الموضع ببراعة بارك الله فيك.</p>
+                          <h3 className="text-4xl font-black mb-4 text-brand-emerald">فتح الله عليك!</h3>
+                          <p className="mb-10 text-slate-600 text-xl font-medium">أتقنت جميع المتشابهات في هذا الموضع ببراعة بارك الله فيك.</p>
 
                           <div className="flex flex-col sm:flex-row gap-4 justify-center">
                             {challengeMode === 'daily' ? (
@@ -2829,7 +2879,7 @@ ${versesList}
                       صاحب فكرة التطبيق<span className="text-brand-gold"> الاخ عمر سمير طبش</span>
                     </p>
                     <p className="text-slate-500 font-bold text-xs leading-relaxed">
-                      لا تنسونا من دعواكم، هذا التطبيق صدقة عنا وعن والدينا وأحبائنا
+                      لا تنسونا من دعواكم، هذا التطبيق صدقة عني وعن اخي عمر وعن والدينا وأحبائنا
                     </p>
                   </div>
                   <div className="flex items-center gap-2 mt-1">

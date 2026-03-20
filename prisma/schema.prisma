@@ -38,11 +38,12 @@ model Challenge {
 }
 
 model Player {
-  id        Int      @id @default(autoincrement())
-  deviceId  String   @unique
-  name      String
-  points    Int      @default(0)
-  cups      Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                    Int      @id @default(autoincrement())
+  deviceId              String   @unique
+  name                  String
+  points                Int      @default(0)
+  cups                  Int      @default(0)
+  completedChallengeIds Json     @default("[]")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 }
