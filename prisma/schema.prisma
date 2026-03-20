@@ -46,4 +46,27 @@ model Player {
   completedChallengeIds Json     @default("[]")
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
+  
+  // 1v1 Relations
+  rooms1                Room[]   @relation("Player1Rooms")
+  rooms2                Room[]   @relation("Player2Rooms")
+  wonRooms              Room[]   @relation("WinnerRooms")
+}
+
+model Room {
+  id              String   @id @default(uuid())
+  code            String   @unique
+  player1Id       Int
+  player2Id       Int?
+  player1Progress Int      @default(0)
+  player2Progress Int      @default(0)
+  status          String   @default("WAITING") // WAITING, PLAYING, FINISHED
+  winnerId        Int?
+  challengeIds    Json     // Array of challenge IDs
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  player1         Player   @relation("Player1Rooms", fields: [player1Id], references: [id])
+  player2         Player?  @relation("Player2Rooms", fields: [player2Id], references: [id])
+  winner          Player?  @relation("WinnerRooms", fields: [winnerId], references: [id])
 }

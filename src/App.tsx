@@ -49,7 +49,7 @@ function useWindowSize() {
   return windowSize;
 }
 
-type View = 'home' | 'difficulty' | 'challenge' | 'mushaf' | 'adhkar' | 'hadith' | 'admin' | 'list';
+type View = 'home' | 'difficulty' | 'challenge' | 'mushaf' | 'adhkar' | 'hadith' | 'admin' | 'list' | '1v1_menu' | '1v1_waiting' | '1v1_game' | 'speed_challenge';
 type Difficulty = 'easy' | 'medium' | 'hard';
 
 // Helper function to find the best subsequence match of targetWords in transcriptWords
@@ -121,16 +121,34 @@ const VerseCard = memo(({ verse, keyword, isMatched, isRevealed, hints, onReveal
   const [copied, setCopied] = useState(false);
 
   const getHintText = () => {
+    if (hints === 0) return null;
+
+    if (hints === 1) {
+      return (
+        <div className="flex flex-col items-center gap-1">
+          <span className="text-xs font-bold text-brand-gold uppercase tracking-widest">تلميح: مكان الآية</span>
+          <span className="text-xl font-black text-slate-800">سورة {verse.surah} • آية {verse.number}</span>
+        </div>
+      );
+    }
+
     const words = verse.text.split(' ').filter(Boolean);
     const uniqueWords = words.slice(keywordWordCount);
-
-    if (hints === 0 || uniqueWords.length === 0) return null;
-
-    const wordsToShow = Math.min(hints * 2, uniqueWords.length);
+    
+    // Shift hints by -1 because Level 1 is now Surah info
+    const textHints = hints - 1;
+    const wordsToShow = Math.min(textHints * 2, uniqueWords.length);
     const keywordText = words.slice(0, keywordWordCount).join(' ');
     const hintTextValue = uniqueWords.slice(0, wordsToShow).join(' ');
 
-    return `${keywordText} ${hintTextValue} ...`;
+    return (
+      <div className="flex flex-col items-center gap-2">
+        <span className="text-[10px] font-bold text-brand-gold uppercase tracking-[0.2em] mb-1">تلميح من نص الآية</span>
+        <span className="text-xl quran-text text-slate-800 leading-relaxed text-center">
+          {keywordText} {hintTextValue} ...
+        </span>
+      </div>
+    );
   };
 
   const hintText = getHintText();
@@ -237,13 +255,13 @@ const VerseCard = memo(({ verse, keyword, isMatched, isRevealed, hints, onReveal
             onClick={() => onReveal(verse.id)}
           >
             {hintText ? (
-              <motion.span
+              <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="text-slate-800 text-xl quran-text"
+                className="w-full"
               >
                 {hintText}
-              </motion.span>
+              </motion.div>
             ) : (
               <div className="flex flex-col items-center gap-3">
                 <BookOpen className="w-10 h-10 opacity-20 group-hover:opacity-40 transition-opacity" />
@@ -437,6 +455,22 @@ export default function App() {
   const [isRegistering, setIsRegistering] = useState(false);
   const [registrationError, setRegistrationError] = useState<string | null>(null);
 
+  // 1v1 State
+  const [room, setRoom] = useState<any>(null);
+  const [isCreatingRoom, setIsCreatingRoom] = useState(false);
+  const [isJoiningRoom, setIsJoiningRoom] = useState(false);
+  const [joinCode, setJoinCode] = useState('');
+  const [v1ChallengeIndex, setV1ChallengeIndex] = useState(0);
+  const [v1PreviousMatchesCount, setV1PreviousMatchesCount] = useState(0);
+  const [v1Error, setV1Error] = useState<string | null>(null);
+  const [v1Polling, setV1Polling] = useState(false);
+
+  // Speed Challenge State
+  const [speedTimeLeft, setSpeedTimeLeft] = useState(30);
+  const [speedTotalTimeSpent, setSpeedTotalTimeSpent] = useState(0);
+  const [isSpeedGameOver, setIsSpeedGameOver] = useState(false);
+  const [speedStartTime, setSpeedStartTime] = useState<number | null>(null);
+
   const fetchChallenges = useCallback(async () => {
     setChallengesLoading(true);
     setChallengesError(null);
@@ -558,12 +592,6 @@ export default function App() {
     return daysSinceEpoch % challenges.length;
   }, [challenges]);
 
-  const currentChallenge = challenges.length > 0
-    ? (challengeMode === 'daily' ? challenges[dailyChallengeIndex] : challenges[currentChallengeIndex])
-    : null;
-
-  const KEYWORD = currentChallenge?.keyword || '';
-
   const [allTargetVerses, setAllTargetVerses] = useState<Verse[]>([]);
   const [matchedIds, setMatchedIds] = useState<Set<string>>(new Set());
   const [wordStates, setWordStates] = useState<Record<string, Record<number, 'correct' | 'skipped'>>>({});
@@ -583,6 +611,26 @@ export default function App() {
   const { width, height } = useWindowSize();
 
   const { isListening, transcript, startListening, stopListening, resetTranscript, hasRecognition } = useSpeechRecognition();
+
+  const currentChallenge = useMemo(() => {
+     if (challenges.length === 0) return null;
+     if (view === '1v1_game' && room?.challenges) {
+       return room.challenges[v1ChallengeIndex];
+     }
+     return challengeMode === 'daily' ? challenges[dailyChallengeIndex] : challenges[currentChallengeIndex];
+  }, [view, challenges, room?.challenges, v1ChallengeIndex, challengeMode, dailyChallengeIndex, currentChallengeIndex]);
+
+  const KEYWORD = currentChallenge?.keyword || '';
+
+  const targetVerses = useMemo(() => {
+    let limit = allTargetVerses.length;
+    if (difficulty === 'easy') limit = Math.min(3, allTargetVerses.length);
+    else if (difficulty === 'medium') limit = Math.min(5, allTargetVerses.length);
+    return allTargetVerses.slice(0, limit);
+  }, [allTargetVerses, difficulty]);
+
+  const isComplete = targetVerses.length > 0 && matchedIds.size === targetVerses.length;
+  const progress = targetVerses.length > 0 ? (matchedIds.size / targetVerses.length) * 100 : 0;
 
   // const [totalPoints, setTotalPoints] = useState(0); // This line is removed as totalPoints is declared above
   const [streak, setStreak] = useState(0);
@@ -703,6 +751,189 @@ export default function App() {
     }
   }, []);
 
+  // Check for 1v1 code in URL on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    let code = params.get('code');
+    if (!code) {
+      code = localStorage.getItem('pending_join_code');
+    }
+
+    if (code && playerName) {
+      handleJoinV1(code);
+      localStorage.removeItem('pending_join_code');
+    } else if (code && !playerName) {
+      localStorage.setItem('pending_join_code', code);
+    }
+  }, [playerName]);
+
+  const handleJoinV1 = async (code: string) => {
+    if (!playerName) return;
+    setIsJoiningRoom(true);
+    setV1Error(null);
+    try {
+      const res = await fetch('/api/1v1/join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, player2Id: deviceId }) // Using deviceId as an unique identifier for players in room
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setRoom(data);
+        setView('1v1_game');
+        // Clear code from URL
+        window.history.replaceState({}, '', window.location.pathname);
+      } else {
+        setV1Error(data.message || 'فشل الانضمام للعبة');
+      }
+    } catch (err) {
+      setV1Error('حدث خطأ في الاتصال');
+    } finally {
+      setIsJoiningRoom(false);
+    }
+  };
+
+  const handleCreateV1 = async () => {
+    if (!playerName) return;
+    setIsCreatingRoom(true);
+    setV1Error(null);
+    try {
+      const res = await fetch('/api/1v1/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ player1Id: deviceId })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setRoom(data);
+        setView('1v1_waiting');
+      } else {
+        setV1Error(data.message || 'فشل إنشاء الغرفة');
+      }
+    } catch (err) {
+      setV1Error('حدث خطأ في الاتصال');
+    } finally {
+      setIsCreatingRoom(false);
+    }
+  };
+
+  // Poll room status
+  useEffect(() => {
+    if (!room?.id || (view !== '1v1_waiting' && view !== '1v1_game')) return;
+    if (room.status === 'FINISHED') return;
+
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/1v1/status?roomId=${room.id}`);
+        const data = await res.json();
+        if (res.ok) {
+          setRoom(data);
+          if (view === '1v1_waiting' && data.status === 'PLAYING') {
+            setView('1v1_game');
+          }
+        }
+      } catch (err) {
+        console.error('Polling error:', err);
+      }
+    };
+
+    const interval = setInterval(poll, 3000); // Poll every 3 seconds
+    return () => clearInterval(interval);
+  }, [room?.id, view, room?.status]);
+
+  // Update progress in 1v1 game
+  useEffect(() => {
+    if (view !== '1v1_game' || !room?.id) return;
+    
+    const totalVersesCount = room.challenges?.reduce((acc: number, c: any) => acc + (Array.isArray(c.verses) ? c.verses.length : 0), 0) || 1;
+    const currentMatches = v1PreviousMatchesCount + matchedIds.size;
+    const progress = (currentMatches / totalVersesCount) * 100;
+    
+    const isPlayer1 = room.player1Id === deviceId;
+    const currentProgress = isPlayer1 ? room.player1Progress : room.player2Progress;
+    
+    if (progress > (currentProgress || 0) || (v1ChallengeIndex === 4 && isComplete)) {
+      fetch('/api/1v1/submit-progress', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          roomId: room.id, 
+          playerId: deviceId, 
+          progress,
+          isWinner: v1ChallengeIndex === 4 && isComplete 
+        })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.id) setRoom(data);
+      })
+      .catch(err => console.error('Progress update error:', err));
+    }
+  }, [matchedIds.size, view, room?.id, room?.player1Id, room?.player1Progress, room?.player2Progress, deviceId]);
+
+  // Handle 1v1 challenge progression
+  useEffect(() => {
+    if (view === '1v1_game' && isComplete && v1ChallengeIndex < 4) {
+      const timer = setTimeout(() => {
+        setV1PreviousMatchesCount(prev => prev + matchedIds.size);
+        setV1ChallengeIndex(prev => prev + 1);
+        setMatchedIds(new Set());
+        setRevealedIds(new Set());
+        setHintLevels({});
+        setWordStates({});
+        resetTranscript();
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [isComplete, view, v1ChallengeIndex, matchedIds.size, resetTranscript]);
+  // Speed Challenge Timer
+  useEffect(() => {
+    let interval: any;
+    if (view === 'speed_challenge' && !isSpeedGameOver && !isComplete) {
+      interval = setInterval(() => {
+        setSpeedTimeLeft((prev) => {
+          if (prev <= 1) {
+            setIsSpeedGameOver(true);
+            stopListening();
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [view, isSpeedGameOver, isComplete, stopListening]);
+
+  // Reset Speed timer on each match
+  useEffect(() => {
+    if (view === 'speed_challenge' && !isSpeedGameOver && matchedIds.size > 0 && !isComplete) {
+       const timeTaken = 30 - speedTimeLeft;
+       setSpeedTotalTimeSpent(prev => prev + timeTaken);
+       setSpeedTimeLeft(30);
+    }
+  }, [matchedIds.size, view, isSpeedGameOver, isComplete]);
+
+  // Handle Speed Challenge progression
+  useEffect(() => {
+    if (view === 'speed_challenge' && isComplete && !isSpeedGameOver) {
+      const timeTaken = 30 - speedTimeLeft;
+      setSpeedTotalTimeSpent(prev => prev + timeTaken);
+      
+      const timer = setTimeout(() => {
+        const nextIdx = Math.floor(Math.random() * challenges.length);
+        setCurrentChallengeIndex(nextIdx);
+        setSpeedTimeLeft(30);
+        setMatchedIds(new Set());
+        setRevealedIds(new Set());
+        setHintLevels({});
+        setWordStates({});
+        resetTranscript();
+        setSpeedStartTime(Date.now());
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [isComplete, view, isSpeedGameOver, challenges.length, speedTimeLeft, resetTranscript]);
+
   // Effect to lock body scroll when modal is open
   useEffect(() => {
     if (selectedHadith || showExplanation || isSettingsOpen || showScores) {
@@ -730,6 +961,19 @@ export default function App() {
   const handleStartNormal = () => {
     setChallengeMode('normal');
     setView('list'); // Show all challenges to pick from
+  };
+
+  const handleStartSpeedChallenge = () => {
+    setChallengeMode('normal');
+    const randomIdx = Math.floor(Math.random() * Math.min(challenges.length, 50));
+    setCurrentChallengeIndex(randomIdx);
+    setView('speed_challenge');
+    setSpeedTimeLeft(30);
+    setSpeedTotalTimeSpent(0);
+    setIsSpeedGameOver(false);
+    setSpeedStartTime(Date.now());
+    resetTranscript();
+    startListening();
   };
 
   const handleSelectDifficulty = (diff: Difficulty) => {
@@ -974,13 +1218,6 @@ export default function App() {
     setShowExplanation(false);
     resetTranscript();
   }, [KEYWORD, resetTranscript, view, challengeMode, currentChallenge, challenges.length]);
-
-  const targetVerses = useMemo(() => {
-    let limit = allTargetVerses.length;
-    if (difficulty === 'easy') limit = Math.min(3, allTargetVerses.length);
-    else if (difficulty === 'medium') limit = Math.min(5, allTargetVerses.length);
-    return allTargetVerses.slice(0, limit);
-  }, [allTargetVerses, difficulty]);
 
   const keywordWordCount = useMemo(() => KEYWORD.split(' ').filter(Boolean).length, [KEYWORD]);
 
@@ -1279,9 +1516,6 @@ ${versesList}
     }
   };
 
-  const progress = targetVerses.length > 0 ? (matchedIds.size / targetVerses.length) * 100 : 0;
-  const isComplete = targetVerses.length > 0 && matchedIds.size === targetVerses.length;
-
   return (
     <div className={`min-h-screen relative text-slate-900 font-sans selection:bg-brand-emerald/10 ${librarySettings.darkMode ? 'lib-dark' : 'bg-slate-50'}`} dir="rtl">
       {/* Background with Generated Pattern */}
@@ -1533,6 +1767,412 @@ ${versesList}
                       </div>
                     )}
                   </motion.div>
+                ) : view === '1v1_menu' ? (
+                  <motion.div
+                    key="1v1_menu"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.98 }}
+                    className="flex flex-col gap-10 max-w-4xl mx-auto py-10 px-4"
+                  >
+                    <div className="flex items-center justify-between">
+                      <button
+                        onClick={() => setView('home')}
+                        className="p-4 rounded-2xl bg-white/50 hover:bg-white transition-all text-slate-500 font-bold flex items-center gap-2"
+                      >
+                        <ArrowRight className="w-5 h-5" />
+                        الرئيسية
+                      </button>
+                    </div>
+
+                    <div className="text-center mb-4">
+                      <div className="w-20 h-20 bg-orange-100 text-orange-600 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-xl shadow-orange-500/10">
+                        <User className="w-10 h-10" />
+                      </div>
+                      <h2 className="text-4xl font-black text-slate-800 mb-2">تحدي 1 ضد 1</h2>
+                      <p className="text-slate-500 font-bold">نافس أصدقاءك في تلاوة المتشابهات</p>
+                    </div>
+
+                    {v1Error && (
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="p-4 bg-red-50 text-red-600 rounded-2xl text-center font-bold border border-red-100"
+                      >
+                        {v1Error}
+                      </motion.div>
+                    )}
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                      {/* Create Room */}
+                      <motion.button
+                        whileHover={{ y: -5 }}
+                        onClick={handleCreateV1}
+                        disabled={isCreatingRoom}
+                        className="group p-10 rounded-[2.5rem] bg-white border-2 border-orange-100 hover:border-orange-500 transition-all text-center flex flex-col items-center gap-6 shadow-xl hover:shadow-orange-500/10"
+                      >
+                        <div className="w-16 h-16 bg-orange-500 text-white rounded-2xl flex items-center justify-center shadow-lg group-hover:rotate-6 transition-transform">
+                          <Zap className="w-8 h-8" />
+                        </div>
+                        <div>
+                          <h3 className="text-2xl font-black text-slate-800 mb-2">إنشاء غرفة جديدة</h3>
+                          <p className="text-slate-400 font-bold text-sm">سوف تحصل على كود لمشاركته مع صديقك</p>
+                        </div>
+                        {isCreatingRoom ? (
+                          <div className="w-6 h-6 border-4 border-orange-500 border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <div className="px-8 py-3 bg-orange-500 text-white rounded-xl font-black shadow-lg">أنشئ الآن</div>
+                        )}
+                      </motion.button>
+
+                      {/* Join Room */}
+                      <div className="p-10 rounded-[2.5rem] bg-white border-2 border-brand-emerald/10 text-center flex flex-col items-center gap-6 shadow-xl">
+                        <div className="w-16 h-16 bg-brand-emerald text-white rounded-2xl flex items-center justify-center shadow-lg">
+                          <Lock className="w-8 h-8" />
+                        </div>
+                        <div className="w-full">
+                          <h3 className="text-2xl font-black text-slate-800 mb-2">الدخول برمز الغرفة</h3>
+                          <p className="text-slate-400 font-bold text-sm mb-6">أدخل الرمز الذي أرسله لك صديقك</p>
+                          
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              maxLength={6}
+                              placeholder="الرمز (6 أرقام)"
+                              value={joinCode}
+                              onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                              className="flex-1 px-4 py-3 rounded-xl bg-slate-50 border border-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-emerald/20 text-center font-black tracking-widest"
+                            />
+                            <button
+                              onClick={() => handleJoinV1(joinCode)}
+                              disabled={isJoiningRoom || joinCode.length < 4}
+                              className="px-6 py-3 bg-brand-emerald text-white rounded-xl font-black shadow-lg disabled:opacity-50 transition-all active:scale-95"
+                            >
+                              {isJoiningRoom ? (
+                                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                              ) : 'دخول'}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                ) : view === '1v1_waiting' ? (
+                  <motion.div
+                    key="1v1_waiting"
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="max-w-2xl mx-auto py-20 px-4 text-center"
+                  >
+                    <div className="glass p-12 rounded-[4rem] border-orange-100 shadow-2xl relative overflow-hidden">
+                      <div className="absolute top-0 inset-x-0 h-2 bg-linear-to-r from-transparent via-orange-400 to-transparent animate-pulse" />
+                      
+                      <div className="w-24 h-24 bg-orange-100 text-orange-600 rounded-[2rem] flex items-center justify-center mx-auto mb-8 relative">
+                        <div className="absolute inset-0 bg-orange-400/20 rounded-[2rem] animate-ping opacity-40" />
+                        <RotateCcw className="w-10 h-10 animate-spin-slow" />
+                      </div>
+
+                      <h2 className="text-4xl font-black text-brand-emerald mb-4">في انتظار المنافس...</h2>
+                      <p className="text-slate-500 font-bold mb-10">شارك الرمز التالي مع صديقك ليبدأ التحدي فوراً</p>
+
+                      <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-3xl p-8 mb-10 group relative">
+                        <span className="text-6xl font-black text-brand-emerald tracking-[0.2em] tabular-nums select-all">
+                          {room?.code}
+                        </span>
+                        
+                        <button
+                          onClick={() => {
+                            if (room?.code) {
+                              navigator.clipboard.writeText(room.code);
+                              // Show success feedback
+                            }
+                          }}
+                          className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1.5 bg-brand-gold text-brand-emerald rounded-full text-[10px] font-black uppercase tracking-widest shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          نسخ الرمز
+                        </button>
+                      </div>
+
+                      <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                        <button
+                          onClick={() => {
+                           const shareText = `تعالَ نافسني في تحدي المتشابهات القرآنية! الرمز: ${room?.code}\n${window.location.origin}/?code=${room?.code}`;
+                           window.open(`https://wa.me/?text=${encodeURIComponent(shareText)}`, '_blank');
+                          }}
+                          className="flex-1 py-4 bg-[#25D366] text-white rounded-2xl font-black shadow-lg hover:brightness-110 transition-all flex items-center justify-center gap-3"
+                        >
+                          <svg className="w-6 h-6 fill-current" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.992-.001-3.951-.499-5.688-1.447l-6.305 1.653zm6.357-3.872c1.414.841 3.109 1.484 4.748 1.485 5.817 0 10.541-4.724 10.544-10.542.001-2.822-1.097-5.474-3.092-7.471-1.994-1.996-4.649-3.095-7.472-3.095-5.817 0-10.543 4.725-10.545 10.544 0 2.107.51 3.841 1.485 5.48l-.943 3.443 3.52-.924zm10.974-7.411c-.33-.165-1.951-.963-2.252-1.073-.302-.11-.522-.165-.742.165s-.852 1.073-1.044 1.293c-.192.22-.385.247-.715.082-.33-.165-1.393-.513-2.653-1.637-1.006-.897-1.684-2.005-1.882-2.335-.198-.33-.021-.508.143-.672.148-.147.33-.385.495-.578.165-.193.22-.33.33-.55.11-.22.055-.412-.028-.577-.082-.165-.742-1.789-1.018-2.433-.268-.64-.537-.552-.743-.563-.191-.01-.411-.011-.631-.011-.22 0-.577.083-.88.413-.303.33-1.155 1.127-1.155 2.75s1.183 3.191 1.348 3.411c.165.22 2.328 3.555 5.639 4.981.787.34 1.401.543 1.88.697.79.25 1.51.215 2.079.13.634-.095 1.951-.798 2.225-1.569.275-.77.275-1.43.192-1.569-.083-.138-.303-.22-.633-.385z"/></svg>
+                          مشاركة عبر واتساب
+                        </button>
+                        <button
+                          onClick={() => {
+                            const url = `${window.location.origin}/?code=${room?.code}`;
+                            navigator.clipboard.writeText(url);
+                            // Show success feedback
+                          }}
+                          className="px-8 py-4 bg-white border-2 border-slate-100 text-slate-500 rounded-2xl font-black hover:bg-slate-50 transition-all flex items-center justify-center gap-3"
+                        >
+                          <Copy className="w-5 h-5" />
+                          نسخ الرابط المباشر
+                        </button>
+                      </div>
+
+                      <button
+                        onClick={() => setView('home')}
+                        className="mt-12 text-slate-400 font-bold hover:text-red-500 transition-colors flex items-center gap-2 mx-auto"
+                      >
+                        <X className="w-4 h-4" />
+                        إلغاء الغرفة والعودة
+                      </button>
+                    </div>
+                  </motion.div>
+                ) : view === '1v1_game' ? (
+                  <motion.div
+                    key="1v1_game"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="flex flex-col gap-8 max-w-6xl mx-auto py-6 px-4"
+                  >
+                    {/* Header: Scoreboard / Progress */}
+                    <div className="glass p-6 rounded-3xl border-brand-emerald/10 shadow-xl sticky top-4 z-50">
+                      <div className="flex items-center justify-between mb-6">
+                        <div className="flex items-center gap-3">
+                           <div className="w-10 h-10 bg-orange-500 text-white rounded-xl flex items-center justify-center">
+                             <Zap className="w-6 h-6" />
+                           </div>
+                           <h2 className="text-xl font-black text-slate-800 tracking-tight">تحدي المواجهة المباشرة</h2>
+                        </div>
+                        <div className="flex items-center gap-2 px-4 py-2 bg-slate-100 rounded-full">
+                           <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                           <span className="text-xs font-black text-slate-500">مباشر</span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+                        {/* Player 1 Progress */}
+                        <div className={`space-y-3 p-4 rounded-2xl transition-all ${room?.player1Id === deviceId ? 'bg-brand-emerald/5 ring-2 ring-brand-emerald/20 shadow-md' : 'bg-slate-50 opacity-90'}`}>
+                           <div className="flex justify-between items-center px-1">
+                              <span className="font-black text-slate-700">{room?.player1?.name} {room?.player1Id === deviceId && '(أنت)'}</span>
+                              <span className="font-black text-brand-emerald">{room?.player1Progress !== undefined ? Math.round(room.player1Progress * 10) / 10 : 0}%</span>
+                           </div>
+                           <div className="h-3 bg-slate-200 rounded-full overflow-hidden shadow-inner">
+                              <motion.div 
+                                initial={{ width: 0 }}
+                                animate={{ width: `${room?.player1Progress || 0}%` }}
+                                className="h-full bg-linear-to-r from-brand-emerald to-emerald-400"
+                              />
+                           </div>
+                        </div>
+
+                        {/* Player 2 Progress */}
+                        <div className={`space-y-3 p-4 rounded-2xl transition-all ${room?.player2Id === deviceId ? 'bg-orange-50 ring-2 ring-orange-200 shadow-md' : 'bg-slate-50 opacity-90'}`}>
+                           <div className="flex justify-between items-center px-1">
+                              <span className="font-black text-slate-700">{room?.player2?.name || 'في انتظار...'} {room?.player2Id === deviceId && '(أنت)'}</span>
+                              <span className="font-black text-orange-600">{room?.player2Progress !== undefined ? Math.round(room.player2Progress * 10) / 10 : 0}%</span>
+                           </div>
+                           <div className="h-3 bg-slate-200 rounded-full overflow-hidden shadow-inner">
+                              <motion.div 
+                                initial={{ width: 0 }}
+                                animate={{ width: `${room?.player2Progress || 0}%` }}
+                                className="h-full bg-linear-to-r from-orange-400 to-orange-600"
+                              />
+                           </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Winner Message Overlay */}
+                    <AnimatePresence>
+                      {room?.status === 'FINISHED' && (
+                         <motion.div
+                           initial={{ opacity: 0, scale: 0.9 }}
+                           animate={{ opacity: 1, scale: 1 }}
+                           className="glass p-12 rounded-[4rem] text-center border-brand-gold/20 shadow-2xl relative overflow-hidden my-10"
+                         >
+                           <div className="absolute inset-0 bg-brand-gold/5 animate-pulse" />
+                           <div className="relative z-10">
+                             <Trophy className="w-24 h-24 text-brand-gold mx-auto mb-6" />
+                             <h2 className="text-5xl font-black text-brand-emerald mb-4">انتهى التحدي!</h2>
+                             <div className="text-3xl font-black text-slate-800 mb-8">
+                                الفائز: <span className="text-brand-gold">{room.winner?.name || 'تعادل!'}</span>
+                             </div>
+                             <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                                <button 
+                                  onClick={() => setView('home')}
+                                  className="px-12 py-5 bg-brand-emerald text-white rounded-3xl font-black text-xl shadow-xl hover:scale-105 transition-all"
+                                >
+                                  العودة للرئيسية
+                                </button>
+                             </div>
+                           </div>
+                         </motion.div>
+                      )}
+                    </AnimatePresence>
+
+                    {/* Game Content */}
+                    {room?.status === 'PLAYING' && (
+                      <div className="max-w-4xl mx-auto w-full px-4 pt-10">
+                         <div className="text-center mb-12">
+                            <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-orange-100 text-orange-600 text-xs font-black uppercase tracking-[0.2em] mb-4">
+                              <Sparkles className="w-3.5 h-3.5" />
+                              <span>المسابقة {v1ChallengeIndex + 1} من 5</span>
+                            </span>
+                            <h2 className="text-3xl md:text-5xl font-black text-brand-emerald mb-6 leading-tight quran-text">
+                              آيات تبدأ بـ: <span className="text-brand-gold">"{KEYWORD}"</span>
+                            </h2>
+                            <div className="h-1.5 w-24 bg-brand-gold/20 rounded-full mx-auto" />
+                         </div>
+
+                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-20">
+                          {targetVerses.map((verse, index) => (
+                            <VerseCard
+                              key={verse.id}
+                              verse={verse}
+                              keyword={KEYWORD}
+                              isMatched={matchedIds.has(verse.id)}
+                              isRevealed={revealedIds.has(verse.id)}
+                              hints={hintLevels[verse.id] || 0}
+                              onReveal={handleReveal}
+                              onHint={handleHint}
+                              index={index}
+                              keywordWordCount={keywordWordCount}
+                              distinguishingWordCount={distinguishingWordCounts[verse.id] || 0}
+                              wordStates={wordStates[verse.id] || {}}
+                            />
+                          ))}
+                        </div>
+
+                        {/* Mic Button for 1v1 */}
+                        <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-50">
+                           <motion.button
+                             whileHover={{ scale: 1.1 }}
+                             whileTap={{ scale: 0.9 }}
+                             onClick={isListening ? stopListening : startListening}
+                             className={`w-20 h-20 rounded-full flex items-center justify-center shadow-2xl transition-all ${isListening ? 'bg-red-500 text-white animate-pulse' : 'bg-brand-emerald text-white'}`}
+                           >
+                             {isListening ? <Mic className="w-8 h-8" /> : <MicOff className="w-8 h-8" />}
+                           </motion.button>
+                        </div>
+                      </div>
+                    )}
+                  </motion.div>
+                ) : view === 'speed_challenge' ? (
+                  <motion.div
+                    key="speed_challenge"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="flex flex-col gap-8 max-w-6xl mx-auto py-6 px-4 min-h-[70vh]"
+                  >
+                    {/* Floating Timer UI */}
+                    <div className="flex justify-center mb-6 sticky top-4 z-50">
+                      <motion.div
+                        animate={{ 
+                          scale: speedTimeLeft <= 10 ? [1, 1.1, 1] : 1,
+                          backgroundColor: speedTimeLeft <= 10 ? '#fee2e2' : '#ffffff' 
+                        }}
+                        transition={{ repeat: speedTimeLeft <= 10 ? Infinity : 0, duration: 0.5 }}
+                        className={`glass px-10 py-5 rounded-full shadow-2xl border-2 flex items-center gap-6 ${speedTimeLeft <= 10 ? 'border-red-500' : 'border-brand-emerald/20'}`}
+                      >
+                        <div className={`p-3 rounded-2xl ${speedTimeLeft <= 10 ? 'bg-red-500 text-white' : 'bg-brand-emerald text-white'}`}>
+                           <Zap className="w-8 h-8" />
+                        </div>
+                        <div className="text-right">
+                           <span className={`text-4xl font-black block tabular-nums ${speedTimeLeft <= 10 ? 'text-red-600' : 'text-slate-800'}`}>
+                             {speedTimeLeft} ثانية
+                           </span>
+                           <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">الوقت المتبقي للآية</span>
+                        </div>
+                        <div className="w-px h-10 bg-slate-100 mx-2" />
+                        <div className="text-right">
+                           <span className="text-2xl font-black text-brand-emerald block tabular-nums">
+                             {Math.floor(speedTotalTimeSpent / 60)}:{String(speedTotalTimeSpent % 60).padStart(2, '0')}
+                           </span>
+                           <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">إجمالي الوقت</span>
+                        </div>
+                      </motion.div>
+                    </div>
+
+                    {isSpeedGameOver ? (
+                       <motion.div
+                         initial={{ opacity: 0, scale: 0.9 }}
+                         animate={{ opacity: 1, scale: 1 }}
+                         className="glass p-12 rounded-[4rem] text-center border-red-200 shadow-2xl relative overflow-hidden my-10 max-w-2xl mx-auto"
+                       >
+                         <div className="absolute inset-0 bg-red-50/50" />
+                         <div className="relative z-10">
+                           <div className="w-24 h-24 bg-red-100 text-red-600 rounded-[2rem] flex items-center justify-center mx-auto mb-8">
+                             <AlertCircle className="w-12 h-12" />
+                           </div>
+                           <h2 className="text-4xl font-black text-slate-800 mb-4">انتهى الوقت!</h2>
+                           <p className="text-xl text-slate-600 font-bold mb-10 leading-relaxed">
+                             لا بأس، استعن بالله وعاود المحاولة
+                           </p>
+                           <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                              <button 
+                                onClick={handleStartSpeedChallenge}
+                                className="px-12 py-5 bg-red-600 text-white rounded-3xl font-black text-xl shadow-xl hover:bg-red-700 transition-all flex items-center justify-center gap-3"
+                              >
+                                <RotateCcw className="w-6 h-6" />
+                                كرر المحاولة
+                              </button>
+                              <button 
+                                onClick={() => setView('home')}
+                                className="px-12 py-5 bg-white border-2 border-slate-100 text-slate-500 rounded-3xl font-black text-xl hover:bg-slate-50 transition-all"
+                              >
+                                العودة للرئيسية
+                              </button>
+                           </div>
+                         </div>
+                       </motion.div>
+                    ) : (
+                      <div className="max-w-4xl mx-auto w-full">
+                         <div className="text-center mb-12">
+                            <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-brand-gold/10 text-brand-gold text-xs font-black uppercase tracking-[0.2em] mb-4">
+                              <Sparkles className="w-3.5 h-3.5" />
+                              <span>الموضع الحالي</span>
+                            </span>
+                            <h2 className="text-3xl md:text-5xl font-black text-brand-emerald mb-6 leading-tight quran-text">
+                              آيات تبدأ بـ: <span className="text-brand-gold">"{KEYWORD}"</span>
+                            </h2>
+                            <div className="h-1.5 w-24 bg-brand-gold/20 rounded-full mx-auto" />
+                         </div>
+
+                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-20">
+                          {targetVerses.map((verse, index) => (
+                            <VerseCard
+                              key={verse.id}
+                              verse={verse}
+                              keyword={KEYWORD}
+                              isMatched={matchedIds.has(verse.id)}
+                              isRevealed={revealedIds.has(verse.id)}
+                              hints={hintLevels[verse.id] || 0}
+                              onReveal={handleReveal}
+                              onHint={handleHint}
+                              index={index}
+                              keywordWordCount={keywordWordCount}
+                              distinguishingWordCount={distinguishingWordCounts[verse.id] || 0}
+                              wordStates={wordStates[verse.id] || {}}
+                            />
+                          ))}
+                        </div>
+
+                        {/* Mic Button */}
+                        <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-50">
+                           <motion.button
+                             whileHover={{ scale: 1.1 }}
+                             whileTap={{ scale: 0.9 }}
+                             onClick={isListening ? stopListening : startListening}
+                             className={`w-24 h-24 rounded-full flex items-center justify-center shadow-2xl transition-all ${isListening ? 'bg-red-500 text-white animate-pulse' : 'bg-brand-emerald text-white'}`}
+                           >
+                             {isListening ? <Mic className="w-10 h-10" /> : <MicOff className="w-10 h-10" />}
+                           </motion.button>
+                        </div>
+                      </div>
+                    )}
+                  </motion.div>
                 ) : view === 'home' ? (
                   <motion.div
                     key="home"
@@ -1628,146 +2268,165 @@ ${versesList}
                     )}
 
                     {/* Main Challenges Grid */}
-                    <div className="space-y-8">
-                      <div className="flex items-center gap-4 px-6 mb-2">
-                        <div className="w-1.5 h-8 bg-brand-gold rounded-full shadow-lg shadow-brand-gold/40" />
-                        <h3 className="text-2xl md:text-3xl font-black text-brand-emerald tracking-tight">مسابقات المتشابهات</h3>
+                    <div className="space-y-6">
+                      <div className="flex items-center gap-3 px-4">
+                        <div className="w-1 h-6 bg-brand-gold rounded-full" />
+                        <h3 className="text-xl font-black text-brand-emerald tracking-tight">مسابقات المتشابهات</h3>
                       </div>
 
-                      <div className="grid grid-cols-2 md:grid-cols-2 gap-4 md:gap-12">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {/* Daily Challenge Card */}
                         <motion.button
-                          whileHover={{ y: -8, scale: 1.01 }}
+                          whileHover={{ y: -4 }}
                           onClick={handleStartDaily}
                           disabled={dailyCompleted}
-                          className={`group relative p-4 md:p-12 rounded-[1.5rem] md:rounded-[4rem] text-right overflow-hidden transition-all duration-500 flex flex-col justify-between border-2 min-h-[160px] md:min-h-[400px] ${dailyCompleted ? 'bg-slate-50 opacity-60 grayscale border-slate-100' : 'glass bg-linear-to-br from-white via-white to-brand-gold/10 border-brand-gold/20 shadow-2xl hover:shadow-brand-gold/30 active:scale-[0.99]'}`}
+                          className={`group relative p-6 rounded-2xl text-right overflow-hidden transition-all duration-300 flex flex-col justify-between border border-slate-100 min-h-[160px] ${dailyCompleted ? 'bg-slate-50 opacity-60 grayscale' : 'bg-white shadow-sm hover:shadow-md hover:border-brand-gold/30'}`}
                         >
-                          <div className="absolute top-0 right-0 w-64 h-64 bg-brand-gold/5 rounded-full -mr-32 -mt-32 blur-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
-
-                          <div className="relative z-10">
-                            <div className={`w-10 h-10 md:w-24 md:h-24 rounded-xl md:rounded-[2.5rem] flex items-center justify-center mb-3 md:mb-8 shadow-2xl transition-all duration-500 group-hover:rotate-6 ${dailyCompleted ? 'bg-slate-200' : 'bg-brand-gold shadow-brand-gold/30 text-brand-emerald'}`}>
-                              <Calendar className="w-5 h-5 md:w-12 md:h-12" />
+                          <div className="flex items-center justify-between">
+                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-300 ${dailyCompleted ? 'bg-slate-200' : 'bg-brand-gold/10 text-brand-gold group-hover:bg-brand-gold group-hover:text-brand-emerald shadow-sm'}`}>
+                              <Calendar className="w-6 h-6" />
                             </div>
-                            <h2 className={`text-lg md:text-5xl font-black mb-1 md:mb-4 ${dailyCompleted ? 'text-slate-400' : 'text-brand-emerald'}`}>التحدي اليومي</h2>
-                            <p className="text-slate-500 font-bold text-sm md:text-xl leading-relaxed max-w-sm hidden md:block">
-                              {dailyCompleted ? 'لقد أتممت التحدي اليومي، نراك غداً بإذن الله' : 'اختبر مهاراتك في مواضع متشابهة جديدة تُختار لك بعناية كل يوم'}
+                            {!dailyCompleted && <ArrowLeft className="w-5 h-5 text-brand-gold opacity-0 group-hover:opacity-100 group-hover:-translate-x-1 transition-all" />}
+                          </div>
+                          
+                          <div className="mt-4">
+                            <h2 className={`text-lg font-black ${dailyCompleted ? 'text-slate-400' : 'text-brand-emerald'}`}>التحدي اليومي</h2>
+                            <p className="text-slate-400 font-bold text-xs mt-1">
+                              {dailyCompleted ? 'نراك غداً بإذن الله' : 'مواضع مختارة بعناية لكل يوم'}
                             </p>
                           </div>
-
-                          {dailyCompleted ? (
-                            <div className="mt-8 relative z-10">
-                              <div className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2 mr-2">التحدي القادم خلال</div>
-                              <div className="text-3xl font-black text-brand-emerald tabular-nums bg-white shadow-sm inline-flex items-center gap-3 px-8 py-3 rounded-2xl border border-slate-100" dir="ltr">
-                                <RotateCcw className="w-4 h-4 opacity-50" />
-                                {timeLeft}
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="mt-8 flex items-center justify-between relative z-10">
-                              <div className="flex items-center gap-3 text-brand-gold font-black transition-all">
-                                <span className="text-lg">ابدأ التحدي اليوم</span>
-                                <ArrowLeft className="w-6 h-6 group-hover:-translate-x-2 transition-transform" />
-                              </div>
-                              <div className="w-12 h-12 rounded-full border border-brand-gold/20 flex items-center justify-center group-hover:bg-brand-gold group-hover:text-brand-emerald transition-all">
-                                <CheckCircle className="w-6 h-6 opacity-20 group-hover:opacity-100" />
-                              </div>
+                          
+                          {dailyCompleted && (
+                            <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between">
+                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">الموعد القادم</span>
+                              <span className="text-sm font-black text-brand-emerald tabular-nums">{timeLeft}</span>
                             </div>
                           )}
                         </motion.button>
 
                         {/* Skill Challenge Card */}
                         <motion.button
-                          whileHover={{ y: -8, scale: 1.01 }}
+                          whileHover={{ y: -4 }}
                           onClick={handleStartNormal}
-                          className="group relative p-4 md:p-12 rounded-[1.5rem] md:rounded-[4rem] text-right overflow-hidden transition-all duration-500 flex flex-col justify-between glass bg-linear-to-br from-white via-white to-brand-emerald/10 border-brand-emerald/20 shadow-2xl hover:shadow-brand-emerald/30 border-2 min-h-[160px] md:min-h-[400px] active:scale-[0.99]"
+                          className="group relative p-6 rounded-2xl text-right overflow-hidden transition-all duration-300 flex flex-col justify-between border border-slate-100 min-h-[160px] bg-white shadow-sm hover:shadow-md hover:border-brand-emerald/30"
                         >
-                          <div className="absolute top-0 right-0 w-64 h-64 bg-brand-emerald/5 rounded-full -mr-32 -mt-32 blur-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
-
-                          <div className="relative z-10">
-                            <div className="w-10 h-10 md:w-24 md:h-24 rounded-xl md:rounded-[2.5rem] bg-brand-emerald text-white flex items-center justify-center mb-3 md:mb-8 shadow-2xl shadow-brand-emerald/30 transition-all duration-500 group-hover:rotate-6">
-                              <Zap className="w-5 h-5 md:w-12 md:h-12" />
+                          <div className="flex items-start justify-between">
+                            <div className="w-12 h-12 rounded-xl bg-brand-emerald/10 text-brand-emerald flex items-center justify-center transition-all duration-300 group-hover:bg-brand-emerald group-hover:text-white shadow-sm">
+                              <Zap className="w-6 h-6" />
                             </div>
-                            <h2 className="text-lg md:text-5xl font-black mb-1 md:mb-4 text-brand-emerald">تحدي المهارات</h2>
-                            <p className="text-slate-500 font-bold text-sm md:text-xl leading-relaxed max-w-sm hidden md:block">
-                              مستويات عشوائية ومتعددة للمتشابهات في مختلف المواضع والآيات، من السهل إلى المتقدم
-                            </p>
+                            <ArrowLeft className="w-5 h-5 text-brand-emerald opacity-0 group-hover:opacity-100 group-hover:-translate-x-1 transition-all" />
                           </div>
+                          
+                          <div className="mt-4">
+                            <h2 className="text-lg font-black text-brand-emerald">تحدي المهارات</h2>
+                            <p className="text-slate-400 font-bold text-xs mt-1">أسئلة عشوائية من مختلف سور القرآن</p>
+                          </div>
+                        </motion.button>
 
-                          <div className="mt-8 flex items-center justify-between relative z-10">
-                            <div className="flex items-center gap-3 text-brand-emerald font-black transition-all">
-                              <span className="text-lg">استكشف مهاراتك</span>
-                              <ArrowLeft className="w-6 h-6 group-hover:-translate-x-2 transition-transform" />
+                        {/* 1v1 Challenge Card */}
+                        <motion.button
+                          whileHover={{ y: -4 }}
+                          onClick={() => setView('1v1_menu')}
+                          className="group relative p-6 rounded-2xl text-right overflow-hidden transition-all duration-300 flex flex-col justify-between border border-slate-100 min-h-[160px] bg-white shadow-sm hover:shadow-md hover:border-orange-300/30"
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="w-12 h-12 rounded-xl bg-orange-500/10 text-orange-500 flex items-center justify-center transition-all duration-300 group-hover:bg-orange-500 group-hover:text-white shadow-sm">
+                              <User className="w-6 h-6" />
                             </div>
-                            <div className="w-12 h-12 rounded-full border border-brand-emerald/20 flex items-center justify-center group-hover:bg-brand-emerald group-hover:text-white transition-all text-brand-emerald">
-                              <Sparkles className="w-6 h-6 opacity-20 group-hover:opacity-100" />
+                            <span className="text-[10px] text-orange-600 font-bold opacity-0 group-hover:opacity-100 transition-opacity">مباشر الآن</span>
+                          </div>
+                          
+                          <div className="mt-4">
+                            <div className="flex items-center justify-between">
+                                <h2 className="text-lg font-black text-orange-900">تحدي 1 ضد 1</h2>
+                                <ArrowLeft className="w-5 h-5 text-orange-500 opacity-0 group-hover:opacity-100 group-hover:-translate-x-1 transition-all" />
                             </div>
+                            <p className="text-slate-400 font-bold text-xs mt-1">نافس أصدقاءك في سباق مباشر للمتشابهات</p>
+                          </div>
+                        </motion.button>
+
+                        {/* Speed Challenge Card */}
+                        <motion.button
+                          whileHover={{ y: -4 }}
+                          onClick={handleStartSpeedChallenge}
+                          className="group relative p-6 rounded-2xl text-right overflow-hidden transition-all duration-300 flex flex-col justify-between border border-slate-100 min-h-[160px] bg-white shadow-sm hover:shadow-md hover:border-red-300/30"
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="w-12 h-12 rounded-xl bg-red-500/10 text-red-500 flex items-center justify-center transition-all duration-300 group-hover:bg-red-500 group-hover:text-white shadow-sm">
+                              <Zap className="w-6 h-6" />
+                            </div>
+                            <span className="text-[10px] text-red-600 font-bold opacity-0 group-hover:opacity-100 transition-opacity">30 ثانية</span>
+                          </div>
+                          
+                          <div className="mt-4">
+                            <div className="flex items-center justify-between">
+                                <h2 className="text-lg font-black text-red-900">تحدي السرعة</h2>
+                                <ArrowLeft className="w-5 h-5 text-red-500 opacity-0 group-hover:opacity-100 group-hover:-translate-x-1 transition-all" />
+                            </div>
+                            <p className="text-slate-400 font-bold text-xs mt-1">اختبار السرعة مع العداد التنازلي المثير</p>
                           </div>
                         </motion.button>
                       </div>
                     </div>
 
-                    {/* Islamic Library Grid */}
-                    <div className="space-y-8">
-                      <div className="flex items-center gap-4 px-6 mb-2">
-                        <div className="w-1.5 h-8 bg-blue-500 rounded-full shadow-lg shadow-blue-500/40" />
-                        <h3 className="text-2xl md:text-3xl font-black text-slate-800 tracking-tight tracking-tight">المكتبة والعلوم الشرعية</h3>
+                    <div className="space-y-6">
+                      <div className="flex items-center gap-3 px-4">
+                        <div className="w-1 h-6 bg-blue-500 rounded-full shadow-lg shadow-blue-500/20" />
+                        <h3 className="text-xl font-black text-slate-800 tracking-tight">المكتبة والعلوم الشرعية</h3>
                       </div>
 
                       <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
                         {/* Mushaf Card */}
                         <motion.button
-                          whileHover={{ y: -8 }}
+                          whileHover={{ y: -4 }}
                           onClick={() => { setView('mushaf'); setSelectedSurahId(null); }}
-                          className="group relative p-4 md:p-10 rounded-[1.5rem] md:rounded-[3rem] text-right overflow-hidden transition-all duration-500 flex flex-col justify-between glass border-blue-100 hover:border-blue-400 shadow-xl hover:shadow-blue-500/15 border-2 min-h-[180px] md:min-h-[280px]"
+                          className="group relative p-6 rounded-2xl text-right overflow-hidden transition-all duration-300 flex flex-col justify-between border border-slate-100 min-h-[160px] bg-white shadow-sm hover:shadow-md hover:border-blue-400"
                         >
-                          <div className="relative z-10">
-                            <div className="w-10 h-10 md:w-16 md:h-16 rounded-xl md:rounded-[1.5rem] bg-blue-600 text-white flex items-center justify-center mb-3 md:mb-6 shadow-xl shadow-blue-600/30 group-hover:rotate-12 transition-transform">
-                              <BookOpen className="w-5 h-5 md:w-8 md:h-8" />
+                          <div className="flex items-center justify-between">
+                            <div className="w-12 h-12 rounded-xl bg-blue-600/10 text-blue-600 flex items-center justify-center transition-all duration-300 group-hover:bg-blue-600 group-hover:text-white shadow-sm">
+                              <BookOpen className="w-6 h-6" />
                             </div>
-                            <h2 className="text-lg md:text-3xl font-black mb-1 md:mb-3 text-blue-950 group-hover:text-blue-600 transition-colors">المصحف الشريف</h2>
-                            <p className="text-slate-500 font-bold text-[10px] md:text-sm leading-tight md:leading-relaxed hidden md:block">تصفح القرآن الكريم كاملاً بالرسم العثماني بوضوح ويسر</p>
+                            <ChevronLeft className="w-5 h-5 text-blue-600 opacity-0 group-hover:opacity-100 group-hover:-translate-x-1 transition-all" />
                           </div>
-                          <div className="mt-6 flex items-center gap-2 text-blue-600 font-black text-sm">
-                            <span>فتح المصحف</span>
-                            <ChevronLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
+                          <div>
+                            <h2 className="text-lg font-black text-blue-950 group-hover:text-blue-600 transition-colors">المصحف الشريف</h2>
+                            <p className="text-slate-400 font-bold text-xs mt-1">تصفح القرآن الكريم كاملاً بالرسم العثماني</p>
                           </div>
                         </motion.button>
 
                         {/* Adhkar Card */}
                         <motion.button
-                          whileHover={{ y: -8 }}
+                          whileHover={{ y: -4 }}
                           onClick={() => { setView('adhkar'); setSelectedAdhkarCategoryId(null); }}
-                          className="group relative p-4 md:p-10 rounded-[1.5rem] md:rounded-[3rem] text-right overflow-hidden transition-all duration-500 flex flex-col justify-between glass border-indigo-100 hover:border-indigo-400 shadow-xl hover:shadow-indigo-500/15 border-2 min-h-[180px] md:min-h-[280px]"
+                          className="group relative p-6 rounded-2xl text-right overflow-hidden transition-all duration-300 flex flex-col justify-between border border-slate-100 min-h-[160px] bg-white shadow-sm hover:shadow-md hover:border-indigo-400 font-inter"
                         >
-                          <div className="relative z-10">
-                            <div className="w-10 h-10 md:w-16 md:h-16 rounded-xl md:rounded-[1.5rem] bg-indigo-600 text-white flex items-center justify-center mb-3 md:mb-6 shadow-xl shadow-indigo-600/30 group-hover:rotate-12 transition-transform">
-                              <Sun className="w-5 h-5 md:w-8 md:h-8" />
+                          <div className="flex items-center justify-between">
+                            <div className="w-12 h-12 rounded-xl bg-indigo-600/10 text-indigo-600 flex items-center justify-center transition-all duration-300 group-hover:bg-indigo-600 group-hover:text-white shadow-sm">
+                              <Sun className="w-6 h-6" />
                             </div>
-                            <h2 className="text-lg md:text-3xl font-black mb-1 md:mb-3 text-indigo-950 group-hover:text-indigo-600 transition-colors">أذكار المسلم</h2>
-                            <p className="text-slate-500 font-bold text-[10px] md:text-sm leading-tight md:leading-relaxed hidden md:block">أذكار الصباح والمساء واليوم والليل لتطمئن قلوبكم</p>
+                            <ChevronLeft className="w-5 h-5 text-indigo-600 opacity-0 group-hover:opacity-100 group-hover:-translate-x-1 transition-all" />
                           </div>
-                          <div className="mt-6 flex items-center gap-2 text-indigo-600 font-black text-sm">
-                            <span>تصفح المورد</span>
-                            <ChevronLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
+                          <div>
+                            <h2 className="text-lg font-black text-indigo-950 group-hover:text-indigo-600 transition-colors">أذكار المسلم</h2>
+                            <p className="text-slate-400 font-bold text-xs mt-1">أذكار الصباح والمساء واليوم والليل</p>
                           </div>
                         </motion.button>
 
                         {/* Hadith Card */}
                         <motion.button
-                          whileHover={{ y: -8 }}
+                          whileHover={{ y: -4 }}
                           onClick={() => { setView('hadith'); setSelectedHadith(null); }}
-                          className="group relative p-4 md:p-10 rounded-[1.5rem] md:rounded-[3rem] text-right overflow-hidden transition-all duration-500 flex flex-col justify-between glass border-teal-100 hover:border-teal-400 shadow-xl hover:shadow-teal-500/15 border-2 min-h-[180px] md:min-h-[280px]"
+                          className="group relative p-6 rounded-2xl text-right overflow-hidden transition-all duration-300 flex flex-col justify-between border border-slate-100 min-h-[160px] bg-white shadow-sm hover:shadow-md hover:border-teal-400"
                         >
-                          <div className="relative z-10">
-                            <div className="w-10 h-10 md:w-14 md:h-14 rounded-xl md:rounded-2xl bg-teal-600 flex items-center justify-center mb-3 md:mb-4 shadow-lg shadow-teal-600/40">
-                              <Quote className="w-5 h-5 text-white" />
+                          <div className="flex items-center justify-between">
+                            <div className="w-12 h-12 rounded-xl bg-teal-600/10 text-teal-600 flex items-center justify-center transition-all duration-300 group-hover:bg-teal-600 group-hover:text-white shadow-sm">
+                              <Quote className="w-6 h-6" />
                             </div>
-                            <h2 className="text-lg md:text-3xl font-black mb-1 md:mb-2 text-teal-900">الأربعون النووية</h2>
-                            <p className="text-slate-500 font-medium text-[10px] md:text-sm leading-tight md:leading-relaxed hidden md:block">شرح وتبسيط أحاديث الأربعون النووية</p>
+                            <ChevronLeft className="w-5 h-5 text-teal-600 opacity-0 group-hover:opacity-100 group-hover:-translate-x-1 transition-all" />
                           </div>
-                          <div className="mt-6 flex items-center gap-2 text-teal-600 font-black text-sm">
-                            <span>تصفح الأحاديث</span>
-                            <ChevronLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
+                          <div>
+                            <h2 className="text-lg font-black text-teal-900 group-hover:text-teal-600 transition-colors">الأربعون النووية</h2>
+                            <p className="text-slate-400 font-bold text-xs mt-1">شرح وتبسيط أحاديث الأربعون النووية</p>
                           </div>
                         </motion.button>
                       </div>
@@ -2855,9 +3514,8 @@ ${versesList}
                   </div>
                 )}
               </AnimatePresence>
-            )
-            }
-          </main >
+            )}
+          </main>
 
           {view === 'home' && (
             <footer className="max-w-4xl mx-auto px-6 pb-12 relative z-10">
@@ -2999,7 +3657,6 @@ ${versesList}
         setSettings={setLibrarySettings}
         showReadingMode={view === 'mushaf'}
       />
-
-    </div >
+    </div>
   );
 }
