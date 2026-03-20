@@ -1375,19 +1375,37 @@ ${versesList}
                 <div className="w-16 h-16 bg-red-50 text-red-500 rounded-3xl flex items-center justify-center mb-6">
                   <AlertCircle className="w-8 h-8" />
                 </div>
-                <h3 className="text-2xl font-black text-slate-800 mb-4">تعذر الاتصال بقاعدة البيانات</h3>
+                <h3 className="text-2xl font-black text-slate-800 mb-4">
+                  {import.meta.env.PROD ? 'عذراً، حدث خطأ في الاتصال بالخادم' : 'تعذر الاتصال بقاعدة البيانات'}
+                </h3>
                 <p className="text-slate-500 font-bold mb-8 max-w-md mx-auto">
-                  تأكد من تشغيل المشروع عبر الأمر التالي في الـ Terminal:
-                  <code className="block mt-4 bg-slate-100 p-4 rounded-xl text-brand-emerald">npx vercel dev</code>
+                  {import.meta.env.PROD ? (
+                    'يرجى التأكد من اتصالك بالإنترنت والمحاولة مرة أخرى لاحقاً'
+                  ) : (
+                    <>
+                      تأكد من تشغيل المشروع عبر الأمر التالي في الـ Terminal:
+                      <code className="block mt-4 bg-slate-100 p-4 rounded-xl text-brand-emerald">npx vercel dev</code>
+                    </>
+                  )}
                 </p>
-                <button
-                  onClick={() => fetchChallenges()}
-                  disabled={challengesLoading}
-                  className="px-10 py-4 bg-brand-emerald text-white rounded-2xl font-black shadow-lg hover:bg-brand-emerald/90 transition-all flex items-center gap-3 disabled:opacity-50"
-                >
-                  {challengesLoading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <RotateCcw className="w-5 h-5" />}
-                  إعادة المحاولة
-                </button>
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <button
+                    onClick={() => fetchChallenges()}
+                    disabled={challengesLoading}
+                    className="px-10 py-4 bg-brand-emerald text-white rounded-2xl font-black shadow-lg hover:bg-brand-emerald/90 transition-all flex items-center gap-3 disabled:opacity-50"
+                  >
+                    {challengesLoading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <RotateCcw className="w-5 h-5" />}
+                    إعادة المحاولة
+                  </button>
+                  {import.meta.env.PROD && (
+                    <button
+                      onClick={() => window.location.reload()}
+                      className="px-10 py-4 bg-white text-slate-600 border border-slate-200 rounded-2xl font-black shadow-sm hover:bg-slate-50 transition-all"
+                    >
+                      تحديث الصفحة
+                    </button>
+                  )}
+                </div>
               </div>
             ) : (
               <AnimatePresence mode="wait">
