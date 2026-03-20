@@ -494,7 +494,11 @@ export default function App() {
         data = text ? JSON.parse(text) : {};
       } catch (e) {
         console.error('JSON Parse Error:', text);
-        setRegistrationError(`فشل الاتصال: السيرفر أرجع رداً غير صالح. الرد: ${text.substring(0, 50) || '(فارغ)'}...`);
+        if (import.meta.env.PROD) {
+          setRegistrationError('عذراً، حدث خطأ في الاتصال بالخادم. يرجى المحاولة لاحقاً.');
+        } else {
+          setRegistrationError(`فشل الاتصال: السيرفر أرجع رداً غير صالح. الرد: ${text.substring(0, 50) || '(فارغ)'}...`);
+        }
         return;
       }
 
@@ -503,11 +507,19 @@ export default function App() {
         localStorage.setItem('quran_player_name', nameInput.trim());
       } else {
         const detail = data.error || data.message || '';
-        setRegistrationError(`فشل الاتصال: ${detail || 'خطأ غير معروف في السيرفر'}`);
+        if (import.meta.env.PROD) {
+          setRegistrationError('عذراً، لم نتمكن من إكمال عملية التسجيل. يرجى التأكد من اسمك والمحاولة مرة أخرى.');
+        } else {
+          setRegistrationError(`فشل الاتصال: ${detail || 'خطأ غير معروف في السيرفر'}`);
+        }
       }
     } catch (err: any) {
       console.error('Registration failed:', err);
-      setRegistrationError(`خطأ في الاتصال: ${err.message || 'تعذر الوصول إلى السيرفر'}. تأكد من تشغيل المشروع عبر 'vercel dev'.`);
+      if (import.meta.env.PROD) {
+        setRegistrationError('حدث خطأ غير متوقع. يرجى التأكد من اتصالك بالإنترنت والمحاولة مجدداً.');
+      } else {
+        setRegistrationError(`خطأ في الاتصال: ${err.message || 'تعذر الوصول إلى السيرفر'}. تأكد من تشغيل المشروع عبر 'vercel dev'.`);
+      }
     } finally {
       setIsRegistering(false);
     }
