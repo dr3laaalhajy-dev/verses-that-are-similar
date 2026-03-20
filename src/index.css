@@ -1,15 +1,16 @@
-@import url('https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Tajawal:wght@300;400;500;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Scheherazade+New:wght@400;700&family=Tajawal:wght@300;400;500;700;800;900&display=swap');
 @import "tailwindcss";
 
 @theme {
   --font-sans: "Tajawal", ui-sans-serif, system-ui, sans-serif;
-  --font-quran: "Amiri", serif;
+  --font-quran: "Scheherazade New", serif;
   
   --color-brand-emerald: #064e3b;
   --color-brand-gold: #d4af37;
   --color-brand-sand: #fdfbf7;
   
   --shadow-premium: 0 10px 30px -5px rgba(6, 78, 59, 0.1), 0 4px 12px -4px rgba(6, 78, 59, 0.05);
+  --shadow-3xl: 0 35px 60px -15px rgba(0, 0, 0, 0.3);
 }
 
 @layer base {
@@ -28,7 +29,7 @@
   }
   
   .glass-dark {
-    @apply bg-brand-emerald/90 backdrop-blur-lg border border-white/20 shadow-2xl;
+    @apply bg-[#064e3b]/85 backdrop-blur-xl border border-white/10 shadow-3xl;
   }
   
   .text-gradient-gold {
@@ -71,6 +72,14 @@
 /* Library Dark Theme */
 .lib-dark {
   background-color: #0f172a !important; /* Slate 900 */
+  color: #f8fafc !important;
+  
+  /* Override Mushaf Variables in Dark Mode */
+  --mushaf-bg: #0f172a;
+  --mushaf-text: #e2e8f0;
+  --mushaf-border: rgba(52, 211, 153, 0.4);
+  --mushaf-frame-opacity: 0.2;
+  --mushaf-marker: #34d399;
 }
 
 .lib-dark .text-slate-800,
@@ -79,24 +88,31 @@
 }
 
 .lib-dark .text-slate-600,
+.lib-dark .text-slate-50,
 .lib-dark .text-slate-500,
 .lib-dark .text-slate-400 {
   color: #cbd5e1 !important; /* Slate 300 */
 }
 
-.lib-dark .bg-white {
+.lib-dark .bg-white,
+.lib-dark .bg-slate-50,
+.lib-dark .bg-slate-100 {
   background-color: #1e293b !important; /* Slate 800 */
 }
 
 .lib-dark .border-slate-100,
 .lib-dark .border-white\/80,
-.lib-dark .border-white\/50 {
-  border-color: rgba(255, 255, 255, 0.1) !important;
+.lib-dark .border-white\/55,
+.lib-dark .border-white\/50,
+.lib-dark .border-white\/40,
+.lib-dark .border-white\/20 {
+  border-color: rgba(255, 255, 255, 0.08) !important;
 }
 
 .lib-dark .glass {
-  background: rgba(30, 41, 59, 0.8) !important;
+  background: rgba(15, 23, 42, 0.6) !important; /* Lighter transparent Slate 900 */
   border-color: rgba(255, 255, 255, 0.05) !important;
+  backdrop-filter: blur(12px) !important;
 }
 
 .lib-dark .bg-slate-50,
@@ -112,16 +128,41 @@
   transition: background-color 0.5s ease, color 0.5s ease, border-color 0.5s ease, box-shadow 0.5s ease;
 }
 
-/* Mushaf Page Design */
+/* Mushaf Page Design using Variables */
 .mushaf-page-container {
-  @apply relative mx-auto w-full max-w-4xl bg-white shadow-[0_50px_100px_-20px_rgba(0,0,0,0.15)] rounded-2xl overflow-hidden;
-  border: 1px solid #e2e8f0;
+  display: block;
+  position: relative;
+  margin-left: auto;
+  margin-right: auto;
+  width: 100%;
+  max-width: 56rem; /* max-w-4xl */
+  background-color: var(--mushaf-bg);
+  border: 1px solid rgba(0,0,0,0.05);
+  border-radius: 1.5rem;
+  overflow: hidden;
+  box-shadow: 0 50px 100px -20px rgba(0, 0, 0, 0.15);
+  transition: all 0.5s ease;
+}
+
+.lib-dark .mushaf-page-container {
+  box-shadow: 0 50px 100px -20px rgba(0, 0, 0, 0.5) !important;
+  border-color: rgba(255,255,255,0.05) !important;
 }
 
 .mushaf-page-frame {
-  @apply relative p-8 md:p-12 m-4 md:m-8 border-4 border-[#d4af37]/30 min-h-[70vh] flex flex-col;
-  outline: 1px solid #d4af37;
-  outline-offset: -8px;
+  position: relative;
+  margin: 1.5rem;
+  padding: 2rem;
+  border: 4px solid;
+  border-color: var(--mushaf-border);
+  opacity: 1; /* reset base opacity if any */
+  border-radius: 0.5rem;
+  transition: all 0.5s ease;
+}
+
+/* Apply specific border opacity separately to avoid affecting content */
+.mushaf-page-frame {
+  border-color: color-mix(in srgb, var(--mushaf-border), transparent calc(100% - (var(--mushaf-frame-opacity) * 100%)));
 }
 
 .mushaf-page-frame::before {
@@ -133,16 +174,34 @@
   @apply absolute bottom-1 right-1 text-[#d4af37] text-xs opacity-50;
 }
 
+.mushaf-text-container {
+  text-align: justify;
+  text-justify: inter-word;
+  word-spacing: 2px;
+  line-height: 2.5;
+  color: var(--mushaf-text);
+  @apply quran-text;
+}
+
 .mushaf-corner-ornament {
   @apply absolute w-8 h-8 pointer-events-none text-[#d4af37]/40;
 }
 
-.mushaf-header-label {
-  @apply px-6 py-2 border-b-2 border-brand-gold/10 text-brand-gold font-bold text-sm tracking-widest uppercase flex items-center gap-2;
+.mushaf-text-container .no-justify {
+  text-align: center !important;
+  text-justify: none !important;
 }
 
 .mushaf-footer-page {
-  @apply absolute bottom-[-20px] left-1/2 -translate-x-1/2 px-8 py-2 bg-white border-2 border-brand-gold/30 rounded-full text-brand-gold font-black text-lg shadow-sm z-10;
+  @apply absolute bottom-[-20px] left-1/2 -translate-x-1/2 px-8 py-2 bg-inherit rounded-full font-black text-lg shadow-sm z-10;
+  border: 2px solid var(--mushaf-border);
+  color: var(--mushaf-marker);
+}
+
+.lib-dark .mushaf-footer-page {
+  background-color: var(--mushaf-bg) !important;
+  border-color: var(--mushaf-marker) !important;
+  color: var(--mushaf-marker) !important;
 }
 
 /* Custom Verse Marker for Page Mode */
@@ -150,31 +209,23 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 38px;
-  height: 38px;
-  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="45" fill="none" stroke="%23d4af37" stroke-width="2"/><circle cx="50" cy="50" r="35" fill="none" stroke="%23d4af37" stroke-width="1" stroke-dasharray="2,2"/></svg>');
+  width: 32px;
+  height: 32px;
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="45" fill="none" stroke="%23d4af37" stroke-width="2"/><path d="M50 10 L60 40 L90 50 L60 60 L50 90 L40 60 L10 50 L40 40 Z" fill="%23d4af37" opacity="0.1"/><circle cx="50" cy="50" r="35" fill="none" stroke="%23d4af37" stroke-width="1" stroke-dasharray="2,2"/></svg>');
   background-size: contain;
-  margin: 0 1rem;
-  font-size: 10px;
+  margin: 0 0.5rem;
+  font-size: 9px;
   font-weight: 900;
-  color: #d4af37;
+  color: var(--mushaf-marker);
   vertical-align: middle;
+  transform: translateY(-2px);
 }
 
-.mushaf-dark .mushaf-page-container {
-  @apply bg-slate-900 border-slate-800 shadow-[0_50px_100px_-20px_rgba(0,0,0,0.5)];
+.lib-dark .verse-marker-traditional {
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="45" fill="none" stroke="%2334d399" stroke-width="2"/><path d="M50 10 L60 40 L90 50 L60 60 L50 90 L40 60 L10 50 L40 40 Z" fill="%2334d399" opacity="0.1"/><circle cx="50" cy="50" r="35" fill="none" stroke="%2334d399" stroke-width="1" stroke-dasharray="2,2"/></svg>') !important;
 }
 
-.mushaf-dark .mushaf-page-frame {
-  @apply border-[#34d399]/20;
-  outline-color: rgba(52, 211, 153, 0.3);
-}
-
-.mushaf-dark .mushaf-footer-page {
-  @apply bg-slate-900 border-[#34d399]/30 text-[#34d399];
-}
-
-.mushaf-dark .verse-marker-traditional {
-  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="45" fill="none" stroke="%2334d399" stroke-width="2"/><circle cx="50" cy="50" r="35" fill="none" stroke="%2334d399" stroke-width="1" stroke-dasharray="2,2"/></svg>');
-  color: #34d399;
+.lib-dark .islamic-watermark::before {
+  opacity: 0.02 !important;
+  filter: invert(1) brightness(0.5);
 }

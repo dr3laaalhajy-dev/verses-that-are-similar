@@ -29,8 +29,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.log('No admins found. Creating first admin...')
       const hashedPassword = await bcrypt.hash(password, 10)
       admin = await prisma.admin.create({
-        data: { username, password: hashedPassword }
-      })
+        data: { username, password: hashedPassword, isSuperAdmin: true } as any
+      }) as any
     }
 
     if (!admin) {
@@ -46,12 +46,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(401).json({ message: 'بيانات الدخول غير صحيحة' })
     }
 
-    const token = jwt.sign({ adminId: admin.id }, JWT_SECRET, { expiresIn: '1d' })
-    return res.status(200).json({ token, username: admin.username })
+    const adminData = admin as any;
+    const token = jwt.sign(
+      { adminId: adminData.id, isSuperAdmin: adminData.isSuperAdmin },
+      JWT_SECRET,
+      { expiresIn: '1d' }
+    )
+    return res.status(200).json({
+      token,
+      username: adminData.username,
+      isSuperAdmin: adminData.isSuperAdmin
+    })
   } catch (error: any) {
     console.error('Admin Login Error:', error)
     // Return detailed error only in development, otherwise generic message
-    return res.status(500).json({ 
+    return res.status(500).json({
       message: 'حدث خطأ في الخادم أثناء تسجيل الدخول',
       details: process.env.NODE_ENV === 'development' ? error.message : undefined
     })

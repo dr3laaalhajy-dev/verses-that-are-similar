@@ -11,9 +11,11 @@ export const normalizeArabicText = (text: string): string => {
 
   // 3. Normalize Alifs and Hamzas
   // We treat different Alif forms as plain Alif.
-  // IMPORTANT: Hamza on line (ء) is removed to match Quranic spellings like 'اسرايل'
+  // Standardizing all Hamza forms (on line, on waw, on ya)
   t = t.replace(/[أإآٱ]/g, 'ا');
-  t = t.replace(/ء/g, '');
+  t = t.replace(/[ءئؤ]/g, ''); // Remove standalone/attached hamzas for consistency 
+  t = t.replace(/ؤ/g, 'و'); // This is redundant but ensures Waw with Hamza is treated as Waw if needed, though often it's just a marker.
+  t = t.replace(/ئ/g, 'ي');
   
   // 4. Normalize other letters
   t = t.replace(/ة/g, 'ه');
@@ -56,11 +58,29 @@ export const normalizeArabicText = (text: string): string => {
   // 10. Remove punctuation and literal dots
   t = t.replace(/[.\u06D4،؛؟!,:;"'()<>{}\[\]\\/|_+=*-]/g, '');
 
-  // 11. Clean up extra spaces and non-Arabic chars
-  t = t.replace(/[^\u0600-\u06FF\s]/g, '');
-  t = t.replace(/\s+/g, ' ');
+  // 11. Remove invisible control characters and directional marks
+  t = t.replace(/[\u200B-\u200F\uFEFF\u202A-\u202E\u2060-\u206F]/g, '');
 
-  return t.trim();
+  // 12. Clean up extra spaces and non-Arabic chars
+  t = t.replace(/[^\u0020\u0600-\u06FF\s]/g, '');
+  t = t.replace(/\s+/g, ' ');
+  t = t.trim();
+
+  // 13. Speech Recognition Specific Normalization (Lenient equivalents)
+  // These handle common ways speech-to-text engines transcribe Quranic words
+  const speechEquivalents: [RegExp, string][] = [
+    [/(^|\s)ولا ان(?=\s|$)/g, '$1ولين'],    // 'ولا ان' -> 'ولئن' (normalized to 'ولين')
+    [/(^|\s)ولان(?=\s|$)/g, '$1ولين'],     // 'ولان' -> 'ولئن'
+    [/(^|\s)فانا(?=\s|$)/g, '$1فاني'],     // 'فانا' -> 'فأنى' (normalized to 'فاني')
+    [/(^|\s)يقولون(?=\s|$)/g, '$1ليقولن'], // Common confusion in similar verses
+    [/(^|\s)ما(?=\s|$)/g, '$1من'],         // Common confusion between Ma/Man
+  ];
+
+  speechEquivalents.forEach(([regex, replacement]) => {
+    t = t.replace(regex, replacement);
+  });
+
+  return t;
 };
 
 export const getLevenshteinDistance = (a: string, b: string): number => {

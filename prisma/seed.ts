@@ -8,20 +8,29 @@ async function main() {
   const password = 'admin'
   const hashedPassword = await bcrypt.hash(password, 10)
 
-  console.log('Seeding admin user...')
+  console.log('Seeding admin users...')
 
-  const admin = await prisma.admin.upsert({
+  await prisma.admin.upsert({
     where: { username },
-    update: {
-      password: hashedPassword,
-    },
-    create: {
-      username,
-      password: hashedPassword,
+    update: { password: hashedPassword },
+    create: { username, password: hashedPassword, isSuperAdmin: false },
+  })
+
+  const alaaUsername = 'alaa'
+  const alaaPassword = 'alaa123'
+  const alaaHashedPassword = await bcrypt.hash(alaaPassword, 10)
+
+  const alaaAdmin = await prisma.admin.upsert({
+    where: { username: alaaUsername },
+    update: { password: alaaHashedPassword, isSuperAdmin: true },
+    create: { 
+      username: alaaUsername, 
+      password: alaaHashedPassword, 
+      isSuperAdmin: true 
     },
   })
 
-  console.log({ admin })
+  console.log({ alaaAdmin })
 
   console.log('Seeding challenges...')
   
