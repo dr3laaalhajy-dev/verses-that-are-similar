@@ -1226,7 +1226,7 @@ ${versesList}
       <div
         className={`fixed inset-0 z-0 opacity-10 pointer-events-none transition-opacity duration-700 ${librarySettings.darkMode ? 'mix-blend-soft-light opacity-5' : 'mix-blend-multiply opacity-10'}`}
         style={{
-          backgroundImage: `url('/Users/apple/.gemini/antigravity/brain/0e51dbf2-7a4d-40b5-9f54-4d4f25142f1d/islamic_geometric_pattern_1773882545168.png')`,
+          backgroundImage: `url('/islamic_pattern.png')`,
           backgroundSize: '400px',
         }}
       />
