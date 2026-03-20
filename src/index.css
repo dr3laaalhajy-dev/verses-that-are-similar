@@ -37,7 +37,12 @@
   }
 
   .quran-text {
-    @apply font-quran leading-loose;
+    font-family: var(--font-quran);
+    line-height: 2.2;
+    font-size: 1.5rem;
+    display: inline-block;
+    direction: rtl;
+    text-rendering: optimizeLegibility;
   }
 
   .islamic-watermark {
@@ -177,10 +182,10 @@
 .mushaf-text-container {
   text-align: justify;
   text-justify: inter-word;
-  word-spacing: 2px;
-  line-height: 2.5;
+  word-spacing: 4px;
+  line-height: 2.8;
   color: var(--mushaf-text);
-  @apply quran-text;
+  font-family: var(--font-quran);
 }
 
 .mushaf-corner-ornament {
