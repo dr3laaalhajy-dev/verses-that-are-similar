@@ -98,7 +98,7 @@ export default function AdminDashboard({ token, isSuperAdmin, onLogout, onBackHo
   const fetchInviteCodes = async () => {
     setInviteLoading(true);
     try {
-      const res = await fetch('/api/admin/invite', {
+      const res = await fetch('/api/admin?action=invite', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -116,13 +116,13 @@ export default function AdminDashboard({ token, isSuperAdmin, onLogout, onBackHo
     if (inviteLoading) return;
     setInviteLoading(true);
     try {
-      const res = await fetch('/api/admin/invite', {
+      const res = await fetch('/api/admin', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}` 
         },
-        body: JSON.stringify({ role })
+        body: JSON.stringify({ action: 'invite', role })
       });
       if (res.ok) fetchInviteCodes();
     } catch (err) {
@@ -136,7 +136,7 @@ export default function AdminDashboard({ token, isSuperAdmin, onLogout, onBackHo
     showConfirm('تأكيد الحذف', 'هل أنت متأكد من حذف كود الدعوة هذا؟', async () => {
       setInviteLoading(true);
       try {
-        const res = await fetch(`/api/admin/invite?id=${id}`, {
+        const res = await fetch(`/api/admin?action=invite&id=${id}`, {
           method: 'DELETE',
           headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -152,7 +152,7 @@ export default function AdminDashboard({ token, isSuperAdmin, onLogout, onBackHo
   const fetchAdmins = async () => {
     setAdminLoading(true);
     try {
-      const res = await fetch('/api/admin/manage', {
+      const res = await fetch('/api/admin?action=manage', {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -311,13 +311,14 @@ export default function AdminDashboard({ token, isSuperAdmin, onLogout, onBackHo
 
     setIsAddingAdmin(true);
     try {
-      const res = await fetch('/api/admin/manage', {
+      const res = await fetch('/api/admin', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({ 
+          action: 'manage',
           username: newAdminUsername, 
           password: newAdminPassword,
           isSuperAdmin: newAdminIsSuper
@@ -345,7 +346,7 @@ export default function AdminDashboard({ token, isSuperAdmin, onLogout, onBackHo
     showConfirm('تأكيد الحذف', 'هل أنت متأكد من حذف هذا المشرف؟', async () => {
       setIsDeletingAdmin(id);
       try {
-        const res = await fetch(`/api/manage?id=${id}`, {
+        const res = await fetch(`/api/admin?action=manage&id=${id}`, {
           method: 'DELETE',
           headers: { 'Authorization': `Bearer ${token}` }
         });

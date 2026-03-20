@@ -28,10 +28,10 @@ export default function AdminLogin({ onLogin, onBack }: AdminLoginProps) {
     }
 
     try {
-      const res = await fetch('/api/admin/login', {
+      const res = await fetch('/api/admin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ action: 'login', username, password }),
       });
 
       const data = await res.json();
@@ -47,10 +47,10 @@ export default function AdminLogin({ onLogin, onBack }: AdminLoginProps) {
 
   const handleRegister = async () => {
     try {
-      const res = await fetch('/api/admin/register', {
+      const res = await fetch('/api/admin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password, code: inviteCode }),
+        body: JSON.stringify({ action: 'register', username, password, code: inviteCode }),
       });
 
       const data = await res.json();
