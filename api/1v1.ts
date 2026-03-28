@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { prisma } from '../_lib/prisma.js'
+import { prisma } from './_lib/prisma.js'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const action = req.method === 'GET' ? req.query.action : req.body.action
@@ -8,6 +8,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     case 'create': return handleCreate(req, res)
     case 'join': return handleJoin(req, res)
     case 'poll': return handlePoll(req, res)
+    case 'start': return handleStart(req, res)
     case 'submit-progress': return handleSubmitProgress(req, res)
     case 'list-challenges': return handleListChallenges(req, res)
     case 'check-active': return handleCheckActive(req, res)
@@ -18,14 +19,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 }
 
 async function handleCreate(req: VercelRequest, res: VercelResponse) {
-  const { player1Id, category, level, questionCount, questionIds, maxPlayers, gameMode, timePerQuestion } = req.body
-  if (!player1Id) return res.status(400).json({ message: 'Missing player1Id' })
+    const { player1Id, player1Name, category, level, questionCount, questionIds, maxPlayers, gameMode, timePerQuestion } = req.body
+    if (!player1Id) return res.status(400).json({ message: 'Missing player1Id' })
 
-  const maxQuestions = Number(questionCount) || 5
+    const maxQuestions = Number(questionCount) || 5
 
-  try {
-    const player1 = await prisma.player.findUnique({ where: { deviceId: player1Id } })
-    if (!player1) return res.status(404).json({ message: 'Player not found' })
+    try {
+      let player1 = await prisma.player.findUnique({ where: { deviceId: player1Id } })
+      
+      // Auto-register if not found
+      if (!player1 && player1Name) {
+        player1 = await prisma.player.create({
+          data: { deviceId: player1Id, name: player1Name }
+        })
+      }
+
+      if (!player1) return res.status(400).json({ message: 'اللاعب غير مسجل (Player not found)' })
 
     let code = ''
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
@@ -114,14 +123,15 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
         maxPlayers: Number(maxPlayers) || 2,
         gameMode: gameMode || "STANDARD",
         timePerQuestion: Number(timePerQuestion) || 20,
-        playersProgress: { [player1.id]: 0 }
+        playersProgress: { [String(player1.id)]: 0 }
       } as any,
       include: { player1: true }
     })
 
     return res.status(201).json({ ...roomData, challenges: selectedChallenges })
   } catch (error: any) {
-    return res.status(500).json({ message: 'Failed to create room', error: error.message })
+    console.error('Failed to create room:', error)
+    return res.status(500).json({ message: 'Failed to create room', error: error.message, stack: error.stack })
   }
 }
 
@@ -132,19 +142,42 @@ async function handleJoin(req: VercelRequest, res: VercelResponse) {
   try {
     const room = await prisma.room.findUnique({ where: { code }, include: { player1: true } })
     if (!room) return res.status(404).json({ message: 'الغرفة غير موجودة' })
-    if (room.status !== 'WAITING') return res.status(400).json({ message: 'هذه اللعبة بدأت بالفعل أو انتهت' })
+    
+    // Status can be WAITING or PLAYING (allow late join if within maxPlayers)
+    if (room.status === 'FINISHED') return res.status(400).json({ message: 'هذه اللعبة انتهت بالفعل' })
 
-    const player2 = await prisma.player.findUnique({ where: { deviceId: player2Id } })
-    if (!player2) return res.status(404).json({ message: 'اللاعب غير مسجل' })
-    if (room.player1Id === player2.id) return res.status(400).json({ message: 'لا يمكنك اللعب ضد نفسك' })
+    const player = await prisma.player.findUnique({ where: { deviceId: player2Id } })
+    if (!player) return res.status(404).json({ message: 'اللاعب غير مسجل' })
+
+    let playersProgress = room.playersProgress as any || {}
+    const playerIds = Object.keys(playersProgress)
+    
+    if (playerIds.length >= (room.maxPlayers || 2)) {
+      return res.status(400).json({ message: 'الغرفة ممتلئة' })
+    }
+
+    // Add player if not already in
+    if (!playersProgress[player.id]) {
+      playersProgress[player.id] = { 
+        progress: 0, 
+        joinedAt: Date.now(),
+        name: player.name
+      }
+    }
 
     const updatedRoomData = await prisma.room.update({
       where: { id: room.id },
-      data: { player2Id: player2.id, status: 'PLAYING' },
+      data: { 
+        playersProgress,
+        // Keep player2Id compatibility for 1v1 if needed, but primary is playersProgress
+        player2Id: room.player2Id || (room.player1Id !== player.id ? player.id : room.player2Id)
+      },
       include: { player1: true, player2: true }
     })
 
-    const challenges = await prisma.challenge.findMany({ where: { id: { in: updatedRoomData.challengeIds as number[] } } })
+    const challenges = await prisma.challenge.findMany({ 
+      where: { id: { in: updatedRoomData.challengeIds as number[] } }
+    })
     return res.status(200).json({ ...updatedRoomData, challenges })
   } catch (error: any) {
     return res.status(500).json({ message: 'Failed to join room', error: error.message })
@@ -160,8 +193,42 @@ async function handlePoll(req: VercelRequest, res: VercelResponse) {
     })
     if (!roomData) return res.status(404).json({ error: 'Room not found' })
 
-    const challenges = await prisma.challenge.findMany({ where: { id: { in: roomData.challengeIds as number[] } } })
-    return res.status(200).json({ ...roomData, challenges })
+    const progress: any = roomData.playersProgress || {}
+    const playerIds = Object.keys(progress).map(id => parseInt(id))
+    const players = await prisma.player.findMany({
+      where: { id: { in: playerIds } },
+      select: { id: true, name: true, deviceId: true }
+    })
+
+    const challenges = await prisma.challenge.findMany({ 
+      where: { id: { in: roomData.challengeIds as number[] } }
+    })
+    return res.status(200).json({ ...roomData, participants: players, challenges })
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message })
+  }
+}
+
+async function handleStart(req: VercelRequest, res: VercelResponse) {
+  const { roomId } = req.body
+  try {
+    const room = await prisma.room.update({
+      where: { id: roomId },
+      data: { status: 'PLAYING' },
+      include: { player1: true, player2: true, winner: true }
+    })
+    
+    const progress: any = room.playersProgress || {}
+    const playerIds = Object.keys(progress).map(id => parseInt(id))
+    const players = await prisma.player.findMany({
+      where: { id: { in: playerIds } },
+      select: { id: true, name: true, deviceId: true }
+    })
+
+    const challenges = await prisma.challenge.findMany({ 
+      where: { id: { in: room.challengeIds as number[] } }
+    })
+    return res.status(200).json({ ...room, participants: players, challenges })
   } catch (err: any) {
     return res.status(500).json({ error: err.message })
   }
@@ -178,14 +245,41 @@ async function handleSubmitProgress(req: VercelRequest, res: VercelResponse) {
     const player = await prisma.player.findUnique({ where: { deviceId: playerId } })
     if (!player) return res.status(404).json({ message: 'Player not found' })
 
-    const updateData: any = {}
+    let playersProgress = room.playersProgress as any || {}
+    if (!playersProgress[player.id]) playersProgress[player.id] = {}
+    
+    playersProgress[player.id].progress = progress
+    
+    const updateData: any = { playersProgress }
+    
+    // Legacy mapping compatibility
     if (room.player1Id === player.id) updateData.player1Progress = progress
     else if (room.player2Id === player.id) updateData.player2Progress = progress
-    else return res.status(403).json({ message: 'Not a player' })
 
-    if (isWinner && room.status !== 'FINISHED') {
-      updateData.status = 'FINISHED'
-      updateData.winnerId = player.id
+    if (isWinner) {
+      const finishTime = Date.now()
+      playersProgress[player.id].finishTime = finishTime
+
+      // Scoring algorithm: correctAnswers × 100 + timeRemaining × 10
+      const correctAnswers = Number(req.body.correctAnswers || 0)
+      const timeRemaining = Number(req.body.timeRemaining || 0)
+      const totalScore = (correctAnswers * 100) + (timeRemaining * 10)
+      playersProgress[player.id].score = totalScore
+      playersProgress[player.id].correctAnswers = correctAnswers
+      
+      // If everyone finished, set room status to FINISHED
+      const allFinished = Object.values(playersProgress).every((p: any) => p.finishTime)
+      if (allFinished) {
+        updateData.status = 'FINISHED'
+      }
+      
+      // Set winnerId to the player with the highest score (or first to finish if tie)
+      const finishedPlayers = Object.entries(playersProgress)
+        .filter(([, p]: [string, any]) => p.finishTime)
+        .sort(([, a]: [string, any], [, b]: [string, any]) => (b.score || 0) - (a.score || 0));
+      if (finishedPlayers.length > 0) {
+        updateData.winnerId = Number(finishedPlayers[0][0])
+      }
     }
 
     const updatedRoomData = await prisma.room.update({

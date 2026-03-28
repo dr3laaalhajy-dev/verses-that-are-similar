@@ -13,9 +13,9 @@ const SkillsMenu: React.FC<SkillsMenuProps> = ({ onBack, onSelectMode, title = '
   const modes = [
     {
       id: 'audio' as const,
-      title: 'تحدي المتشابهات النصي',
-      description: 'اقرأ الآية الكريمة وحدد المتشابهات بدقة من خلال النص القرآني المكتوب لتعزيز الضبط البصري',
-      icon: <Sparkles className="w-8 h-8" />,
+      title: 'التحدي الصوتي',
+      description: 'اقرأ الآية الكريمة بصوتك وتحقق من ضبطك للمتشابهات من خلال التلاوة المباشرة',
+      icon: <Mic className="w-8 h-8" />,
       color: 'bg-brand-emerald',
       lightColor: 'bg-brand-emerald/10',
       textColor: 'text-brand-emerald',
@@ -23,7 +23,7 @@ const SkillsMenu: React.FC<SkillsMenuProps> = ({ onBack, onSelectMode, title = '
     },
     {
       id: 'complete' as const,
-      title: 'اختر تكملة الآية',
+      title: 'تحدي إكمال الآية',
       description: 'اختبر قوة حفظك من خلال اختيار التكملة الصحيحة للآيات المتشابهة من بين عدة خيارات',
       icon: <CheckCircle className="w-8 h-8" />,
       color: 'bg-brand-gold',
@@ -33,7 +33,7 @@ const SkillsMenu: React.FC<SkillsMenuProps> = ({ onBack, onSelectMode, title = '
     },
     {
       id: 'surah' as const,
-      title: 'اسم السورة',
+      title: 'تحديد اسم السورة',
       description: 'تحدَّ نفسك في معرفة السور التي وردت فيها هذه الآيات المتشابهة بدقة عالية',
       icon: <BookOpen className="w-8 h-8" />,
       color: 'bg-indigo-600',

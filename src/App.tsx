@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useMemo, useCallback, memo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, memo, useRef } from 'react';
 import {
   Sparkles, Trophy, RotateCcw, X, Mic, MicOff, Search, BookOpen, CheckCircle, CheckCircle2,
   ChevronRight, ChevronLeft, LayoutGrid, Heart, History, Compass, Home, Plane,
-  ListFilter, Sun, Moon, Calendar, Settings, Copy, Check, Lightbulb, ChevronDown, User, Quote,
+  ListFilter, Sun, Moon, Calendar, Settings, Copy, Check, Lightbulb, ChevronDown, User, Users, Quote,
   ArrowRight, ArrowLeft, Zap, Lock, AlertCircle, Hash, XCircle, Eye
 } from 'lucide-react';
 import { quranData } from './services/QuranRepository';
@@ -53,8 +53,13 @@ function useWindowSize() {
   return windowSize;
 }
 
-type View = 'home' | 'difficulty' | 'challenge' | 'mushaf' | 'adhkar' | 'hadith' | 'admin' | 'list' | '1v1_menu' | '1v1_waiting' | '1v1_game' | 'speed_challenge' | 'skills_menu' | 'speed_menu' | 'v1_create' | 'v1_join' | 'book' | 'encyclopedia' | 'qiraat_index' | 'qiraat_reader' | 'skills_count_selection' | 'skills_results';
+type View = 'home' | 'difficulty' | 'challenge' | 'mushaf' | 'adhkar' | 'hadith' | 'admin' | 'list' | 'group_menu' | 'group_waiting' | 'group_game' | 'speed_challenge' | 'skills_menu' | 'speed_menu' | 'group_create' | 'group_join' | 'book' | 'encyclopedia' | 'qiraat_index' | 'qiraat_reader' | 'skills_count_selection' | 'skills_results';
 type Difficulty = 'easy' | 'medium' | 'hard';
+
+const toast = {
+  success: (msg: string) => alert(msg),
+  error: (msg: string) => alert(msg)
+};
 
 // Helper function to find the best subsequence match of targetWords in transcriptWords
 // Returns the maximum number of matched words and the maximum consecutive matched words
@@ -115,6 +120,234 @@ interface VerseCardProps {
   wordStates: Record<number, 'correct' | 'skipped'>;
 }
 
+const SkillsChallengeHeader = ({ index, total, mode, verseText, totalPoints: pts }: any) => (
+  <div className="flex flex-col md:flex-row justify-between items-center gap-8 mb-12 relative z-10">
+    <div className="flex flex-col md:flex-row items-center gap-6">
+      <div className="w-16 h-16 bg-brand-gold/10 rounded-2xl flex items-center justify-center text-brand-gold shadow-inner border border-brand-gold/5">
+        {mode === 'audio' ? <Mic className="w-8 h-8" /> : mode === 'surah' ? <Search className="w-8 h-8" /> : <BookOpen className="w-8 h-8" />}
+      </div>
+      <div className="text-center md:text-right">
+        <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand-emerald/10 text-brand-emerald text-[10px] font-black uppercase tracking-[0.2em] mb-2">
+          <motion.div animate={{ rotate: [0, 15, -15, 0] }} transition={{ repeat: Infinity, duration: 2 }}>
+            <Sparkles className="w-3 h-3 text-brand-gold" />
+          </motion.div>
+          <span>{mode === 'audio' ? 'تحدي التلاوة' : mode === 'surah' ? 'تحدي السور' : 'تحدي الإكمال'}</span>
+        </span>
+        <h2 className="text-3xl font-black text-slate-800 leading-tight quran-text">
+          {verseText ? <>{verseText.substring(0, 40)}{verseText.length > 40 ? '...' : ''}</> : 'جاري التحميل...'}
+        </h2>
+      </div>
+    </div>
+
+    <div className="flex items-center gap-8 bg-white/50 backdrop-blur-md p-4 rounded-3xl border border-white shadow-sm">
+      {index !== undefined && total !== undefined && (
+        <div className="flex flex-col">
+          <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">التقدم</span>
+          <span className="text-xl font-black text-brand-emerald tabular-nums">سؤال {index + 1} <span className="text-sm font-bold text-slate-300">من {total}</span></span>
+        </div>
+      )}
+      <div className="w-px h-10 bg-slate-200/50" />
+      <div className="flex flex-col items-end">
+        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">النقاط</span>
+        <span className="text-2xl font-black text-brand-gold tabular-nums">{pts || 0}</span>
+      </div>
+    </div>
+  </div>
+);
+
+const AudioChallengeUI = ({ targetVerses, matchedIds, isListening, onToggleListening, keyword, keywordWordCount, wordStates, onSkip, isComplete, challengeMode, saveScore, KEYWORD, score, setDailyCompleted, updateStatsAfterWin, handlePromptNextChallenge }: any) => {
+  return (
+    <div className="flex flex-col items-center gap-12 w-full">
+      <div className="relative group">
+        <div className={`absolute inset-0 bg-brand-emerald/20 blur-3xl rounded-full transition-all duration-700 group-hover:scale-110 ${isListening ? 'opacity-100 animate-pulse' : 'opacity-0'}`} />
+
+        {/* Success Message */}
+        <AnimatePresence>
+          {isComplete && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              className="p-10 glass border-brand-emerald/10 text-brand-emerald rounded-[3rem] text-center shadow-[0_30px_60px_-15px_rgba(6,78,59,0.1)] relative overflow-hidden mt-6"
+            >
+              <div className="absolute top-0 right-0 w-64 h-64 bg-brand-emerald/5 rounded-full -mr-32 -mt-32 blur-3xl" />
+              <Trophy className="w-20 h-20 mb-6 text-brand-gold mx-auto drop-shadow-lg" />
+              <h3 className="text-4xl font-black mb-4 text-brand-emerald">فتح الله عليك!</h3>
+              <p className="mb-10 text-slate-600 text-xl font-medium">أتقنت جميع المتشابهات في هذا الموضع ببراعة بارك الله فيك.</p>
+
+              <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                {challengeMode === 'daily' ? (
+                  <button
+                    onClick={() => {
+                      saveScore(KEYWORD, score);
+                      const todayStr = new Date().toISOString().split('T')[0];
+                      localStorage.setItem('quran_daily_completed', todayStr);
+                      setDailyCompleted(true);
+                      updateStatsAfterWin();
+                    }}
+                    className="px-10 py-5 bg-brand-gold text-brand-emerald rounded-3xl font-black text-lg hover:bg-white transition-all shadow-xl"
+                  >
+                    إنهاء التحدي اليومي
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => {
+                      handlePromptNextChallenge();
+                      updateStatsAfterWin();
+                    }}
+                    className="px-10 py-5 bg-white text-brand-emerald rounded-3xl font-black text-lg hover:bg-brand-gold transition-all shadow-xl"
+                  >
+                    التحدي التالي
+                  </button>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      <motion.button
+        whileHover={{ scale: 1.02 }}
+        whileTap={{ scale: 0.98 }}
+        onClick={onToggleListening}
+        className={`relative flex items-center gap-6 px-12 py-7 rounded-[2.5rem] font-black text-xl transition-all shadow-2xl ${isListening
+          ? 'bg-red-500 text-white shadow-red-200 scale-105'
+          : 'bg-brand-emerald text-white shadow-brand-emerald/20 hover:shadow-brand-emerald/40'
+          }`}
+      >
+        {isListening ? (
+          <>
+            <div className="flex gap-1 justify-center items-center">
+              {[1, 2, 3].map(i => (
+                <motion.div key={i} animate={{ height: [10, 25, 10] }} transition={{ repeat: Infinity, duration: 0.6, delay: i * 0.1 }} className="w-1 bg-white rounded-full" />
+              ))}
+            </div>
+            <span>إيقاف التلاوة</span>
+          </>
+        ) : (
+          <>
+            <Mic className="w-7 h-7 group-hover:rotate-12 transition-transform" />
+            <span>ابدأ التلاوة الكريمة</span>
+          </>
+        )}
+      </motion.button>
+
+      {onSkip && (
+        <button onClick={onSkip} className="text-slate-400 font-bold hover:text-red-500 transition-colors flex items-center gap-2">
+          <X className="w-4 h-4" /> تخطي هذا الموضع
+        </button>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full pb-20 mt-8">
+        {targetVerses.map((verse: any, idx: number) => (
+          <VerseCard
+            key={verse.id}
+            verse={verse}
+            keyword={keyword}
+            isMatched={matchedIds.has(verse.id)}
+            index={idx}
+            keywordWordCount={keywordWordCount}
+            wordStates={wordStates[verse.id] || {}}
+          />
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const SurahChallengeUI = ({ verseText, inputs, onInputChange, onSubmit, feedback, onSkip }: any) => (
+  <div className="flex flex-col items-center gap-10 w-full max-w-2xl mx-auto">
+    <div className="glass p-12 rounded-[4rem] w-full text-center border-white/80 shadow-2xl relative overflow-hidden group">
+      <div className="absolute top-0 inset-x-0 h-1.5 bg-linear-to-r from-transparent via-brand-gold/30 to-transparent" />
+      <div className="text-4xl md:text-5xl font-black text-brand-emerald leading-relaxed quran-text mb-12 drop-shadow-sm">
+        {verseText}
+      </div>
+
+      <form onSubmit={(e) => { e.preventDefault(); onSubmit(); }} className="flex flex-col gap-5 max-w-md mx-auto relative z-10">
+        {inputs.map((input: string, idx: number) => (
+          <motion.div key={idx} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: idx * 0.1 }}>
+            <input
+              type="text"
+              value={input}
+              onChange={(e) => onInputChange(idx, e.target.value)}
+              placeholder={inputs.length > 1 ? `اسم السورة ${idx + 1}` : "ما اسم السورة؟"}
+              className="w-full p-6 rounded-3xl bg-white border-2 border-slate-100 focus:border-brand-gold outline-none text-2xl font-black text-center quran-text shadow-sm transition-all focus:shadow-xl focus:scale-[1.02]"
+              autoFocus={idx === 0}
+            />
+          </motion.div>
+        ))}
+        <motion.button
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          type="submit"
+          disabled={feedback}
+          className="w-full py-6 bg-brand-gold text-brand-emerald rounded-3xl font-black text-2xl shadow-xl shadow-brand-gold/20 hover:shadow-brand-gold/40 transition-all flex items-center justify-center gap-3 mt-4"
+        >
+          {feedback ? <div className="w-7 h-7 border-4 border-brand-emerald/30 border-t-brand-emerald rounded-full animate-spin" /> : <span>تحقق من الإجابة</span>}
+        </motion.button>
+      </form>
+    </div>
+    {onSkip && (
+      <button onClick={onSkip} className="text-slate-400 font-bold hover:text-red-500 transition-colors flex items-center gap-2">
+        <X className="w-4 h-4" /> تخطي السؤال
+      </button>
+    )}
+  </div>
+);
+
+const CompleteChallengeUI = ({ verseText, options, selectedOption, onOptionSelect, onConfirm, feedback, onSkip }: any) => (
+  <div className="flex flex-col items-center gap-10 w-full max-w-3xl mx-auto">
+    <div className="glass p-12 rounded-[4rem] w-full text-center border-white/80 shadow-2xl relative overflow-hidden">
+      <div className="absolute top-0 inset-x-0 h-1.5 bg-linear-to-r from-transparent via-brand-emerald/30 to-transparent" />
+      <div className="text-4xl md:text-5xl font-black text-brand-emerald leading-relaxed quran-text mb-12">
+        {verseText}
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
+        {options.map((opt: any, idx: number) => {
+          const isSelected = selectedOption === opt;
+          return (
+            <button
+              key={idx}
+              disabled={feedback}
+              onClick={() => onOptionSelect(opt)}
+              className={`p-6 rounded-3xl border-2 transition-all text-2xl font-black quran-text active:scale-95 relative shadow-sm ${isSelected
+                ? 'bg-brand-gold border-brand-gold text-brand-emerald shadow-xl scale-[1.02]'
+                : 'bg-white border-slate-100 text-slate-700 hover:border-brand-gold/30 hover:bg-brand-gold/5'
+                } ${feedback ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              {opt.text}
+            </button>
+          );
+        })}
+      </div>
+
+      {selectedOption && (
+        <motion.button
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          onClick={onConfirm}
+          disabled={feedback}
+          className="w-full mt-10 py-6 bg-brand-emerald text-white rounded-3xl font-black text-2xl shadow-xl shadow-brand-emerald/20 hover:shadow-brand-emerald/40 transition-all flex items-center justify-center gap-4"
+        >
+          {feedback ? (
+            <div className="w-7 h-7 border-4 border-white/30 border-t-white rounded-full animate-spin" />
+          ) : (
+            <>
+              <CheckCircle2 className="w-7 h-7" />
+              <span>تأكيد الإجابة</span>
+            </>
+          )}
+        </motion.button>
+      )}
+    </div>
+    {onSkip && (
+      <button onClick={onSkip} className="text-slate-400 font-bold hover:text-red-500 transition-colors flex items-center gap-2">
+        <X className="w-4 h-4" /> تخطي السؤال
+      </button>
+    )}
+  </div>
+);
+
 const VerseCard = memo(({ verse, keyword, isMatched, index, keywordWordCount, wordStates }: VerseCardProps) => {
   const [copied, setCopied] = useState(false);
   const [isRevealed, setIsRevealed] = useState(false);
@@ -143,7 +376,7 @@ const VerseCard = memo(({ verse, keyword, isMatched, index, keywordWordCount, wo
   const renderHighlightedVerse = () => {
     const words = verse.text.split(' ').filter(Boolean);
     // If we're hinting text (level 2+), show 25% more words per level after the keyword
-    const visibleWordsCount = hintLevel >= 2 
+    const visibleWordsCount = hintLevel >= 2
       ? keywordWordCount + Math.floor((words.length - keywordWordCount) * ((hintLevel - 1) * 0.25))
       : words.length;
 
@@ -152,7 +385,7 @@ const VerseCard = memo(({ verse, keyword, isMatched, index, keywordWordCount, wo
         {words.map((word, wIdx) => {
           const isKeyword = wIdx < keywordWordCount;
           const isVisible = isRevealed || wIdx < visibleWordsCount;
-          
+
           if (!isVisible) return null;
 
           const wordIdx = wIdx - keywordWordCount;
@@ -212,7 +445,7 @@ const VerseCard = memo(({ verse, keyword, isMatched, index, keywordWordCount, wo
           )}
           <div className="flex-1 flex flex-col items-center">
             {isRevealed || hintLevel >= 2 ? (
-              <div 
+              <div
                 className={!isRevealed ? "cursor-pointer hover:opacity-80 transition-opacity w-full text-center" : "w-full text-center"}
                 onClick={() => !isRevealed && setIsRevealed(true)}
               >
@@ -450,7 +683,14 @@ export default function App() {
   const [registrationError, setRegistrationError] = useState<string | null>(null);
 
   // 1v1 State
-  const [room, setRoom] = useState<any>(null);
+  const roomRef = useRef<any>(null);
+  const [room, _setRoom] = useState<any>(null);
+  const setRoom = (val: any) => {
+    roomRef.current = val;
+    _setRoom(val);
+  };
+  const prevParticipantsCount = useRef<number>(0);
+  const prevRoomStatus = useRef<string>('WAITING');
   const [isCreatingRoom, setIsCreatingRoom] = useState(false);
   const [isJoiningRoom, setIsJoiningRoom] = useState(false);
   const [joinCode, setJoinCode] = useState('');
@@ -459,6 +699,7 @@ export default function App() {
   const [v1Error, setV1Error] = useState<string | null>(null);
   const [v1Polling, setV1Polling] = useState(false);
   const [v1GameMode, setV1GameMode] = useState<'audio' | 'complete' | 'surah'>('audio');
+  const [v1MaxPlayers, setV1MaxPlayers] = useState<number>(2);
   const [v1Timer, setV1Timer] = useState(false);
   const [v1QuestionCount, setV1QuestionCount] = useState(5);
   const [v1TimePerQuestion, setV1TimePerQuestion] = useState(15);
@@ -472,7 +713,7 @@ export default function App() {
   const [speedTimeLeft, setSpeedTimeLeft] = useState(30);
   const [speedTotalTimeSpent, setSpeedTotalTimeSpent] = useState(0);
   const [isSpeedGameOver, setIsSpeedGameOver] = useState(false);
-  const [surahInput, setSurahInput] = useState('');
+  const [surahInputs, setSurahInputs] = useState<string[]>([]);
   const [speedStartTime, setSpeedStartTime] = useState<number | null>(null);
 
   // Quiz Session State
@@ -592,6 +833,7 @@ export default function App() {
     setCurrentChallengeIndex(0);
     setSessionCurrentIndex(0);
     setMatchedIds(new Set());
+    setSpeedTimeLeft(skillsType === 'audio' ? 30 : 15);
 
     const dbType = skillsType === 'audio' ? 'STANDARD' : skillsType === 'complete' ? 'COMPLETION' : 'SURAH';
     const excludeIds = Array.from(completedChallengeIds);
@@ -642,6 +884,9 @@ export default function App() {
   const [difficulty, setDifficulty] = useState<Difficulty>((localStorage.getItem('quran_game_difficulty') as Difficulty) || 'medium');
 
   // AI Explanation State
+  const [showExplanation, setShowExplanation] = useState(false);
+  const [isExplaining, setIsExplaining] = useState(false);
+  const [explanationText, setExplanationText] = useState('');
 
   const { width, height } = useWindowSize();
 
@@ -649,13 +894,21 @@ export default function App() {
 
   const currentChallenge = useMemo(() => {
     if (challenges.length === 0) return null;
-    if (view === '1v1_game' && room?.challenges) {
+    if (view === 'group_game' && room?.challenges) {
       return room.challenges[v1ChallengeIndex];
     }
     return challengeMode === 'daily' ? challenges[dailyChallengeIndex] : challenges[currentChallengeIndex];
   }, [view, challenges, room?.challenges, v1ChallengeIndex, challengeMode, dailyChallengeIndex, currentChallengeIndex]);
 
-  const KEYWORD = currentChallenge?.keyword || '';
+  const KEYWORD = currentChallenge?.verseText || currentChallenge?.text || currentChallenge?.keyword || '';
+
+  // Normalize DB gameMode (STANDARD/COMPLETION/SURAH) to frontend values (audio/complete/surah)
+  const roomGameMode = useMemo((): 'audio' | 'complete' | 'surah' => {
+    const raw = (room?.gameMode || '').toUpperCase();
+    if (raw === 'COMPLETION') return 'complete';
+    if (raw === 'SURAH') return 'surah';
+    return 'audio'; // STANDARD, AUDIO, or empty defaults to audio
+  }, [room?.gameMode]);
 
   const targetVerses = useMemo(() => {
     let limit = allTargetVerses.length;
@@ -813,7 +1066,12 @@ export default function App() {
       const data = await res.json();
       if (res.ok) {
         setRoom(data);
-        setView('1v1_game');
+        if (data.status === 'PLAYING') {
+          setView('group_game');
+        } else {
+          setView('group_waiting');
+        }
+        toast.success('تم دخول الغرفة بنجاح');
         // Clear code from URL
         window.history.replaceState({}, '', window.location.pathname);
       } else {
@@ -831,22 +1089,26 @@ export default function App() {
     setIsCreatingRoom(true);
     setV1Error(null);
     try {
+      const requestBody = {
+        action: 'create',
+        player1Id: deviceId,
+        player1Name: playerName,
+        gameMode: v1GameMode === 'audio' ? 'STANDARD' : v1GameMode === 'complete' ? 'COMPLETION' : 'SURAH',
+        questionCount: v1QuestionCount,
+        timePerQuestion: v1Timer ? v1TimePerQuestion : 0
+      };
+
+      console.log('Request Body being sent:', requestBody);
+
       const res = await fetch('/api/1v1', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'create',
-          player1Id: deviceId,
-          player1Name: playerName,
-          gameMode: v1GameMode === 'audio' ? 'STANDARD' : v1GameMode === 'complete' ? 'COMPLETION' : 'SURAH',
-          totalQuestions: v1QuestionCount,
-          timePerQuestion: v1Timer ? v1TimePerQuestion : 0
-        })
+        body: JSON.stringify(requestBody)
       });
       const data = await res.json();
       if (res.ok) {
         setRoom(data);
-        setView('1v1_waiting');
+        setView('group_waiting');
       } else {
         setV1Error(data.message || 'فشل إنشاء الغرفة');
       }
@@ -859,18 +1121,27 @@ export default function App() {
 
   // Poll room status
   useEffect(() => {
-    if (!room?.id || (view !== '1v1_waiting' && view !== '1v1_game')) return;
+    if (!room?.id || (view !== 'group_waiting' && view !== 'group_game')) return;
     if (room.status === 'FINISHED') return;
 
     const poll = async () => {
       try {
-        const res = await fetch(`/api/1v1?action=status&roomId=${room.id}`);
+        const res = await fetch(`/api/1v1?action=poll&roomId=${room.id}`);
         const data = await res.json();
         if (res.ok) {
-          setRoom(data);
-          if (view === '1v1_waiting' && data.status === 'PLAYING') {
-            setView('1v1_game');
+          const prevCount = prevParticipantsCount.current;
+          const newCount = data.participants?.length || 0;
+          if (newCount > prevCount && prevCount > 0) {
+            const newPlayer = data.participants[newCount - 1];
+            toast.success(`انضم ${newPlayer.name} إلى الغرفة`);
           }
+          prevParticipantsCount.current = newCount;
+
+          if (view === 'group_waiting' && data.status === 'PLAYING') {
+            setView('group_game');
+            toast.success('بدأ التحدي الآن!');
+          }
+          setRoom(data);
         }
       } catch (err) {
         console.error('Polling error:', err);
@@ -883,16 +1154,16 @@ export default function App() {
 
   // Update progress in 1v1 game
   useEffect(() => {
-    if (view !== '1v1_game' || !room?.id) return;
+    if (view !== 'group_game' || !room?.id) return;
 
     const totalVersesCount = room.challenges?.reduce((acc: number, c: any) => acc + (Array.isArray(c.verses) ? c.verses.length : 0), 0) || 1;
     const currentMatches = v1PreviousMatchesCount + matchedIds.size;
     const progress = (currentMatches / totalVersesCount) * 100;
 
-    const isPlayer1 = room.player1Id === deviceId;
-    const currentProgress = isPlayer1 ? room.player1Progress : room.player2Progress;
+    const myParticipant = (room.participants || []).find((p: any) => p.deviceId === deviceId);
+    const currentProgress = myParticipant ? (room.playersProgress?.[myParticipant.id]?.progress || 0) : 0;
 
-    if (progress > (currentProgress || 0) || (v1ChallengeIndex === 4 && isComplete)) {
+    if (progress > (currentProgress || 0) || (v1ChallengeIndex === (room?.questionCount || 5) - 1 && isComplete)) {
       fetch('/api/1v1', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -901,7 +1172,9 @@ export default function App() {
           roomId: room.id,
           playerId: deviceId,
           progress,
-          isWinner: v1ChallengeIndex === 4 && isComplete
+          isWinner: v1ChallengeIndex === (room?.questionCount || 5) - 1 && isComplete,
+          correctAnswers: matchedIds.size + (v1PreviousMatchesCount || 0),
+          timeRemaining: speedTimeLeft || 0
         })
       })
         .then(res => res.json())
@@ -914,11 +1187,14 @@ export default function App() {
 
   // Handle 1v1 challenge progression
   useEffect(() => {
-    if (view === '1v1_game' && isComplete && v1ChallengeIndex < 4) {
+    if (view === 'group_game' && isComplete && v1ChallengeIndex < (room?.questionCount || challenges.length) - 1) {
       const timer = setTimeout(() => {
         setV1PreviousMatchesCount(prev => prev + matchedIds.size);
         setV1ChallengeIndex(prev => prev + 1);
         setMatchedIds(new Set());
+        if ((room?.timePerQuestion || 0) > 0) {
+          setSpeedTimeLeft(room.timePerQuestion || 20);
+        }
         setWordStates({});
         resetTranscript();
       }, 2000);
@@ -928,11 +1204,17 @@ export default function App() {
   // Speed Challenge Timer
   useEffect(() => {
     let interval: any;
-    if (view === 'speed_challenge' && !isSpeedGameOver && !isComplete) {
+    const isActive = (view === 'speed_challenge' || (view === 'challenge' && isSpeedMode) || (view === 'group_game' && room?.timePerQuestion > 0)) && !isSpeedGameOver && !isComplete && !skillsFeedback;
+
+    if (isActive) {
       interval = setInterval(() => {
         setSpeedTimeLeft((prev) => {
           if (prev <= 1) {
-            setIsSpeedGameOver(true);
+            if (view === 'speed_challenge') {
+              setIsSpeedGameOver(true);
+            } else {
+              handleSpeedTimeout();
+            }
             stopListening();
             return 0;
           }
@@ -941,7 +1223,7 @@ export default function App() {
       }, 1000);
     }
     return () => clearInterval(interval);
-  }, [view, isSpeedGameOver, isComplete, stopListening]);
+  }, [view, isSpeedGameOver, isComplete, isSpeedMode, stopListening, skillsFeedback]);
 
   // Reset Speed timer on each match
   useEffect(() => {
@@ -951,6 +1233,32 @@ export default function App() {
       setSpeedTimeLeft(30);
     }
   }, [matchedIds.size, view, isSpeedGameOver, isComplete]);
+
+  // Effect to handle Surah Name Challenge inputs initialization
+  useEffect(() => {
+    const isSurahMode = skillsType === 'surah' || (view === 'group_game' && roomGameMode === 'surah');
+    if (currentChallenge && isSurahMode) {
+      const text = currentChallenge.correctText || "";
+      let surahs: string[] = [];
+      try {
+        if (text.startsWith("[")) {
+          surahs = JSON.parse(text);
+        } else if (text) {
+          surahs = [text];
+        } else {
+          // Fallback to first verse surah if any
+          const firstVerseSurah = currentChallenge.verses?.[0]?.surah;
+          if (firstVerseSurah) surahs = [firstVerseSurah];
+        }
+      } catch (e) {
+        if (text) surahs = [text];
+      }
+
+      const validSurahs = surahs.filter(s => s.trim());
+      // Initialize with correct number of empty strings
+      setSurahInputs(new Array(Math.max(1, validSurahs.length)).fill(''));
+    }
+  }, [currentChallenge, skillsType, room?.gameMode, view]);
 
   // Handle Speed Challenge progression
   useEffect(() => {
@@ -1038,8 +1346,7 @@ export default function App() {
 
   const generateOptions = useCallback((type: 'complete' | 'surah', correctValue: string) => {
     if (type === 'surah') return;
-
-    const currentChallenge = challenges[currentChallengeIndex];
+    if (!currentChallenge) return;
     let rawOptions: string[] = [];
 
     if (currentChallenge?.options && Array.isArray(currentChallenge.options)) {
@@ -1057,17 +1364,18 @@ export default function App() {
 
     // Convert to objects and flag the correct one using Identity or Aggressive Normalization
     const normalizedCorrect = superNormalizeArabic(correctValue);
-    const mappedOptions = rawOptions.map(opt => {
+    const mappedOptions = rawOptions.filter((opt): opt is NonNullable<typeof opt> => opt !== null).map(opt => {
       // 1. Check if option is already an identity-based object from DB
-      if (typeof opt === 'object' && opt !== null && 'isCorrect' in opt) {
+      if (typeof opt === 'object' && (opt as any) !== null && 'isCorrect' in (opt as any)) {
+        const o = opt as { text: string; isCorrect: boolean };
         return {
-          text: opt.text,
-          isCorrect: !!opt.isCorrect
+          text: o.text,
+          isCorrect: !!o.isCorrect
         };
       }
 
       // 2. Legacy Fallback: Use Aggressive Normalization for string options
-      const optText = typeof opt === 'string' ? opt : (opt.text || '');
+      const optText = typeof opt === 'string' ? opt : ((opt as any).text || '');
       const isCorrect = superNormalizeArabic(optText) === normalizedCorrect;
 
       // Keep debug logs for any cases that rely on text comparison
@@ -1088,16 +1396,72 @@ export default function App() {
 
     setSkillsOptions(mappedOptions.sort(() => Math.random() - 0.5));
     setSkillsCorrectAnswer(correctValue);
-  }, [challenges, currentChallengeIndex]);
+  }, [currentChallenge]);
+
+  const handleSpeedTimeout = () => {
+    if (skillsFeedback || isComplete) return;
+
+    if (skillsType === 'surah' || (view === 'group_game' && roomGameMode === 'surah')) {
+      handleSubmitSurah();
+    } else if (skillsType === 'audio' || (view === 'group_game' && roomGameMode === 'audio') || skillsType === 'complete' || (view === 'group_game' && roomGameMode === 'complete')) {
+      if (skillsType === 'audio' || (view === 'group_game' && roomGameMode === 'audio')) {
+        const currentQuestion = challenges[currentChallengeIndex];
+        // In group game, the matching might be different, but let's stick to the current logic
+        setSkillsFeedback(true);
+        setTimeout(() => {
+          if (view === 'group_game') {
+            const maxQ = room?.questionCount || 5;
+            const roomChallenges = room?.challenges || [];
+            const maxAvail = roomChallenges.length > 0 ? roomChallenges.length : maxQ;
+            if (v1ChallengeIndex >= Math.min(maxQ, maxAvail) - 1) {
+              // Last question done — force isComplete by matching all verses
+              setMatchedIds(new Set(targetVerses.map(v => v.id)));
+              setSkillsFeedback(false);
+            } else {
+              setV1PreviousMatchesCount(prev => prev + matchedIds.size);
+              setV1ChallengeIndex(prev => prev + 1);
+              setMatchedIds(new Set());
+              setSkillsFeedback(false);
+            }
+          } else {
+            moveToNextQuestion();
+          }
+        }, 1000);
+      } else {
+        handleConfirmAnswer();
+      }
+    }
+  };
+
+  const moveToNextQuestion = () => {
+    setSkillsFeedback(false);
+    setSelectedOption(null);
+    if (view === 'group_game') return;
+
+    if (sessionCurrentIndex + 1 >= questionsCount || sessionCurrentIndex + 1 >= challenges.length) {
+      setView('skills_results');
+    } else {
+      setSessionCurrentIndex(prev => prev + 1);
+      setCurrentChallengeIndex(prev => prev + 1);
+      setMatchedIds(new Set());
+      setWordStates({});
+      setSpeedTimeLeft(skillsType === 'audio' ? 30 : 15); // Reset timer based on mode
+    }
+  };
 
   const handleOptionSelect = (option: any) => {
     if (skillsFeedback) return;
     setSelectedOption(option);
   };
 
+  const handleConfirmAnswerWithOption = (option: any) => {
+    setSelectedOption(option);
+    handleConfirmAnswer();
+  };
+
   const handleConfirmAnswer = () => {
     try {
-      if (skillsFeedback || !selectedOption) return;
+      if (skillsFeedback) return;
       setSkillsFeedback(true);
 
       const currentQuestion = challenges[currentChallengeIndex];
@@ -1106,17 +1470,17 @@ export default function App() {
         return;
       }
 
-      const rawSelected = typeof selectedOption === 'object' ? selectedOption.text : selectedOption;
+      const rawSelected = selectedOption ? (typeof selectedOption === 'object' ? selectedOption.text : selectedOption) : null;
       const rawCorrect = currentQuestion.correctText || "";
 
-      const isCorrect = String(rawSelected).trim().includes(String(rawCorrect).trim());
-      const answer = rawSelected;
+      const isCorrect = rawSelected && String(rawSelected).trim().includes(String(rawCorrect).trim());
+      const answer = rawSelected || "لم يتم اختيار إجابة (انتهى الوقت)";
 
       if (isCorrect) {
         setSessionCorrect(prev => prev + 1);
         if (window.navigator.vibrate) window.navigator.vibrate(50);
 
-        if (view === '1v1_game' && currentQuestion.verses) {
+        if (view === 'group_game' && currentQuestion.verses) {
           const allVerseIds = currentQuestion.verses.map((v: any) => v.id);
           setMatchedIds(new Set(allVerseIds));
         }
@@ -1134,24 +1498,13 @@ export default function App() {
         if (window.navigator.vibrate) window.navigator.vibrate(200);
         setSessionMistakes(prev => [...prev, {
           challenge: currentQuestion,
-          userAnswer: answer,
+          userAnswer: answer || "لا يوجد إجابة",
           correctAnswer: rawCorrect
         }]);
       }
 
       setTimeout(() => {
-        setSkillsFeedback(false);
-        setSelectedOption(null);
-        if (view === '1v1_game') return;
-
-        if (sessionCurrentIndex + 1 >= questionsCount || sessionCurrentIndex + 1 >= challenges.length) {
-          setView('skills_results');
-        } else {
-          setSessionCurrentIndex(prev => prev + 1);
-          setCurrentChallengeIndex(prev => prev + 1);
-          setMatchedIds(new Set());
-          setWordStates({});
-        }
+        moveToNextQuestion();
       }, 1000);
     } catch (error) {
       console.error('handleConfirmAnswer Error:', error);
@@ -1159,43 +1512,75 @@ export default function App() {
     }
   };
 
-  const handleSubmitSurah = (e: React.FormEvent) => {
-    e.preventDefault();
-    const correctSurah = currentChallenge?.correctText || targetVerses[0]?.surah;
-    const isCorrect = normalizeArabicText(surahInput).trim() === normalizeArabicText(correctSurah).trim();
+  const handleSubmitSurah = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     const currentQuestion = challenges[currentChallengeIndex];
+    if (!currentQuestion || skillsFeedback) return;
 
-    if (isCorrect) {
+    setSkillsFeedback(true);
+
+    // 1. Determine all correct surahs
+    const text = currentQuestion.correctText || "";
+    let correctSurahs: string[] = [];
+    try {
+      if (text.startsWith("[")) {
+        correctSurahs = JSON.parse(text);
+      } else if (text) {
+        correctSurahs = [text];
+      } else {
+        const firstVerseSurah = currentQuestion.verses?.[0]?.surah || (targetVerses && targetVerses[0]?.surah);
+        if (firstVerseSurah) correctSurahs = [firstVerseSurah];
+      }
+    } catch (e) {
+      if (text) correctSurahs = [text];
+    }
+    correctSurahs = correctSurahs.filter(s => s.trim());
+
+    // 2. Normalize and check matches
+    const normalizedCorrect = correctSurahs.map(s => normalizeArabicText(s).trim());
+    const normalizedInputs = surahInputs.map(s => normalizeArabicText(s).trim());
+
+    let correctCount = 0;
+    const matchedCorrectIndices = new Set<number>();
+
+    normalizedInputs.forEach(input => {
+      if (!input) return;
+      const matchIndex = normalizedCorrect.findIndex((correct, idx) => correct === input && !matchedCorrectIndices.has(idx));
+      if (matchIndex !== -1) {
+        correctCount++;
+        matchedCorrectIndices.add(matchIndex);
+      }
+    });
+
+    const isFullyCorrect = correctCount === normalizedCorrect.length && normalizedInputs.length === normalizedCorrect.length;
+
+    if (isFullyCorrect) {
       setSessionCorrect(prev => prev + 1);
-      if (window.navigator.vibrate) window.navigator.vibrate(50);
-
-      // Mark as completed
-      if (currentQuestion?.id) {
-        setCompletedChallengeIds(prev => {
-          const next = new Set(prev);
-          next.add(currentQuestion.id);
-          localStorage.setItem('quran_completed_ids', JSON.stringify(Array.from(next)));
-          return next;
-        });
+      if (view === 'group_game' && currentQuestion.verses) {
+        const allVerseIds = currentQuestion.verses.map((v: any) => v.id);
+        setMatchedIds(new Set(allVerseIds));
       }
     } else {
-      setSessionWrong(prev => prev + 1);
-      if (window.navigator.vibrate) window.navigator.vibrate(200);
-      setSessionMistakes(prev => [...prev, { ...currentQuestion, userAnswer: surahInput }]);
+      setSessionWrong(prev => prev + (correctSurahs.length - correctCount));
     }
+    setTotalPoints(prev => prev + correctCount);
 
-    setSurahInput('');
+    setSessionMistakes(prev => [...prev, {
+      challenge: currentQuestion,
+      text: currentQuestion.keyword || "",
+      type: 'SURAH',
+      userInputs: surahInputs,
+      correctSurahsList: correctSurahs,
+      pointsEarned: correctCount,
+      totalPossible: correctSurahs.length,
+      isFullyCorrect
+    }]);
 
-    // Auto-advance
+    setSurahInputs(new Array(surahInputs.length).fill(''));
+
+    // 4. Auto-advance
     setTimeout(() => {
-      if (sessionCurrentIndex + 1 >= questionsCount || sessionCurrentIndex + 1 >= challenges.length) {
-        setView('skills_results');
-      } else {
-        setSessionCurrentIndex(prev => prev + 1);
-        setCurrentChallengeIndex(prev => prev + 1);
-        setMatchedIds(new Set());
-        setWordStates({});
-      }
+      moveToNextQuestion();
     }, 1000);
   };
 
@@ -1450,16 +1835,14 @@ export default function App() {
       // Use verses stored in the database if available
       verses = currentChallenge.verses as Verse[];
       console.log('App: Loaded verses from DB challenge:', currentChallenge.keyword, verses);
-    } else if (currentChallenge && (skillsType === 'complete' || skillsType === 'surah')) {
+    } else if (currentChallenge && (skillsType === 'complete' || skillsType === 'surah' || roomGameMode === 'complete' || roomGameMode === 'surah')) {
       // Create a virtual verse from the keyword for Completion/Surah challenges that lack explicit verses
       verses = [{
         id: `virtual-${currentChallenge.id}`,
-        verseNumber: 1,
+        number: 1,
         text: currentChallenge.keyword,
         surah: currentChallenge.correctText || 'سورة',
-        surahId: 1,
-        page: 1
-      }];
+      }] as Verse[];
       console.log('App: Using virtual verse from keyword:', currentChallenge.keyword);
     } else {
       // Fallback to automatic search disabled as per strict requirement
@@ -1476,11 +1859,15 @@ export default function App() {
     setWordStates({});
     setScore(0);
     resetTranscript();
-  }, [KEYWORD, resetTranscript, view, challengeMode, currentChallenge, challenges.length]);
+    console.log('App: currentChallenge updated:', currentChallenge);
+  }, [KEYWORD, resetTranscript, view, challengeMode, currentChallenge, challenges.length, roomGameMode]);
 
   useEffect(() => {
-    if (view === 'challenge' && (skillsType === 'complete' || skillsType === 'surah') && targetVerses.length > 0) {
-      if (skillsType === 'surah') {
+    const isSkillsMode = view === 'challenge' || view === 'group_game';
+    const effectiveType = view === 'group_game' ? roomGameMode : skillsType;
+
+    if (isSkillsMode && (effectiveType === 'complete' || effectiveType === 'surah') && targetVerses.length > 0) {
+      if (effectiveType === 'surah') {
         generateOptions('surah', targetVerses[0]?.surah || '');
       } else {
         const firstUnmatched = targetVerses.find(v => !matchedIds.has(v.id));
@@ -1491,7 +1878,7 @@ export default function App() {
         }
       }
     }
-  }, [view, skillsType, targetVerses, matchedIds.size, generateOptions]);
+  }, [view, skillsType, targetVerses, matchedIds.size, generateOptions, roomGameMode]);
 
   const keywordWordCount = useMemo(() => KEYWORD.split(' ').filter(Boolean).length, [KEYWORD]);
 
@@ -2013,9 +2400,9 @@ ${versesList}
                       </div>
                     )}
                   </motion.div>
-                ) : view === '1v1_menu' ? (
+                ) : view === 'group_menu' ? (
                   <motion.div
-                    key="1v1_menu"
+                    key="group_menu"
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.98 }}
@@ -2035,14 +2422,14 @@ ${versesList}
                       <div className="w-20 h-20 bg-orange-100 text-orange-600 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-xl shadow-orange-500/10">
                         <User className="w-10 h-10" />
                       </div>
-                      <h2 className="text-4xl font-black text-slate-800 mb-2">تحدي المواجهة (1 ضد 1)</h2>
+                      <h2 className="text-4xl font-black text-slate-800 mb-2">التحدي الجماعي</h2>
                       <p className="text-slate-500 font-bold">نافس أصدقاءك في سباق مباشر للمتشابهات</p>
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                       <motion.button
                         whileHover={{ y: -5 }}
-                        onClick={() => setView('v1_create')}
+                        onClick={() => setView('group_create')}
                         className="group p-10 rounded-[2.5rem] bg-white border-2 border-orange-100 hover:border-orange-500 transition-all text-center flex flex-col items-center gap-6 shadow-xl"
                       >
                         <div className="w-16 h-16 bg-orange-500 text-white rounded-2xl flex items-center justify-center shadow-lg group-hover:rotate-6 transition-transform">
@@ -2056,7 +2443,7 @@ ${versesList}
 
                       <motion.button
                         whileHover={{ y: -5 }}
-                        onClick={() => setView('v1_join')}
+                        onClick={() => setView('group_join')}
                         className="group p-10 rounded-[2.5rem] bg-white border-2 border-brand-emerald/10 hover:border-brand-emerald transition-all text-center flex flex-col items-center gap-6 shadow-xl"
                       >
                         <div className="w-16 h-16 bg-brand-emerald text-white rounded-2xl flex items-center justify-center shadow-lg">
@@ -2069,60 +2456,85 @@ ${versesList}
                       </motion.button>
                     </div>
                   </motion.div>
-                ) : view === 'v1_create' ? (
+                ) : view === 'group_create' ? (
                   <motion.div
-                    key="v1_create"
+                    key="group_create"
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
                     className="max-w-2xl mx-auto py-10 px-4"
                   >
                     <div className="glass p-10 rounded-[3.5rem] border-orange-100 shadow-2xl">
-                      <h2 className="text-3xl font-black text-slate-800 mb-8 text-center">إعدادات المواجهة</h2>
+                      <h2 className="text-3xl font-black text-slate-800 mb-8 text-center">إعدادات التحدي الجماعي</h2>
 
                       <div className="space-y-8">
                         <div>
-                          <label className="block text-sm font-black text-slate-400 mb-4 uppercase tracking-widest">نوع التحدي</label>
-                          <div className="grid grid-cols-3 gap-3">
+                          <label className="block text-sm font-black text-slate-400 mb-6 uppercase tracking-widest text-center">اختر مهارة التحدي</label>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             {[
-                              { id: 'audio', label: 'صوتي', icon: Mic },
-                              { id: 'complete', label: 'خيارات', icon: ListFilter },
-                              { id: 'surah', label: 'السورة', icon: BookOpen }
+                              { id: 'audio', label: 'افتتح بالقول', icon: Mic, color: 'emerald', bg: 'bg-brand-emerald/10', desc: 'تحدى نفسك بقراءة بداية الآيات' },
+                              { id: 'complete', label: 'إكمال الآيات', icon: ListFilter, color: 'blue', bg: 'bg-blue-600/10', desc: 'توقع الكلمات المفقودة في الآية' },
+                              { id: 'surah', label: 'تحديد السورة', icon: BookOpen, color: 'purple', bg: 'bg-purple-600/10', desc: 'تعرف على اسم السورة من الآية' },
+                              { id: 'similar', label: 'متشابهات الآيات', icon: Sparkles, color: 'amber', bg: 'bg-amber-100', desc: 'ميز بين الآيات المتشابهة بدقة' },
+                              { id: 'context', label: 'سياق الآية', icon: Quote, color: 'rose', bg: 'bg-rose-100', desc: 'عرف الآية السابقة أو اللاحقة' },
+                              { id: 'juz', label: 'البحث في الأجزاء', icon: Hash, color: 'indigo', bg: 'bg-indigo-100', desc: 'حدد الجزء والحزب للآية الكريمة' }
                             ].map(mode => (
                               <button
                                 key={mode.id}
                                 onClick={() => setV1GameMode(mode.id as any)}
-                                className={`p-4 rounded-2xl border-2 transition-all flex flex-col items-center gap-2 ${v1GameMode === mode.id ? 'border-orange-500 bg-orange-50 text-orange-600' : 'border-slate-100 hover:border-orange-200 text-slate-400'}`}
+                                className={`p-6 rounded-[2rem] border-2 transition-all flex flex-col items-center text-center gap-3 relative overflow-hidden ${v1GameMode === mode.id
+                                  ? `border-brand-emerald bg-brand-emerald/5 shadow-xl scale-[1.02]`
+                                  : 'border-slate-100 hover:border-slate-200 bg-white'
+                                  }`}
                               >
-                                <mode.icon className="w-6 h-6" />
-                                <span className="font-bold text-sm">{mode.label}</span>
+                                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-1 ${v1GameMode === mode.id ? `bg-brand-emerald text-white` : 'bg-slate-50 text-slate-400'}`}>
+                                  <mode.icon className="w-6 h-6" />
+                                </div>
+                                <div className={`font-black text-sm ${v1GameMode === mode.id ? `text-brand-emerald` : 'text-slate-700'}`}>{mode.label}</div>
+                                <div className="text-[10px] text-slate-400 font-medium leading-tight">{mode.desc}</div>
+                                {v1GameMode === mode.id && <div className={`absolute top-2 right-2 w-2 h-2 rounded-full bg-brand-emerald animate-pulse`} />}
                               </button>
                             ))}
                           </div>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-[10px] font-black text-slate-400 mb-2 uppercase tracking-widest">عدد الأسئلة</label>
-                            <input
-                              type="number"
-                              min="1"
-                              max="20"
-                              value={v1QuestionCount}
-                              onChange={(e) => setV1QuestionCount(parseInt(e.target.value) || 5)}
-                              className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl font-bold text-center"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[10px] font-black text-slate-400 mb-2 uppercase tracking-widest">المؤقت (ثانية/سؤال)</label>
-                            <div className="flex items-center gap-2">
-                              <button
-                                onClick={() => setV1Timer(!v1Timer)}
-                                className={`flex-1 p-4 rounded-2xl border-2 transition-all flex items-center justify-center gap-2 ${v1Timer ? 'border-orange-500 bg-orange-50 text-orange-600' : 'border-slate-100 hover:border-orange-200 text-slate-400'}`}
-                              >
-                                {v1Timer ? <Zap className="w-5 h-5" /> : <X className="w-5 h-5" />}
-                                <span className="font-bold text-sm">{v1Timer ? 'مفعل' : 'معطل'}</span>
-                              </button>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                          <div className="md:col-span-1">
+                            <label className="block text-[10px] font-black text-slate-400 mb-3 uppercase tracking-widest text-center">عدد المشاركين</label>
+                            <div className="flex items-center justify-center gap-2">
+                              {[2, 4, 8, 10].map(num => (
+                                <button
+                                  key={num}
+                                  onClick={() => setV1MaxPlayers(num)}
+                                  className={`w-10 h-10 rounded-xl font-black text-sm transition-all ${v1MaxPlayers === num ? 'bg-orange-500 text-white shadow-md' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}
+                                >
+                                  {num}
+                                </button>
+                              ))}
                             </div>
+                          </div>
+                          <div className="md:col-span-1">
+                            <label className="block text-[10px] font-black text-slate-400 mb-3 uppercase tracking-widest text-center">عدد الأسئلة</label>
+                            <div className="flex items-center justify-center gap-2">
+                              {[5, 10, 15, 20].map(num => (
+                                <button
+                                  key={num}
+                                  onClick={() => setV1QuestionCount(num)}
+                                  className={`w-10 h-10 rounded-xl font-black text-sm transition-all ${v1QuestionCount === num ? 'bg-orange-500 text-white shadow-md' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}
+                                >
+                                  {num}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="md:col-span-1">
+                            <label className="block text-[10px] font-black text-slate-400 mb-3 uppercase tracking-widest text-center">المؤقت</label>
+                            <button
+                              onClick={() => setV1Timer(!v1Timer)}
+                              className={`w-full py-2 px-4 rounded-xl border-2 font-black text-xs transition-all flex items-center justify-center gap-2 ${v1Timer ? 'border-orange-500 bg-orange-50 text-orange-600' : 'border-slate-100 text-slate-400 hover:bg-slate-50'}`}
+                            >
+                              {v1Timer ? <Zap className="w-4 h-4" /> : <X className="w-4 h-4" />}
+                              {v1Timer ? `${v1TimePerQuestion}ث` : 'معطل'}
+                            </button>
                           </div>
                         </div>
 
@@ -2151,17 +2563,98 @@ ${versesList}
                           disabled={isCreatingRoom}
                           className="w-full py-5 bg-orange-500 text-white rounded-3xl font-black text-xl shadow-xl hover:bg-orange-600 transition-all active:scale-95 flex items-center justify-center gap-3"
                         >
-                          {isCreatingRoom ? <div className="w-6 h-6 border-4 border-white border-t-transparent rounded-full animate-spin" /> : 'بدء التحدي الآن'}
+                          {isCreatingRoom ? <div className="w-6 h-6 border-4 border-white border-t-transparent rounded-full animate-spin" /> : 'أنشئ الغرفة الآن'}
                           <ArrowLeft className="w-6 h-6" />
                         </button>
 
-                        <button onClick={() => setView('1v1_menu')} className="w-full text-slate-400 font-bold hover:text-slate-600">رجوع</button>
+                        <button onClick={() => setView('group_menu')} className="w-full text-slate-400 font-bold hover:text-slate-600">رجوع</button>
                       </div>
                     </div>
                   </motion.div>
-                ) : view === 'v1_join' ? (
+                ) : view === 'group_waiting' ? (
                   <motion.div
-                    key="v1_join"
+                    key="group_waiting"
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="max-w-2xl mx-auto py-10 px-4"
+                  >
+                    <div className="glass p-10 rounded-[3.5rem] border-orange-100 shadow-2xl text-center">
+                      <div className="flex items-center justify-center gap-4 mb-8">
+                        <div className="w-16 h-16 bg-orange-500 text-white rounded-2xl flex items-center justify-center shadow-lg animate-pulse">
+                          <Users className="w-8 h-8" />
+                        </div>
+                        <div className="text-right">
+                          <h2 className="text-3xl font-black text-slate-800">قاعة الانتظار</h2>
+                          <p className="text-slate-400 font-bold">انتظار انضمام بقية المتسابقين...</p>
+                        </div>
+                      </div>
+
+                      <div className="bg-slate-50 p-8 rounded-[2.5rem] mb-10 border-2 border-slate-100 shadow-inner">
+                        <div className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">رمز الانضمام للغرفة</div>
+                        <div className="text-5xl font-black text-orange-500 tracking-[0.2em] mb-4">{room?.code}</div>
+                        <button
+                          onClick={() => {
+                            if (room?.code) {
+                              navigator.clipboard.writeText(room.code);
+                            }
+                          }}
+                          className="px-6 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-50"
+                        >
+                          نسخ الرمز
+                        </button>
+                      </div>
+
+                      <div className="space-y-4 mb-10">
+                        <div className="flex items-center justify-between px-4">
+                          <span className="text-sm font-black text-slate-800">المتسابقون ({room?.participants?.length || 1} / {room?.maxPlayers || v1MaxPlayers})</span>
+                          <span className="flex h-2 w-2 rounded-full bg-orange-500 animate-ping" />
+                        </div>
+                        <div className="grid grid-cols-1 gap-3">
+                          {(room?.participants || []).map((p: any, i: number) => (
+                            <motion.div
+                              initial={{ opacity: 0, x: -20 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              key={p?.id || i}
+                              className="flex items-center gap-4 p-4 bg-white rounded-2xl border border-slate-100 shadow-sm"
+                            >
+                              <div className="w-10 h-10 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center font-black">
+                                {i + 1}
+                              </div>
+                              <span className="font-bold text-slate-700">{p?.name || 'لاعب'}</span>
+                              {p?.deviceId === room?.player1?.deviceId && <span className="mr-auto px-3 py-1 bg-orange-500 text-white text-[10px] font-black rounded-lg uppercase">المنشئ</span>}
+                            </motion.div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {room?.player1?.deviceId === deviceId && (
+                        <button
+                          onClick={async () => {
+                            const res = await fetch('/api/1v1', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ action: 'start', roomId: room.id })
+                            });
+                            const data = await res.json();
+                            if (res.ok) {
+                              setRoom(data);
+                              toast.success('بدأ التحدي! بالتوفيق للجميع');
+                              setView('group_game');
+                            }
+                          }}
+                          className="w-full py-5 bg-orange-500 text-white rounded-3xl font-black text-xl shadow-xl hover:bg-orange-600 transition-all active:scale-95"
+                        >
+                          ابدأ التحدي الآن
+                        </button>
+                      )}
+
+                      <button onClick={() => setView('home')} className="mt-8 text-slate-400 font-bold hover:text-slate-600">إلغاء والتراجع</button>
+                    </div>
+                  </motion.div>
+                ) : view === 'group_join' ? (
+                  <motion.div
+                    key="group_join"
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
                     className="max-w-md mx-auto py-20 px-4"
@@ -2190,88 +2683,17 @@ ${versesList}
                         {isJoiningRoom ? <div className="w-6 h-6 border-4 border-white border-t-transparent rounded-full animate-spin" /> : 'دخول الغرفة'}
                       </button>
 
-                      <button onClick={() => setView('1v1_menu')} className="mt-8 text-slate-400 font-bold hover:text-slate-600">رجوع</button>
+                      <button onClick={() => setView('group_menu')} className="mt-8 text-slate-400 font-bold hover:text-slate-600">رجوع</button>
                     </div>
                   </motion.div>
-                ) : view === '1v1_waiting' ? (
+                ) : view === 'group_game' ? (
                   <motion.div
-                    key="1v1_waiting"
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0 }}
-                    className="max-w-2xl mx-auto py-20 px-4 text-center"
-                  >
-                    <div className="glass p-12 rounded-[4rem] border-orange-100 shadow-2xl relative overflow-hidden">
-                      <div className="absolute top-0 inset-x-0 h-2 bg-linear-to-r from-transparent via-orange-400 to-transparent animate-pulse" />
-
-                      <div className="w-24 h-24 bg-orange-100 text-orange-600 rounded-[2rem] flex items-center justify-center mx-auto mb-8 relative">
-                        <div className="absolute inset-0 bg-orange-400/20 rounded-[2rem] animate-ping opacity-40" />
-                        <RotateCcw className="w-10 h-10 animate-spin-slow" />
-                      </div>
-
-                      <h2 className="text-4xl font-black text-brand-emerald mb-4">في انتظار المنافس...</h2>
-                      <p className="text-slate-500 font-bold mb-10">شارك الرمز التالي مع صديقك ليبدأ التحدي فوراً</p>
-
-                      <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-3xl p-8 mb-10 group relative">
-                        <span className="text-6xl font-black text-brand-emerald tracking-[0.2em] tabular-nums select-all">
-                          {room?.code}
-                        </span>
-
-                        <button
-                          onClick={() => {
-                            if (room?.code) {
-                              navigator.clipboard.writeText(room.code);
-                              // Show success feedback
-                            }
-                          }}
-                          className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1.5 bg-brand-gold text-brand-emerald rounded-full text-[10px] font-black uppercase tracking-widest shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          نسخ الرمز
-                        </button>
-                      </div>
-
-                      <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                        <button
-                          onClick={() => {
-                            const shareText = `تعالَ نافسني في تحدي المتشابهات القرآنية! الرمز: ${room?.code}\n${window.location.origin}/?code=${room?.code}`;
-                            window.open(`https://wa.me/?text=${encodeURIComponent(shareText)}`, '_blank');
-                          }}
-                          className="flex-1 py-4 bg-[#25D366] text-white rounded-2xl font-black shadow-lg hover:brightness-110 transition-all flex items-center justify-center gap-3"
-                        >
-                          <svg className="w-6 h-6 fill-current" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.992-.001-3.951-.499-5.688-1.447l-6.305 1.653zm6.357-3.872c1.414.841 3.109 1.484 4.748 1.485 5.817 0 10.541-4.724 10.544-10.542.001-2.822-1.097-5.474-3.092-7.471-1.994-1.996-4.649-3.095-7.472-3.095-5.817 0-10.543 4.725-10.545 10.544 0 2.107.51 3.841 1.485 5.48l-.943 3.443 3.52-.924zm10.974-7.411c-.33-.165-1.951-.963-2.252-1.073-.302-.11-.522-.165-.742.165s-.852 1.073-1.044 1.293c-.192.22-.385.247-.715.082-.33-.165-1.393-.513-2.653-1.637-1.006-.897-1.684-2.005-1.882-2.335-.198-.33-.021-.508.143-.672.148-.147.33-.385.495-.578.165-.193.22-.33.33-.55.11-.22.055-.412-.028-.577-.082-.165-.742-1.789-1.018-2.433-.268-.64-.537-.552-.743-.563-.191-.01-.411-.011-.631-.011-.22 0-.577.083-.88.413-.303.33-1.155 1.127-1.155 2.75s1.183 3.191 1.348 3.411c.165.22 2.328 3.555 5.639 4.981.787.34 1.401.543 1.88.697.79.25 1.51.215 2.079.13.634-.095 1.951-.798 2.225-1.569.275-.77.275-1.43.192-1.569-.083-.138-.303-.22-.633-.385z" /></svg>
-                          مشاركة عبر واتساب
-                        </button>
-                        <button
-                          onClick={() => {
-                            const url = `${window.location.origin}/?code=${room?.code}`;
-                            navigator.clipboard.writeText(url);
-                            // Show success feedback
-                          }}
-                          className="px-8 py-4 bg-white border-2 border-slate-100 text-slate-500 rounded-2xl font-black hover:bg-slate-50 transition-all flex items-center justify-center gap-3"
-                        >
-                          <Copy className="w-5 h-5" />
-                          نسخ الرابط المباشر
-                        </button>
-                      </div>
-
-                      <button
-                        onClick={() => setView('home')}
-                        className="mt-12 text-slate-400 font-bold hover:text-red-500 transition-colors flex items-center gap-2 mx-auto"
-                      >
-                        <X className="w-4 h-4" />
-                        إلغاء الغرفة والعودة
-                      </button>
-                    </div>
-                  </motion.div>
-                ) : view === '1v1_game' ? (
-                  <motion.div
-                    key="1v1_game"
+                    key="group_game"
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
                     className="flex flex-col gap-8 max-w-6xl mx-auto py-6 px-4"
                   >
-                    {/* Header: Scoreboard / Progress */}
                     <div className="glass p-6 rounded-3xl border-brand-emerald/10 shadow-xl sticky top-4 z-50">
                       <div className="flex items-center justify-between mb-6">
                         <div className="flex items-center gap-3">
@@ -2285,41 +2707,29 @@ ${versesList}
                           <span className="text-xs font-black text-slate-500">مباشر</span>
                         </div>
                       </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
-                        {/* Player 1 Progress */}
-                        <div className={`space-y-3 p-4 rounded-2xl transition-all ${room?.player1Id === deviceId ? 'bg-brand-emerald/5 ring-2 ring-brand-emerald/20 shadow-md' : 'bg-slate-50 opacity-90'}`}>
-                          <div className="flex justify-between items-center px-1">
-                            <span className="font-black text-slate-700">{room?.player1?.name} {room?.player1Id === deviceId && '(أنت)'}</span>
-                            <span className="font-black text-brand-emerald">{room?.player1Progress !== undefined ? Math.round(room.player1Progress * 10) / 10 : 0}%</span>
-                          </div>
-                          <div className="h-3 bg-slate-200 rounded-full overflow-hidden shadow-inner">
-                            <motion.div
-                              initial={{ width: 0 }}
-                              animate={{ width: `${room?.player1Progress || 0}%` }}
-                              className="h-full bg-linear-to-r from-brand-emerald to-emerald-400"
-                            />
-                          </div>
-                        </div>
-
-                        {/* Player 2 Progress */}
-                        <div className={`space-y-3 p-4 rounded-2xl transition-all ${room?.player2Id === deviceId ? 'bg-orange-50 ring-2 ring-orange-200 shadow-md' : 'bg-slate-50 opacity-90'}`}>
-                          <div className="flex justify-between items-center px-1">
-                            <span className="font-black text-slate-700">{room?.player2?.name || 'في انتظار...'} {room?.player2Id === deviceId && '(أنت)'}</span>
-                            <span className="font-black text-orange-600">{room?.player2Progress !== undefined ? Math.round(room.player2Progress * 10) / 10 : 0}%</span>
-                          </div>
-                          <div className="h-3 bg-slate-200 rounded-full overflow-hidden shadow-inner">
-                            <motion.div
-                              initial={{ width: 0 }}
-                              animate={{ width: `${room?.player2Progress || 0}%` }}
-                              className="h-full bg-linear-to-r from-orange-400 to-orange-600"
-                            />
-                          </div>
-                        </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-center">
+                        {(room?.participants || []).map((p: any) => {
+                          const pProgress = room?.playersProgress?.[p.id]?.progress || 0;
+                          const isMe = p.deviceId === deviceId;
+                          return (
+                            <div key={p.id} className={`space-y-2 p-4 rounded-2xl transition-all ${isMe ? 'bg-orange-50 ring-2 ring-orange-200 shadow-md' : 'bg-white border border-slate-100 opacity-90'}`}>
+                              <div className="flex justify-between items-center px-1">
+                                <span className="font-black text-xs text-slate-700 truncate max-w-[100px]">{p.name} {isMe && '(أنت)'}</span>
+                                <span className="font-black text-[10px] text-orange-600">{Math.round(pProgress * 10) / 10}%</span>
+                              </div>
+                              <div className="h-2 bg-slate-100 rounded-full overflow-hidden shadow-inner">
+                                <motion.div
+                                  initial={{ width: 0 }}
+                                  animate={{ width: `${pProgress}%` }}
+                                  className={`h-full ${isMe ? 'bg-orange-500' : 'bg-slate-400'}`}
+                                />
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
 
-                    {/* Winner Message Overlay */}
                     <AnimatePresence>
                       {room?.status === 'FINISHED' && (
                         <motion.div
@@ -2329,11 +2739,45 @@ ${versesList}
                         >
                           <div className="absolute inset-0 bg-brand-gold/5 animate-pulse" />
                           <div className="relative z-10">
-                            <Trophy className="w-24 h-24 text-brand-gold mx-auto mb-6" />
-                            <h2 className="text-5xl font-black text-brand-emerald mb-4">انتهى التحدي!</h2>
-                            <div className="text-3xl font-black text-slate-800 mb-8">
-                              الفائز: <span className="text-brand-gold">{room.winner?.name || 'تعادل!'}</span>
+                            <Trophy className="w-20 h-20 text-brand-gold mx-auto mb-6" />
+                            <h2 className="text-4xl font-black text-brand-emerald mb-4">اكتمل السباق!</h2>
+
+                            <div className="max-w-md mx-auto space-y-3 mb-10">
+                              {(room?.participants || [])
+                                .map((p: any) => ({
+                                  ...p,
+                                  finishTime: room?.playersProgress?.[p.id]?.finishTime,
+                                  score: room?.playersProgress?.[p.id]?.score || 0
+                                }))
+                                .filter((p: any) => p.finishTime)
+                                .sort((a: any, b: any) => {
+                                  if (b.score !== a.score) return b.score - a.score;
+                                  return (a.finishTime || Infinity) - (b.finishTime || Infinity);
+                                })
+                                .map((p: any, idx: number) => (
+                                  <motion.div
+                                    key={p.id}
+                                    initial={{ opacity: 0, x: -20 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    transition={{ delay: idx * 0.1 }}
+                                    className={`flex items-center gap-4 p-4 rounded-2xl border-2 ${idx === 0 ? 'bg-brand-gold/10 border-brand-gold ring-4 ring-brand-gold/20' : 'bg-white border-slate-100 shadow-sm'}`}
+                                  >
+                                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-xl ${idx === 0 ? 'bg-brand-gold text-brand-emerald' : 'bg-slate-100 text-slate-400'}`}>
+                                      {idx + 1}
+                                    </div>
+                                    <div className="text-right flex-1">
+                                      <div className="font-black text-slate-800 flex justify-between items-center">
+                                        <span>{p.name} {p.deviceId === deviceId && '(أنت)'}</span>
+                                        <span className="text-xs text-brand-gold font-bold">النقاط: {p.score}</span>
+                                      </div>
+                                      <div className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+                                        {idx === 0 ? 'المركز الأول 🏆' : `المركز ${idx + 1}`}
+                                      </div>
+                                    </div>
+                                  </motion.div>
+                                ))}
                             </div>
+
                             <div className="flex flex-col sm:flex-row gap-4 justify-center">
                               <button
                                 onClick={() => setView('home')}
@@ -2347,76 +2791,48 @@ ${versesList}
                       )}
                     </AnimatePresence>
 
-                    {/* Game Content */}
                     {room?.status === 'PLAYING' && (
                       <div className="max-w-4xl mx-auto w-full px-4 pt-10">
-                        <div className="text-center mb-12">
-                          <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-orange-100 text-orange-600 text-xs font-black uppercase tracking-[0.2em] mb-4">
-                            <Sparkles className="w-3.5 h-3.5" />
-                            <span>المسابقة {v1ChallengeIndex + 1} من {room?.totalQuestions || 5}</span>
-                          </span>
-                          <h2 className="text-3xl md:text-5xl font-black text-brand-emerald mb-6 leading-tight quran-text">
-                            آيات تبدأ بـ: <span className="text-brand-gold">"{KEYWORD}"</span>
-                          </h2>
-                          <div className="h-1.5 w-24 bg-brand-gold/20 rounded-full mx-auto" />
-                        </div>
+                        <SkillsChallengeHeader
+                          index={v1ChallengeIndex}
+                          total={room?.questionCount || 5}
+                          mode={roomGameMode}
+                          verseText={currentChallenge?.verseText || currentChallenge?.text || currentChallenge?.keyword}
+                          totalPoints={totalPoints}
+                        />
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-20">
-                          {targetVerses.map((verse, index) => (
-                            <VerseCard
-                              key={verse.id}
-                              verse={verse}
-                              keyword={KEYWORD}
-                              isMatched={matchedIds.has(verse.id)}
-                              index={index}
-                              keywordWordCount={keywordWordCount}
-                              wordStates={wordStates[verse.id] || {}}
-                            />
-                          ))}
-                        </div>
-
-                        {/* Controls for 1v1 */}
-                        <div className="flex justify-center mt-10">
-                          {room?.gameMode === 'audio' ? (
-                            <motion.button
-                              whileHover={{ scale: 1.1 }}
-                              whileTap={{ scale: 0.9 }}
-                              onClick={isListening ? stopListening : startListening}
-                              className={`w-20 h-20 rounded-full flex items-center justify-center shadow-2xl transition-all ${isListening ? 'bg-red-500 text-white animate-pulse' : 'bg-brand-emerald text-white'}`}
-                            >
-                              {isListening ? <Mic className="w-8 h-8" /> : <MicOff className="w-8 h-8" />}
-                            </motion.button>
-                          ) : room?.gameMode === 'surah' ? (
-                            <form onSubmit={handleSubmitSurah} className="w-full max-w-md flex flex-col sm:flex-row gap-3 bg-white/50 p-4 rounded-[2.5rem] border border-white">
-                              <input
-                                type="text"
-                                value={surahInput}
-                                onChange={(e) => setSurahInput(e.target.value)}
-                                placeholder="اكتب اسم السورة..."
-                                className="flex-1 p-4 rounded-2xl bg-white border border-slate-100 focus:border-brand-gold outline-none text-xl font-black text-center quran-text"
-                                autoFocus
-                              />
-                              <button
-                                type="submit"
-                                className="px-8 py-4 bg-brand-gold text-brand-emerald rounded-2xl font-black text-lg shadow-lg"
-                              >
-                                تحقق
-                              </button>
-                            </form>
-                          ) : (
-                            <div className="grid grid-cols-2 gap-3 w-full max-w-md">
-                              {skillsOptions.map((opt, idx) => (
-                                <button
-                                  key={idx}
-                                  onClick={() => handleOptionSelect(opt)}
-                                  className="p-4 rounded-2xl bg-white border-2 border-slate-50 hover:border-brand-gold hover:bg-brand-gold/5 transition-all text-lg font-black text-slate-700 shadow-sm quran-text"
-                                >
-                                  {opt.text}
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
+                        {roomGameMode === 'audio' ? (
+                          <AudioChallengeUI
+                            targetVerses={targetVerses}
+                            matchedIds={matchedIds}
+                            isListening={isListening}
+                            onToggleListening={isListening ? stopListening : startListening}
+                            keyword={currentChallenge?.verseText || currentChallenge?.text || currentChallenge?.keyword}
+                            keywordWordCount={keywordWordCount}
+                            wordStates={wordStates}
+                          />
+                        ) : roomGameMode === 'surah' ? (
+                          <SurahChallengeUI
+                            verseText={currentChallenge?.verseText || currentChallenge?.text || currentChallenge?.keyword}
+                            inputs={surahInputs}
+                            onInputChange={(idx: number, val: string) => {
+                              const newInputs = [...surahInputs];
+                              newInputs[idx] = val;
+                              setSurahInputs(newInputs);
+                            }}
+                            onSubmit={handleSubmitSurah}
+                            feedback={skillsFeedback}
+                          />
+                        ) : (
+                          <CompleteChallengeUI
+                            verseText={currentChallenge?.verseText || currentChallenge?.text || currentChallenge?.keyword}
+                            options={skillsOptions || []}
+                            selectedOption={selectedOption}
+                            onOptionSelect={handleOptionSelect}
+                            onConfirm={handleConfirmAnswer}
+                            feedback={skillsFeedback}
+                          />
+                        )}
                       </div>
                     )}
                   </motion.div>
@@ -2490,43 +2906,45 @@ ${versesList}
                         </div>
                       </motion.div>
                     ) : (
-                      <div className="max-w-4xl mx-auto w-full">
-                        <div className="text-center mb-12">
-                          <span className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-brand-gold/10 text-brand-gold text-xs font-black uppercase tracking-[0.2em] mb-4">
-                            <Sparkles className="w-3.5 h-3.5" />
-                            <span>الموضع الحالي</span>
-                          </span>
-                          <h2 className="text-3xl md:text-5xl font-black text-brand-emerald mb-6 leading-tight quran-text">
-                            آيات تبدأ بـ: <span className="text-brand-gold">"{KEYWORD}"</span>
-                          </h2>
-                          <div className="h-1.5 w-24 bg-brand-gold/20 rounded-full mx-auto" />
-                        </div>
+                      <div className="max-w-4xl mx-auto w-full px-4 pt-10">
+                        <SkillsChallengeHeader
+                          mode={skillsType}
+                          verseText={KEYWORD}
+                          totalPoints={totalPoints}
+                        />
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-20">
-                          {targetVerses.map((verse, index) => (
-                            <VerseCard
-                              key={verse.id}
-                              verse={verse}
-                              keyword={KEYWORD}
-                              isMatched={matchedIds.has(verse.id)}
-                              index={index}
-                              keywordWordCount={keywordWordCount}
-                              wordStates={wordStates[verse.id] || {}}
-                            />
-                          ))}
-                        </div>
-
-                        {/* Mic Button */}
-                        <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-50">
-                          <motion.button
-                            whileHover={{ scale: 1.1 }}
-                            whileTap={{ scale: 0.9 }}
-                            onClick={isListening ? stopListening : startListening}
-                            className={`w-24 h-24 rounded-full flex items-center justify-center shadow-2xl transition-all ${isListening ? 'bg-red-500 text-white animate-pulse' : 'bg-brand-emerald text-white'}`}
-                          >
-                            {isListening ? <Mic className="w-10 h-10" /> : <MicOff className="w-10 h-10" />}
-                          </motion.button>
-                        </div>
+                        {skillsType === 'audio' ? (
+                          <AudioChallengeUI
+                            targetVerses={targetVerses}
+                            matchedIds={matchedIds}
+                            isListening={isListening}
+                            onToggleListening={isListening ? stopListening : startListening}
+                            keyword={KEYWORD}
+                            keywordWordCount={keywordWordCount}
+                            wordStates={wordStates}
+                          />
+                        ) : skillsType === 'surah' ? (
+                          <SurahChallengeUI
+                            verseText={KEYWORD}
+                            inputs={surahInputs}
+                            onInputChange={(idx: number, val: string) => {
+                              const newInputs = [...surahInputs];
+                              newInputs[idx] = val;
+                              setSurahInputs(newInputs);
+                            }}
+                            onSubmit={handleSubmitSurah}
+                            feedback={skillsFeedback}
+                          />
+                        ) : (
+                          <CompleteChallengeUI
+                            verseText={KEYWORD}
+                            options={skillsOptions || []}
+                            selectedOption={selectedOption}
+                            onOptionSelect={handleOptionSelect}
+                            onConfirm={handleConfirmAnswer}
+                            feedback={skillsFeedback}
+                          />
+                        )}
                       </div>
                     )}
                   </motion.div>
@@ -2603,11 +3021,11 @@ ${versesList}
                       <div className="grid grid-cols-2 gap-6 mb-12">
                         <div className="bg-brand-emerald/5 p-8 rounded-[2rem] border border-brand-emerald/10">
                           <span className="text-4xl font-black text-brand-emerald block mb-1">{sessionCorrect}</span>
-                          <span className="text-slate-500 font-bold">إجابة صحيحة</span>
+                          <span className="text-slate-500 font-bold">{skillsType === 'surah' ? 'سورة صحيحة' : 'إجابة صحيحة'}</span>
                         </div>
                         <div className="bg-red-50 p-8 rounded-[2rem] border border-red-100">
                           <span className="text-4xl font-black text-red-600 block mb-1">{sessionWrong}</span>
-                          <span className="text-slate-500 font-bold">إجابة خاطئة</span>
+                          <span className="text-slate-500 font-bold">{skillsType === 'surah' ? 'سورة خاطئة' : 'إجابة خاطئة'}</span>
                         </div>
                       </div>
 
@@ -2618,7 +3036,7 @@ ${versesList}
                             className="w-full py-5 bg-slate-800 text-white rounded-3xl font-black text-lg shadow-xl hover:bg-slate-900 transition-all flex items-center justify-center gap-3"
                           >
                             <History className="w-6 h-6" />
-                            {showMistakes ? 'إخفاء الأخطاء' : 'كشف الأسئلة التي أخطأت بها'}
+                            {showMistakes ? 'إخفاء التفاصيل' : 'عرض تفاصيل الإجابات'}
                           </button>
                         )}
 
@@ -2638,21 +3056,49 @@ ${versesList}
                             exit={{ opacity: 0, height: 0 }}
                             className="mt-10 pt-10 border-t border-slate-100 text-right overflow-hidden"
                           >
-                            <h3 className="text-xl font-black text-slate-800 mb-6">مراجعة الأخطاء:</h3>
-                            <div className="space-y-6 max-h-[400px] overflow-y-auto px-2">
+                            <h3 className="text-xl font-black text-slate-800 mb-6">مراجعة الإجابات:</h3>
+                            <div className="space-y-6 max-h-[600px] overflow-y-auto px-2">
                               {sessionMistakes.map((m, i) => (
-                                <div key={i} className="p-6 rounded-2xl bg-slate-50 border border-slate-100">
-                                  <p className="quran-text text-xl mb-4 text-slate-700 leading-loose">{m.text || m.keyword}</p>
-                                  <div className="flex flex-col gap-2 text-sm">
-                                    <div className="flex items-center gap-2 text-red-600 font-bold">
-                                      <XCircle className="w-4 h-4" />
-                                      <span>إجابتك: <span className="quran-text-sm">{m.userAnswer}</span></span>
-                                    </div>
-                                    <div className="flex items-center gap-2 text-brand-emerald font-bold">
-                                      <CheckCircle className="w-4 h-4" />
-                                      <span>الإجابة الصحيحة: <span className="quran-text-sm">{m.correctText || (m.type === 'COMPLETION' ? m.text.split(' ').pop() : m.surah)}</span></span>
+                                <div key={i} className={`p-6 rounded-2xl border ${m.isFullyCorrect ? 'bg-brand-emerald/5 border-brand-emerald/10' : 'bg-slate-50 border-slate-100'}`}>
+                                  <div className="flex justify-between items-start mb-4 gap-4">
+                                    <p className="quran-text text-xl text-slate-700 leading-loose flex-1 text-right">{m.keyword || m.text}</p>
+                                    <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest flex-shrink-0 ${m.isFullyCorrect ? 'bg-brand-emerald text-white' : 'bg-brand-gold text-brand-emerald'}`}>
+                                      {m.pointsEarned} / {m.totalPossible || 1}
                                     </div>
                                   </div>
+
+                                  {m.type === 'AUDIO_MISS' ? (
+                                    <div className="mt-4 p-4 rounded-xl bg-red-50/50 border border-red-100">
+                                      <div className="flex items-center justify-between mb-2">
+                                        <span className="text-sm font-black text-slate-500">نتيجة التلاوة:</span>
+                                        <span className="text-lg font-black text-red-600 tabular-nums">{m.matchedCount} / {m.totalPossible}</span>
+                                      </div>
+                                      <p className="text-xs font-bold text-red-500">تم التعرف على {m.matchedCount} آيات، وفاتك {m.missedCount} آيات بسبب ضيق الوقت.</p>
+                                    </div>
+                                  ) : m.correctSurahsList ? (
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+                                      {m.correctSurahsList.map((correct: string, idx: number) => {
+                                        const userHasIt = m.userInputs?.some((input: string) => normalizeArabicText(input).trim() === normalizeArabicText(correct).trim());
+                                        return (
+                                          <div key={idx} className={`p-3 rounded-xl flex items-center justify-between gap-3 border ${userHasIt ? 'bg-white border-brand-emerald/30 text-brand-emerald shadow-sm' : 'bg-red-50/50 border-red-100 text-red-600'}`}>
+                                            <span className="font-bold quran-text-sm">{correct}</span>
+                                            {userHasIt ? <CheckCircle className="w-4 h-4" /> : <XCircle className="w-4 h-4" />}
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  ) : (
+                                    <div className="flex flex-col gap-2 text-sm">
+                                      <div className="flex items-center gap-2 text-red-600 font-bold">
+                                        <XCircle className="w-4 h-4" />
+                                        <span>إجابتك: <span className="quran-text-sm">{m.userAnswer}</span></span>
+                                      </div>
+                                      <div className="flex items-center gap-2 text-brand-emerald font-bold">
+                                        <CheckCircle className="w-4 h-4" />
+                                        <span>الإجابة الصحيحة: <span className="quran-text-sm">{m.correctText || (m.type === 'COMPLETION' ? m.text.split(' ').pop() : (m.challenge?.verses?.[0]?.surah || ''))}</span></span>
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
                               ))}
                             </div>
@@ -2815,26 +3261,7 @@ ${versesList}
                         </motion.button>
 
                         {/* 1v1 Challenge Card */}
-                        <motion.button
-                          whileHover={{ y: -4 }}
-                          onClick={() => setView('1v1_menu')}
-                          className="group relative p-6 rounded-2xl text-right overflow-hidden transition-all duration-300 flex flex-col justify-between border border-slate-100 min-h-[160px] bg-white shadow-sm hover:shadow-md hover:border-orange-300/30"
-                        >
-                          <div className="flex items-start justify-between">
-                            <div className="w-12 h-12 rounded-xl bg-orange-500/10 text-orange-500 flex items-center justify-center transition-all duration-300 group-hover:bg-orange-500 group-hover:text-white shadow-sm">
-                              <User className="w-6 h-6" />
-                            </div>
-                            <span className="text-[10px] text-orange-600 font-bold opacity-0 group-hover:opacity-100 transition-opacity">مباشر الآن</span>
-                          </div>
 
-                          <div className="mt-4">
-                            <div className="flex items-center justify-between">
-                              <h2 className="text-lg font-black text-orange-900">تحدي 1 ضد 1</h2>
-                              <ArrowLeft className="w-5 h-5 text-orange-500 opacity-0 group-hover:opacity-100 group-hover:-translate-x-1 transition-all" />
-                            </div>
-                            <p className="text-slate-400 font-bold text-xs mt-1">نافس أصدقاءك في سباق مباشر للمتشابهات</p>
-                          </div>
-                        </motion.button>
 
                         {/* Speed Challenge Card */}
                         <motion.button
@@ -3888,184 +4315,74 @@ ${versesList}
                     />
                   </motion.div>
                 ) : (
-                  <div key="game" className="space-y-10">
-                    {/* Keyword Card */}
-                    <motion.div
-                      layout
-                      className="glass relative p-12 rounded-[4rem] text-center overflow-hidden border-brand-emerald/10 shadow-2xl"
-                    >
-                      <div className="absolute top-0 inset-x-0 h-2 bg-linear-to-r from-transparent via-brand-gold/40 to-transparent" />
-
-                      {challengeMode === 'daily' && (
-                        <div className="absolute top-8 right-8 bg-brand-gold text-brand-emerald text-[10px] font-black uppercase tracking-[0.2em] px-4 py-2 rounded-full shadow-lg">
-                          يوميات الحفاظ
-                        </div>
-                      )}
-
-                      <h2 className="text-sm font-black text-slate-400 uppercase tracking-[0.3em] mb-6">
-                        {skillsType === 'surah' ? 'تحديد السورة' : skillsType === 'complete' ? 'إكمال الآيات' : 'افتتح بالقول'}
-                      </h2>
-                      <motion.div
-                        initial={{ scale: 0.9 }}
-                        animate={{ scale: 1 }}
-                        key={KEYWORD}
-                        className="text-5xl font-black text-brand-emerald leading-relaxed quran-text"
-                      >
-                        {skillsType === 'surah' ? (
-                          <>ما اسم السورة لهذه الآيات؟</>
-                        ) : skillsType === 'complete' ? (
-                          <div className="space-y-4">
-                            <span className="text-2xl opacity-60 block mb-4">
-                              أكمل الآية ({matchedIds.size + 1} من {targetVerses.length}):
+                  <div key="game" className="space-y-10 max-w-4xl mx-auto w-full px-4 pt-10">
+                    {/* Floating Timer UI for Speed Mode */}
+                    {isSpeedMode && (
+                      <div className="flex justify-center mb-6 sticky top-4 z-50">
+                        <motion.div
+                          animate={{
+                            scale: speedTimeLeft <= 10 ? [1, 1.1, 1] : 1,
+                            backgroundColor: speedTimeLeft <= 10 ? '#fee2e2' : '#ffffff'
+                          }}
+                          transition={{ repeat: speedTimeLeft <= 10 ? Infinity : 0, duration: 0.5 }}
+                          className={`glass px-10 py-5 rounded-full shadow-2xl border-2 flex items-center gap-6 ${speedTimeLeft <= 10 ? 'border-red-500' : 'border-brand-emerald/20'}`}
+                        >
+                          <div className={`p-3 rounded-2xl ${speedTimeLeft <= 10 ? 'bg-red-500 text-white' : 'bg-brand-emerald text-white'}`}>
+                            <Zap className="w-8 h-8" />
+                          </div>
+                          <div className="text-right">
+                            <span className={`text-4xl font-black block tabular-nums ${speedTimeLeft <= 10 ? 'text-red-600' : 'text-slate-800'}`}>
+                              {speedTimeLeft} ثانية
                             </span>
-                            <span className="text-4xl md:text-5xl font-black text-brand-emerald leading-relaxed quran-text block">
-                              {targetVerses.find(v => !matchedIds.has(v.id))?.text.split(' ').slice(0, -1).join(' ') || (challenges[currentChallengeIndex]?.keyword || challenges[currentChallengeIndex]?.text)}
-                            </span>
+                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">الوقت المتبقي للسؤال</span>
                           </div>
-                        ) : (
-                          <>"{KEYWORD} ..."</>
-                        )}
-                      </motion.div>
-
-                      <div className="flex justify-center gap-4 mt-10">
-                        {challengeMode === 'normal' && (
-                          <button
-                            onClick={handleSkip}
-                            className="group flex items-center gap-3 px-8 py-4 bg-white/80 text-slate-500 rounded-3xl text-sm font-black hover:bg-white transition-all shadow-xl border border-slate-100"
-                          >
-                            <X className="w-5 h-5 group-hover:rotate-90 transition-transform" />
-                            تخطي السؤال
-                          </button>
-                        )}
+                        </motion.div>
                       </div>
-                    </motion.div>
+                    )}
 
+                    <SkillsChallengeHeader
+                      index={challengeMode === 'daily' ? dailyChallengeIndex : (view === 'challenge' ? currentChallengeIndex : sessionCurrentIndex)}
+                      total={challengeMode === 'daily' ? 1 : (challenges.length > 50 ? 20 : Math.max(challenges.length, 1))}
+                      mode={skillsType}
+                      verseText={KEYWORD}
+                      totalPoints={totalPoints}
+                    />
 
-                    {/* Controls & Progress */}
-                    <div className="glass p-8 rounded-[3rem] flex flex-col items-center gap-10 border-white/80">
-
-                      {/* Progress / Achievement Container (Now ON TOP) */}
-                      <div className="w-full max-w-xl">
-                        <div className="flex justify-between items-end mb-4 px-2">
-                          <div className="flex flex-col">
-                            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">إنجازك</span>
-                            <span className="text-2xl font-black text-brand-emerald">{matchedIds.size} / {targetVerses.length} <span className="text-sm font-bold text-slate-400">آية</span></span>
-                          </div>
-                          <div className="flex gap-6 items-end">
-                            <div className="flex flex-col items-end">
-                              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">إجمالي النقاط</span>
-                              <span className="text-xl font-black text-brand-gold tabular-nums">{totalPoints}</span>
-                            </div>
-                            <div className="flex flex-col items-end">
-                              <span className="text-[10px] font-black uppercase tracking-[0.2em] text-brand-gold">نقاط التحدي</span>
-                              <span className="text-3xl font-black text-brand-gold tabular-nums">{score}</span>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="h-5 bg-slate-100 rounded-2xl overflow-hidden p-1 border border-white shadow-inner">
-                          <motion.div
-                            initial={{ width: 0 }}
-                            animate={{ width: `${(matchedIds.size / targetVerses.length) * 100 || 0}%` }}
-                            transition={{ type: "spring", stiffness: 50 }}
-                            className="h-full bg-linear-to-r from-brand-emerald to-emerald-400 rounded-xl shadow-lg relative overflow-hidden"
-                          >
-                            <div className="absolute inset-0 bg-linear-to-r from-white/20 to-transparent skew-x-12 -translate-x-full animate-[shimmer_2s_infinite]" />
-                          </motion.div>
-                        </div>
-                      </div>
-
-                      {/* Options / Mic Container (Now BELOW) */}
-                      <div className="flex items-center gap-6 w-full lg:w-auto">
-                        {skillsType === 'audio' ? (
-                          !hasRecognition ? (
-                            <div className="bg-red-50 text-red-600 px-6 py-4 rounded-2xl border border-red-100 flex items-center gap-3">
-                              <div className="w-2 h-2 bg-red-500 rounded-full animate-ping" />
-                              <span className="font-bold text-sm">التطبيق يتطلب متصفح Chrome لتفعيل ميزة التعرف على الصوت</span>
-                            </div>
-                          ) : (
-                            <div className="relative group">
-                              <div className={`absolute inset-0 bg-brand-emerald/20 blur-2xl rounded-full transition-all duration-500 group-hover:scale-110 ${isListening ? 'opacity-100 animate-pulse' : 'opacity-0'}`} />
-                              <button
-                                onClick={isListening ? stopListening : startListening}
-                                className={`relative flex items-center gap-4 px-10 py-5 rounded-3xl font-black text-lg transition-all active:scale-95 shadow-2xl ${isListening
-                                  ? 'bg-red-500 text-white shadow-red-200'
-                                  : 'bg-brand-emerald text-white shadow-brand-emerald/20 hover:bg-brand-emerald/90'
-                                  }`}
-                              >
-                                {isListening ? (
-                                  <>
-                                    <MicOff className="w-6 h-6 animate-bounce" />
-                                    إيقاف التلاوة
-                                  </>
-                                ) : (
-                                  <>
-                                    <Mic className="w-6 h-6 group-hover:rotate-6 transition-transform" />
-                                    ابدأ التلاوة الكريمة
-                                  </>
-                                )}
-                              </button>
-                            </div>
-                          )
-                        ) : skillsType === 'surah' ? (
-                          <form onSubmit={handleSubmitSurah} className="w-full max-w-md flex flex-col sm:flex-row gap-3">
-                            <input
-                              type="text"
-                              value={surahInput}
-                              onChange={(e) => setSurahInput(e.target.value)}
-                              placeholder="ما اسم السورة؟"
-                              className="flex-1 p-5 rounded-3xl bg-white border-2 border-slate-100 focus:border-brand-gold outline-none text-lg font-black text-center quran-text shadow-sm"
-                              autoFocus
-                            />
-                            <button
-                              type="submit"
-                              className="px-8 py-4 bg-brand-gold text-brand-emerald rounded-3xl font-black text-lg shadow-lg hover:shadow-brand-gold/30 transition-all hover:scale-105"
-                            >
-                              تحقق
-                            </button>
-                          </form>
-                        ) : (
-                          <div className="flex flex-col items-center gap-6 w-full max-w-md">
-                            <div className="grid grid-cols-2 gap-3 w-full">
-                              {skillsOptions.map((opt, idx) => {
-                                const isSelected = selectedOption === opt;
-                                return (
-                                  <button
-                                    key={idx}
-                                    disabled={skillsFeedback}
-                                    onClick={() => handleOptionSelect(opt)}
-                                    className={`p-4 rounded-2xl border-2 transition-all text-lg font-black quran-text active:scale-95 relative z-10 ${isSelected
-                                      ? 'bg-brand-gold border-brand-gold text-brand-emerald shadow-lg scale-105'
-                                      : 'bg-white border-slate-100 text-slate-700 hover:border-brand-gold hover:bg-brand-gold/5 shadow-sm'
-                                      } ${skillsFeedback ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                  >
-                                    {opt.text}
-                                  </button>
-                                );
-                              })}
-                            </div>
-
-                            {selectedOption && (
-                              <motion.button
-                                initial={{ opacity: 0, scale: 0.9 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                onClick={handleConfirmAnswer}
-                                disabled={skillsFeedback}
-                                className="w-full py-5 bg-brand-emerald text-white rounded-3xl font-black text-xl shadow-xl hover:bg-brand-emerald/90 transition-all flex items-center justify-center gap-3"
-                              >
-                                {skillsFeedback ? (
-                                  <div className="w-6 h-6 border-4 border-white/30 border-t-white rounded-full animate-spin" />
-                                ) : (
-                                  <>
-                                    <CheckCircle2 className="w-6 h-6" />
-                                    تأكيد الإجابة والانتقال
-                                  </>
-                                )}
-                              </motion.button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
+                    {skillsType === 'audio' ? (
+                      <AudioChallengeUI
+                        targetVerses={targetVerses}
+                        matchedIds={matchedIds}
+                        isListening={isListening}
+                        onToggleListening={isListening ? stopListening : startListening}
+                        keyword={KEYWORD}
+                        keywordWordCount={keywordWordCount}
+                        wordStates={wordStates}
+                        onSkip={handleSkip}
+                      />
+                    ) : skillsType === 'surah' ? (
+                      <SurahChallengeUI
+                        verseText={KEYWORD}
+                        inputs={surahInputs}
+                        onInputChange={(idx: number, val: string) => {
+                          const newInputs = [...surahInputs];
+                          newInputs[idx] = val;
+                          setSurahInputs(newInputs);
+                        }}
+                        onSubmit={handleSubmitSurah}
+                        feedback={skillsFeedback}
+                        onSkip={handleSkip}
+                      />
+                    ) : (
+                      <CompleteChallengeUI
+                        verseText={KEYWORD}
+                        options={skillsOptions || []}
+                        selectedOption={selectedOption}
+                        onOptionSelect={handleOptionSelect}
+                        onConfirm={handleConfirmAnswer}
+                        feedback={skillsFeedback}
+                        onSkip={handleSkip}
+                      />
+                    )}
 
                     {/* Transcript Debug */}
                     <AnimatePresence>
@@ -4074,7 +4391,7 @@ ${versesList}
                           initial={{ opacity: 0, y: 10 }}
                           animate={{ opacity: 1, y: 0 }}
                           exit={{ opacity: 0 }}
-                          className="p-8 glass bg-brand-gold/5 border-brand-gold/10 rounded-3xl text-slate-700 text-center quran-text text-xl italic"
+                          className="p-8 glass bg-brand-gold/5 border-brand-gold/10 rounded-3xl text-slate-700 text-center quran-text text-xl italic mt-6"
                         >
                           "{transcript}"
                         </motion.div>
@@ -4087,7 +4404,7 @@ ${versesList}
                         <motion.div
                           initial={{ opacity: 0, scale: 0.9, y: 20 }}
                           animate={{ opacity: 1, scale: 1, y: 0 }}
-                          className="p-10 glass border-brand-emerald/10 text-brand-emerald rounded-[3rem] text-center shadow-[0_30px_60px_-15px_rgba(6,78,59,0.1)] relative overflow-hidden"
+                          className="p-10 glass border-brand-emerald/10 text-brand-emerald rounded-[3rem] text-center shadow-[0_30px_60px_-15px_rgba(6,78,59,0.1)] relative overflow-hidden mt-6"
                         >
                           <div className="absolute top-0 right-0 w-64 h-64 bg-brand-emerald/5 rounded-full -mr-32 -mt-32 blur-3xl" />
                           <Trophy className="w-20 h-20 mb-6 text-brand-gold mx-auto drop-shadow-lg" />
@@ -4123,24 +4440,6 @@ ${versesList}
                         </motion.div>
                       )}
                     </AnimatePresence>
-
-                    {/* Verses Grid (Shown only in Audio/Surah modes or when session complete) */}
-                    {skillsType !== 'complete' && (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-20">
-                        {targetVerses.map((verse, index) => (
-                          <VerseCard
-                            key={verse.id}
-                            verse={verse}
-                            keyword={KEYWORD}
-                            isMatched={matchedIds.has(verse.id)}
-                            index={index}
-                            keywordWordCount={keywordWordCount}
-                            wordStates={wordStates[verse.id] || {}}
-                            skillsType={skillsType}
-                          />
-                        ))}
-                      </div>
-                    )}
                   </div>
                 )}
               </AnimatePresence>
