@@ -29,7 +29,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Logical check: If challengeId is provided and NOT already completed
     if (challengeId !== undefined && challengeId !== null && !completedIds.includes(Number(challengeId))) {
-      const updatedPlayer = await prisma.player.update({
+      await prisma.player.update({
         where: { deviceId },
         data: {
           points: { increment: points || 0 },
@@ -37,11 +37,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           completedChallengeIds: [...completedIds, Number(challengeId)]
         }
       })
+      const updatedPlayer = await prisma.player.findUnique({ where: { deviceId } })
       return res.status(200).json(updatedPlayer)
     }
 
-    // If challenge was already completed OR no challengeId provided, just return current player
-    // This satisfies the requirement "no duplicate cups/points"
+    // Handle generic point/cup updates if provided (e.g. for penalties or sync)
+    if (points !== undefined || req.body.cups !== undefined || req.body.totalPoints !== undefined || req.body.totalCups !== undefined) {
+      const updateData: any = {};
+      if (req.body.totalPoints !== undefined) updateData.points = Number(req.body.totalPoints);
+      else if (points !== undefined) updateData.points = { increment: Number(points) };
+      
+      if (req.body.totalCups !== undefined) updateData.cups = Number(req.body.totalCups);
+      else if (req.body.cups !== undefined) updateData.cups = { increment: Number(req.body.cups) };
+
+      const updatedPlayer = await prisma.player.update({
+        where: { deviceId },
+        data: updateData
+      });
+      return res.status(200).json(updatedPlayer);
+    }
+
+    // If no updates needed, just return current player
     return res.status(200).json(player)
   } catch (error: any) {
     console.error('Score Update Error:', error)

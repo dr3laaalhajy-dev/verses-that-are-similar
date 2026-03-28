@@ -22,15 +22,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // Protected PUT
   if (req.method === 'PUT') {
-    const { keyword, verses } = req.body
+    const { keyword, verses, category, level } = req.body
     try {
       const challenge = await prisma.challenge.update({
         where: { id: Number(id) },
-        data: { keyword, verses }
+        data: { 
+          keyword, 
+          verses,
+          category: category !== undefined ? category : undefined,
+          level: level !== undefined ? level : undefined
+        }
       })
       return res.status(200).json(challenge)
     } catch (error: any) {
-      console.error('Update Challenge Error:', error)
+      console.error('Update Challenge API Crash:', {
+        id,
+        message: error.message,
+        stack: error.stack
+      })
       return res.status(500).json({ 
         message: 'Failed to update challenge',
         error: error.message 

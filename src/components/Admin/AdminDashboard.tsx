@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Plus, Edit2, Trash2, Save, X, BookOpen,
-  LayoutDashboard, Search, Sparkles, AlertCircle,
+  LayoutDashboard, Search, Sparkles, AlertCircle, ArrowRight,
   Hash, List, ChevronDown, ChevronUp, Users, Shield, UserPlus, Key, Loader2, Home
 } from 'lucide-react';
 import { searchGroupedAyahsByStart, GroupedAyah } from '../../services/QuranRepository';
@@ -19,6 +19,12 @@ interface Challenge {
   id: number;
   keyword: string;
   verses: Verse[];
+  category?: string;
+  level?: string;
+  type?: string;
+  audioUrl?: string;
+  options?: any[];
+  correctText?: string;
 }
 
 interface Admin {
@@ -38,7 +44,7 @@ export default function AdminDashboard({ token, isSuperAdmin, onLogout, onBackHo
   const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [admins, setAdmins] = useState<Admin[]>([]);
   const [inviteCodes, setInviteCodes] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<'challenges' | 'admins'>('challenges');
+  const [activeTab, setActiveTab] = useState<'STANDARD' | 'COMPLETION' | 'SURAH' | 'admins'>('STANDARD');
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
@@ -85,9 +91,18 @@ export default function AdminDashboard({ token, isSuperAdmin, onLogout, onBackHo
 
   // Form states
   const [keyword, setKeyword] = useState('');
+  const [category, setCategory] = useState('');
+  const [level, setLevel] = useState('');
+  const [type, setType] = useState<'STANDARD' | 'COMPLETION' | 'SURAH'>('STANDARD');
+  const [audioUrl, setAudioUrl] = useState('');
+  const [options, setOptions] = useState<any[]>(['', '', '', '']);
+  const [correctIndex, setCorrectIndex] = useState<number | null>(null);
+  const [correctText, setCorrectText] = useState('');
+  const [correctSurahs, setCorrectSurahs] = useState<string[]>(['']);
   const [verses, setVerses] = useState<Verse[]>([]);
   const [suggestions, setSuggestions] = useState<GroupedAyah[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     fetchChallenges();
@@ -183,12 +198,24 @@ export default function AdminDashboard({ token, isSuperAdmin, onLogout, onBackHo
       setLoading(false);
     }
   };
-
   const handleFetchMatches = () => {
     if (!keyword.trim()) return;
     setIsSearching(true);
     try {
       const groupedMatches = searchGroupedAyahsByStart(keyword);
+      setSuggestions(groupedMatches);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const handleSearchCompletionAyahs = () => {
+    if (!searchQuery.trim()) return;
+    setIsSearching(true);
+    try {
+      const groupedMatches = searchGroupedAyahsByStart(searchQuery);
       setSuggestions(groupedMatches);
     } catch (err) {
       console.error(err);
@@ -234,22 +261,65 @@ export default function AdminDashboard({ token, isSuperAdmin, onLogout, onBackHo
 
   const handleSave = async () => {
     if (!keyword.trim()) {
-      showAlert('تنبيه', 'يرجى إدخال الكلمة المفتاحية');
-      return;
-    }
-    if (verses.length === 0) {
-      showAlert('تنبيه', 'يرجى إضافة آية واحدة على الأقل');
+      showAlert('تنبيه', type === 'STANDARD' ? 'يرجى إدخال الكلمة المفتاحية (بداية الآيات)' : 'يرجى إدخال نص الآية');
       return;
     }
 
-    const invalidVerses = verses.filter(v => !v.text.trim() || !v.surah.trim());
-    if (invalidVerses.length > 0) {
-      showAlert('تنبيه', 'يرجى التأكد من ملء نص الآية واسم السورة لجميع الآيات المضافة');
+    // Type-specific validations
+    if (type === 'STANDARD') {
+      if (verses.length === 0) {
+        showAlert('تنبيه', 'يرجى إضافة آية واحدة على الأقل للتحدي');
+        return;
+      }
+      const invalidVerses = verses.filter(v => !v.text.trim() || !v.surah.trim());
+      if (invalidVerses.length > 0) {
+        showAlert('تنبيه', 'يرجى التأكد من ملء نص الآية واسم السورة لجميع الآيات المضافة');
+        return;
+      }
+    }
+
+    if (type === 'COMPLETION') {
+      if (options.some(opt => !opt.trim())) {
+        showAlert('تنبيه', 'يرجى إدخال جميع الخيارات الأربعة لتكملة الآية');
+        return;
+      }
+      if (!correctText.trim() || !options.includes(correctText)) {
+        showAlert('تنبيه', 'يرجى اختيار أحد الخيارات كإجابة صحيحة');
+        return;
+      }
+    }
+    if (type === 'SURAH' && correctSurahs.filter(s => s.trim()).length === 0) {
+      showAlert('تنبيه', 'يرجى إدخال اسم سورة صحيح واحد على الأقل');
       return;
     }
+
+    const payloadVerses = type === 'STANDARD' ? verses : [];
+
 
     const method = editingId ? 'PUT' : 'POST';
     const url = editingId ? `/api/challenges/${editingId}` : '/api/challenges';
+
+    const finalCorrectText = type === 'SURAH' 
+      ? JSON.stringify(correctSurahs.filter(s => s.trim())) 
+      : correctText;
+
+    const finalOptions = type === 'COMPLETION' 
+      ? options.map((opt, i) => ({
+          text: typeof opt === 'string' ? opt : opt.text,
+          isCorrect: i === correctIndex
+        }))
+      : options;
+
+    const payload = { 
+      keyword, 
+      verses: payloadVerses, 
+      category, 
+      level, 
+      type, 
+      audioUrl, 
+      options: finalOptions, 
+      correctText: finalCorrectText 
+    };
 
     setIsSavingChallenge(true);
     try {
@@ -259,7 +329,7 @@ export default function AdminDashboard({ token, isSuperAdmin, onLogout, onBackHo
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ keyword, verses }),
+        body: JSON.stringify(payload)
       });
 
       const responseData = await res.json().catch(() => ({}));
@@ -365,15 +435,55 @@ export default function AdminDashboard({ token, isSuperAdmin, onLogout, onBackHo
     setIsAdding(false);
     setEditingId(null);
     setKeyword('');
+    setCategory('');
+    setLevel('');
     setVerses([]);
+    setSuggestions([]);
+    setType(activeTab === 'admins' ? 'STANDARD' : activeTab);
+    setAudioUrl('');
+    setOptions(['', '', '', '']);
+    setCorrectIndex(null);
+    setCorrectText('');
+    setCorrectSurahs(['']);
+    setSearchQuery('');
     setSuggestions([]);
   };
 
-  const startEdit = (c: Challenge) => {
+  const startEdit = (c: any) => {
     setEditingId(c.id);
     setKeyword(c.keyword);
+    setCategory(c.category || '');
+    setLevel(c.level || '');
+    const cType = (c.type === 'AUDIO' || !c.type) ? 'STANDARD' : c.type;
+    setActiveTab(cType);
+    setType(cType as 'STANDARD' | 'COMPLETION' | 'SURAH');
+    setAudioUrl(c.audioUrl || '');
+    setOptions(c.options || ['', '', '', '']);
+    
+    if (cType === 'COMPLETION' && Array.isArray(c.options)) {
+      const idx = c.options.findIndex((o: any) => typeof o === 'object' ? o.isCorrect : o === c.correctText);
+      setCorrectIndex(idx !== -1 ? idx : null);
+    }
+    
+    // Parse correctSurahs if it's a JSON string
+    if (cType === 'SURAH') {
+      try {
+        if (c.correctText?.startsWith('[')) {
+          setCorrectSurahs(JSON.parse(c.correctText));
+        } else {
+          setCorrectSurahs([c.correctText || '']);
+        }
+      } catch (e) {
+        setCorrectSurahs([c.correctText || '']);
+      }
+    }
+    
+    setCorrectText(c.correctText || '');
     // Ensure verses is an array (backwards compat)
-    setVerses(Array.isArray(c.verses) ? c.verses : []);
+    setVerses(Array.isArray(c.verses) ? c.verses.map((v: any) => ({
+      ...v,
+      number: v.number || v.verseNumber
+    })) : []);
     setIsAdding(true);
   };
 
@@ -405,17 +515,35 @@ export default function AdminDashboard({ token, isSuperAdmin, onLogout, onBackHo
           <div className="flex flex-col sm:flex-row items-center gap-3 md:gap-4 w-full md:w-auto">
             <div className="flex bg-slate-100/80 p-1 rounded-2xl w-full sm:w-auto">
               <button
-                onClick={() => setActiveTab('challenges')}
-                className={`flex-1 sm:flex-none px-4 md:px-6 py-2 rounded-xl text-xs md:text-sm font-black transition-all ${activeTab === 'challenges' ? 'bg-white text-brand-emerald shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                onClick={() => { resetForm(); setActiveTab('STANDARD'); }}
+                className={`flex-1 sm:flex-none px-3 md:px-5 py-2 rounded-xl text-xs md:text-sm font-black transition-all ${activeTab === 'STANDARD' ? 'bg-white text-brand-emerald shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
               >
                 <div className="flex items-center justify-center gap-2">
-                  <List className="w-4 h-4" />
-                  <span>التحديات</span>
+                  <BookOpen className="w-4 h-4" />
+                  <span>المتشابهات</span>
+                </div>
+              </button>
+              <button
+                onClick={() => { resetForm(); setActiveTab('COMPLETION'); }}
+                className={`flex-1 sm:flex-none px-3 md:px-5 py-2 rounded-xl text-xs md:text-sm font-black transition-all ${activeTab === 'COMPLETION' ? 'bg-white text-brand-emerald shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                <div className="flex items-center justify-center gap-2">
+                  <Edit2 className="w-4 h-4" />
+                  <span>تكملة الآية</span>
+                </div>
+              </button>
+              <button
+                onClick={() => { resetForm(); setActiveTab('SURAH'); }}
+                className={`flex-1 sm:flex-none px-3 md:px-5 py-2 rounded-xl text-xs md:text-sm font-black transition-all ${activeTab === 'SURAH' ? 'bg-white text-brand-emerald shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              >
+                <div className="flex items-center justify-center gap-2">
+                  <Hash className="w-4 h-4" />
+                  <span>اسم السورة</span>
                 </div>
               </button>
               {isSuperAdmin && (
                 <button
-                  onClick={() => setActiveTab('admins')}
+                  onClick={() => { resetForm(); setActiveTab('admins'); }}
                   className={`flex-1 sm:flex-none px-4 md:px-6 py-2 rounded-xl text-xs md:text-sm font-black transition-all ${activeTab === 'admins' ? 'bg-white text-brand-emerald shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
                 >
                   <div className="flex items-center justify-center gap-2">
@@ -427,13 +555,20 @@ export default function AdminDashboard({ token, isSuperAdmin, onLogout, onBackHo
             </div>
             
             <div className="flex items-center gap-2 w-full sm:w-auto">
-              <button
-                onClick={() => setIsAdding(true)}
-                className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-2.5 bg-brand-emerald text-white rounded-2xl font-black text-xs md:text-sm shadow-xl shadow-brand-emerald/10 hover:bg-brand-emerald/90 transition-all active:scale-95 whitespace-nowrap"
-              >
-                <Plus className="w-4 h-4" />
-                <span>إضافة تحدي</span>
-              </button>
+              {activeTab !== 'admins' && (
+                <button
+                  onClick={() => {
+                    setType(activeTab as any);
+                    setIsAdding(true);
+                  }}
+                  className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-6 py-2.5 bg-brand-emerald text-white rounded-2xl font-black text-xs md:text-sm shadow-xl shadow-brand-emerald/10 hover:bg-brand-emerald/90 transition-all active:scale-95 whitespace-nowrap"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>
+                    إضافة {activeTab === 'STANDARD' ? 'متشابهات' : activeTab === 'COMPLETION' ? 'تكملة' : 'سورة'}
+                  </span>
+                </button>
+              )}
               
               <button 
                 onClick={onLogout} 
@@ -457,7 +592,7 @@ export default function AdminDashboard({ token, isSuperAdmin, onLogout, onBackHo
 
 
       <main className="max-w-6xl mx-auto p-8">
-        {activeTab === 'challenges' ? (
+        {activeTab !== 'admins' ? (
           <>
             <AnimatePresence>
               {isAdding && (
@@ -468,143 +603,331 @@ export default function AdminDashboard({ token, isSuperAdmin, onLogout, onBackHo
                   className="bg-white rounded-[3rem] shadow-2xl border border-slate-200 mb-10 overflow-hidden"
                 >
                   <div className="p-8 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
-                    <h3 className="text-xl font-black text-slate-800 flex items-center gap-3">
-                      <Edit2 className="w-5 h-5 text-brand-emerald" />
-                      {editingId ? 'تعديل التحدي' : 'إضافة تحدي جديد'}
-                    </h3>
+                    <div className="flex items-center gap-6">
+                      <button 
+                        onClick={resetForm}
+                        className="flex items-center gap-2 text-slate-500 hover:text-brand-emerald transition-all py-2 font-bold text-sm group"
+                      >
+                        <ArrowRight className="w-5 h-5 transition-transform group-hover:translate-x-1" />
+                        <span>رجوع</span>
+                      </button>
+                      <div className="w-px h-6 bg-slate-200" />
+                      <h3 className="text-xl font-black text-slate-800 flex items-center gap-3">
+                        <Edit2 className="w-5 h-5 text-brand-emerald" />
+                        {editingId ? 'تعديل التحدي' : `إضافة تحدي ${type === 'STANDARD' ? 'متشابهات' : type === 'COMPLETION' ? 'تكملة آية' : 'اسم سورة'}`}
+                      </h3>
+                    </div>
                     <button onClick={resetForm} className="p-2 hover:bg-slate-200 rounded-full transition-all"><X className="w-5 h-5 text-slate-400" /></button>
                   </div>
 
                   <div className="p-8 space-y-10">
-                    {/* Keyword & Search Suggestions */}
-                    <div className="space-y-6">
-                      <div className="grid grid-cols-1 md:grid-cols-[1fr,auto] gap-4">
-                        <div className="relative">
-                          <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 mr-2 tracking-widest">الكلمة المفتاحية (بداية الآيات)</label>
-                          <input
-                            type="text"
+                    
+
+
+                    {/* STANDARD FORM (Mutashabihat) */}
+                    {type === 'STANDARD' && (
+                      <div className="space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-[1fr,auto] gap-4 mb-6">
+                          <div className="relative">
+                            <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 mr-2 tracking-widest">الكلمة المفتاحية (بداية الآيات)</label>
+                            <input
+                              type="text"
+                              value={keyword}
+                              onChange={(e) => setKeyword(e.target.value)}
+                              placeholder="مثل: يا أيها الذين آمنوا"
+                              className="w-full px-6 py-4 rounded-2xl bg-slate-100/50 border-2 border-transparent focus:border-brand-emerald outline-none font-bold text-lg transition-all"
+                            />
+                          </div>
+                          <div className="flex items-end">
+                            <button 
+                              onClick={handleFetchMatches}
+                              disabled={!keyword.trim() || isSearching}
+                              className="h-[60px] px-8 bg-brand-gold text-brand-emerald rounded-2xl font-black shadow-lg hover:-translate-y-1 transition-all disabled:opacity-50 flex items-center gap-3"
+                            >
+                              {isSearching ? <div className="w-4 h-4 border-2 border-brand-emerald border-t-transparent rounded-full animate-spin" /> : <Sparkles className="w-5 h-5" />}
+                              بحث عن تطابقات
+                            </button>
+                          </div>
+                        </div>
+
+                        {suggestions.length > 0 && (
+                          <motion.div 
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            className="bg-brand-emerald/5 border border-brand-emerald/10 rounded-2xl p-6"
+                          >
+                            <h4 className="text-sm font-black text-brand-emerald mb-4 flex items-center gap-2">
+                              <List className="w-4 h-4" />
+                              اقتراحات من المصحف الشريف ({suggestions.length})
+                            </h4>
+                            <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
+                              {suggestions.map((s, idx) => (
+                                <button
+                                  key={idx}
+                                  onClick={() => addSuggestion(s)}
+                                  disabled={verses.some(v => v.text === s.text)}
+                                  className="px-4 py-2 bg-white border border-brand-emerald/20 text-slate-700 rounded-xl text-xs font-bold hover:bg-brand-emerald hover:text-white transition-all disabled:opacity-40 quran-text text-right"
+                                >
+                                  <div className="font-bold mb-1 truncate max-w-[200px]">{s.text}</div>
+                                  <div className="text-[10px] opacity-60">
+                                    {s.occurrences.map(o => `${o.surah} (${o.verseNumber})`).join('، ')}
+                                  </div>
+                                </button>
+                              ))}
+                            </div>
+                          </motion.div>
+                        )}
+                        
+                        {/* Verses List */}
+                        <div className="space-y-6 pt-6 border-t border-slate-100">
+                          <div className="flex items-center justify-between px-2">
+                            <h4 className="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                              <BookOpen className="w-4 h-4" />
+                              الآيات المضافة ({verses.length})
+                            </h4>
+                            <button 
+                              onClick={addManualVerse}
+                              className="text-xs font-black text-brand-emerald hover:underline flex items-center gap-1"
+                            >
+                              <Plus className="w-3 h-3" />
+                              إضافة آية يدوياً
+                            </button>
+                          </div>
+
+                          <div className="space-y-4">
+                            <AnimatePresence>
+                              {verses.map((v, idx) => (
+                                <motion.div
+                                  key={v.id}
+                                  layout
+                                  initial={{ opacity: 0, x: -10 }}
+                                  animate={{ opacity: 1, x: 0 }}
+                                  exit={{ opacity: 0, x: 10 }}
+                                  className="bg-slate-50 p-6 rounded-3xl border border-slate-100 group relative"
+                                >
+                                  <button 
+                                    onClick={() => removeVerse(v.id)}
+                                    className="absolute -top-2 -left-2 w-8 h-8 bg-red-500 text-white rounded-full flex items-center justify-center shadow-lg opacity-0 group-hover:opacity-100 transition-all active:scale-95"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+
+                                  <div className="grid grid-cols-1 lg:grid-cols-[1fr,200px,100px] gap-4">
+                                    <div>
+                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 mr-2">نص الآية</label>
+                                        <textarea
+                                          value={v.text}
+                                          onChange={(e) => handleVerseChange(idx, 'text', e.target.value)}
+                                          className="w-full h-24 px-4 py-3 rounded-xl bg-white border border-slate-200 outline-none focus:border-brand-emerald transition-all quran-text text-lg"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 mr-2">اسم السورة</label>
+                                        <input
+                                          type="text"
+                                          value={v.surah}
+                                          onChange={(e) => handleVerseChange(idx, 'surah', e.target.value)}
+                                          className="w-full px-4 py-3 rounded-xl bg-white border border-slate-200 outline-none focus:border-brand-emerald transition-all font-bold"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 mr-2">الرقم</label>
+                                        <input
+                                          type="number"
+                                          value={v.number}
+                                          onChange={(e) => handleVerseChange(idx, 'number', parseInt(e.target.value) || 0)}
+                                          className="w-full px-4 py-3 rounded-xl bg-white border border-slate-200 outline-none focus:border-brand-emerald transition-all font-black tabular-nums"
+                                        />
+                                    </div>
+                                  </div>
+                                </motion.div>
+                              ))}
+                            </AnimatePresence>
+                            
+                            {verses.length === 0 && (
+                              <div className="py-12 text-center bg-slate-50 border-2 border-dashed border-slate-200 rounded-3xl">
+                                <AlertCircle className="w-10 h-10 text-slate-200 mx-auto mb-3" />
+                                <p className="text-slate-400 font-bold">لم يتم إضافة أي آيات بعد</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+
+
+                    {/* COMPLETION FORM */}
+                    {type === 'COMPLETION' && (
+                      <div className="bg-brand-emerald/5 border border-brand-emerald/10 p-6 rounded-3xl space-y-6">
+                        <h4 className="text-sm font-black text-brand-emerald uppercase tracking-widest mb-4">نموذج تكملة الآية</h4>
+                        
+                        {/* Search Ayah Tool */}
+                        <div className="bg-white p-6 rounded-3xl border-2 border-slate-100 space-y-4">
+                          <label className="block text-[10px] font-black text-slate-400 uppercase mr-2 tracking-widest">البحث السريع في القرآن (اختياري)</label>
+                          <div className="flex gap-3">
+                            <div className="relative flex-1">
+                              <Search className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                              <input
+                                type="text"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                placeholder="ابحث عن آية..."
+                                className="w-full pl-6 pr-12 py-4 rounded-2xl bg-slate-50 border-2 border-transparent focus:border-brand-emerald focus:bg-white outline-none font-bold text-lg transition-all"
+                              />
+                            </div>
+                            <button 
+                              onClick={handleSearchCompletionAyahs}
+                              disabled={!searchQuery.trim() || isSearching}
+                              className="px-8 bg-brand-emerald text-white rounded-2xl font-black shadow-lg hover:bg-brand-emerald/90 transition-all disabled:opacity-50 flex items-center gap-2"
+                            >
+                              {isSearching ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
+                              <span>بحث</span>
+                            </button>
+                          </div>
+
+                          {suggestions.length > 0 && type === 'COMPLETION' && (
+                            <div className="pt-4 border-t border-slate-50">
+                              <h5 className="text-[10px] font-black text-brand-emerald uppercase mb-3 mr-2">نتائج البحث ({suggestions.length}) - اضغط للإكمال التلقائي</h5>
+                              <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto pr-2 custom-scrollbar">
+                                {suggestions.map((s, idx) => (
+                                  <button
+                                    key={idx}
+                                    onClick={() => {
+                                      setKeyword(s.text);
+                                      setSuggestions([]);
+                                      setSearchQuery('');
+                                    }}
+                                    className="px-4 py-2 bg-slate-50 border border-slate-200 text-slate-700 rounded-xl text-xs font-bold hover:border-brand-emerald hover:text-brand-emerald transition-all quran-text text-right"
+                                  >
+                                    {s.text}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="space-y-4">
+                          <label className="block text-[10px] font-black text-slate-500 uppercase mr-2 tracking-widest">نص بداية الآية</label>
+                          <textarea
                             value={keyword}
                             onChange={(e) => setKeyword(e.target.value)}
-                            placeholder="مثل: يا أيها الذين آمنوا"
-                            className="w-full px-6 py-4 rounded-2xl bg-slate-100/50 border-2 border-transparent focus:border-brand-emerald focus:bg-white outline-none font-bold text-lg transition-all"
+                            placeholder="نص الآية الذي سيظهر للمستخدم..."
+                            className="w-full px-6 py-4 h-24 rounded-2xl bg-white border-2 border-slate-200 focus:border-brand-emerald outline-none font-bold text-lg quran-text"
                           />
                         </div>
-                        <div className="flex items-end">
-                          <button 
-                            onClick={handleFetchMatches}
-                            disabled={!keyword.trim() || isSearching}
-                            className="h-[60px] px-8 bg-brand-gold text-brand-emerald rounded-2xl font-black shadow-lg hover:shadow-brand-gold/20 hover:-translate-y-1 transition-all active:scale-95 disabled:opacity-50 disabled:translate-y-0 flex items-center gap-3"
-                          >
-                            {isSearching ? <div className="w-4 h-4 border-2 border-brand-emerald border-t-transparent rounded-full animate-spin" /> : <Sparkles className="w-5 h-5" />}
-                            بحث عن تطابقات
-                          </button>
-                        </div>
-                      </div>
 
-                      {/* Suggestions List */}
-                      {suggestions.length > 0 && (
-                        <motion.div 
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: 'auto' }}
-                          className="bg-brand-emerald/5 border border-brand-emerald/10 rounded-2xl p-6"
-                        >
-                          <h4 className="text-sm font-black text-brand-emerald mb-4 flex items-center gap-2">
-                            <List className="w-4 h-4" />
-                            اقتراحات من المصحف الشريف ({suggestions.length})
-                          </h4>
-                          <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
-                            {suggestions.map((s, idx) => (
-                              <button
-                                key={idx}
-                                onClick={() => addSuggestion(s)}
-                                disabled={verses.some(v => v.text === s.text)}
-                                className="px-4 py-2 bg-white border border-brand-emerald/20 text-slate-700 rounded-xl text-xs font-bold hover:bg-brand-emerald hover:text-white transition-all disabled:opacity-40 quran-text text-right"
-                              >
-                                <div className="font-bold mb-1 truncate max-w-[200px]">{s.text}</div>
-                                <div className="text-[10px] opacity-60">
-                                  {s.occurrences.map(o => `${o.surah} (${o.verseNumber})`).join('، ')}
-                                </div>
-                              </button>
-                            ))}
-                          </div>
-                        </motion.div>
-                      )}
-                    </div>
-
-                    {/* Verses List */}
-                    <div className="space-y-6">
-                      <div className="flex items-center justify-between px-2">
-                        <h4 className="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                          <BookOpen className="w-4 h-4" />
-                          الآيات المضافة ({verses.length})
-                        </h4>
-                        <button 
-                          onClick={addManualVerse}
-                          className="text-xs font-black text-brand-emerald hover:underline flex items-center gap-1"
-                        >
-                          <Plus className="w-3 h-3" />
-                          إضافة آية يدوياً
-                        </button>
-                      </div>
-
-                      <div className="space-y-4">
-                        <AnimatePresence>
-                          {verses.map((v, idx) => (
-                            <motion.div
-                              key={v.id}
-                              layout
-                              initial={{ opacity: 0, x: -10 }}
-                              animate={{ opacity: 1, x: 0 }}
-                              exit={{ opacity: 0, x: 10 }}
-                              className="bg-slate-50 p-6 rounded-3xl border border-slate-100 group relative"
-                            >
-                              <button 
-                                onClick={() => removeVerse(v.id)}
-                                className="absolute -top-2 -left-2 w-8 h-8 bg-red-500 text-white rounded-full flex items-center justify-center shadow-lg opacity-0 group-hover:opacity-100 transition-all active:scale-95"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-
-                              <div className="grid grid-cols-1 lg:grid-cols-[1fr,200px,100px] gap-4">
-                                <div>
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 mr-2">نص الآية</label>
-                                    <textarea
-                                      value={v.text}
-                                      onChange={(e) => handleVerseChange(idx, 'text', e.target.value)}
-                                      className="w-full h-24 px-4 py-3 rounded-xl bg-white border border-slate-200 outline-none focus:border-brand-emerald transition-all quran-text text-lg"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 mr-2">اسم السورة</label>
-                                    <input
-                                      type="text"
-                                      value={v.surah}
-                                      onChange={(e) => handleVerseChange(idx, 'surah', e.target.value)}
-                                      className="w-full px-4 py-3 rounded-xl bg-white border border-slate-200 outline-none focus:border-brand-emerald transition-all font-bold"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-black text-slate-400 uppercase mb-2 mr-2">الرقم</label>
-                                    <input
-                                      type="number"
-                                      value={v.number}
-                                      onChange={(e) => handleVerseChange(idx, 'number', parseInt(e.target.value) || 0)}
-                                      className="w-full px-4 py-3 rounded-xl bg-white border border-slate-200 outline-none focus:border-brand-emerald transition-all font-black tabular-nums"
-                                    />
+                        <div className="space-y-4">
+                          <label className="block text-[10px] font-black text-slate-500 uppercase mr-2 tracking-widest">خيارات التكملة (حدد الإجابة الصحيحة)</label>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {[0, 1, 2, 3].map((index) => (
+                              <div key={index} className="relative group">
+                                <input
+                                  type="text"
+                                  value={typeof options[index] === 'object' ? (options[index]?.text || '') : (options[index] || '')}
+                                  onChange={(e) => {
+                                    const newVal = e.target.value;
+                                    const oldVal = options[index];
+                                    const newOptions = [...options];
+                                    
+                                    if (typeof oldVal === 'object') {
+                                      newOptions[index] = { ...oldVal, text: newVal };
+                                    } else {
+                                      newOptions[index] = newVal;
+                                    }
+                                    
+                                    setOptions(newOptions);
+                                    
+                                    // Sync correctText if this was the selected one
+                                    const oldText = typeof oldVal === 'object' ? oldVal.text : oldVal;
+                                    if (correctText === oldText && oldText !== '') {
+                                      setCorrectText(newVal);
+                                    }
+                                  }}
+                                  placeholder={`الخيار ${index + 1}`}
+                                  className={`w-full pl-14 pr-6 py-4 rounded-2xl bg-white border-2 outline-none font-bold text-lg quran-text transition-all ${
+                                    (typeof options[index] === 'object' ? options[index].text === correctText : options[index] === correctText) && correctText !== ''
+                                      ? 'border-brand-emerald bg-brand-emerald/5 shadow-inner'
+                                      : 'border-slate-200 focus:border-brand-emerald'
+                                  }`}
+                                />
+                                <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center">
+                                  <input 
+                                    type="radio"
+                                    name="correctOption"
+                                    checked={correctIndex === index}
+                                    onChange={() => {
+                                      setCorrectIndex(index);
+                                      setCorrectText(typeof options[index] === 'string' ? options[index] : options[index].text);
+                                    }}
+                                    className="w-6 h-6 cursor-pointer accent-brand-emerald"
+                                    title="تحديد كإجابة صحيحة"
+                                  />
                                 </div>
                               </div>
-                            </motion.div>
-                          ))}
-                        </AnimatePresence>
-                        
-                        {verses.length === 0 && (
-                          <div className="py-12 text-center bg-slate-50 border-2 border-dashed border-slate-200 rounded-3xl">
-                            <AlertCircle className="w-10 h-10 text-slate-200 mx-auto mb-3" />
-                            <p className="text-slate-400 font-bold">لم يتم إضافة أي آيات بعد</p>
+                            ))}
                           </div>
-                        )}
+                        </div>
                       </div>
-                    </div>
+                    )}
+
+                    {/* SURAH FORM */}
+                    {type === 'SURAH' && (
+                      <div className="bg-brand-emerald/5 border border-brand-emerald/10 p-6 rounded-3xl space-y-6">
+                        <h4 className="text-sm font-black text-brand-emerald uppercase tracking-widest mb-4">نموذج التعرّف على السورة</h4>
+                        
+                        <div className="space-y-4">
+                          <label className="block text-[10px] font-black text-slate-500 uppercase mr-2 tracking-widest">نص الآية</label>
+                          <textarea
+                            value={keyword}
+                            onChange={(e) => setKeyword(e.target.value)}
+                            placeholder="نص الآية كاملة..."
+                            className="w-full px-6 py-4 h-24 rounded-2xl bg-white border-2 border-slate-200 focus:border-brand-emerald outline-none font-bold text-lg quran-text"
+                          />
+                        </div>
+
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between">
+                            <label className="block text-[10px] font-black text-slate-500 uppercase mr-2 tracking-widest">أسماء السور الصحيحة</label>
+                            <button
+                              onClick={() => setCorrectSurahs([...correctSurahs, ''])}
+                              className="flex items-center gap-2 text-xs font-black text-brand-emerald hover:bg-brand-emerald/10 px-3 py-1 rounded-lg transition-all"
+                            >
+                              <Plus className="w-3 h-3" />
+                              إضافة سورة أخرى
+                            </button>
+                          </div>
+                          <div className="space-y-3">
+                            {correctSurahs.map((surah, index) => (
+                              <div key={index} className="relative flex items-center gap-2">
+                                <input
+                                  type="text"
+                                  value={surah}
+                                  onChange={(e) => {
+                                    const newSurahs = [...correctSurahs];
+                                    newSurahs[index] = e.target.value;
+                                    setCorrectSurahs(newSurahs);
+                                  }}
+                                  placeholder={`اسم السورة ${index + 1}...`}
+                                  className="w-full px-6 py-4 rounded-2xl bg-white border-2 border-slate-200 focus:border-brand-emerald outline-none font-bold text-lg"
+                                />
+                                {correctSurahs.length > 1 && (
+                                  <button
+                                    onClick={() => setCorrectSurahs(correctSurahs.filter((_, i) => i !== index))}
+                                    className="p-3 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                                  >
+                                    <X className="w-5 h-5" />
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    
+
                   </div>
 
                   <div className="p-8 bg-slate-50 border-t border-slate-100 flex justify-end gap-4">
@@ -628,7 +951,7 @@ export default function AdminDashboard({ token, isSuperAdmin, onLogout, onBackHo
                   <Loader2 className="w-10 h-10 animate-spin text-brand-emerald/20 mx-auto mb-4" />
                   <p className="text-slate-400 font-bold">جاري تحميل البيانات...</p>
                 </div>
-              ) : challenges.map(c => (
+              ) : challenges.filter(c => ((c.type === 'AUDIO' || !c.type) ? 'STANDARD' : c.type) === activeTab).map(c => (
                 <motion.div
                   key={c.id}
                   layout
@@ -640,10 +963,12 @@ export default function AdminDashboard({ token, isSuperAdmin, onLogout, onBackHo
                   <div className="flex justify-between items-start mb-6 relative z-10">
                     <div className="flex flex-col gap-1">
                       <div className="bg-slate-50 px-3 py-1 rounded-lg text-slate-400 text-[10px] font-black border border-slate-100">ID: {c.id}</div>
-                      <div className="flex items-center gap-1.5 text-brand-emerald font-black text-[10px] uppercase tracking-wider">
-                        <List className="w-3 h-3" />
-                        <span>{c.verses.length} آيات</span>
-                      </div>
+                      {activeTab === 'STANDARD' && (
+                        <div className="flex items-center gap-1.5 text-brand-emerald font-black text-[10px] uppercase tracking-wider">
+                          <List className="w-3 h-3" />
+                          <span>{c.verses.length} آيات</span>
+                        </div>
+                      )}
                     </div>
                     
                     <div className="flex gap-1.5">
@@ -671,7 +996,9 @@ export default function AdminDashboard({ token, isSuperAdmin, onLogout, onBackHo
                   </h3>
                   
                   <div className="flex items-center justify-between pt-4 border-t border-slate-50 relative z-10">
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2">تحدي المتشابهات</span>
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2">
+                       {activeTab === 'STANDARD' ? 'تحدي المتشابهات' : activeTab === 'COMPLETION' ? 'تكملة الآية' : 'اسم السورة'}
+                    </span>
                     <div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center group-hover:bg-brand-emerald group-hover:text-white transition-all">
                       <ChevronDown className="w-4 h-4 opacity-50 group-hover:opacity-100" />
                     </div>

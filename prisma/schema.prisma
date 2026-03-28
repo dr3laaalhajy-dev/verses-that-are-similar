@@ -30,11 +30,17 @@ model AdminCode {
 }
 
 model Challenge {
-  id        Int      @id @default(autoincrement())
-  keyword   String   @unique
-  verses    Json     // Array of verse objects
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          Int      @id @default(autoincrement())
+  keyword     String   @unique
+  verses      Json     // Array of verse objects
+  category    String   @default("")
+  level       String   @default("")
+  type        String   @default("STANDARD") // "STANDARD", "AUDIO", "COMPLETION", "SURAH"
+  audioUrl    String?  // For AUDIO type
+  options     Json?    // For COMPLETION type
+  correctText String?  // For SURAH type or other single correct answers
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model Player {
@@ -63,6 +69,13 @@ model Room {
   status          String   @default("WAITING") // WAITING, PLAYING, FINISHED
   winnerId        Int?
   challengeIds    Json     // Array of challenge IDs
+  surahFilters    Json     @default("[]") // Renamed to keep backward compatibility or used for category
+  categoryFilter  String   @default("")   // New explicit field for category
+  questionCount   Int      @default(5)    // Number of questions in the challenge
+  maxPlayers      Int      @default(2)    // Phase 1: Multiplayer Group Rooms
+  gameMode        String   @default("STANDARD") // STANDARD, COMPLETION, SURAH
+  timePerQuestion Int      @default(20)   // Time in seconds
+  playersProgress Json     @default("{}") // Store progress as { playerId: progress }
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

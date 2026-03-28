@@ -1,9 +1,9 @@
-@import url('https://fonts.googleapis.com/css2?family=Scheherazade+New:wght@400;700&family=Tajawal:wght@300;400;500;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400;1,700&family=Tajawal:wght@300;400;500;700;800;900&display=swap');
 @import "tailwindcss";
 
 @theme {
   --font-sans: "Tajawal", ui-sans-serif, system-ui, sans-serif;
-  --font-quran: "Scheherazade New", serif;
+  --font-quran: "Amiri", serif;
   
   --color-brand-emerald: #064e3b;
   --color-brand-gold: #d4af37;
@@ -53,6 +53,15 @@
     text-rendering: optimizeLegibility;
   }
 
+  .quran-text-sm {
+    font-family: var(--font-quran);
+    line-height: 1.8;
+    font-size: 1.15rem;
+    display: inline-block;
+    direction: rtl;
+    text-rendering: optimizeLegibility;
+  }
+
   .islamic-watermark {
     position: relative;
   }
@@ -70,6 +79,20 @@
 
   .card-hover {
     @apply transition-all duration-500 hover:-translate-y-2 hover:shadow-[0_30px_60px_-12px_rgba(6,78,59,0.12)];
+  }
+
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(6, 78, 59, 0.1);
+    border-radius: 10px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgba(6, 78, 59, 0.2);
   }
 }
 
