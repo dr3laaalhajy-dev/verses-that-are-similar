@@ -4,6 +4,13 @@ import jwt from 'jsonwebtoken'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
 
+const mapChallenges = (challenges: any[]) => 
+  (challenges || []).map(c => ({ 
+    ...c, 
+    verseText: c.verseText || c.keyword || c.text || '',
+    text: c.verseText || c.keyword || c.text || '' 
+  }));
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Public GET
   if (req.method === 'GET') {
@@ -45,7 +52,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         take: isNaN(take as any) ? undefined : take,
         orderBy: { createdAt: 'desc' }
       })
-      return res.status(200).json(challenges || [])
+      return res.status(200).json(mapChallenges(challenges) || [])
     } catch (error: any) {
       console.error('Fetch Challenges API Crash:', {
         query: req.query,
