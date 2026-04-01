@@ -2472,7 +2472,7 @@ ${versesList}
             )}
           </AnimatePresence>
 
-          {/* Main Content */}
+          {/* Main Content*/}
           <main className="max-w-6xl mx-auto px-6 pt-12 pb-40 relative z-10">
             {challengesLoading ? (
 
