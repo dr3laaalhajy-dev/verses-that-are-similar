@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useMemo, useCallback, memo, useRef } from 'react';
 import {
   Sparkles, Trophy, RotateCcw, X, Mic, MicOff, Search, BookOpen, CheckCircle, CheckCircle2,
-  ChevronRight, ChevronLeft, LayoutGrid, Heart, History, Compass, Home, Plane,
+  ChevronRight, ChevronLeft, LayoutGrid, Heart, History, Compass, Home, Plane, Award,
   ListFilter, Sun, Moon, Calendar, Settings, Copy, Check, Lightbulb, ChevronDown, User, Users, Quote,
   ArrowRight, ArrowLeft, Zap, Lock, AlertCircle, Hash, XCircle, Eye, List, Loader2, Flame
 } from 'lucide-react';
 import Dashboard from './components/Dashboard';
+import CertificateGenerator from './components/CertificateGenerator';
 import { quranData } from './services/QuranRepository';
 
 interface Verse {
@@ -55,7 +56,7 @@ function useWindowSize() {
   return windowSize;
 }
 
-type View = 'home' | 'difficulty' | 'challenge' | 'mushaf' | 'adhkar' | 'hadith' | 'admin' | 'list' | 'group_menu' | 'group_waiting' | 'group_game' | 'speed_challenge' | 'skills_menu' | 'speed_menu' | 'group_create' | 'group_join' | 'book' | 'encyclopedia' | 'skills_count_selection' | 'skills_results' | 'islamic_quiz';
+type View = 'home' | 'difficulty' | 'challenge' | 'mushaf' | 'adhkar' | 'hadith' | 'admin' | 'list' | 'group_menu' | 'group_waiting' | 'group_game' | 'speed_challenge' | 'skills_menu' | 'speed_menu' | 'group_create' | 'group_join' | 'book' | 'encyclopedia' | 'skills_count_selection' | 'skills_results' | 'islamic_quiz' | 'settings';
 type Difficulty = 'easy' | 'medium' | 'hard';
 
 const toast = {
@@ -730,6 +731,72 @@ export default function App() {
   });
   const [totalPoints, setTotalPoints] = useState<number>(() => Number(localStorage.getItem('quran_total_points')) || 0);
   const [cups, setCups] = useState(() => parseInt(localStorage.getItem('quran_total_cups') || '0'));
+  const [showProfileDecoration, setShowProfileDecoration] = useState(() => localStorage.getItem('quran_show_decoration') !== 'false');
+  const [userCertificates, setUserCertificates] = useState<{ category: string, date: string, name: string }[]>(() => JSON.parse(localStorage.getItem('quran_user_certificates') || '[]'));
+  const [showCertificate, setShowCertificate] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<'seerah' | 'general' | 'quran'>('seerah');
+
+  // Game Gamification: Explicit Decoration State
+  const [activeFrame, setActiveFrame] = useState<string | null>(() => localStorage.getItem('quran_active_frame'));
+  const [isNameDecorated, setIsNameDecorated] = useState(() => localStorage.getItem('quran_name_decorated') === 'true');
+
+  // Gamification: Achievement Style Definitions
+  const achievementStyles: Record<string, { className: string, icon: string, textColor: string }> = {
+    quran: {
+      className: 'bg-gradient-to-tr from-yellow-300 via-amber-400 to-yellow-600 shadow-lg shadow-yellow-500/50 p-[3px]',
+      icon: '📖',
+      textColor: 'from-yellow-600 to-amber-700'
+    },
+    seerah: {
+      className: 'bg-[url("/golden_seerah_achievement_frame.png")] bg-center bg-no-repeat bg-contain',
+      icon: '/icons/seerah.png',
+      textColor: 'from-emerald-700 to-green-800'
+    },
+    general: {
+      className: 'bg-gradient-to-tr from-cyan-300 via-blue-500 to-indigo-600 shadow-lg shadow-blue-500/50 p-[3px]',
+      icon: '/icons/general.png',
+      textColor: 'from-blue-600 to-indigo-800'
+    },
+    none: {
+      className: 'bg-slate-200 p-[3px]',
+      icon: '',
+      textColor: 'from-slate-600 to-slate-800'
+    }
+  };
+
+  // Determine user's active achievement
+  const getActiveAchievement = () => {
+    // 1. Check Quran (High mastery: 15+ challenges completed)
+    if (completedChallengeIds.size >= 15) return 'quran';
+
+    // 2. Check Seerah (Full Completion: 3 groups)
+    const seerahSaved = localStorage.getItem('quran_quiz_progress_seerah');
+    if (seerahSaved) {
+      try {
+        const parsed = JSON.parse(seerahSaved);
+        // Check for certificate or 3 levels reached
+        const hasSeerahCert = userCertificates.some(c => c.category === 'seerah');
+        if (hasSeerahCert || (parsed.easy >= 3 || parsed.hard >= 3)) return 'seerah';
+      } catch { }
+    }
+
+    // 3. Check General (Full Completion: 5 groups)
+    const generalSaved = localStorage.getItem('quran_quiz_progress_general');
+    if (generalSaved) {
+      try {
+        const parsed = JSON.parse(generalSaved);
+        const hasGeneralCert = userCertificates.some(c => c.category === 'general');
+        if (hasGeneralCert || (parsed.easy >= 5 || parsed.hard >= 5)) return 'general';
+      } catch { }
+    }
+
+    return 'none';
+  };
+
+  const userAchievement = activeFrame || getActiveAchievement();
+  const safeAchievement = userAchievement && achievementStyles[userAchievement] ? userAchievement : 'none';
+  const currentStyle = achievementStyles[safeAchievement];
+  const isElite = (safeAchievement !== 'none') && showProfileDecoration;
 
   const [leaderboard, setLeaderboard] = useState<{ name: string, cups: number, points: number }[]>(() => {
     try {
@@ -906,7 +973,9 @@ export default function App() {
         localStorage.setItem('quran_player_name', nameInput.trim());
       } else {
         const detail = data.error || data.message || '';
-        if (import.meta.env.PROD) {
+        if (detail === 'NAME_TAKEN' || data.message === 'NAME_TAKEN') {
+          setRegistrationError('هذا الاسم مستخدم بالفعل، يرجى اختيار اسم آخر.');
+        } else if (import.meta.env.PROD) {
           setRegistrationError('عذراً، لم نتمكن من إكمال عملية التسجيل. يرجى التأكد من اسمك والمحاولة مرة أخرى.');
         } else {
           setRegistrationError(`فشل الاتصال: ${detail || 'خطأ غير معروف في السيرفر'}`);
@@ -1072,23 +1141,23 @@ export default function App() {
     const savedPoints = localStorage.getItem('quran_total_points');
     if (savedPoints) setTotalPoints(parseInt(savedPoints));
 
-    const savedStreak = localStorage.getItem('quran_streak') || '0';
-    const lastPlayed = localStorage.getItem('quran_last_played');
+    const savedStreak = parseInt(localStorage.getItem('quran_streak') || '0');
+    const lastPlayed = localStorage.getItem('quran_last_played'); // YYYY-MM-DD
     const today = new Date().toISOString().split('T')[0];
 
-    if (lastPlayed) {
-      const lastDate = new Date(lastPlayed);
-      const todayDate = new Date(today);
-      const diffTime = Math.abs(todayDate.getTime() - lastDate.getTime());
-      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    // Calculate Yesterday
+    const yesterdayDate = new Date();
+    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const yesterday = yesterdayDate.toISOString().split('T')[0];
 
-      if (diffDays === 1) {
-        setStreak(parseInt(savedStreak));
-      } else if (diffDays > 1) {
+    if (lastPlayed) {
+      if (lastPlayed === today || lastPlayed === yesterday) {
+        // Streak is still valid
+        setStreak(savedStreak);
+      } else {
+        // Streak is broken
         setStreak(0);
         localStorage.setItem('quran_streak', '0');
-      } else {
-        setStreak(parseInt(savedStreak));
       }
       setLastPlayedDate(lastPlayed);
     }
@@ -1103,19 +1172,49 @@ export default function App() {
 
   const updateStatsAfterWin = useCallback(() => {
     const today = new Date().toISOString().split('T')[0];
+    const yesterdayDate = new Date();
+    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const yesterday = yesterdayDate.toISOString().split('T')[0];
+
     let newStreak = streak;
 
-    if (lastPlayedDate !== today) {
+    if (!lastPlayedDate) {
+      // Case 1: First time
+      newStreak = 1;
+    } else if (lastPlayedDate === yesterday) {
+      // Case 2: Consecutive day
       newStreak = streak + 1;
-      setStreak(newStreak);
-      setLastPlayedDate(today);
-      localStorage.setItem('quran_streak', newStreak.toString());
-      localStorage.setItem('quran_last_played', today);
+    } else if (lastPlayedDate === today) {
+      // Case 3: Same day - no change
+      newStreak = streak;
+    } else {
+      // Case 4: Broken streak (gap > 1 day)
+      newStreak = 1;
     }
+
+    setStreak(newStreak);
+    setLastPlayedDate(today);
+    localStorage.setItem('quran_streak', newStreak.toString());
+    localStorage.setItem('quran_last_played', today);
 
     const newTotalPoints = totalPoints + score;
     setTotalPoints(newTotalPoints);
     localStorage.setItem('quran_total_points', newTotalPoints.toString());
+
+    // Sync completion status with backend
+    fetch('/api/player-score', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        deviceId,
+        playerId: deviceId,
+        score: newTotalPoints,
+        totalPoints: newTotalPoints,
+        seerahCompleted: (getActiveAchievement() === 'seerah'),
+        generalCompleted: (getActiveAchievement() === 'general'),
+        quranCompleted: (completedChallengeIds.size >= 15)
+      })
+    }).catch(err => console.error('Failed to sync quiz completion:', err));
 
     // Record completed challenge ID
     if (challengeMode === 'normal' || view === 'group_game') {
@@ -1856,6 +1955,23 @@ export default function App() {
   const syncLeaderboard = useCallback(async () => {
     setIsSyncing(true);
     try {
+      // 1. Proactive sync of achievement flags before fetching rankings
+      if (deviceId && playerName) {
+        await fetch('/api/player-score', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            deviceId,
+            playerId: deviceId,
+            score: totalPoints,
+            totalPoints: totalPoints,
+            seerahCompleted: (getActiveAchievement() === 'seerah'),
+            generalCompleted: (getActiveAchievement() === 'general'),
+            quranCompleted: (completedChallengeIds.size >= 15)
+          })
+        }).catch(err => console.warn('Pre-fetch sync failed:', err));
+      }
+
       const response = await fetch('/api/leaderboard');
       if (!response.ok) {
         const text = await response.text();
@@ -1871,7 +1987,7 @@ export default function App() {
     } finally {
       setIsSyncing(false);
     }
-  }, []);
+  }, [deviceId, playerName, totalPoints, completedChallengeIds]);
 
   useEffect(() => {
     localStorage.setItem('quran_total_points', totalPoints.toString());
@@ -1928,7 +2044,17 @@ export default function App() {
       fetch('/api/player-score', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ deviceId, points: score, challengeId: currentChallenge?.id })
+        body: JSON.stringify({
+          deviceId,
+          points: score,
+          challengeId: currentChallenge?.id,
+          roomId: room?.id,
+          playerId: deviceId,
+          score: newPoints,
+          seerahCompleted: (getActiveAchievement() === 'seerah'),
+          generalCompleted: (getActiveAchievement() === 'general'),
+          quranCompleted: (completedChallengeIds.size >= 15)
+        })
       })
         .then(async (res) => {
           if (!res.ok) {
@@ -1993,7 +2119,14 @@ export default function App() {
         fetch('/api/player-score', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ deviceId, points: newPoints, cups: calculatedCups })
+          body: JSON.stringify({
+            deviceId,
+            points: newPoints,
+            cups: calculatedCups,
+            roomId: room?.id,
+            playerId: deviceId,
+            score: newPoints
+          })
         })
           .catch(err => console.error('Failed to sync retroactive cups:', err));
       }
@@ -2362,7 +2495,7 @@ ${versesList}
       ) : (
         <>
           {/* Header */}
-          <header className="relative z-50 glass-dark text-white shadow-2xl overflow-hidden">
+          <header className="relative z-50 glass-dark text-white shadow-2xl">
             <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32 blur-3xl pointer-events-none" />
             <div className="max-w-6xl mx-auto px-6 py-5 flex items-center justify-between relative z-10">
               <motion.div
@@ -2370,7 +2503,7 @@ ${versesList}
                 animate={{ x: 0, opacity: 1 }}
                 className="flex items-center gap-4"
               >
-                <div className="bg-white/5 p-1 rounded-xl md:rounded-2xl backdrop-blur-sm border border-white/10 overflow-hidden shadow-xl shadow-black/10">
+                <div className="bg-white/5 p-1 rounded-xl md:rounded-2xl backdrop-blur-sm border border-white/10 shadow-xl shadow-black/10">
                   <img src="/logo.png" className="w-10 h-10 md:w-20 md:h-20 object-contain" alt="Logo" />
                 </div>
                 <div>
@@ -2403,6 +2536,18 @@ ${versesList}
                 </button>
 
                 <button
+                  onClick={() => {
+                    setShowScores(false);
+                    setView(view === 'settings' ? 'home' : 'settings');
+                  }}
+                  className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl transition-all text-sm font-bold shadow-lg ${view === 'settings' ? 'bg-white text-brand-emerald' : 'bg-white/10 text-white hover:bg-white/20 border border-white/10'}`}
+                  title="الإعدادات"
+                >
+                  <Settings className="w-4 h-4" />
+                  <span className="hidden sm:inline">الإعدادات</span>
+                </button>
+
+                <button
                   onClick={() => setView('admin')}
                   className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-white/10 text-white hover:bg-white/20 border border-white/10 transition-all text-sm font-bold shadow-lg"
                   title="لوحة التحكم"
@@ -2410,6 +2555,41 @@ ${versesList}
                   <Lock className="w-4 h-4" />
                   <span className="hidden sm:inline">الإدارة</span>
                 </button>
+
+                {playerName && (
+                  <div className="flex items-center gap-3 mr-2 border-r border-white/10 pr-4">
+                    <div className="relative group">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-black text-lg bg-brand-emerald border-2 border-white/20 shadow-inner shadow-black/20 text-shadow-sm`}>
+                        {playerName.charAt(0).toUpperCase()}
+                      </div>
+                      {isElite && (
+                        <div className={`absolute -inset-1.5 pointer-events-none z-10 ${currentStyle.className}`} />
+                      )}
+                      {isElite && (
+                        <motion.div
+                          initial={{ scale: 0 }}
+                          animate={{ scale: 1 }}
+                          className="absolute -bottom-1 -left-1 z-[60] flex h-6 w-6 items-center justify-center bg-transparent drop-shadow-lg"
+                          title={userAchievement}
+                        >
+                          {currentStyle.icon.startsWith('/') ? (
+                            <img src={currentStyle.icon} className="w-full h-full object-contain" alt="Badge" />
+                          ) : (
+                            <div className="flex items-center justify-center bg-transparent text-white text-[10px] drop-shadow-lg w-full h-full">
+                              {currentStyle.icon}
+                            </div>
+                          )}
+                        </motion.div>
+                      )}
+                    </div>
+                    <div className="hidden md:flex flex-col text-right">
+                      <span className={`text-sm font-black leading-none ${isElite ? `text-transparent bg-clip-text bg-gradient-to-r ${currentStyle.textColor}` : 'text-white'}`}>
+                        {playerName}
+                      </span>
+                      <span className="text-[10px] font-bold text-brand-gold/70 mt-1">{totalPoints} نقطة</span>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </header>
@@ -2553,31 +2733,81 @@ ${versesList}
                       </div>
                     ) : (
                       <div className="space-y-2 md:space-y-4 pr-1 md:pr-3 max-h-[60vh] overflow-y-auto custom-scrollbar">
-                        {leaderboard.map((player, index) => (
-                          <motion.div
-                            initial={{ x: 20, opacity: 0 }}
-                            animate={{ x: 0, opacity: 1 }}
-                            transition={{ delay: index * 0.05 }}
-                            key={player.name}
-                            className={`flex justify-between items-center p-3 md:p-6 rounded-2xl md:rounded-3xl border transition-all group ${player.name === playerName ? 'bg-brand-emerald/5 border-brand-emerald/20 shadow-lg' : 'bg-white/60 border-white hover:shadow-xl'}`}
-                          >
-                            <div className="flex items-center gap-3 md:gap-6">
-                              <div className={`w-8 h-8 md:w-12 md:h-12 rounded-xl md:rounded-2xl flex items-center justify-center font-black text-sm md:text-lg transition-transform group-hover:rotate-12 ${index === 0 ? 'bg-brand-gold/10 text-brand-gold scale-110 shadow-lg' : 'bg-slate-100 text-slate-400'}`}>
-                                {index === 0 ? '👑' : index + 1}
+                        {leaderboard.map((player: any, index) => {
+                          const isCurrentPlayer = player.name.trim().toLowerCase() === playerName.trim().toLowerCase();
+
+                          // INDIVIDUAL PLAYER ACHIEVEMENT LOGIC (Global visibility)
+                          const getPlayerAchievement = (p: any) => {
+                            if (p.seerahCompleted) return 'seerah';
+                            if (p.quranCompleted || (p.cups >= 15 || p.points >= 600)) return 'quran';
+                            if (p.generalCompleted || p.points >= 200) return 'general';
+                            return 'none';
+                          };
+
+                          // Use individual player data for everyone in the list
+                          const achievement = getPlayerAchievement(player);
+                          const style = achievementStyles[achievement];
+                          
+                          // Decoration visibility (always show for others, follow settings for self)
+                          const isPlayerElite = (achievement !== 'none') && (isCurrentPlayer ? showProfileDecoration : true);
+
+                          return (
+                            <motion.div
+                              initial={{ x: 20, opacity: 0 }}
+                              animate={{ x: 0, opacity: 1 }}
+                              transition={{ delay: index * 0.05 }}
+                              key={player.name}
+                              className={`flex justify-between items-center p-3 md:p-6 rounded-2xl md:rounded-3xl border transition-all group overflow-visible ${isCurrentPlayer ? 'bg-brand-emerald/5 border-brand-emerald/20 shadow-lg' : 'bg-white/60 border-white hover:shadow-xl'}`}
+                            >
+                              <div className="flex items-center gap-3 md:gap-6">
+                                {/* Rank Indicator */}
+                                <div className="w-8 md:w-10 flex flex-col items-center justify-center text-center">
+                                  <span className={`text-[7px] md:text-[8px] font-black uppercase tracking-widest ${index === 0 ? 'text-brand-gold' : 'text-slate-400'}`}>الرتبة</span>
+                                  <span className={`text-xs md:text-lg font-black tabular-nums ${index === 0 ? 'text-brand-gold drop-shadow-sm scale-110' : 'text-slate-500'}`}>
+                                    {index === 0 ? '👑' : index + 1}
+                                  </span>
+                                </div>
+
+                                <div className="relative group">
+                                  <div className={`w-10 h-10 md:w-14 md:h-14 rounded-full flex items-center justify-center text-white font-black text-sm md:text-xl transition-transform group-hover:scale-105 bg-brand-emerald shadow-inner border-2 border-white/20`}>
+                                    {player.name.charAt(0).toUpperCase()}
+                                  </div>
+                                  {isPlayerElite && (
+                                    <div className={`absolute -inset-1.5 md:-inset-2 pointer-events-none z-10 ${style.className}`} />
+                                  )}
+                                  {isPlayerElite && (
+                                    <motion.div
+                                      initial={{ scale: 0 }}
+                                      animate={{ scale: 1 }}
+                                      className="absolute -bottom-1 -left-1 z-[60] flex h-5 w-5 md:h-6 md:w-6 items-center justify-center bg-transparent drop-shadow-lg"
+                                    >
+                                      {style.icon.startsWith('/') ? (
+                                        <img src={style.icon} className="w-full h-full object-contain" alt="Badge" />
+                                      ) : (
+                                        <div className="flex items-center justify-center bg-transparent text-white text-[8px] md:text-[10px] drop-shadow-lg w-full h-full">
+                                          {style.icon}
+                                        </div>
+                                      )}
+                                    </motion.div>
+                                  )}
+                                </div>
+                                <div className="text-right">
+                                  <span className={`font-black text-sm md:text-xl block leading-tight ${isPlayerElite ? `text-transparent bg-clip-text bg-gradient-to-r ${style.textColor}` : 'text-slate-800'}`}>
+                                    {player.name}
+                                    {isCurrentPlayer && <span className="mr-2 text-[10px] text-brand-emerald opacity-60">(أنت)</span>}
+                                  </span>
+                                  <span className="text-[8px] md:text-[10px] uppercase font-black tracking-widest text-slate-400">{player.points} نقطة</span>
+                                </div>
                               </div>
-                              <div className="text-right">
-                                <span className="font-black text-slate-800 text-sm md:text-xl block leading-tight">{player.name}</span>
-                                <span className="text-[8px] md:text-[10px] uppercase font-black tracking-widest text-slate-400">{player.points} نقطة</span>
+                              <div className="flex items-center gap-2 md:gap-4">
+                                <div className="flex items-center gap-1 bg-brand-gold/10 px-2 py-1 md:px-4 md:py-2 rounded-xl md:rounded-2xl border border-brand-gold/20">
+                                  <Trophy className="w-3 h-3 md:w-4 md:h-4 text-brand-gold" />
+                                  <span className="font-black text-base md:text-2xl text-brand-emerald tabular-nums">{player.cups}</span>
+                                </div>
                               </div>
-                            </div>
-                            <div className="flex items-center gap-2 md:gap-4">
-                              <div className="flex items-center gap-1 bg-brand-gold/10 px-2 py-1 md:px-4 md:py-2 rounded-xl md:rounded-2xl border border-brand-gold/20">
-                                <Trophy className="w-3 h-3 md:w-4 md:h-4 text-brand-gold" />
-                                <span className="font-black text-base md:text-2xl text-brand-emerald tabular-nums">{player.cups}</span>
-                              </div>
-                            </div>
-                          </motion.div>
-                        ))}
+                            </motion.div>
+                          );
+                        })}
                       </div>
                     )}
                   </motion.div>
@@ -3243,22 +3473,115 @@ ${versesList}
                       </AnimatePresence>
                     </div>
                   </motion.div>
+                ) : view === 'settings' ? (
+                  <motion.div
+                    key="settings"
+                    initial={{ opacity: 0, scale: 0.98 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.98 }}
+                    className="max-w-4xl mx-auto py-10 px-6 bg-white rounded-[3rem] shadow-2xl border border-slate-100 relative overflow-hidden"
+                  >
+                    <div className="absolute top-0 right-0 w-64 h-64 bg-brand-emerald/5 rounded-full -mr-32 -mt-32 blur-3xl opacity-50" />
+
+                    <div className="relative z-10 text-right">
+                      <div className="flex items-center justify-between mb-12">
+                        <button
+                          onClick={() => setView('home')}
+                          className="p-4 rounded-2xl bg-slate-50 text-slate-400 hover:text-brand-emerald transition-colors"
+                        >
+                          <ChevronRight className="w-6 h-6" />
+                        </button>
+                        <div>
+                          <h2 className="text-3xl font-black text-slate-800">إعدادات الحساب والخصوصية</h2>
+                          <p className="text-slate-400 font-bold mt-1">خصص تجربتك في تحدي المتشابهات</p>
+                        </div>
+                      </div>
+
+                      {/* Privacy Section */}
+                      <div className="space-y-6 mb-16">
+                        <h3 className="text-xl font-black text-brand-emerald flex items-center gap-2 justify-end">
+                          الخصوصية والظهور
+                          <Lock className="w-5 h-5" />
+                        </h3>
+
+                        <div className="p-6 rounded-[2rem] bg-slate-50 border border-slate-100 flex items-center justify-between">
+                          <button
+                            onClick={() => {
+                              const newVal = !showProfileDecoration;
+                              setShowProfileDecoration(newVal);
+                              localStorage.setItem('quran_show_decoration', String(newVal));
+                            }}
+                            className={`w-14 h-7 rounded-full relative transition-all duration-300 ${showProfileDecoration ? 'bg-emerald-500' : 'bg-slate-300'}`}
+                          >
+                            <div className={`absolute top-1 w-5 h-5 bg-white rounded-full shadow-md transition-all duration-300 ${showProfileDecoration ? 'left-8' : 'left-1'}`} />
+                          </button>
+
+                          <div className="text-right">
+                            <h4 className="font-black text-slate-800 text-lg">إظهار الزخرفة والإطار في قائمة المتصدرين</h4>
+                            <p className="text-slate-400 font-bold text-sm mt-1">يتحكم هذا الخيار في ظهور إطار التميز والاسم الملون للآخرين</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* My Certificates Section */}
+                      <div className="space-y-6">
+                        <h3 className="text-xl font-black text-brand-gold flex items-center gap-2 justify-end">
+                          شهاداتي وإنجازاتي
+                          <Award className="w-5 h-5" />
+                        </h3>
+
+                        {userCertificates.length === 0 ? (
+                          <div className="p-12 text-center bg-slate-50/50 rounded-[2rem] border-2 border-dashed border-slate-100">
+                            <Award className="w-12 h-12 text-slate-200 mx-auto mb-4" />
+                            <p className="text-slate-400 font-bold">لم تحصل على أي شهادات بعد. أكمل أقسام المسابقة للحصول عليها!</p>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            {userCertificates.slice().reverse().map((cert, i) => (
+                              <div key={i} className="p-6 rounded-[2rem] bg-white border border-slate-100 shadow-sm hover:shadow-md transition-all flex items-center justify-between group">
+                                <button
+                                  onClick={() => {
+                                    setSelectedCategory(cert.category === 'seerah' ? 'seerah' : 'general');
+                                    setShowCertificate(true);
+                                  }}
+                                  className="p-3 rounded-xl bg-slate-50 text-slate-400 hover:bg-brand-emerald hover:text-white transition-all opacity-0 group-hover:opacity-100"
+                                >
+                                  <Eye className="w-5 h-5" />
+                                </button>
+                                <div className="flex items-center gap-4">
+                                  <div className="text-right">
+                                    <h4 className="font-black text-slate-800">{cert.category === 'seerah' ? 'شهادة السيرة النبوية' : 'شهادة الأسئلة العامة'}</h4>
+                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{cert.date}</p>
+                                  </div>
+                                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${cert.category === 'seerah' ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'}`}>
+                                    <Trophy className="w-6 h-6" />
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </motion.div>
                 ) : view === 'home' ? (
                   <motion.div
                     key="home"
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.98 }}
-                    className="flex flex-col gap-6 md:gap-10 max-w-6xl mx-auto py-6 md:py-10 px-4"
+                    className="flex flex-col gap-6 md:gap-10 max-w-6xl mx-auto py-6 md:py-10 px-4 overflow-visible"
                   >
                     {/* Premium Welcome Header Section */}
                     <motion.div
                       initial={{ opacity: 0, y: -20 }}
                       animate={{ opacity: 1, y: 0 }}
-                      className="flex flex-col items-center justify-center text-center space-y-4 mb-8 animate-in fade-in slide-in-from-top-4 duration-1000"
+                      className="flex flex-col items-center justify-center text-center space-y-4 mb-8"
                     >
+
+
                       <h1 className="text-3xl md:text-5xl font-black text-slate-800 tracking-tight">
-                        السلام عليكم يا <span className="text-brand-emerald underline decoration-brand-gold/30 decoration-4 underline-offset-8">{playerName || 'يا ضيفنا الكريم'}</span>
+                        السلام عليكم يا <span className={`underline decoration-brand-gold/30 decoration-4 underline-offset-8 transition-all ${isElite && isNameDecorated ? `text-transparent bg-clip-text bg-gradient-to-r ${currentStyle.textColor}` : 'text-brand-emerald'}`}>{playerName || 'يا ضيفنا الكريم'}</span>
                       </h1>
 
                       {/* Motivational Quote Display - Flattened & Integrated */}
@@ -4485,7 +4808,15 @@ ${versesList}
                     exit={{ opacity: 0, scale: 0.98 }}
                     className="w-full"
                   >
-                    <IslamicQuiz onBack={() => setView('home')} onWin={updateStatsAfterWin} />
+                    <IslamicQuiz
+                      onBack={() => setView('home')}
+                      onWin={updateStatsAfterWin}
+                      claimedCategories={userCertificates.map(c => c.category)}
+                      onShowCertificate={(cat) => {
+                        setSelectedCategory(cat);
+                        setShowCertificate(true);
+                      }}
+                    />
                   </motion.div>
                 ) : (
                   <>
@@ -4784,6 +5115,32 @@ ${versesList}
           />
 
           <DailyAyah />
+
+          <AnimatePresence>
+            {showCertificate && (
+              <CertificateGenerator
+                category={selectedCategory}
+                onClose={() => setShowCertificate(false)}
+                isClaimed={userCertificates.some(c => c.category === selectedCategory)}
+                claimedName={userCertificates.find(c => c.category === selectedCategory)?.name}
+                onSave={(certData) => {
+                  // Prevent duplicate entries for the same category
+                  if (userCertificates.some(c => c.category === certData.category)) return;
+
+                  const newCerts = [...userCertificates, certData];
+                  setUserCertificates(newCerts);
+                  localStorage.setItem('quran_user_certificates', JSON.stringify(newCerts));
+
+                  // Automatically activate frame and decoration upon earning certificate
+                  const category = certData.category === 'seerah' ? 'seerah' : 'general';
+                  setActiveFrame(category);
+                  setIsNameDecorated(true);
+                  localStorage.setItem('quran_active_frame', category);
+                  localStorage.setItem('quran_name_decorated', 'true');
+                }}
+              />
+            )}
+          </AnimatePresence>
 
           <AnimatePresence>
             {showTafsirModal && (

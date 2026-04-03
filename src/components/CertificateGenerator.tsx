@@ -4,13 +4,16 @@ import { Download, X, Award, CheckCircle2, User, Share2, Info } from 'lucide-rea
 
 interface CertificateGeneratorProps {
   onClose: () => void;
+  onSave?: (cert: { category: string, date: string, name: string }) => void;
   category: string;
+  isClaimed?: boolean;
+  claimedName?: string;
 }
 
-const CertificateGenerator: React.FC<CertificateGeneratorProps> = ({ onClose, category }) => {
-  // Initialize with saved name if available
-  const [userName, setUserName] = useState(() => localStorage.getItem('quran_user_name') || '');
-  const [isGenerated, setIsGenerated] = useState(false);
+const CertificateGenerator: React.FC<CertificateGeneratorProps> = ({ onClose, onSave, category, isClaimed, claimedName }) => {
+  // Initialize with saved name if available, or claimed name if already exists
+  const [userName, setUserName] = useState(() => claimedName || localStorage.getItem('quran_user_triple_name') || localStorage.getItem('quran_user_name') || '');
+  const [isGenerated, setIsGenerated] = useState(!!isClaimed);
   const [isImageLoaded, setIsImageLoaded] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -118,7 +121,21 @@ const CertificateGenerator: React.FC<CertificateGeneratorProps> = ({ onClose, ca
   const handleGenerate = () => {
     if (userName.trim()) {
       setIsGenerated(true);
-      localStorage.setItem('quran_user_name', userName);
+      localStorage.setItem('quran_user_triple_name', userName.trim());
+      
+      const currentDate = new Date().toLocaleDateString('ar-EG', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric'
+      });
+
+      if (onSave) {
+        onSave({ 
+          category, 
+          date: currentDate, 
+          name: userName.trim() 
+        });
+      }
     }
   };
 
@@ -213,7 +230,7 @@ const CertificateGenerator: React.FC<CertificateGeneratorProps> = ({ onClose, ca
             >
               <div className="mb-6 p-4 bg-emerald-50 rounded-2xl inline-flex items-center gap-2 text-emerald-700 font-black">
                 <CheckCircle2 className="w-5 h-5" />
-                <span>تم تجهيز وسامك بنجاح!</span>
+                <span>{isClaimed ? 'تم توثيق إنجازك مسبقاً بنجاح!' : 'تم تجهيز وسامك بنجاح!'}</span>
               </div>
 
               <div className="w-full overflow-hidden rounded-2xl shadow-2xl border-4 border-white mb-6 relative group">

@@ -16,7 +16,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       select: {
         name: true,
         points: true,
-        cups: true
+        cups: true,
+        seerahCompleted: true,
+        generalCompleted: true,
+        quranCompleted: true
       }
     })
 

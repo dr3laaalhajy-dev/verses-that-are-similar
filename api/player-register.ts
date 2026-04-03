@@ -10,13 +10,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   console.log('Registration attempt:', { deviceId, name })
 
   if (!deviceId || !name) {
-    return res.status(400).json({ 
+    return res.status(400).json({
       message: 'Missing deviceId or name',
       received: { deviceId: !!deviceId, name: !!name, body: req.body }
     })
   }
 
   try {
+    // Check if the name is already taken by a DIFFERENT device
+    const existingPlayerWithName = await prisma.player.findFirst({
+      where: {
+        name: { equals: name, mode: 'insensitive' },
+        NOT: { deviceId: deviceId }
+      }
+    });
+
+    if (existingPlayerWithName) {
+      return res.status(400).json({
+        message: 'NAME_TAKEN',
+        error: 'هذا الاسم مستخدم بالفعل، يرجى اختيار اسم آخر'
+      });
+    }
+
     console.log('Database operation starting for:', deviceId);
     const start = Date.now();
     const player = await prisma.player.upsert({
@@ -34,7 +49,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       stack: error.stack,
       deviceId
     });
-    return res.status(500).json({ 
+    return res.status(500).json({
       message: 'Internal server error',
       error: error.message,
       code: error.code

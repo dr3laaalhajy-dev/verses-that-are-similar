@@ -18,6 +18,13 @@ export default defineConfig(({mode}) => {
     server: {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
       hmr: process.env.DISABLE_HMR !== 'true',
+      proxy: {
+        '/api': {
+          target: 'http://localhost:3000', // Redirect /api to the same port if vercel dev is used, or adjust as needed
+          changeOrigin: true,
+          rewrite: (path) => path // Keep /api prefix for vercel dev / generic backend
+        }
+      }
     },
   };
 });

@@ -7,7 +7,12 @@ import CertificateGenerator from './CertificateGenerator';
 
 const getStorageKey = (category: string | null) => `quran_quiz_progress_${category || 'general'}`;
 
-const IslamicQuiz: React.FC<{ onBack?: () => void, onWin?: () => void }> = ({ onBack, onWin }) => {
+const IslamicQuiz: React.FC<{
+  onBack?: () => void,
+  onWin?: () => void,
+  onShowCertificate?: (category: 'seerah' | 'general' | 'quran') => void,
+  claimedCategories?: string[]
+}> = ({ onBack, onWin, onShowCertificate, claimedCategories = [] }) => {
   const [gameStatus, setGameStatus] = useState<'categories' | 'difficulty' | 'levels' | 'playing' | 'result'>('categories');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -19,8 +24,6 @@ const IslamicQuiz: React.FC<{ onBack?: () => void, onWin?: () => void }> = ({ on
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [isAnimating, setIsAnimating] = useState(false);
   const [showCertificate, setShowCertificate] = useState(false);
-  const [showStartChallengeModal, setShowStartChallengeModal] = useState(false);
-  const [pendingGroup, setPendingGroup] = useState<number | null>(null);
 
   // Load progress when category changes
   useEffect(() => {
@@ -66,14 +69,6 @@ const IslamicQuiz: React.FC<{ onBack?: () => void, onWin?: () => void }> = ({ on
   };
 
   const handleStartGroup = (groupNum: number) => {
-    setPendingGroup(groupNum);
-    setShowStartChallengeModal(true);
-  };
-
-  const confirmStartGroup = () => {
-    if (pendingGroup === null) return;
-    const groupNum = pendingGroup;
-    
     let groupQuestions: Question[] = [];
 
     if (selectedCategory === 'general') {
@@ -93,8 +88,6 @@ const IslamicQuiz: React.FC<{ onBack?: () => void, onWin?: () => void }> = ({ on
     setCurrentIndex(0);
     setScore(0);
     setSelectedAnswer(null);
-    setShowStartChallengeModal(false);
-    setPendingGroup(null);
   };
 
   const handleAnswerSelect = (option: string) => {
@@ -118,24 +111,31 @@ const IslamicQuiz: React.FC<{ onBack?: () => void, onWin?: () => void }> = ({ on
         // Final score calculation for immediate unlock logic
         const finalScore = isCorrect ? score + 1 : score;
 
-        // Handle Unlock Logic: For 'general' or 'seerah' categories and if passed (12/20)
         const isGeneral = selectedCategory === 'general';
         const isSeerah = selectedCategory === 'seerah';
 
         if ((isGeneral || isSeerah) && finalScore >= 12) {
           const progressKey = (isSeerah) ? 'easy' : (difficulty as 'easy' | 'hard');
           const maxGroups = isSeerah ? 3 : 5;
-          const currentMaxUnlocked = unlockedLevels[progressKey];
+          const currentMaxUnlocked = unlockedLevels[progressKey] || 1;
 
-          if (selectedGroup === currentMaxUnlocked && currentMaxUnlocked < maxGroups) {
+          // If they just won the last group, set progress to maxGroups + 1
+          if (selectedGroup === maxGroups) {
+            const updatedProgress = {
+              ...unlockedLevels,
+              [progressKey]: maxGroups + 1
+            };
+            setUnlockedLevels(updatedProgress);
+            syncProgress(updatedProgress);
+          } else if (selectedGroup === currentMaxUnlocked && currentMaxUnlocked < maxGroups) {
             const updatedProgress = {
               ...unlockedLevels,
               [progressKey]: currentMaxUnlocked + 1
             };
             setUnlockedLevels(updatedProgress);
-            syncProgress(updatedProgress); // Immediate save
+            syncProgress(updatedProgress);
           }
-          
+
           // Trigger streak update on win
           if (onWin) onWin();
         }
@@ -234,9 +234,9 @@ const IslamicQuiz: React.FC<{ onBack?: () => void, onWin?: () => void }> = ({ on
         {/* Certificate Generator Modal Component for Testing */}
         <AnimatePresence>
           {showCertificate && (
-            <CertificateGenerator 
-              category={selectedCategory || 'seerah'} 
-              onClose={() => setShowCertificate(false)} 
+            <CertificateGenerator
+              category={selectedCategory || 'seerah'}
+              onClose={() => setShowCertificate(false)}
             />
           )}
         </AnimatePresence>
@@ -306,7 +306,7 @@ const IslamicQuiz: React.FC<{ onBack?: () => void, onWin?: () => void }> = ({ on
     const isGeneral = selectedCategory === 'general';
     const progress = (isSeerah) ? unlockedLevels.easy : (difficulty ? unlockedLevels[difficulty] : 1);
     const totalGroups = isSeerah ? 3 : 5;
-    const isAllCompleted = progress >= totalGroups;
+    const isAllCompleted = progress > totalGroups;
 
     return (
       <div className="max-w-2xl mx-auto px-4 py-8 text-center" dir="rtl">
@@ -320,7 +320,7 @@ const IslamicQuiz: React.FC<{ onBack?: () => void, onWin?: () => void }> = ({ on
 
         {/* Certificate Reward Button - Only shown when all levels are unlocked */}
         <AnimatePresence>
-          {isAllCompleted && (
+          {isAllCompleted && !claimedCategories.includes(selectedCategory || 'general') && (
             <motion.div
               initial={{ opacity: 0, y: 10, scale: 0.95 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -331,21 +331,25 @@ const IslamicQuiz: React.FC<{ onBack?: () => void, onWin?: () => void }> = ({ on
                 className="group relative w-full max-w-md mx-auto p-1 rounded-3xl bg-linear-to-r from-brand-gold via-amber-400 to-brand-gold shadow-xl hover:shadow-2xl transition-all overflow-hidden"
               >
                 <div className="relative bg-white/90 backdrop-blur-sm p-6 rounded-[1.4rem] flex items-center justify-between gap-4 overflow-hidden">
-                   {/* Animated Background Decoration */}
-                   <div className="absolute top-0 right-0 w-32 h-32 bg-amber-100/50 rounded-full -mr-16 -mt-16 blur-3xl animate-pulse" />
-                   
-                   <div className="flex items-center gap-4 relative z-10">
-                      <div className="w-14 h-14 bg-amber-500 rounded-2xl flex items-center justify-center text-white shadow-lg group-hover:rotate-12 transition-transform duration-500">
-                         <Award className="w-8 h-8" />
-                      </div>
-                      <div className="text-right">
-                         <h3 className="text-xl font-black text-slate-800 leading-none mb-1">مبارك الإتمام! 🎓</h3>
-                         <p className="text-xs text-amber-700 font-black">اضغط هنا لاستلام شهادة النجاح الرسمية</p>
-                      </div>
-                   </div>
-                   <div className="p-3 bg-amber-50 rounded-xl text-amber-600 group-hover:bg-amber-100 transition-colors">
-                      <ChevronLeft className="w-6 h-6 rotate-180" />
-                   </div>
+                  {/* Animated Background Decoration */}
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-amber-100/50 rounded-full -mr-16 -mt-16 blur-3xl animate-pulse" />
+
+                  <div className="flex items-center gap-4 relative z-10">
+                    <div className="w-14 h-14 bg-amber-500 rounded-2xl flex items-center justify-center text-white shadow-lg group-hover:rotate-12 transition-transform duration-500">
+                      <Award className="w-8 h-8" />
+                    </div>
+                    <div className="text-right">
+                      <h3 className="text-xl font-black text-slate-800 leading-none mb-1">
+                        {claimedCategories.includes(selectedCategory || 'general') ? 'عرض الوسام! 🎓' : 'مبارك الإتمام! 🎓'}
+                      </h3>
+                      <p className="text-xs text-amber-700 font-black">
+                        {claimedCategories.includes(selectedCategory || 'general') ? 'اضغط هنا لاستعراض وسام التميز الخاص بك' : 'اضغط هنا لاستلام وسام التميز'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="p-3 bg-amber-50 rounded-xl text-amber-600 group-hover:bg-amber-100 transition-colors">
+                    <ChevronLeft className="w-6 h-6 rotate-180" />
+                  </div>
                 </div>
               </button>
             </motion.div>
@@ -401,9 +405,9 @@ const IslamicQuiz: React.FC<{ onBack?: () => void, onWin?: () => void }> = ({ on
         {/* Certificate Generator Modal Component */}
         <AnimatePresence>
           {showCertificate && (
-            <CertificateGenerator 
-              category={selectedCategory || 'general'} 
-              onClose={() => setShowCertificate(false)} 
+            <CertificateGenerator
+              category={selectedCategory || 'general'}
+              onClose={() => setShowCertificate(false)}
             />
           )}
         </AnimatePresence>
@@ -459,7 +463,32 @@ const IslamicQuiz: React.FC<{ onBack?: () => void, onWin?: () => void }> = ({ on
           </div>
           <p className="text-lg text-slate-600 font-bold mb-8 leading-relaxed">{message}</p>
 
-          <div className="flex flex-col gap-3">
+          {isPassed && selectedGroup === maxGroupsForCurrent && (
+            <motion.div
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              className="mt-6 p-8 rounded-[3rem] bg-linear-to-br from-emerald-500 to-teal-700 text-white shadow-2xl relative overflow-hidden"
+            >
+              <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-2xl" />
+              <div className="relative z-10">
+                < Award className="w-12 h-12 mx-auto mb-4 text-emerald-200" />
+                <h3 className="text-2xl font-black mb-2">مبارك! أتممت التحدي كاملاً</h3>
+                <p className="text-emerald-50 font-bold mb-6 text-sm">لقد حصلت على وسام {isSeerah ? 'السيرة النبوية' : 'المعلومات العامة'} المتميز!</p>
+
+                <button
+                  onClick={() => {
+                    if (onShowCertificate) onShowCertificate(selectedCategory as any);
+                  }}
+                  className="w-full py-4 bg-white text-emerald-700 rounded-2xl font-black text-lg hover:shadow-xl transition-all active:scale-95 flex items-center justify-center gap-2"
+                >
+                  <Award className="w-5 h-5" />
+                  <span>{claimedCategories.includes(selectedCategory || 'general') ? 'عرض وسام التميز' : 'إصدار شهادة الإنجاز'}</span>
+                </button>
+              </div>
+            </motion.div>
+          )}
+
+          <div className="flex flex-col gap-3 mt-8">
             {isPassed && canUnlockNext && (
               <button
                 onClick={() => handleStartGroup(selectedGroup + 1)}
@@ -623,67 +652,7 @@ const IslamicQuiz: React.FC<{ onBack?: () => void, onWin?: () => void }> = ({ on
         )}
       </div>
 
-      {/* Start Challenge Modal */}
-      <AnimatePresence>
-        {showStartChallengeModal && (
-          <div className="fixed inset-0 z-[300] flex items-center justify-center p-6">
-            {/* Backdrop */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setShowStartChallengeModal(false)}
-              className="absolute inset-0 bg-slate-900/60 backdrop-blur-xl"
-            />
-
-            {/* Modal Card */}
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="relative w-full max-w-md bg-white rounded-[3.5rem] shadow-3xl overflow-hidden border border-white/20 p-10 text-center"
-              dir="rtl"
-            >
-              {/* Close Button */}
-              <button
-                onClick={() => setShowStartChallengeModal(false)}
-                className="absolute top-8 left-8 p-2 text-slate-300 hover:text-slate-500 transition-colors"
-              >
-                <ChevronLeft className="w-6 h-6" />
-              </button>
-
-              {/* Icon */}
-              <div className="w-20 h-20 bg-brand-gold/10 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-xl shadow-brand-gold/5">
-                <Flame className="w-10 h-10 text-brand-gold" />
-              </div>
-
-              {/* Content */}
-              <h2 className="text-3xl font-black text-brand-emerald mb-4 tracking-tight">
-                بدأ التحدي!
-              </h2>
-              <p className="text-slate-500 font-bold mb-10 leading-relaxed text-lg px-2">
-                تحديك اليومي جاهز للانطلاق. هل أنت مستعد للبدء؟
-              </p>
-
-              {/* Actions */}
-              <div className="flex flex-row-reverse gap-4">
-                <button
-                  onClick={confirmStartGroup}
-                  className="flex-1 py-4 bg-brand-emerald text-white rounded-2xl font-black text-lg shadow-xl shadow-brand-emerald/20 hover:bg-brand-emerald/90 transition-all active:scale-95"
-                >
-                  ابدأ التحدي!
-                </button>
-                <button
-                  onClick={() => setShowStartChallengeModal(false)}
-                  className="flex-1 py-4 bg-slate-50 text-slate-500 rounded-2xl font-black text-lg border border-slate-100 hover:bg-slate-100 transition-all active:scale-95"
-                >
-                  إلغاء
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+      {/* Start Challenge Modal removed for direct transition */}
     </div>
   );
 };
