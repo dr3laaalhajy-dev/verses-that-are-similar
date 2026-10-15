@@ -28,8 +28,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     try {
+      // Check system settings for hidden challenge types
+      let hiddenTypes: string[] = [];
+      try {
+        const setting = await prisma.systemSetting.findUnique({ where: { id: 1 } });
+        if (setting?.hideAudioChallenge) hiddenTypes.push('AUDIO');
+        if (setting?.hideCompletionChallenge) hiddenTypes.push('COMPLETION');
+        if (setting?.hideSurahChallenge) hiddenTypes.push('SURAH');
+      } catch (e) {
+        // Fallback silently if table not ready
+      }
+
+      if (effectiveType && hiddenTypes.includes(effectiveType) && req.query.adminView !== 'true') {
+        return res.status(200).json([]);
+      }
+
       const where: any = {};
-      if (effectiveType) where.type = effectiveType;
+      if (effectiveType) {
+        where.type = effectiveType;
+      } else if (hiddenTypes.length > 0 && req.query.adminView !== 'true') {
+        where.type = { notIn: hiddenTypes };
+      }
       if (excluded.length > 0) where.id = { notIn: excluded };
 
       console.log('Fetching challenges with query:', JSON.stringify(where));

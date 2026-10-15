@@ -167,7 +167,7 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
         questionCount: finalQuestionCount,
         maxPlayers: 999,
         gameMode: gameMode || "STANDARD",
-        timePerQuestion: Number(timePerQuestion) || 20,
+        timePerQuestion: (timePerQuestion !== undefined && !isNaN(Number(timePerQuestion))) ? Number(timePerQuestion) : 0,
         playersProgress: { [String(player1.id)]: { progress: 0, name: player1.name, joinedAt: Date.now() } }
       } as any,
       include: { player1: true }
@@ -376,15 +376,36 @@ async function handleResign(req: VercelRequest, res: VercelResponse) {
     })
     if (!room) return res.status(404).json({ error: 'Room not found' })
 
-    const winnerId = room.player1Id === player.id ? room.player2Id : room.player1Id
-    if (!winnerId) return res.status(400).json({ error: 'Opponent not found' })
+    let playersProgress = (room.playersProgress as any) || {}
+    if (!playersProgress[player.id]) {
+      playersProgress[player.id] = { name: player.name }
+    }
+
+    playersProgress[player.id].progress = 100
+    playersProgress[player.id].score = 0
+    playersProgress[player.id].finishTime = Date.now()
+    playersProgress[player.id].isResigned = true
+
+    const updateData: any = { playersProgress }
+
+    // If everyone finished or resigned, set room status to FINISHED
+    const allFinished = Object.values(playersProgress).every((p: any) => !!p.finishTime)
+    if (allFinished) {
+      updateData.status = 'FINISHED'
+    }
+
+    // Set winnerId to the player with the highest score
+    const finishedPlayers = Object.entries(playersProgress)
+      .map(([id, p]: [string, any]) => ({ id: parseInt(id), score: p.score || 0, finishTime: p.finishTime }))
+      .sort((a, b) => b.score - a.score || (a.finishTime || 0) - (b.finishTime || 0))
+
+    if (finishedPlayers.length > 0) {
+      updateData.winnerId = finishedPlayers[0].id
+    }
 
     await prisma.room.update({
       where: { id: String(roomId) },
-      data: {
-        status: 'FINISHED',
-        winnerId: winnerId
-      } as any
+      data: updateData
     })
     const fullRoom = await getFullRoom(String(roomId))
     return res.status(200).json(fullRoom)

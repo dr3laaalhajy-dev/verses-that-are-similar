@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo, useCallback, memo, useRef } from 'react';
 import {
   Sparkles, Trophy, RotateCcw, X, Mic, MicOff, Search, BookOpen, CheckCircle, CheckCircle2,
-  ChevronRight, ChevronLeft, LayoutGrid, Heart, History, Compass, Home, Plane, Award,
+  ChevronRight, ChevronLeft, LayoutGrid, Heart, History, Compass, Home, Plane, Award, Star,
   ListFilter, Sun, Moon, Calendar, Settings, Copy, Check, Lightbulb, ChevronDown, User, Users, Quote,
-  ArrowRight, ArrowLeft, Zap, Lock, AlertCircle, Hash, XCircle, Eye, List, Loader2, Flame
+  ArrowRight, ArrowLeft, Zap, Lock, AlertCircle, Hash, XCircle, Eye, List, Loader2, Flame, ZoomIn, ZoomOut, Maximize2, LogOut,
+  Info, HelpCircle, AtSign, Key, LogIn, UserPlus
 } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import CertificateGenerator from './components/CertificateGenerator';
@@ -34,6 +35,8 @@ import Encyclopedia from './components/Encyclopedia';
 import IslamicQuiz from './components/IslamicQuiz';
 import DailyAyah from './components/DailyAyah';
 import { renderQuranText } from './utils/quranUtils';
+import { calculateStreakInfo, StreakInfo } from './utils/streakManager';
+import { StreakModal } from './components/StreakModal';
 
 function useWindowSize() {
   const [windowSize, setWindowSize] = useState({
@@ -56,7 +59,7 @@ function useWindowSize() {
   return windowSize;
 }
 
-type View = 'home' | 'difficulty' | 'challenge' | 'mushaf' | 'adhkar' | 'hadith' | 'admin' | 'list' | 'group_menu' | 'group_waiting' | 'group_game' | 'speed_challenge' | 'skills_menu' | 'speed_menu' | 'group_create' | 'group_join' | 'book' | 'encyclopedia' | 'skills_count_selection' | 'skills_results' | 'islamic_quiz' | 'settings';
+type View = 'home' | 'difficulty' | 'challenge' | 'mushaf' | 'adhkar' | 'hadith' | 'admin' | 'list' | 'group_menu' | 'group_waiting' | 'group_game' | 'speed_challenge' | 'skills_menu' | 'speed_menu' | 'group_create' | 'group_join' | 'book' | 'encyclopedia' | 'skills_count_selection' | 'skills_results' | 'islamic_quiz' | 'settings' | 'library' | 'challenges';
 type Difficulty = 'easy' | 'medium' | 'hard';
 
 const toast = {
@@ -123,52 +126,59 @@ interface VerseCardProps {
   wordStates: Record<number, 'correct' | 'skipped'>;
 }
 
-const SkillsChallengeHeader = ({ index, total, mode, verseText, totalPoints: pts }: any) => (
-  <div className="flex flex-col md:flex-row justify-between items-center gap-3 md:gap-8 mb-4 md:mb-12 relative z-10">
-    <div className="flex flex-row items-center gap-2 md:gap-6 w-full md:w-auto">
-      <div className="w-8 h-8 md:w-16 md:h-16 bg-brand-gold/10 rounded-lg md:rounded-2xl flex items-center justify-center text-brand-gold shadow-inner border border-brand-gold/5 flex-shrink-0">
-        {mode === 'audio' ? <Mic className="w-4 h-4 md:w-8 md:h-8" /> : mode === 'surah' ? <BookOpen className="w-4 h-4 md:w-8 md:h-8" /> : <CheckCircle className="w-4 h-4 md:w-8 md:h-8" />}
+const SkillsChallengeHeader = ({ index, total, mode, verseText, totalPoints: pts, onSkip, isComplete }: any) => (
+  <div className="flex justify-between items-start gap-2 mb-2 md:mb-4 relative z-10 w-full">
+    <div className="flex items-center gap-2 md:gap-3 min-w-0 pt-0.5">
+      <div className="w-7 h-7 md:w-11 md:h-11 bg-brand-gold/10 rounded-lg md:rounded-xl flex items-center justify-center text-brand-gold shrink-0">
+        {mode === 'audio' ? <Mic className="w-3.5 h-3.5 md:w-5 md:h-5" /> : mode === 'surah' ? <BookOpen className="w-3.5 h-3.5 md:w-5 md:h-5" /> : <CheckCircle className="w-3.5 h-3.5 md:w-5 md:h-5" />}
       </div>
-      <div className="text-right flex-1">
-        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-brand-emerald/10 text-brand-emerald text-[8px] md:text-[10px] font-black uppercase tracking-widest mb-1">
-          <motion.div animate={{ rotate: [0, 15, -15, 0] }} transition={{ repeat: Infinity, duration: 2 }}>
-            <Sparkles className="w-2.5 h-2.5 text-brand-gold" />
-          </motion.div>
-          <span>{mode === 'audio' ? 'تحدي التلاوة' : mode === 'surah' ? 'تحدي السور' : 'تحدي الإكمال'}</span>
+      <div className="text-right min-w-0">
+        <span className={`font-black text-brand-emerald block leading-tight ${mode === 'complete' ? 'text-xs md:text-lg' : 'text-[9px] md:text-xs mb-0.5'}`}>
+          {mode === 'audio' ? 'تحدي التلاوة' : mode === 'surah' ? 'تحدي السور' : 'تحدي الإكمال'}
         </span>
-        <h2 className="text-xs md:text-3xl font-black text-slate-800 leading-tight quran-text">
-          {verseText ? <>{verseText.substring(0, 20)}{verseText.length > 20 ? '...' : ''}</> : 'جاري التحميل...'}
-        </h2>
+        {mode !== 'complete' && (
+          <h2 className="text-xs md:text-base font-bold text-slate-700 quran-text truncate max-w-[140px] sm:max-w-xs md:max-w-md">
+            {verseText ? renderQuranText(verseText.substring(0, 25) + (verseText.length > 25 ? '...' : '')) : 'جاري التحميل...'}
+          </h2>
+        )}
       </div>
     </div>
 
-    <div className="flex items-center gap-2 md:gap-8 bg-white/50 backdrop-blur-md p-1.5 md:p-4 rounded-xl md:rounded-3xl border border-white shadow-sm w-full md:w-auto justify-between md:justify-start">
-      {index !== undefined && total !== undefined && (
-        <div className="flex flex-col">
-          <span className="text-[8px] md:text-[10px] font-black uppercase tracking-widest text-slate-400">التقدم</span>
-          <span className="text-sm md:text-xl font-black text-brand-emerald tabular-nums">سؤال {index + 1} <span className="text-[10px] md:text-sm font-bold text-slate-300">من {total}</span></span>
-        </div>
-      )}
-      <div className="w-px h-8 md:h-10 bg-slate-200/50" />
-      <div className="flex flex-col items-end">
-        <span className="text-[8px] md:text-[10px] font-black uppercase tracking-widest text-slate-400">النقاط</span>
-        <span className="text-xs md:text-2xl font-black text-brand-gold tabular-nums">{pts || 0}</span>
+    <div className="flex flex-col items-end shrink-0">
+      <div className="flex items-center gap-2 sm:gap-3 bg-white/70 backdrop-blur-md px-2.5 py-1 md:px-4 md:py-2 rounded-xl md:rounded-2xl border border-white shadow-xs">
+        {index !== undefined && total !== undefined && (
+          <span className="text-xs md:text-base font-black text-brand-emerald tabular-nums">
+            {index + 1} <span className="text-[10px] md:text-xs font-bold text-slate-400">/ {total}</span>
+          </span>
+        )}
+        <div className="w-px h-3.5 md:h-4 bg-slate-200" />
+        <span className="text-xs md:text-base font-black text-brand-gold tabular-nums">{pts || 0} نقطة</span>
       </div>
+      {onSkip && !isComplete && (
+        <button
+          onClick={onSkip}
+          className="text-red-500 hover:text-red-600 font-bold transition-all flex items-center gap-1.5 text-[11px] md:text-sm mt-1 md:mt-2 px-1.5 md:px-3 py-0.5 md:py-1 rounded-lg hover:bg-red-50 active:scale-95"
+          title="تخطي السؤال"
+        >
+          <X className="w-3 h-3 md:w-4 md:h-4 text-red-500" />
+          <span>تخطي السؤال</span>
+        </button>
+      )}
     </div>
   </div>
 );
 
 const AudioChallengeUI = ({ targetVerses, matchedIds, isListening, onToggleListening, keyword, keywordWordCount, wordStates, onSkip, isComplete, challengeMode, saveScore, KEYWORD, score, setDailyCompleted, updateStatsAfterWin, handlePromptNextChallenge, onViewTafsir }: any) => {
   return (
-    <div className="flex flex-col items-center gap-6 md:gap-12 w-full">
+    <div className="flex flex-col items-center gap-3 md:gap-5 w-full">
       <div className="relative group">
-        <div className={`absolute inset-0 bg-brand-emerald/20 blur-3xl rounded-full transition-all duration-700 group-hover:scale-110 ${isListening ? 'opacity-100 animate-pulse' : 'opacity-0'}`} />
+        <div className={`absolute inset-0 bg-brand-emerald/20 blur-xl rounded-full transition-all duration-700 group-hover:scale-110 ${isListening ? 'opacity-100 animate-pulse' : 'opacity-0'}`} />
 
         <motion.button
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
           onClick={onToggleListening}
-          className={`relative flex items-center gap-2 md:gap-6 px-4 py-2 md:px-12 md:py-7 rounded-lg md:rounded-[2.5rem] font-black text-xs md:text-xl transition-all shadow-2xl ${isListening
+          className={`relative flex items-center gap-2 md:gap-3 px-4 py-2 md:px-6 md:py-2.5 rounded-xl font-bold text-xs md:text-sm transition-all shadow-md ${isListening
             ? 'bg-red-500 text-white shadow-red-200 scale-105'
             : 'bg-brand-emerald text-white shadow-brand-emerald/20 hover:shadow-brand-emerald/40'
             }`}
@@ -177,14 +187,14 @@ const AudioChallengeUI = ({ targetVerses, matchedIds, isListening, onToggleListe
             <>
               <div className="flex gap-1 justify-center items-center">
                 {[1, 2, 3].map(i => (
-                  <motion.div key={i} animate={{ height: [8, 18, 8] }} transition={{ repeat: Infinity, duration: 0.6, delay: i * 0.1 }} className="w-0.5 md:w-1 bg-white rounded-full" />
+                  <motion.div key={i} animate={{ height: [6, 14, 6] }} transition={{ repeat: Infinity, duration: 0.6, delay: i * 0.1 }} className="w-0.5 bg-white rounded-full" />
                 ))}
               </div>
               <span>إيقاف التلاوة</span>
             </>
           ) : (
             <>
-              <Mic className="w-5 h-5 md:w-7 md:h-7 group-hover:rotate-12 transition-transform" />
+              <Mic className="w-4 h-4 md:w-5 md:h-5 group-hover:rotate-12 transition-transform" />
               <span>ابدأ التلاوة الكريمة</span>
             </>
           )}
@@ -192,8 +202,8 @@ const AudioChallengeUI = ({ targetVerses, matchedIds, isListening, onToggleListe
       </div>
 
       {onSkip && (
-        <button onClick={onSkip} className="text-slate-400 font-bold hover:text-red-500 transition-colors flex items-center gap-1.5 text-xs md:text-base">
-          <X className="w-3.5 h-3.5 md:w-4 md:h-4" /> تخطي هذا الموضع
+        <button onClick={onSkip} className="text-slate-400 font-bold hover:text-red-500 transition-colors flex items-center gap-1 text-[11px] md:text-xs">
+          <X className="w-3 h-3 md:w-3.5 md:h-3.5" /> تخطي هذا الموضع
         </button>
       )}
 
@@ -201,16 +211,16 @@ const AudioChallengeUI = ({ targetVerses, matchedIds, isListening, onToggleListe
       <AnimatePresence>
         {isComplete && (
           <motion.div
-            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+            initial={{ opacity: 0, scale: 0.9, y: 15 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            className="p-6 md:p-10 glass border-brand-emerald/10 text-brand-emerald rounded-2xl md:rounded-[3rem] text-center shadow-[0_30px_60px_-15px_rgba(6,78,59,0.1)] relative overflow-hidden mt-8 md:mt-10"
+            className="p-4 md:p-6 glass border-brand-emerald/10 text-brand-emerald rounded-2xl md:rounded-3xl text-center shadow-lg relative overflow-hidden mt-4 w-full"
           >
-            <div className="absolute top-0 right-0 w-64 h-64 bg-brand-emerald/5 rounded-full -mr-32 -mt-32 blur-3xl" />
-            <Trophy className="w-20 h-20 mb-6 text-brand-gold mx-auto drop-shadow-lg" />
-            <h3 className="text-4xl font-black mb-4 text-brand-emerald">فتح الله عليك!</h3>
-            <p className="mb-10 text-slate-600 text-xl font-medium">أتقنت جميع المتشابهات في هذا الموضع ببراعة بارك الله فيك.</p>
+            <div className="absolute top-0 right-0 w-36 h-36 bg-brand-emerald/5 rounded-full -mr-18 -mt-18 blur-2xl" />
+            <Trophy className="w-10 h-10 md:w-12 md:h-12 mb-2 text-brand-gold mx-auto drop-shadow-xs" />
+            <h3 className="text-xl md:text-2xl font-black mb-1.5 text-brand-emerald">فتح الله عليك!</h3>
+            <p className="mb-4 text-slate-600 text-xs md:text-sm font-medium">أتقنت جميع المتشابهات في هذا الموضع ببراعة بارك الله فيك.</p>
 
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <div className="flex flex-col sm:flex-row gap-2.5 justify-center">
               <button
                 onClick={() => {
                   const firstVerse = targetVerses[0];
@@ -218,9 +228,9 @@ const AudioChallengeUI = ({ targetVerses, matchedIds, isListening, onToggleListe
                     onViewTafsir(firstVerse.surah_number, firstVerse.verse_number, firstVerse.text);
                   }
                 }}
-                className="px-8 py-5 bg-emerald-50 text-emerald-700 rounded-3xl font-black text-lg hover:bg-emerald-100 transition-all border-2 border-emerald-100 flex items-center justify-center gap-2"
+                className="px-5 py-2.5 bg-emerald-50 text-emerald-700 rounded-xl font-bold text-xs md:text-sm hover:bg-emerald-100 transition-all border border-emerald-100 flex items-center justify-center gap-1.5"
               >
-                <BookOpen className="w-6 h-6" />
+                <BookOpen className="w-4 h-4" />
                 <span>عرض التفسير</span>
               </button>
 
@@ -233,7 +243,7 @@ const AudioChallengeUI = ({ targetVerses, matchedIds, isListening, onToggleListe
                     setDailyCompleted(true);
                     updateStatsAfterWin();
                   }}
-                  className="px-10 py-5 bg-brand-gold text-brand-emerald rounded-3xl font-black text-lg hover:bg-white transition-all shadow-xl"
+                  className="px-5 py-2.5 bg-brand-gold text-brand-emerald rounded-xl font-bold text-xs md:text-sm hover:bg-white transition-all shadow-md"
                 >
                   إنهاء التحدي اليومي
                 </button>
@@ -243,7 +253,7 @@ const AudioChallengeUI = ({ targetVerses, matchedIds, isListening, onToggleListe
                     handlePromptNextChallenge();
                     updateStatsAfterWin();
                   }}
-                  className="px-10 py-5 bg-white text-brand-emerald rounded-3xl font-black text-lg hover:bg-brand-gold transition-all shadow-xl"
+                  className="px-5 py-2.5 bg-white text-brand-emerald rounded-xl font-bold text-xs md:text-sm hover:bg-brand-gold transition-all shadow-md"
                 >
                   التحدي التالي
                 </button>
@@ -253,7 +263,7 @@ const AudioChallengeUI = ({ targetVerses, matchedIds, isListening, onToggleListe
         )}
       </AnimatePresence>
 
-      <div className="grid grid-cols-2 md:grid-cols-2 gap-1.5 md:gap-8 w-full pb-6 md:pb-20 mt-2 md:mt-8">
+      <div className="grid grid-cols-2 md:grid-cols-2 gap-1.5 md:gap-4 w-full pb-4 md:pb-8 mt-1 md:mt-2">
         {targetVerses.map((verse: any, idx: number) => (
           <VerseCard
             key={verse.id}
@@ -271,57 +281,52 @@ const AudioChallengeUI = ({ targetVerses, matchedIds, isListening, onToggleListe
 };
 
 const SurahChallengeUI = ({ verseText, inputs, onInputChange, onSubmit, feedback, onSkip, isComplete, challengeMode, saveScore, KEYWORD, score, setDailyCompleted, updateStatsAfterWin, handlePromptNextChallenge, onViewTafsir, currentChallenge }: any) => (
-  <div className="flex flex-col items-center gap-2 md:gap-10 w-full max-w-2xl mx-auto">
-    <div className="glass p-3 md:p-12 rounded-xl md:rounded-[4rem] w-full text-center border-white/80 shadow-2xl relative overflow-hidden group">
+  <div className="flex flex-col items-center gap-2 md:gap-4 w-full max-w-xl md:max-w-3xl lg:max-w-4xl mx-auto">
+    <div className="glass p-3.5 md:p-8 lg:p-10 rounded-2xl md:rounded-3xl w-full text-center border-white/80 shadow-lg relative overflow-hidden group">
       <div className="absolute top-0 inset-x-0 h-1 bg-linear-to-r from-transparent via-brand-gold/30 to-transparent" />
-      <div className="text-xl md:text-5xl font-black text-brand-emerald leading-relaxed quran-text mb-4 md:mb-12 drop-shadow-sm">
+      <div className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-bold text-brand-emerald leading-loose quran-text mb-3.5 md:mb-7 px-2 md:px-4 drop-shadow-xs">
         {renderQuranText(verseText)}
       </div>
 
-      <form onSubmit={(e) => { e.preventDefault(); onSubmit(); }} className="flex flex-col gap-3 md:gap-5 max-w-md mx-auto relative z-10">
+      <form onSubmit={(e) => { e.preventDefault(); onSubmit(); }} className="flex flex-col gap-2.5 md:gap-3 max-w-xs md:max-w-md mx-auto relative z-10 w-full">
         {inputs.map((input: string, idx: number) => (
-          <motion.div key={idx} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: idx * 0.1 }}>
+          <motion.div key={idx} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: idx * 0.1 }}>
             <input
               type="text"
               value={input}
               onChange={(e) => onInputChange(idx, e.target.value)}
               placeholder={inputs.length > 1 ? `اسم السورة ${idx + 1}` : "ما اسم السورة؟"}
-              className="w-full p-2 md:p-6 rounded-lg md:rounded-3xl bg-white border-2 border-slate-100 focus:border-brand-gold outline-none text-sm md:text-2xl font-black text-center quran-text shadow-sm transition-all focus:shadow-xl focus:scale-[1.02]"
+              className="w-full p-3.5 md:p-4 rounded-xl md:rounded-2xl bg-white border-2 border-slate-100 focus:border-brand-gold outline-none text-lg sm:text-xl md:text-xl font-bold text-center quran-text shadow-xs transition-all focus:shadow-sm"
               autoFocus={idx === 0}
             />
           </motion.div>
         ))}
         <motion.button
-          whileHover={{ scale: 1.02 }}
+          whileHover={{ scale: 1.01 }}
           whileTap={{ scale: 0.98 }}
           type="submit"
           disabled={feedback}
-          className="w-full py-3 md:py-6 bg-brand-gold text-brand-emerald rounded-xl md:rounded-3xl font-black text-base md:text-2xl shadow-xl shadow-brand-gold/20 hover:shadow-brand-gold/40 transition-all flex items-center justify-center gap-2 mt-2 md:mt-4"
+          className="w-full py-3.5 md:py-3.5 bg-brand-gold text-brand-emerald rounded-xl md:rounded-2xl font-black text-base sm:text-lg md:text-lg shadow-md shadow-brand-gold/20 hover:shadow-brand-gold/40 transition-all flex items-center justify-center gap-2 mt-1 md:mt-2"
         >
-          {feedback ? <div className="w-5 h-5 md:w-7 md:h-7 border-4 border-brand-emerald/30 border-t-brand-emerald rounded-full animate-spin" /> : <span>تحقق من الإجابة</span>}
+          {feedback ? <div className="w-5 h-5 border-2 border-brand-emerald/30 border-t-brand-emerald rounded-full animate-spin" /> : <span>تحقق من الإجابة</span>}
         </motion.button>
       </form>
     </div>
-    {onSkip && (
-      <button onClick={onSkip} className="text-slate-400 font-bold hover:text-red-500 transition-colors flex items-center gap-1.5 text-xs md:text-base">
-        <X className="w-3.5 h-3.5 md:w-4 md:h-4" /> تخطي السؤال
-      </button>
-    )}
 
     {/* Success Message - Positioned below answer check */}
     <AnimatePresence>
       {isComplete && (
         <motion.div
-          initial={{ opacity: 0, scale: 0.9, y: 20 }}
+          initial={{ opacity: 0, scale: 0.9, y: 15 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
-          className="p-6 md:p-10 glass border-brand-emerald/10 text-brand-emerald rounded-2xl md:rounded-[3rem] text-center shadow-[0_30px_60px_-15px_rgba(6,78,59,0.1)] relative overflow-hidden mt-8 w-full"
+          className="p-4 md:p-6 glass border-brand-emerald/10 text-brand-emerald rounded-2xl md:rounded-3xl text-center shadow-lg relative overflow-hidden mt-4 w-full"
         >
-          <div className="absolute top-0 right-0 w-64 h-64 bg-brand-emerald/5 rounded-full -mr-32 -mt-32 blur-3xl" />
-          <Trophy className="w-16 h-16 mb-4 text-brand-gold mx-auto drop-shadow-lg" />
-          <h3 className="text-2xl md:text-4xl font-black mb-3 text-brand-emerald">فتح الله عليك!</h3>
-          <p className="mb-8 text-slate-600 text-lg font-medium leading-relaxed">أحسنت القول، إجابتك صحيحة وموفقة.</p>
+          <div className="absolute top-0 right-0 w-36 h-36 bg-brand-emerald/5 rounded-full -mr-18 -mt-18 blur-2xl" />
+          <Trophy className="w-10 h-10 md:w-12 md:h-12 mb-2 text-brand-gold mx-auto drop-shadow-xs" />
+          <h3 className="text-xl md:text-2xl font-black mb-1.5 text-brand-emerald">فتح الله عليك!</h3>
+          <p className="mb-4 text-slate-600 text-xs md:text-sm font-medium leading-relaxed">أحسنت القول، إجابتك صحيحة وموفقة.</p>
 
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+          <div className="flex flex-col sm:flex-row gap-2.5 justify-center">
             <button
               onClick={() => {
                 const firstVerse = currentChallenge?.verses?.[0];
@@ -329,9 +334,9 @@ const SurahChallengeUI = ({ verseText, inputs, onInputChange, onSubmit, feedback
                   onViewTafsir(firstVerse.surah_number, firstVerse.verse_number, firstVerse.text);
                 }
               }}
-              className="px-8 py-4 bg-emerald-50 text-emerald-700 rounded-2xl font-black text-lg hover:bg-emerald-100 transition-all border-2 border-emerald-100 flex items-center justify-center gap-2"
+              className="px-5 py-2.5 bg-emerald-50 text-emerald-700 rounded-xl font-bold text-xs md:text-sm hover:bg-emerald-100 transition-all border border-emerald-100 flex items-center justify-center gap-1.5"
             >
-              <BookOpen className="w-6 h-6" />
+              <BookOpen className="w-4 h-4" />
               <span>عرض التفسير</span>
             </button>
 
@@ -344,7 +349,7 @@ const SurahChallengeUI = ({ verseText, inputs, onInputChange, onSubmit, feedback
                   setDailyCompleted(true);
                   updateStatsAfterWin();
                 }}
-                className="px-8 py-4 bg-brand-gold text-brand-emerald rounded-2xl font-black text-lg hover:bg-white transition-all shadow-xl"
+                className="px-5 py-2.5 bg-brand-gold text-brand-emerald rounded-xl font-bold text-xs md:text-sm hover:bg-white transition-all shadow-md"
               >
                 إنهاء التحدي اليومي
               </button>
@@ -354,7 +359,7 @@ const SurahChallengeUI = ({ verseText, inputs, onInputChange, onSubmit, feedback
                   handlePromptNextChallenge();
                   updateStatsAfterWin();
                 }}
-                className="px-8 py-4 bg-white text-brand-emerald rounded-2xl font-black text-lg hover:bg-brand-gold transition-all shadow-xl"
+                className="px-5 py-2.5 bg-white text-brand-emerald rounded-xl font-bold text-xs md:text-sm hover:bg-brand-gold transition-all shadow-md"
               >
                 التحدي التالي
               </button>
@@ -367,14 +372,14 @@ const SurahChallengeUI = ({ verseText, inputs, onInputChange, onSubmit, feedback
 );
 
 const CompleteChallengeUI = ({ verseText, options, selectedOption, onOptionSelect, onConfirm, feedback, onSkip, isComplete, challengeMode, saveScore, KEYWORD, score, setDailyCompleted, updateStatsAfterWin, handlePromptNextChallenge, onViewTafsir, currentChallenge }: any) => (
-  <div className="flex flex-col items-center gap-3 md:gap-10 w-full max-w-3xl mx-auto">
-    <div className="glass p-3 md:p-12 rounded-xl md:rounded-[4rem] w-full text-center border-white/80 shadow-2xl relative overflow-hidden">
-      <div className="absolute top-0 inset-x-0 h-1.5 bg-linear-to-r from-transparent via-brand-emerald/30 to-transparent" />
-      <div className="text-xl md:text-5xl font-black text-brand-emerald leading-relaxed quran-text mb-6 md:mb-12">
+  <div className="flex flex-col items-center gap-2 md:gap-4 w-full max-w-xl md:max-w-3xl lg:max-w-4xl mx-auto">
+    <div className="glass p-3.5 md:p-8 lg:p-10 rounded-2xl md:rounded-3xl w-full text-center border-white/80 shadow-lg relative overflow-hidden">
+      <div className="absolute top-0 inset-x-0 h-1 bg-linear-to-r from-transparent via-brand-emerald/30 to-transparent" />
+      <div className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-bold text-brand-emerald leading-loose quran-text mb-3.5 md:mb-7 px-2 md:px-4">
         {renderQuranText(verseText)}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 md:gap-4 w-full">
         {options.map((opt: any, idx: number) => {
           const isSelected = selectedOption === opt;
           return (
@@ -382,12 +387,12 @@ const CompleteChallengeUI = ({ verseText, options, selectedOption, onOptionSelec
               key={idx}
               disabled={feedback}
               onClick={() => onOptionSelect(opt)}
-              className={`p-3 md:p-6 rounded-xl md:rounded-3xl border-2 transition-all text-sm md:text-2xl font-black quran-text active:scale-95 relative shadow-sm ${isSelected
-                ? 'bg-brand-gold border-brand-gold text-brand-emerald shadow-xl scale-[1.02]'
+              className={`p-3.5 sm:p-4 md:py-5 md:px-6 rounded-xl md:rounded-2xl border-2 transition-all text-lg sm:text-xl md:text-xl lg:text-2xl font-bold quran-text active:scale-98 relative shadow-xs min-h-[62px] sm:min-h-[68px] md:min-h-[75px] flex items-center justify-center text-center ${isSelected
+                ? 'bg-brand-gold border-brand-gold text-brand-emerald shadow-md scale-[1.01]'
                 : 'bg-white border-slate-100 text-slate-700 hover:border-brand-gold/30 hover:bg-brand-gold/5'
                 } ${feedback ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
-              {opt.text}
+              {renderQuranText(opt.text)}
             </button>
           );
         })}
@@ -395,28 +400,23 @@ const CompleteChallengeUI = ({ verseText, options, selectedOption, onOptionSelec
 
       {selectedOption && (
         <motion.button
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           onClick={onConfirm}
           disabled={feedback}
-          className="w-full mt-6 py-4 bg-brand-emerald text-white rounded-xl font-black text-xl shadow-xl shadow-brand-emerald/20 hover:shadow-brand-emerald/40 transition-all flex items-center justify-center gap-4"
+          className="w-full mt-3.5 md:mt-6 py-3 md:py-3.5 bg-brand-emerald text-white rounded-xl md:rounded-2xl font-black text-base sm:text-lg md:text-lg shadow-md shadow-brand-emerald/20 hover:shadow-brand-emerald/40 transition-all flex items-center justify-center gap-2"
         >
           {feedback ? (
-            <div className="w-7 h-7 border-4 border-white/30 border-t-white rounded-full animate-spin" />
+            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
           ) : (
             <>
-              <CheckCircle2 className="w-7 h-7" />
+              <CheckCircle2 className="w-4 h-4 md:w-5 md:h-5" />
               <span>تأكيد الإجابة</span>
             </>
           )}
         </motion.button>
       )}
     </div>
-    {onSkip && (
-      <button onClick={onSkip} className="text-slate-400 font-bold hover:text-red-500 transition-colors flex items-center gap-2">
-        <X className="w-4 h-4" /> تخطي السؤال
-      </button>
-    )}
 
     {/* Success Message - Positioned below confirm/skip */}
     <AnimatePresence>
@@ -424,14 +424,14 @@ const CompleteChallengeUI = ({ verseText, options, selectedOption, onOptionSelec
         <motion.div
           initial={{ opacity: 0, scale: 0.9, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
-          className="p-6 md:p-10 glass border-brand-emerald/10 text-brand-emerald rounded-2xl md:rounded-[3rem] text-center shadow-[0_30px_60px_-15px_rgba(6,78,59,0.1)] relative overflow-hidden mt-8 w-full"
+          className="p-5 md:p-8 glass border-brand-emerald/10 text-brand-emerald rounded-2xl md:rounded-3xl text-center shadow-xl relative overflow-hidden mt-6 w-full"
         >
-          <div className="absolute top-0 right-0 w-64 h-64 bg-brand-emerald/5 rounded-full -mr-32 -mt-32 blur-3xl" />
-          <Trophy className="w-16 h-16 mb-4 text-brand-gold mx-auto drop-shadow-lg" />
-          <h3 className="text-2xl md:text-4xl font-black mb-3 text-brand-emerald">فتح الله عليك!</h3>
-          <p className="mb-8 text-slate-600 text-lg font-medium leading-relaxed">أحسنت التوقع، إجابة صحيحة بارك الله فيك.</p>
+          <div className="absolute top-0 right-0 w-48 h-48 bg-brand-emerald/5 rounded-full -mr-24 -mt-24 blur-3xl" />
+          <Trophy className="w-12 h-12 md:w-16 md:h-16 mb-3 text-brand-gold mx-auto drop-shadow-md" />
+          <h3 className="text-2xl md:text-3xl font-black mb-2 text-brand-emerald">فتح الله عليك!</h3>
+          <p className="mb-6 text-slate-600 text-sm md:text-base font-medium leading-relaxed">أحسنت التوقع، إجابة صحيحة بارك الله فيك.</p>
 
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <button
               onClick={() => {
                 const firstVerse = currentChallenge?.verses?.[0];
@@ -439,9 +439,9 @@ const CompleteChallengeUI = ({ verseText, options, selectedOption, onOptionSelec
                   onViewTafsir(firstVerse.surah_number, firstVerse.verse_number, firstVerse.text);
                 }
               }}
-              className="px-8 py-4 bg-emerald-50 text-emerald-700 rounded-2xl font-black text-lg hover:bg-emerald-100 transition-all border-2 border-emerald-100 flex items-center justify-center gap-2"
+              className="px-6 py-3 bg-emerald-50 text-emerald-700 rounded-xl font-bold text-sm md:text-base hover:bg-emerald-100 transition-all border border-emerald-100 flex items-center justify-center gap-2"
             >
-              <BookOpen className="w-6 h-6" />
+              <BookOpen className="w-5 h-5" />
               <span>عرض التفسير</span>
             </button>
 
@@ -454,7 +454,7 @@ const CompleteChallengeUI = ({ verseText, options, selectedOption, onOptionSelec
                   setDailyCompleted(true);
                   updateStatsAfterWin();
                 }}
-                className="px-8 py-4 bg-brand-gold text-brand-emerald rounded-2xl font-black text-lg hover:bg-white transition-all shadow-xl"
+                className="px-6 py-3 bg-brand-gold text-brand-emerald rounded-xl font-bold text-sm md:text-base hover:bg-white transition-all shadow-lg"
               >
                 إنهاء التحدي اليومي
               </button>
@@ -464,7 +464,7 @@ const CompleteChallengeUI = ({ verseText, options, selectedOption, onOptionSelec
                   handlePromptNextChallenge();
                   updateStatsAfterWin();
                 }}
-                className="px-8 py-4 bg-white text-brand-emerald rounded-2xl font-black text-lg hover:bg-brand-gold transition-all shadow-xl"
+                className="px-6 py-3 bg-white text-brand-emerald rounded-xl font-bold text-sm md:text-base hover:bg-brand-gold transition-all shadow-lg"
               >
                 التحدي التالي
               </button>
@@ -707,6 +707,44 @@ export default function App() {
   const [view, setView] = useState<View>('home');
   const [adminToken, setAdminToken] = useState<string | null>(localStorage.getItem('quran_admin_token'));
   const [isSuperAdmin, setIsSuperAdmin] = useState<boolean>(localStorage.getItem('quran_admin_super') === 'true');
+  const [adminRole, setAdminRole] = useState<string>(() => localStorage.getItem('quran_admin_role') || '');
+  const [adminUsername, setAdminUsername] = useState<string>(() => localStorage.getItem('quran_admin_username') || '');
+  const [adminName, setAdminName] = useState<string>(() => localStorage.getItem('quran_admin_name') || '');
+  const [adminId, setAdminId] = useState<number | null>(() => {
+    const saved = localStorage.getItem('quran_admin_id');
+    return saved ? parseInt(saved) : null;
+  });
+
+  const [systemSettings, setSystemSettings] = useState<{
+    hideAudioChallenge: boolean;
+    hideCompletionChallenge: boolean;
+    hideSurahChallenge: boolean;
+  }>({
+    hideAudioChallenge: false,
+    hideCompletionChallenge: false,
+    hideSurahChallenge: false
+  });
+
+  const fetchSettings = useCallback(async () => {
+    try {
+      const res = await fetch('/api/settings');
+      if (res.ok) {
+        const data = await res.json();
+        setSystemSettings({
+          hideAudioChallenge: !!data.hideAudioChallenge,
+          hideCompletionChallenge: !!data.hideCompletionChallenge,
+          hideSurahChallenge: !!data.hideSurahChallenge
+        });
+      }
+    } catch (e) {
+      console.warn('Failed to fetch settings:', e);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchSettings();
+  }, [fetchSettings]);
+
   const [challenges, setChallenges] = useState<any[]>([]);
   const [completedChallengeIds, setCompletedChallengeIds] = useState<Set<number>>(() => {
     try {
@@ -721,6 +759,7 @@ export default function App() {
   const [challengesError, setChallengesError] = useState<string | null>(null);
 
   const [playerName, setPlayerName] = useState<string | null>(localStorage.getItem('quran_player_name'));
+  const [playerUsername, setPlayerUsername] = useState<string | null>(localStorage.getItem('quran_player_username'));
   const [deviceId] = useState<string>(() => {
     let id = localStorage.getItem('quran_device_id');
     if (!id) {
@@ -734,6 +773,7 @@ export default function App() {
   const [showProfileDecoration, setShowProfileDecoration] = useState(() => localStorage.getItem('quran_show_decoration') !== 'false');
   const [userCertificates, setUserCertificates] = useState<{ category: string, date: string, name: string }[]>(() => JSON.parse(localStorage.getItem('quran_user_certificates') || '[]'));
   const [showCertificate, setShowCertificate] = useState(false);
+  const [showAboutModal, setShowAboutModal] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<'seerah' | 'general' | 'quran'>('seerah');
 
   // Game Gamification: Explicit Decoration State
@@ -815,6 +855,9 @@ export default function App() {
   const [isSearchSubmitted, setIsSearchSubmitted] = useState(false);
   const [selectedJuz, setSelectedJuz] = useState<number | null>(null);
   const [isJuzMenuOpen, setIsJuzMenuOpen] = useState(false);
+  const [isSurahMenuOpen, setIsSurahMenuOpen] = useState(false);
+  const [mushafZoomScale, setMushafZoomScale] = useState(1);
+  const [pageTurnDirection, setPageTurnDirection] = useState<'next' | 'prev'>('next');
   const [selectedHadith, setSelectedHadith] = useState<Hadith | null>(null);
 
   const [librarySettings, setLibrarySettings] = useState(() => {
@@ -828,10 +871,14 @@ export default function App() {
   });
 
   const [isExitModalOpen, setIsExitModalOpen] = useState(false);
+  const [isResignModalOpen, setIsResignModalOpen] = useState(false);
   const [isNextChallengeModalOpen, setIsNextChallengeModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
+  const [playerAuthMode, setPlayerAuthMode] = useState<'register' | 'login'>('register');
   const [nameInput, setNameInput] = useState('');
+  const [usernameInput, setUsernameInput] = useState('');
+  const [passwordInput, setPasswordInput] = useState('');
   const [isRegistering, setIsRegistering] = useState(false);
   const [registrationError, setRegistrationError] = useState<string | null>(null);
 
@@ -890,8 +937,9 @@ export default function App() {
   const [sessionMistakes, setSessionMistakes] = useState<any[]>([]);
   const [sessionCurrentIndex, setSessionCurrentIndex] = useState(0);
   const [showMistakes, setShowMistakes] = useState(false);
+  const [allChallenges, setAllChallenges] = useState<any[]>([]);
 
-  const fetchChallenges = useCallback(async (type?: string, limit?: number, excludeIds?: number[]) => {
+  const fetchChallenges = useCallback(async (type?: string, limit?: number, excludeIds?: number[], retryCount = 1): Promise<any[]> => {
     setChallengesLoading(true);
     setChallengesError(null);
     try {
@@ -910,9 +958,17 @@ export default function App() {
         throw new Error(`Server error: ${text.substring(0, 100)}`);
       }
       const data = await res.json();
+      if (!type && !limit && (!excludeIds || excludeIds.length === 0)) {
+        setAllChallenges(data);
+      }
       setChallenges(data);
       return data; // Return data for recycling logic
     } catch (err: any) {
+      if (retryCount > 0) {
+        console.warn('Retrying fetchChallenges in 1.5s (database wake-up)...');
+        await new Promise(r => setTimeout(r, 1500));
+        return fetchChallenges(type, limit, excludeIds, retryCount - 1);
+      }
       console.error('Failed to fetch challenges:', err);
       setChallengesError(err.message || 'فشل تحميل التحديات');
       return [];
@@ -926,68 +982,144 @@ export default function App() {
     fetchChallenges();
   }, [fetchChallenges]);
 
-  const handleAdminLogin = (token: string, superAdmin?: boolean) => {
+  const handleAdminLogin = (token: string, superAdmin?: boolean, role?: string, username?: string, id?: number, name?: string) => {
     setAdminToken(token);
     setIsSuperAdmin(!!superAdmin);
+    const resolvedRole = role || (superAdmin ? 'CO_FOUNDER' : 'ADMIN');
+    setAdminRole(resolvedRole);
+    if (username) setAdminUsername(username);
+    if (id) setAdminId(id);
+    if (name) setAdminName(name);
     localStorage.setItem('quran_admin_token', token);
     localStorage.setItem('quran_admin_super', String(!!superAdmin));
+    localStorage.setItem('quran_admin_role', resolvedRole);
+    if (username) localStorage.setItem('quran_admin_username', username);
+    if (id) localStorage.setItem('quran_admin_id', id.toString());
+    if (name) localStorage.setItem('quran_admin_name', name);
   };
 
   const handleAdminLogout = () => {
     setAdminToken(null);
     setIsSuperAdmin(false);
+    setAdminRole('');
+    setAdminUsername('');
+    setAdminName('');
+    setAdminId(null);
     localStorage.removeItem('quran_admin_token');
     localStorage.removeItem('quran_admin_super');
+    localStorage.removeItem('quran_admin_role');
+    localStorage.removeItem('quran_admin_username');
+    localStorage.removeItem('quran_admin_name');
+    localStorage.removeItem('quran_admin_id');
     fetchChallenges(); // Refresh data after admin work
     setView('home');
   };
 
-  const handleRegisterPlayer = async (e: React.FormEvent) => {
+  const handlePlayerAuth = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!nameInput.trim()) return;
     setIsRegistering(true);
     setRegistrationError(null);
     try {
-      const res = await fetch('/api/player-register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ deviceId, name: nameInput.trim() })
-      });
+      if (playerAuthMode === 'register') {
+        const cleanName = nameInput.trim();
+        const cleanUsername = usernameInput.trim().replace(/^@+/, '');
+        const cleanPassword = passwordInput.trim();
 
-      const text = await res.text();
-      let data: any = {};
-      try {
-        data = text ? JSON.parse(text) : {};
-      } catch (e) {
-        console.error('JSON Parse Error:', text);
-        if (import.meta.env.PROD) {
-          setRegistrationError('عذراً، حدث خطأ في الاتصال بالخادم. يرجى المحاولة لاحقاً.');
-        } else {
-          setRegistrationError(`فشل الاتصال: السيرفر أرجع رداً غير صالح. الرد: ${text.substring(0, 50) || '(فارغ)'}...`);
+        if (!cleanName) {
+          setRegistrationError('يرجى إدخال اسمك');
+          setIsRegistering(false);
+          return;
         }
-        return;
-      }
+        if (!cleanUsername) {
+          setRegistrationError('يرجى إدخال اسم المستخدم');
+          setIsRegistering(false);
+          return;
+        }
+        if (!cleanPassword) {
+          setRegistrationError('يرجى إدخال كلمة المرور');
+          setIsRegistering(false);
+          return;
+        }
 
-      if (res.ok) {
-        setPlayerName(nameInput.trim());
-        localStorage.setItem('quran_player_name', nameInput.trim());
+        const res = await fetch('/api/player-register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'register',
+            deviceId,
+            name: cleanName,
+            username: cleanUsername,
+            password: cleanPassword
+          })
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          setRegistrationError(data.error || data.message || 'فشلت عملية إنشاء الحساب');
+          return;
+        }
+
+        const p = data.player;
+        setPlayerName(p.name);
+        setPlayerUsername(p.username);
+        localStorage.setItem('quran_player_name', p.name);
+        if (p.username) localStorage.setItem('quran_player_username', p.username);
       } else {
-        const detail = data.error || data.message || '';
-        if (detail === 'NAME_TAKEN' || data.message === 'NAME_TAKEN') {
-          setRegistrationError('هذا الاسم مستخدم بالفعل، يرجى اختيار اسم آخر.');
-        } else if (import.meta.env.PROD) {
-          setRegistrationError('عذراً، لم نتمكن من إكمال عملية التسجيل. يرجى التأكد من اسمك والمحاولة مرة أخرى.');
-        } else {
-          setRegistrationError(`فشل الاتصال: ${detail || 'خطأ غير معروف في السيرفر'}`);
+        // Login mode
+        const cleanIdentifier = usernameInput.trim().replace(/^@+/, '');
+        const cleanPassword = passwordInput.trim();
+
+        if (!cleanIdentifier) {
+          setRegistrationError('يرجى إدخال اسم المستخدم أو الاسم');
+          setIsRegistering(false);
+          return;
+        }
+        if (!cleanPassword) {
+          setRegistrationError('يرجى إدخال كلمة المرور');
+          setIsRegistering(false);
+          return;
+        }
+
+        const res = await fetch('/api/player-register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'login',
+            deviceId,
+            username: cleanIdentifier,
+            password: cleanPassword
+          })
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          setRegistrationError(data.error || data.message || 'بيانات الدخول غير صحيحة');
+          return;
+        }
+
+        const p = data.player;
+        setPlayerName(p.name);
+        setPlayerUsername(p.username);
+        localStorage.setItem('quran_player_name', p.name);
+        if (p.username) localStorage.setItem('quran_player_username', p.username);
+
+        // Sync player stats from database
+        if (p.points !== undefined) {
+          setTotalPoints(p.points);
+          localStorage.setItem('quran_total_points', p.points.toString());
+        }
+        if (p.cups !== undefined) {
+          setCups(p.cups);
+          localStorage.setItem('quran_total_cups', p.cups.toString());
+        }
+        if (Array.isArray(p.completedChallengeIds)) {
+          setCompletedChallengeIds(new Set(p.completedChallengeIds));
+          localStorage.setItem('quran_completed_challenges', JSON.stringify(p.completedChallengeIds));
         }
       }
     } catch (err: any) {
-      console.error('Registration failed:', err);
-      if (import.meta.env.PROD) {
-        setRegistrationError('حدث خطأ غير متوقع. يرجى التأكد من اتصالك بالإنترنت والمحاولة مجدداً.');
-      } else {
-        setRegistrationError(`خطأ في الاتصال: ${err.message || 'تعذر الوصول إلى السيرفر'}. تأكد من تشغيل المشروع عبر 'vercel dev'.`);
-      }
+      console.error('Player auth failed:', err);
+      setRegistrationError(err.message || 'تعذر الاتصال بالخادم');
     } finally {
       setIsRegistering(false);
     }
@@ -1007,17 +1139,39 @@ export default function App() {
     const dbType = skillsType === 'audio' ? 'STANDARD' : skillsType === 'complete' ? 'COMPLETION' : 'SURAH';
     const excludeIds = Array.from(completedChallengeIds);
 
-    let result = await fetchChallenges(dbType, count, excludeIds);
-
-    // RECYCLE LOOP: If zero new questions, recycle all original challenges
-    if (!result || result.length === 0) {
-      console.log('App: Recycling challenges for type:', dbType);
-      result = await fetchChallenges(dbType, count, []);
+    let pool: any[] = [];
+    try {
+      let result = await fetchChallenges(dbType, count, excludeIds);
+      // RECYCLE LOOP: If zero new questions, recycle all original challenges
+      if (!result || result.length === 0) {
+        console.log('App: Recycling challenges for type:', dbType);
+        result = await fetchChallenges(dbType, count, []);
+      }
+      if (result && result.length > 0) {
+        pool = result;
+      }
+    } catch (err) {
+      console.warn('Network fetch error for skills session:', err);
     }
 
-    if (result && result.length > 0) {
-      // Shuffle for localized variety
-      setChallenges([...result].sort(() => Math.random() - 0.5));
+    // In-memory fallback if server didn't return items
+    if (pool.length === 0 && allChallenges.length > 0) {
+      const matchesType = (c: any) => {
+        if (dbType === 'STANDARD') return c.type === 'STANDARD' || c.type === 'AUDIO' || !c.type;
+        return c.type === dbType;
+      };
+      const uncompleted = allChallenges.filter(c => matchesType(c) && !completedChallengeIds.has(c.id));
+      if (uncompleted.length > 0) {
+        pool = uncompleted;
+      } else {
+        pool = allChallenges.filter(matchesType);
+      }
+    }
+
+    if (pool && pool.length > 0) {
+      // Ensure we only take up to `count` questions and shuffle for variety
+      const finalSelection = [...pool].sort(() => Math.random() - 0.5).slice(0, count);
+      setChallenges(finalSelection);
       setView('challenge');
     } else {
       setChallengesError('قاعدة البيانات فارغة حالياً لهذا النوع من التحديات.');
@@ -1100,6 +1254,8 @@ export default function App() {
   // const [totalPoints, setTotalPoints] = useState(0); // This line is removed as totalPoints is declared above
   const [streak, setStreak] = useState(0);
   const [lastPlayedDate, setLastPlayedDate] = useState('');
+  const [isStreakModalOpen, setIsStreakModalOpen] = useState(false);
+  const [streakInfo, setStreakInfo] = useState<StreakInfo>(() => calculateStreakInfo(0, '', null));
   const [incompleteChallenge, setIncompleteChallenge] = useState<{ index: number, mode: 'daily' | 'normal', surah: string } | null>(null);
   const [motivationalQuote, setMotivationalQuote] = useState('');
 
@@ -1141,26 +1297,21 @@ export default function App() {
     const savedPoints = localStorage.getItem('quran_total_points');
     if (savedPoints) setTotalPoints(parseInt(savedPoints));
 
-    const savedStreak = parseInt(localStorage.getItem('quran_streak') || '0');
-    const lastPlayed = localStorage.getItem('quran_last_played'); // YYYY-MM-DD
-    const today = new Date().toISOString().split('T')[0];
-
-    // Calculate Yesterday
-    const yesterdayDate = new Date();
-    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
-    const yesterday = yesterdayDate.toISOString().split('T')[0];
-
-    if (lastPlayed) {
-      if (lastPlayed === today || lastPlayed === yesterday) {
-        // Streak is still valid
-        setStreak(savedStreak);
-      } else {
-        // Streak is broken
-        setStreak(0);
+    const syncStreak = () => {
+      const savedStreak = parseInt(localStorage.getItem('quran_streak') || '0');
+      const lastPlayed = localStorage.getItem('quran_last_played') || '';
+      const lastPlayedTimeStr = localStorage.getItem('quran_last_played_time');
+      const info = calculateStreakInfo(savedStreak, lastPlayed, lastPlayedTimeStr);
+      setStreak(info.streak);
+      setLastPlayedDate(info.lastPlayedDate);
+      setStreakInfo(info);
+      if (info.streak === 0 && savedStreak > 0) {
         localStorage.setItem('quran_streak', '0');
       }
-      setLastPlayedDate(lastPlayed);
-    }
+    };
+
+    syncStreak();
+    const interval = setInterval(syncStreak, 1000);
 
     const savedIncomplete = localStorage.getItem('quran_incomplete_challenge');
     if (savedIncomplete) {
@@ -1168,34 +1319,38 @@ export default function App() {
     }
 
     setMotivationalQuote(MOTIVATIONAL_HADITHS[Math.floor(Math.random() * MOTIVATIONAL_HADITHS.length)]);
+    return () => clearInterval(interval);
   }, [MOTIVATIONAL_HADITHS]);
 
   const updateStatsAfterWin = useCallback(() => {
     const today = new Date().toISOString().split('T')[0];
-    const yesterdayDate = new Date();
-    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
-    const yesterday = yesterdayDate.toISOString().split('T')[0];
+    const nowTime = Date.now();
+    const savedLastPlayedTimeStr = localStorage.getItem('quran_last_played_time');
+    const savedStreak = parseInt(localStorage.getItem('quran_streak') || streak.toString());
 
-    let newStreak = streak;
+    const currentInfo = calculateStreakInfo(savedStreak, lastPlayedDate, savedLastPlayedTimeStr);
 
-    if (!lastPlayedDate) {
-      // Case 1: First time
+    let newStreak = currentInfo.streak;
+
+    if (currentInfo.status === 'zero' || newStreak === 0) {
       newStreak = 1;
-    } else if (lastPlayedDate === yesterday) {
-      // Case 2: Consecutive day
-      newStreak = streak + 1;
-    } else if (lastPlayedDate === today) {
-      // Case 3: Same day - no change
-      newStreak = streak;
-    } else {
-      // Case 4: Broken streak (gap > 1 day)
-      newStreak = 1;
+    } else if (currentInfo.status === 'warning') {
+      // Completed within the 12-hour grace period! Restores & increases streak!
+      newStreak = currentInfo.streak + 1;
+    } else if (currentInfo.status === 'active') {
+      if (lastPlayedDate !== today) {
+        newStreak = currentInfo.streak + 1;
+      }
     }
 
     setStreak(newStreak);
     setLastPlayedDate(today);
     localStorage.setItem('quran_streak', newStreak.toString());
     localStorage.setItem('quran_last_played', today);
+    localStorage.setItem('quran_last_played_time', nowTime.toString());
+
+    const updatedInfo = calculateStreakInfo(newStreak, today, nowTime.toString());
+    setStreakInfo(updatedInfo);
 
     const newTotalPoints = totalPoints + score;
     setTotalPoints(newTotalPoints);
@@ -1367,6 +1522,10 @@ export default function App() {
         const mode = v1GameMode === 'audio' ? 'audio' : v1GameMode === 'complete' ? 'complete' : 'surah';
         setSkillsType(mode);
         setRoom(data);
+        const roomTime = (data.timePerQuestion && data.timePerQuestion > 0) ? data.timePerQuestion : 0;
+        if (roomTime > 0) {
+          setSpeedTimeLeft(roomTime);
+        }
         setView('challenge');
       } else {
         toast.error(data.message || 'فشل بدء التحدي');
@@ -1409,6 +1568,11 @@ export default function App() {
             setSelectedOption(null);
             setMatchedIds(new Set());
 
+            const roomTime = (data.timePerQuestion && data.timePerQuestion > 0) ? data.timePerQuestion : 0;
+            if (roomTime > 0) {
+              setSpeedTimeLeft(roomTime);
+            }
+
             setView('challenge');
           }
           setRoom(data);
@@ -1446,10 +1610,33 @@ export default function App() {
       console.error('Group sync error:', err);
     }
   };
-  // Speed Challenge Timer
+
+  const handleResignGroupChallenge = async () => {
+    if (!room?.id || !deviceId) return;
+    try {
+      const res = await fetch('/api/1v1', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'resign',
+          roomId: room.id,
+          playerId: deviceId
+        })
+      });
+      const data = await res.json();
+      if (res.ok) setRoom(data);
+    } catch (err) {
+      console.error('Group resign error:', err);
+    }
+    setSessionCorrect(0);
+    setView('group_game');
+    setIsResignModalOpen(false);
+  };
+  // Speed & Multiplayer Timer
   useEffect(() => {
     let interval: any;
-    const isActive = (view === 'speed_challenge' || (view === 'challenge' && isSpeedMode) || (view === 'group_game' && room?.timePerQuestion > 0)) && !isSpeedGameOver && !isComplete && !skillsFeedback;
+    const hasRoomTimer = !!(room && (room.timePerQuestion || 0) > 0);
+    const isActive = (view === 'speed_challenge' || (view === 'challenge' && (isSpeedMode || hasRoomTimer)) || (view === 'group_game' && hasRoomTimer)) && !isSpeedGameOver && !isComplete && !skillsFeedback;
 
     if (isActive) {
       interval = setInterval(() => {
@@ -1468,7 +1655,7 @@ export default function App() {
       }, 1000);
     }
     return () => clearInterval(interval);
-  }, [view, isSpeedGameOver, isComplete, isSpeedMode, stopListening, skillsFeedback]);
+  }, [view, isSpeedGameOver, isComplete, isSpeedMode, stopListening, skillsFeedback, room?.timePerQuestion, room?.id]);
 
   // Reset Speed timer on each match
   useEffect(() => {
@@ -1679,19 +1866,20 @@ export default function App() {
   const handleSpeedTimeout = () => {
     if (skillsFeedback || isComplete) return;
 
-    if (skillsType === 'surah' || (view === 'group_game' && roomGameMode === 'surah')) {
+    const isSurah = skillsType === 'surah' || (room && roomGameMode === 'surah');
+    const isAudio = skillsType === 'audio' || (room && roomGameMode === 'audio');
+
+    if (isSurah) {
       handleSubmitSurah();
-    } else if (skillsType === 'audio' || (view === 'group_game' && roomGameMode === 'audio') || skillsType === 'complete' || (view === 'group_game' && roomGameMode === 'complete')) {
-      if (skillsType === 'audio' || (view === 'group_game' && roomGameMode === 'audio')) {
-        const currentQuestion = currentChallenge;
-        if (!currentQuestion) return;
-        setSkillsFeedback(true);
-        setTimeout(() => {
-          moveToNextQuestion();
-        }, 1000);
-      } else {
-        handleConfirmAnswer();
-      }
+    } else if (isAudio) {
+      const currentQuestion = currentChallenge;
+      if (!currentQuestion) return;
+      setSkillsFeedback(true);
+      setTimeout(() => {
+        moveToNextQuestion();
+      }, 1000);
+    } else {
+      handleConfirmAnswer();
     }
   };
 
@@ -1717,10 +1905,13 @@ export default function App() {
     }
 
     setCurrentChallengeIndex(prev => prev + 1);
+    setSessionCurrentIndex(prev => prev + 1);
     setMatchedIds(new Set());
     setWordStates({});
     const isAudio = skillsType === 'audio' || roomGameMode === 'audio';
-    setSpeedTimeLeft(isAudio ? 30 : 15);
+    const roomTime = (room && (room.timePerQuestion || 0) > 0) ? room.timePerQuestion : 0;
+    setSpeedTimeLeft(roomTime > 0 ? roomTime : (isAudio ? 30 : 15));
+    resetTranscript();
   };
 
   const handleOptionSelect = (option: any) => {
@@ -1875,6 +2066,9 @@ export default function App() {
     setShowScores(false);
     resetTranscript();
     stopListening();
+    if (allChallenges.length > 0) {
+      setChallenges(allChallenges);
+    }
   };
 
   const confirmExitToHome = () => {
@@ -1884,6 +2078,9 @@ export default function App() {
     stopListening();
     setIncompleteChallenge(null);
     localStorage.removeItem('quran_incomplete_challenge');
+    if (allChallenges.length > 0) {
+      setChallenges(allChallenges);
+    }
   };
 
   const handleSkip = () => {
@@ -1900,56 +2097,7 @@ export default function App() {
       }]);
     }
 
-    const maxQuestions = view === 'group_game' ? (room?.questionCount || 5) : questionsCount;
-    const currentChallengesLength = view === 'group_game' ? (room?.challenges?.length || 0) : challenges.length;
     moveToNextQuestion();
-
-    if (challenges.length > 1) {
-      const dbType = skillsType === 'audio' ? 'STANDARD' : skillsType === 'complete' ? 'COMPLETION' : 'SURAH';
-      let nextIndex = currentChallengeIndex;
-      let found = false;
-
-      // Try to find the next matching uncompleted challenge
-      for (let i = 1; i <= challenges.length; i++) {
-        const idx = (currentChallengeIndex + i) % challenges.length;
-        const c = challenges[idx];
-        const matchesType = dbType === 'STANDARD'
-          ? (c.type === 'STANDARD' || c.type === 'AUDIO' || !c.type)
-          : c.type === dbType;
-
-        if (matchesType && !completedChallengeIds.has(c.id)) {
-          nextIndex = idx;
-          found = true;
-          break;
-        }
-      }
-
-      // If no matching uncompleted found, pick next matching regardless of completion
-      if (!found) {
-        for (let i = 1; i <= challenges.length; i++) {
-          const idx = (currentChallengeIndex + i) % challenges.length;
-          const c = challenges[idx];
-          const matchesType = dbType === 'STANDARD'
-            ? (c.type === 'STANDARD' || c.type === 'AUDIO' || !c.type)
-            : c.type === dbType;
-
-          if (matchesType) {
-            nextIndex = idx;
-            found = true;
-            break;
-          }
-        }
-      }
-
-      setCurrentChallengeIndex(nextIndex);
-      resetTranscript();
-
-      if (!found) {
-        console.log("All challenges completed! Looping back to start.");
-      }
-    } else if (challenges.length === 1) {
-      resetTranscript();
-    }
   };
 
   const syncLeaderboard = useCallback(async () => {
@@ -2345,24 +2493,20 @@ export default function App() {
 
   const confirmNextChallenge = () => {
     saveScore(KEYWORD, score);
-    if (challenges.length > 0) {
-      setChallengeMode('normal');
+    setSessionCorrect(prev => prev + 1);
+    setIsNextChallengeModalOpen(false);
 
-      let nextIndex = (currentChallengeIndex + 1) % challenges.length;
-      // Find the next uncompleted challenge
-      for (let i = 0; i < challenges.length; i++) {
-        const idx = (currentChallengeIndex + 1 + i) % challenges.length;
-        if (!completedChallengeIds.has(challenges[idx].id)) {
-          nextIndex = idx;
-          break;
-        }
-      }
-
-      setSessionCurrentIndex(prev => prev + 1);
-      setCurrentChallengeIndex(nextIndex);
-      setMatchedIds(new Set());
-      setWordStates({});
+    if (currentChallengeIndex >= challenges.length - 1) {
+      if (room) setView('group_game');
+      else setView('skills_results');
+      return;
     }
+
+    setCurrentChallengeIndex(prev => prev + 1);
+    setSessionCurrentIndex(prev => prev + 1);
+    setMatchedIds(new Set());
+    setWordStates({});
+    resetTranscript();
   };
 
 
@@ -2482,6 +2626,12 @@ ${versesList}
             <AdminDashboard
               token={adminToken}
               isSuperAdmin={isSuperAdmin}
+              adminRole={adminRole}
+              currentUsername={adminUsername}
+              currentName={adminName}
+              currentAdminId={adminId}
+              systemSettings={systemSettings}
+              onSettingsUpdated={fetchSettings}
               onLogout={handleAdminLogout}
               onBackHome={() => setView('home')}
             />
@@ -2495,71 +2645,70 @@ ${versesList}
       ) : (
         <>
           {/* Header */}
-          <header className="relative z-50 glass-dark text-white shadow-2xl">
+          <header className="w-full sticky top-0 z-[100] glass-dark text-white shadow-xl border-b border-white/10 backdrop-blur-xl">
             <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32 blur-3xl pointer-events-none" />
-            <div className="max-w-6xl mx-auto px-6 py-5 flex items-center justify-between relative z-10">
+            <div className="w-full px-4 sm:px-8 py-2 md:py-2 flex items-center justify-between gap-2 sm:gap-4 relative z-10">
+
+              {/* Logo & Title */}
               <motion.div
                 initial={{ x: 20, opacity: 0 }}
                 animate={{ x: 0, opacity: 1 }}
-                className="flex items-center gap-4"
+                className="flex items-center gap-2 sm:gap-3 shrink-0"
               >
-                <div className="bg-white/5 p-1 rounded-xl md:rounded-2xl backdrop-blur-sm border border-white/10 shadow-xl shadow-black/10">
-                  <img src="/logo.png" className="w-10 h-10 md:w-20 md:h-20 object-contain" alt="Logo" />
+                <div className="bg-white/10 p-1 sm:p-1.5 rounded-xl md:rounded-2xl backdrop-blur-md border border-white/15 shadow-md flex items-center justify-center shrink-0">
+                  <img src="/logo.png" className="w-8 h-8 sm:w-10 sm:h-10 md:w-11 md:h-11 object-contain drop-shadow-md" alt="Logo" />
                 </div>
-                <div>
-                  <h1 className="text-sm md:text-2xl font-black tracking-tight text-white leading-tight">تحدي المتشابهات</h1>
-                  <p className="text-[7px] md:text-[10px] uppercase font-black tracking-[0.2em] text-brand-gold/70 leading-none mt-0.5">القرآن الكريم</p>
+                <div className="flex flex-col whitespace-nowrap">
+                  <h1 className="text-sm sm:text-base md:text-lg font-black tracking-tight text-white leading-tight whitespace-nowrap drop-shadow-sm">
+                    تحدي المتشابهات
+                  </h1>
+                  <p className="text-[8px] sm:text-[10px] md:text-[11px] uppercase font-bold tracking-[0.15em] text-brand-gold/80 leading-none mt-0.5 whitespace-nowrap">
+                    القرآن الكريم
+                  </p>
                 </div>
               </motion.div>
 
-              <div className="flex items-center gap-3">
-                {(view !== 'home' || showScores) && (
-                  <button
-                    onClick={handleBackToHome}
-                    className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-white/10 text-white hover:bg-white/20 border border-white/10 transition-all text-sm font-bold shadow-lg"
-                    title="الرئيسية"
-                  >
-                    <Home className="w-4 h-4" />
-                    <span className="hidden sm:inline">الرئيسية</span>
-                  </button>
-                )}
-
+              {/* Navigation Actions & Profile */}
+              <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
                 <button
                   onClick={() => {
                     setShowScores(!showScores);
                     setShowSettings(false);
                   }}
-                  className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl transition-all text-sm font-bold shadow-lg ${showScores ? 'bg-brand-gold text-brand-emerald' : 'bg-white/10 text-white hover:bg-white/20 border border-white/10'}`}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3.5 sm:py-1.5 rounded-xl transition-all text-xs sm:text-sm font-bold shadow-md hover:scale-105 active:scale-95 ${showScores ? 'bg-brand-gold text-brand-emerald font-black' : 'bg-white/10 text-white hover:bg-white/20 border border-white/10'
+                    }`}
+                  title="المتصدرين"
                 >
-                  <Trophy className="w-4 h-4" />
+                  <Trophy className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   <span className="hidden sm:inline">{showScores ? 'العودة' : 'المتصدرين'}</span>
                 </button>
 
                 <button
-                  onClick={() => {
-                    setShowScores(false);
-                    setView(view === 'settings' ? 'home' : 'settings');
-                  }}
-                  className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl transition-all text-sm font-bold shadow-lg ${view === 'settings' ? 'bg-white text-brand-emerald' : 'bg-white/10 text-white hover:bg-white/20 border border-white/10'}`}
-                  title="الإعدادات"
+                  onClick={() => setShowAboutModal(true)}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3.5 sm:py-1.5 rounded-xl bg-white/10 text-white hover:bg-white/20 border border-white/10 transition-all text-xs sm:text-sm font-bold shadow-md hover:scale-105 active:scale-95"
+                  title="عن التطبيق"
                 >
-                  <Settings className="w-4 h-4" />
-                  <span className="hidden sm:inline">الإعدادات</span>
+                  <Info className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-brand-gold" />
+                  <span className="hidden sm:inline">عن التطبيق</span>
                 </button>
 
                 <button
                   onClick={() => setView('admin')}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-white/10 text-white hover:bg-white/20 border border-white/10 transition-all text-sm font-bold shadow-lg"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3.5 sm:py-1.5 rounded-xl bg-white/10 text-white hover:bg-white/20 border border-white/10 transition-all text-xs sm:text-sm font-bold shadow-md hover:scale-105 active:scale-95"
                   title="لوحة التحكم"
                 >
-                  <Lock className="w-4 h-4" />
+                  <Lock className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   <span className="hidden sm:inline">الإدارة</span>
                 </button>
 
                 {playerName && (
-                  <div className="flex items-center gap-3 mr-2 border-r border-white/10 pr-4">
-                    <div className="relative group">
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-black text-lg bg-brand-emerald border-2 border-white/20 shadow-inner shadow-black/20 text-shadow-sm`}>
+                  <div
+                    onClick={() => setView('settings')}
+                    className="flex items-center gap-2 sm:gap-2.5 pr-2 sm:pr-2.5 border-r border-white/20 mr-0.5 sm:mr-1 shrink-0 cursor-pointer group"
+                    title="ملفي الشخصي"
+                  >
+                    <div className="relative shrink-0">
+                      <div className="w-8 h-8 sm:w-9 sm:h-9 md:w-9 md:h-9 rounded-full flex items-center justify-center text-white font-black text-xs sm:text-sm bg-gradient-to-br from-brand-emerald to-emerald-700 border-2 border-white/30 shadow-md group-hover:scale-105 transition-transform">
                         {playerName.charAt(0).toUpperCase()}
                       </div>
                       {isElite && (
@@ -2569,24 +2718,24 @@ ${versesList}
                         <motion.div
                           initial={{ scale: 0 }}
                           animate={{ scale: 1 }}
-                          className="absolute -bottom-1 -left-1 z-[60] flex h-6 w-6 items-center justify-center bg-transparent drop-shadow-lg"
+                          className="absolute -bottom-1 -left-1 z-[60] flex h-4 w-4 sm:h-5 sm:w-5 items-center justify-center bg-transparent drop-shadow-lg"
                           title={userAchievement}
                         >
                           {currentStyle.icon.startsWith('/') ? (
                             <img src={currentStyle.icon} className="w-full h-full object-contain" alt="Badge" />
                           ) : (
-                            <div className="flex items-center justify-center bg-transparent text-white text-[10px] drop-shadow-lg w-full h-full">
+                            <div className="flex items-center justify-center bg-transparent text-white text-[8px] sm:text-[9px] drop-shadow-lg w-full h-full">
                               {currentStyle.icon}
                             </div>
                           )}
                         </motion.div>
                       )}
                     </div>
-                    <div className="hidden md:flex flex-col text-right">
-                      <span className={`text-sm font-black leading-none ${isElite ? `text-transparent bg-clip-text bg-gradient-to-r ${currentStyle.textColor}` : 'text-white'}`}>
+                    <div className="hidden lg:flex flex-col text-right whitespace-nowrap">
+                      <span className={`text-xs sm:text-sm font-black leading-none ${isElite ? `text-transparent bg-clip-text bg-gradient-to-r ${currentStyle.textColor}` : 'text-white'}`}>
                         {playerName}
                       </span>
-                      <span className="text-[10px] font-bold text-brand-gold/70 mt-1">{totalPoints} نقطة</span>
+                      <span className="text-[10px] font-bold text-brand-gold/80 mt-0.5">{totalPoints} نقطة</span>
                     </div>
                   </div>
                 )}
@@ -2594,66 +2743,213 @@ ${versesList}
             </div>
           </header>
 
+          {/* Floating Back Button Directly Below Top Header Bar - ONLY visible when viewing Holy Quran (view === 'mushaf') */}
+          {view === 'mushaf' && (
+            <div className="w-full max-w-6xl mx-auto px-4 sm:px-8 pt-3 pb-1 flex justify-start items-center animate-in fade-in slide-in-from-top-2 duration-300">
+              <button
+                onClick={() => {
+                  setView('library');
+                  setIsPageModeActive(false);
+                  setSelectedSurahId(null);
+                  setSelectedJuz(null);
+                  setIsSearchSubmitted(false);
+                  resetTranscript();
+                  stopListening();
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-white/90 backdrop-blur-md text-slate-700 hover:text-brand-emerald border border-slate-200/80 shadow-sm hover:bg-white transition-all text-xs sm:text-sm font-black active:scale-95 group"
+                title="الرجوع للمكتبة"
+              >
+                <ArrowRight className="w-4 h-4 text-brand-gold group-hover:-translate-x-1 transition-transform" />
+                <span>الرجوع للمكتبة</span>
+              </button>
+            </div>
+          )}
+
+          {/* Multiplayer Resign Button if in a room */}
+          {room && (view === 'challenge' || view === 'group_waiting' || view === 'group_game') && (
+            <div className="w-full max-w-6xl mx-auto px-4 sm:px-8 pt-3 pb-1 flex justify-end items-center">
+              <button
+                onClick={() => setIsResignModalOpen(true)}
+                className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-red-500/10 hover:bg-red-500/20 text-red-600 border border-red-200/80 shadow-sm transition-all text-xs sm:text-sm font-black active:scale-95 group"
+                title="الانسحاب من التحدي الجماعي"
+              >
+                <LogOut className="w-4 h-4 text-red-500 group-hover:rotate-180 transition-transform" />
+                <span>الانسحاب من التحدي</span>
+              </button>
+            </div>
+          )}
+
+          {/* Daily Ayah Section (Below Header) - Only visible on Home Page */}
+          {view === 'home' && !showScores && <DailyAyah />}
+
           <AnimatePresence>
             {!playerName && (
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-xl"
+                className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-xl overflow-y-auto"
               >
                 <motion.div
                   initial={{ scale: 0.9, y: 20 }}
                   animate={{ scale: 1, y: 0 }}
-                  className="glass p-6 md:p-12 rounded-3xl md:rounded-[3.5rem] max-w-md w-full shadow-2xl text-center"
+                  className="glass p-6 sm:p-10 md:p-12 rounded-3xl md:rounded-[3.5rem] max-w-md w-full shadow-2xl text-center relative my-auto bg-white/95"
                 >
-                  <div className="w-16 h-16 md:w-20 md:h-20 bg-brand-emerald rounded-2xl md:rounded-3xl flex items-center justify-center mx-auto mb-6 md:mb-8 shadow-xl shadow-brand-emerald/20">
-                    <User className="w-8 h-8 md:w-10 md:h-10 text-white" />
+                  <div className="w-16 h-16 md:w-20 md:h-20 bg-brand-emerald rounded-2xl md:rounded-3xl flex items-center justify-center mx-auto mb-5 md:mb-6 shadow-xl shadow-brand-emerald/20 text-white">
+                    {playerAuthMode === 'register' ? (
+                      <UserPlus className="w-8 h-8 md:w-10 md:h-10 text-white" />
+                    ) : (
+                      <Key className="w-8 h-8 md:w-10 md:h-10 text-white" />
+                    )}
                   </div>
-                  <h2 className="text-xl md:text-3xl font-black text-brand-emerald mb-4">أهلاً بك في تحدي المتشابهات</h2>
-                  <p className="text-slate-500 font-bold mb-8">يرجى إدخال اسمك لحفظ تقدمك في لوحة المتصدرين</p>
+
+                  <h2 className="text-xl md:text-3xl font-black text-brand-emerald mb-2">
+                    {playerAuthMode === 'register' ? 'أهلاً بك في تحدي المتشابهات' : 'تسجيل الدخول'}
+                  </h2>
+                  <p className="text-slate-500 font-bold text-xs md:text-sm mb-6">
+                    {playerAuthMode === 'register'
+                      ? 'أنشئ حسابك لحفظ تقدمك والتنافس في لوحة المتصدرين'
+                      : 'أدخل بيانات حسابك لمتابعة اللعب وحفظ نقاطك'}
+                  </p>
 
                   {registrationError && (
                     <motion.div
                       initial={{ opacity: 0, scale: 0.95 }}
                       animate={{ opacity: 1, scale: 1 }}
-                      className="mb-6 p-4 bg-red-50 text-red-600 rounded-2xl text-sm font-bold border border-red-100"
+                      className="mb-5 p-3.5 bg-red-50 text-red-600 rounded-2xl text-xs md:text-sm font-bold border border-red-100 text-center"
                     >
                       {registrationError}
                     </motion.div>
                   )}
 
-                  <form onSubmit={handleRegisterPlayer} className="space-y-4">
-                    <input
-                      type="text"
-                      required
-                      placeholder="أدخل اسمك هنا..."
-                      value={nameInput}
-                      onChange={(e) => setNameInput(e.target.value)}
-                      className="w-full px-6 py-4 rounded-2xl bg-slate-50 border border-slate-100 focus:outline-none focus:ring-2 focus:ring-brand-emerald/20 transition-all font-bold text-center"
-                    />
+                  <form onSubmit={handlePlayerAuth} className="space-y-4 text-right">
+                    {playerAuthMode === 'register' && (
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 mr-1 flex items-center gap-1.5">
+                          <User className="w-3.5 h-3.5 text-brand-emerald" />
+                          <span>الاسم</span>
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="مثال: أحمد محمد"
+                          value={nameInput}
+                          onChange={(e) => setNameInput(e.target.value)}
+                          className="w-full px-5 py-3.5 rounded-2xl bg-slate-50 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-emerald/20 focus:border-brand-emerald transition-all font-bold text-sm text-slate-800"
+                        />
+                      </div>
+                    )}
+
+                    {/* حقل اسم المستخدم مع @ مدمجة تلقائياً */}
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 mr-1 flex items-center justify-between">
+                        <span className="flex items-center gap-1.5">
+                          <AtSign className="w-3.5 h-3.5 text-brand-emerald" />
+                          <span>{playerAuthMode === 'register' ? 'اسم المستخدم' : 'اسم المستخدم أو الاسم'}</span>
+                        </span>
+                        <span className="text-[9px] text-brand-emerald font-bold bg-brand-emerald/10 px-2 py-0.5 rounded-md">
+                          تبدأ بـ @ تلقائياً
+                        </span>
+                      </label>
+                      <div className="relative flex items-center bg-slate-50 border border-slate-200 focus-within:ring-2 focus-within:ring-brand-emerald/20 focus-within:border-brand-emerald rounded-2xl transition-all overflow-hidden">
+                        <span className="pr-4 pl-1 text-brand-emerald font-black text-lg select-none shrink-0 pointer-events-none">
+                          @
+                        </span>
+                        <input
+                          type="text"
+                          required
+                          placeholder="username"
+                          value={usernameInput}
+                          onChange={(e) => {
+                            const cleaned = e.target.value.replace(/@/g, '').trim();
+                            setUsernameInput(cleaned);
+                          }}
+                          className="w-full py-3.5 pr-1 pl-4 bg-transparent outline-none font-bold text-sm text-slate-800 text-right"
+                        />
+                      </div>
+                    </div>
+
+                    {/* حقل كلمة المرور */}
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-black uppercase tracking-wider text-slate-500 mr-1 flex items-center gap-1.5">
+                        <Lock className="w-3.5 h-3.5 text-slate-400" />
+                        <span>كلمة المرور</span>
+                      </label>
+                      <input
+                        type="password"
+                        required
+                        placeholder="••••••••"
+                        value={passwordInput}
+                        onChange={(e) => setPasswordInput(e.target.value)}
+                        className="w-full px-5 py-3.5 rounded-2xl bg-slate-50 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-emerald/20 focus:border-brand-emerald transition-all font-bold text-sm text-slate-800"
+                      />
+                      {playerAuthMode === 'login' && (
+                        <p className="text-[10px] text-slate-400 font-bold mr-1">
+                          * كلمة المرور الافتراضية للحسابات السابقة: 1234
+                        </p>
+                      )}
+                    </div>
+
                     <button
                       type="submit"
-                      disabled={isRegistering || !nameInput.trim()}
-                      className="w-full py-4 bg-brand-emerald text-white rounded-2xl font-black shadow-lg hover:bg-brand-emerald/90 transition-all active:scale-95 flex items-center justify-center gap-2"
+                      disabled={isRegistering}
+                      className="w-full py-4 mt-2 bg-brand-emerald text-white rounded-2xl font-black shadow-lg shadow-brand-emerald/20 hover:bg-brand-emerald/90 transition-all active:scale-95 flex items-center justify-center gap-2 text-sm"
                     >
                       {isRegistering ? (
                         <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      ) : (
+                      ) : playerAuthMode === 'register' ? (
                         <>
                           <span>ابدأ اللعب</span>
                           <ArrowLeft className="w-5 h-5" />
                         </>
+                      ) : (
+                        <>
+                          <span>تسجيل الدخول ومتابعة اللعب</span>
+                          <LogIn className="w-5 h-5" />
+                        </>
                       )}
                     </button>
                   </form>
+
+                  {/* التبديل بين لدي حساب بالفعل / ليس لدي حساب */}
+                  <div className="mt-5 pt-4 border-t border-slate-100 text-center">
+                    {playerAuthMode === 'register' ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPlayerAuthMode('login');
+                          setRegistrationError(null);
+                        }}
+                        className="text-xs md:text-sm font-black text-brand-emerald hover:text-brand-emerald/80 hover:underline transition-colors py-1"
+                      >
+                        لدي حساب بالفعل
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPlayerAuthMode('register');
+                          setRegistrationError(null);
+                        }}
+                        className="text-xs md:text-sm font-black text-brand-emerald hover:text-brand-emerald/80 hover:underline transition-colors py-1"
+                      >
+                        ليس لدي حساب؟ أنشئ حساباً جديداً
+                      </button>
+                    )}
+                  </div>
                 </motion.div>
               </motion.div>
             )}
           </AnimatePresence>
 
           {/* Main Content*/}
-          <main className="max-w-6xl mx-auto px-6 pt-12 pb-40 relative z-10">
+          <main className={`${view === 'mushaf'
+              ? (isPageModeActive ? 'max-w-[96rem] px-0 sm:px-2 md:px-4 pt-1 sm:pt-2 md:pt-3' : 'max-w-6xl px-6 pt-1 sm:pt-2 md:pt-3')
+              : (view === 'challenge' || view === 'speed_challenge' || view === 'islamic_quiz' || view === 'group_game' || view === 'skills_count_selection' || view === 'skills_menu' || view === 'speed_menu')
+                ? 'max-w-4xl px-3 sm:px-4 pt-1 sm:pt-2 md:pt-3 pb-8 md:pb-12'
+                : 'max-w-6xl px-4 sm:px-6 pt-6 md:pt-10 pb-20'
+            } mx-auto relative z-10`}>
             {challengesLoading ? (
 
               <div className="flex flex-col items-center justify-center py-40">
@@ -2673,8 +2969,8 @@ ${versesList}
                     'يرجى التأكد من اتصالك بالإنترنت والمحاولة مرة أخرى لاحقاً'
                   ) : (
                     <>
-                      تأكد من تشغيل المشروع عبر الأمر التالي في الـ Terminal:
-                      <code className="block mt-4 bg-slate-100 p-4 rounded-xl text-brand-emerald">npx vercel dev</code>
+                      قاعدة البيانات السحابية قد تستغرق بضع ثوانٍ للاستيقاظ عند أول تشغيل، أو تأكد من تشغيل المشروع عبر:
+                      <code className="block mt-4 bg-slate-100 p-4 rounded-xl text-brand-emerald">npm run dev</code>
                     </>
                   )}
                 </p>
@@ -2747,7 +3043,7 @@ ${versesList}
                           // Use individual player data for everyone in the list
                           const achievement = getPlayerAchievement(player);
                           const style = achievementStyles[achievement];
-                          
+
                           // Decoration visibility (always show for others, follow settings for self)
                           const isPlayerElite = (achievement !== 'none') && (isCurrentPlayer ? showProfileDecoration : true);
 
@@ -2817,52 +3113,52 @@ ${versesList}
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.98 }}
-                    className="flex flex-col gap-10 max-w-4xl mx-auto py-10 px-4"
+                    className="flex flex-col gap-6 md:gap-8 max-w-2xl mx-auto py-6 md:py-8 px-4"
                   >
                     <div className="flex items-center justify-between">
                       <button
                         onClick={() => setView('home')}
-                        className="p-4 rounded-2xl bg-white/50 hover:bg-white transition-all text-slate-500 font-bold flex items-center gap-2"
+                        className="p-2.5 md:p-3 rounded-xl bg-white/50 hover:bg-white transition-all text-slate-500 font-bold flex items-center gap-2 text-xs md:text-sm"
                       >
-                        <ArrowRight className="w-5 h-5" />
+                        <ArrowRight className="w-4 h-4 md:w-5 md:h-5" />
                         الرئيسية
                       </button>
                     </div>
 
-                    <div className="text-center mb-4">
-                      <div className="w-20 h-20 bg-orange-100 text-orange-600 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-xl shadow-orange-500/10">
-                        <User className="w-10 h-10" />
+                    <div className="text-center mb-2">
+                      <div className="w-14 h-14 bg-orange-100 text-orange-600 rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-md shadow-orange-500/10">
+                        <User className="w-7 h-7" />
                       </div>
-                      <h2 className="text-4xl font-black text-slate-800 mb-2">التحدي الجماعي</h2>
-                      <p className="text-slate-500 font-bold">نافس أصدقاءك في سباق مباشر للمتشابهات</p>
+                      <h2 className="text-2xl md:text-3xl font-black text-slate-800 mb-1">التحدي الجماعي</h2>
+                      <p className="text-slate-500 font-bold text-xs md:text-sm">نافس أصدقاءك في سباق مباشر للمتشابهات</p>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
                       <motion.button
-                        whileHover={{ y: -5 }}
+                        whileHover={{ y: -4 }}
                         onClick={() => setView('group_create')}
-                        className="group p-10 rounded-[2.5rem] bg-white border-2 border-orange-100 hover:border-orange-500 transition-all text-center flex flex-col items-center gap-6 shadow-xl"
+                        className="group p-6 md:p-7 rounded-2xl bg-white border-2 border-orange-100 hover:border-orange-500 transition-all text-center flex flex-col items-center gap-4 shadow-lg"
                       >
-                        <div className="w-16 h-16 bg-orange-500 text-white rounded-2xl flex items-center justify-center shadow-lg group-hover:rotate-6 transition-transform">
-                          <Zap className="w-8 h-8" />
+                        <div className="w-12 h-12 bg-orange-500 text-white rounded-xl flex items-center justify-center shadow-md group-hover:rotate-6 transition-transform">
+                          <Zap className="w-6 h-6" />
                         </div>
                         <div>
-                          <h3 className="text-2xl font-black text-slate-800 mb-2">إنشاء غرفة</h3>
-                          <p className="text-slate-400 font-bold text-sm">تخصيص الخصائص ودعوة صديق</p>
+                          <h3 className="text-lg md:text-xl font-black text-slate-800 mb-1">إنشاء غرفة</h3>
+                          <p className="text-slate-400 font-bold text-xs">تخصيص الخصائص ودعوة صديق</p>
                         </div>
                       </motion.button>
 
                       <motion.button
-                        whileHover={{ y: -5 }}
+                        whileHover={{ y: -4 }}
                         onClick={() => setView('group_join')}
-                        className="group p-10 rounded-[2.5rem] bg-white border-2 border-brand-emerald/10 hover:border-brand-emerald transition-all text-center flex flex-col items-center gap-6 shadow-xl"
+                        className="group p-6 md:p-7 rounded-2xl bg-white border-2 border-brand-emerald/10 hover:border-brand-emerald transition-all text-center flex flex-col items-center gap-4 shadow-lg"
                       >
-                        <div className="w-16 h-16 bg-brand-emerald text-white rounded-2xl flex items-center justify-center shadow-lg">
-                          <Lock className="w-8 h-8" />
+                        <div className="w-12 h-12 bg-brand-emerald text-white rounded-xl flex items-center justify-center shadow-md">
+                          <Lock className="w-6 h-6" />
                         </div>
                         <div>
-                          <h3 className="text-2xl font-black text-slate-800 mb-2">الانضمام لغرفة</h3>
-                          <p className="text-slate-400 font-bold text-sm">أدخل كود الغرفة للمنافسة</p>
+                          <h3 className="text-lg md:text-xl font-black text-slate-800 mb-1">الانضمام لغرفة</h3>
+                          <p className="text-slate-400 font-bold text-xs">أدخل كود الغرفة للمنافسة</p>
                         </div>
                       </motion.button>
                     </div>
@@ -2872,50 +3168,48 @@ ${versesList}
                     key="group_create"
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    className="max-w-2xl mx-auto py-10 px-4"
+                    className="max-w-xl mx-auto py-6 md:py-8 px-4"
                   >
-                    <div className="glass p-10 rounded-[3.5rem] border-orange-100 shadow-2xl">
-                      <h2 className="text-3xl font-black text-slate-800 mb-8 text-center">إعدادات التحدي الجماعي</h2>
+                    <div className="glass p-6 md:p-8 rounded-3xl border-orange-100 shadow-xl">
+                      <h2 className="text-xl md:text-2xl font-black text-slate-800 mb-6 text-center">إعدادات التحدي الجماعي</h2>
 
-                      <div className="space-y-8">
+                      <div className="space-y-6">
                         <div>
-                          <label className="block text-sm font-black text-slate-400 mb-6 uppercase tracking-widest text-center">اختر مهارة التحدي</label>
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                          <label className="block text-xs font-black text-slate-400 mb-4 uppercase tracking-widest text-center">اختر مهارة التحدي</label>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
                             {[
-                              { id: 'audio', label: 'التحدي الصوتي', icon: Mic, color: 'emerald', bg: 'bg-brand-emerald/10', desc: 'تحدى نفسك بقراءة بداية الآيات' },
-                              { id: 'complete', label: 'تحدي إكمال الآية', icon: CheckCircle, color: 'blue', bg: 'bg-blue-600/10', desc: 'توقع الكلمات المفقودة في الآية' },
-                              { id: 'surah', label: 'تحديد اسم السورة', icon: BookOpen, color: 'purple', bg: 'bg-purple-600/10', desc: 'تعرف على اسم السورة من الآية' }
-                            ].map(mode => (
+                              { id: 'audio', label: 'التحدي الصوتي', icon: Mic, color: 'emerald', bg: 'bg-brand-emerald/10', desc: 'تحدى نفسك بقراءة بداية الآيات', hidden: systemSettings.hideAudioChallenge },
+                              { id: 'complete', label: 'تحدي إكمال الآية', icon: CheckCircle, color: 'blue', bg: 'bg-blue-600/10', desc: 'توقع الكلمات المفقودة في الآية', hidden: systemSettings.hideCompletionChallenge },
+                              { id: 'surah', label: 'تحديد اسم السورة', icon: BookOpen, color: 'purple', bg: 'bg-purple-600/10', desc: 'تعرف على اسم السورة من الآية', hidden: systemSettings.hideSurahChallenge }
+                            ].filter(m => !m.hidden).map(mode => (
                               <button
                                 key={mode.id}
                                 onClick={() => setV1GameMode(mode.id as any)}
-                                className={`p-8 rounded-[2.5rem] border-2 transition-all flex flex-col items-center text-center gap-4 relative overflow-hidden ${v1GameMode === mode.id
-                                  ? `border-brand-emerald bg-brand-emerald/5 shadow-2xl scale-[1.05]`
+                                className={`p-4 md:p-5 rounded-2xl border-2 transition-all flex flex-col items-center text-center gap-2 relative overflow-hidden ${v1GameMode === mode.id
+                                  ? `border-brand-emerald bg-brand-emerald/5 shadow-lg scale-[1.02]`
                                   : 'border-slate-100 hover:border-slate-200 bg-white'
                                   }`}
                               >
-                                <div className={`w-16 h-16 rounded-[1.5rem] flex items-center justify-center mb-1 shadow-sm ${v1GameMode === mode.id ? `bg-brand-emerald text-white shadow-brand-emerald/20` : 'bg-slate-50 text-slate-400'}`}>
-                                  <mode.icon className="w-8 h-8" />
+                                <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-0.5 shadow-sm ${v1GameMode === mode.id ? `bg-brand-emerald text-white shadow-brand-emerald/20` : 'bg-slate-50 text-slate-400'}`}>
+                                  <mode.icon className="w-6 h-6" />
                                 </div>
-                                <div className={`text-xl font-black ${v1GameMode === mode.id ? `text-brand-emerald` : 'text-slate-700'}`}>{mode.label}</div>
-                                <div className="text-xs text-slate-400 font-bold leading-relaxed">{mode.desc}</div>
-                                {v1GameMode === mode.id && <div className={`absolute top-4 right-4 w-3 h-3 rounded-full bg-brand-emerald animate-pulse`} />}
+                                <div className={`text-sm md:text-base font-black ${v1GameMode === mode.id ? `text-brand-emerald` : 'text-slate-700'}`}>{mode.label}</div>
+                                <div className="text-[10px] md:text-[11px] text-slate-400 font-bold leading-tight">{mode.desc}</div>
+                                {v1GameMode === mode.id && <div className={`absolute top-3 right-3 w-2.5 h-2.5 rounded-full bg-brand-emerald animate-pulse`} />}
                               </button>
                             ))}
                           </div>
                         </div>
 
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4">
-                          {/* Room capacity removed - now unlimited */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 pt-2">
                           <div className="md:col-span-1">
-                            <label className="block text-xs font-black text-slate-400 mb-4 uppercase tracking-widest text-center">عدد الأسئلة</label>
+                            <label className="block text-xs font-black text-slate-400 mb-3 uppercase tracking-widest text-center">عدد الأسئلة</label>
                             <div className="flex items-center justify-center gap-2">
                               {[5, 10, 15, 20].map(num => (
                                 <button
                                   key={num}
                                   onClick={() => setV1QuestionCount(num)}
-                                  className={`w-11 h-11 rounded-2xl font-black text-sm transition-all ${v1QuestionCount === num ? 'bg-orange-500 text-white shadow-lg scale-110' : 'bg-slate-100 text-slate-400 hover:bg-slate-200 shadow-sm'}`}
+                                  className={`w-9 h-9 md:w-10 md:h-10 rounded-xl font-black text-xs md:text-sm transition-all ${v1QuestionCount === num ? 'bg-orange-500 text-white shadow-md scale-105' : 'bg-slate-100 text-slate-400 hover:bg-slate-200 shadow-xs'}`}
                                 >
                                   {num}
                                 </button>
@@ -2923,12 +3217,12 @@ ${versesList}
                             </div>
                           </div>
                           <div className="md:col-span-1">
-                            <label className="block text-xs font-black text-slate-400 mb-4 uppercase tracking-widest text-center">المؤقت</label>
+                            <label className="block text-xs font-black text-slate-400 mb-3 uppercase tracking-widest text-center">المؤقت</label>
                             <button
                               onClick={() => setV1Timer(!v1Timer)}
-                              className={`w-full py-2.5 px-4 rounded-2xl border-2 font-black text-sm transition-all flex items-center justify-center gap-3 ${v1Timer ? 'border-orange-500 bg-orange-50 text-orange-600 shadow-md' : 'bg-slate-50 border-slate-100 text-slate-400 hover:bg-slate-100'}`}
+                              className={`w-full py-2 px-3 rounded-xl border-2 font-black text-xs md:text-sm transition-all flex items-center justify-center gap-2 ${v1Timer ? 'border-orange-500 bg-orange-50 text-orange-600 shadow-xs' : 'bg-slate-50 border-slate-100 text-slate-400 hover:bg-slate-100'}`}
                             >
-                              {v1Timer ? <Zap className="w-5 h-5" /> : <X className="w-5 h-5" />}
+                              {v1Timer ? <Zap className="w-4 h-4" /> : <X className="w-4 h-4" />}
                               {v1Timer ? `${v1TimePerQuestion} ثانية` : 'معطل'}
                             </button>
                           </div>
@@ -2938,11 +3232,11 @@ ${versesList}
                           <motion.div
                             initial={{ opacity: 0, y: -10 }}
                             animate={{ opacity: 1, y: 0 }}
-                            className="p-8 bg-orange-50/50 backdrop-blur-sm rounded-[2.5rem] border border-orange-100 shadow-inner"
+                            className="p-4 md:p-5 bg-orange-50/50 backdrop-blur-sm rounded-2xl border border-orange-100 shadow-inner"
                           >
-                            <div className="flex items-center justify-between mb-4">
-                              <label className="text-sm font-black text-orange-600 uppercase tracking-widest">تخصيص الوقت</label>
-                              <span className="bg-orange-500 text-white px-4 py-1.5 rounded-full text-sm font-black shadow-lg">{v1TimePerQuestion} ثانية لكل سؤال</span>
+                            <div className="flex items-center justify-between mb-3">
+                              <label className="text-xs font-black text-orange-600 uppercase tracking-widest">تخصيص الوقت</label>
+                              <span className="bg-orange-500 text-white px-3 py-1 rounded-full text-xs font-black shadow-xs">{v1TimePerQuestion} ثانية لكل سؤال</span>
                             </div>
                             <input
                               type="range"
@@ -2951,24 +3245,24 @@ ${versesList}
                               step="5"
                               value={v1TimePerQuestion}
                               onChange={(e) => setV1TimePerQuestion(parseInt(e.target.value))}
-                              className="w-full h-3 bg-orange-200 rounded-full appearance-none cursor-pointer accent-orange-500"
+                              className="w-full h-2.5 bg-orange-200 rounded-full appearance-none cursor-pointer accent-orange-500"
                             />
-                            <div className="flex justify-between mt-2 text-[10px] font-bold text-orange-300 uppercase tracking-[0.2em]">
+                            <div className="flex justify-between mt-1.5 text-[9px] md:text-[10px] font-bold text-orange-300 uppercase tracking-[0.2em]">
                               <span>سريع جداً</span>
                               <span>وقت كافٍ</span>
                             </div>
                           </motion.div>
                         )}
 
-                        <div className="pt-6 space-y-4">
+                        <div className="pt-4 space-y-3">
                           <button
                             onClick={handleCreateV1}
                             disabled={isCreatingRoom}
-                            className="w-full py-6 bg-orange-500 text-white rounded-[2rem] font-black text-2xl shadow-2xl shadow-orange-500/30 hover:bg-orange-600 hover:scale-[1.02] transition-all active:scale-95 flex items-center justify-center gap-4 group/btn"
+                            className="w-full py-3.5 md:py-4 bg-orange-500 text-white rounded-2xl font-black text-base md:text-lg shadow-xl shadow-orange-500/20 hover:bg-orange-600 hover:scale-[1.01] transition-all active:scale-95 flex items-center justify-center gap-3 group/btn"
                           >
-                            {isCreatingRoom ? <div className="w-8 h-8 border-4 border-white border-t-transparent rounded-full animate-spin" /> : (
+                            {isCreatingRoom ? <div className="w-6 h-6 border-3 border-white border-t-transparent rounded-full animate-spin" /> : (
                               <>
-                                <ArrowLeft className="w-8 h-8 transition-transform group-hover/btn:-translate-x-2" />
+                                <ArrowLeft className="w-5 h-5 transition-transform group-hover/btn:-translate-x-1" />
                                 <span>أنشئ الغرفة الآن</span>
                               </>
                             )}
@@ -2976,7 +3270,7 @@ ${versesList}
 
                           <button
                             onClick={() => setView('group_menu')}
-                            className="w-full py-3 text-slate-400 font-bold hover:text-slate-600 transition-colors"
+                            className="w-full py-2 text-slate-400 font-bold hover:text-slate-600 transition-colors text-xs md:text-sm"
                           >
                             رجوع للإعدادات
                           </button>
@@ -2990,52 +3284,52 @@ ${versesList}
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0 }}
-                    className="max-w-2xl mx-auto py-10 px-4"
+                    className="max-w-lg mx-auto py-6 md:py-8 px-4"
                   >
-                    <div className="glass p-10 rounded-[3.5rem] border-orange-100 shadow-2xl text-center">
-                      <div className="flex items-center justify-center gap-4 mb-8">
-                        <div className="w-16 h-16 bg-orange-500 text-white rounded-2xl flex items-center justify-center shadow-lg animate-pulse">
-                          <Users className="w-8 h-8" />
+                    <div className="glass p-6 md:p-8 rounded-3xl border-orange-100 shadow-xl text-center">
+                      <div className="flex items-center justify-center gap-3 mb-6">
+                        <div className="w-12 h-12 bg-orange-500 text-white rounded-xl flex items-center justify-center shadow-md animate-pulse">
+                          <Users className="w-6 h-6" />
                         </div>
                         <div className="text-right">
-                          <h2 className="text-3xl font-black text-slate-800">قاعة الانتظار</h2>
-                          <p className="text-slate-400 font-bold">انتظار انضمام بقية المتسابقين...</p>
+                          <h2 className="text-xl md:text-2xl font-black text-slate-800">قاعة الانتظار</h2>
+                          <p className="text-slate-400 font-bold text-xs md:text-sm">انتظار انضمام بقية المتسابقين...</p>
                         </div>
                       </div>
 
-                      <div className="bg-slate-50 p-8 rounded-[2.5rem] mb-10 border-2 border-slate-100 shadow-inner">
-                        <div className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">رمز الانضمام للغرفة</div>
-                        <div className="text-5xl font-black text-orange-500 tracking-[0.2em] mb-4">{room?.code}</div>
+                      <div className="bg-slate-50 p-5 rounded-2xl mb-6 border border-slate-100 shadow-inner">
+                        <div className="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-widest mb-2">رمز الانضمام للغرفة</div>
+                        <div className="text-3xl md:text-4xl font-black text-orange-500 tracking-[0.2em] mb-2">{room?.code}</div>
                         <button
                           onClick={() => {
                             if (room?.code) {
                               navigator.clipboard.writeText(room.code);
                             }
                           }}
-                          className="px-6 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-50"
+                          className="px-4 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-500 hover:bg-slate-50"
                         >
                           نسخ الرمز
                         </button>
                       </div>
 
-                      <div className="space-y-4 mb-10">
-                        <div className="flex items-center justify-between px-4">
-                          <span className="text-sm font-black text-slate-800">المتسابقون ({room?.participants?.length || 1})</span>
+                      <div className="space-y-3 mb-6">
+                        <div className="flex items-center justify-between px-2">
+                          <span className="text-xs md:text-sm font-black text-slate-800">المتسابقون ({room?.participants?.length || 1})</span>
                           <span className="flex h-2 w-2 rounded-full bg-orange-500 animate-ping" />
                         </div>
-                        <div className="grid grid-cols-1 gap-3">
+                        <div className="grid grid-cols-1 gap-2.5">
                           {(room?.participants || []).map((p: any, i: number) => (
                             <motion.div
                               initial={{ opacity: 0, x: -20 }}
                               animate={{ opacity: 1, x: 0 }}
                               key={p?.id || i}
-                              className="flex items-center gap-4 p-4 bg-white rounded-2xl border border-slate-100 shadow-sm"
+                              className="flex items-center gap-3 p-3 bg-white rounded-xl border border-slate-100 shadow-xs"
                             >
-                              <div className="w-10 h-10 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center font-black">
+                              <div className="w-8 h-8 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center font-black text-xs">
                                 {i + 1}
                               </div>
-                              <span className="font-bold text-slate-700">{p?.name || 'لاعب'}</span>
-                              {p?.deviceId === room?.player1?.deviceId && <span className="mr-auto px-3 py-1 bg-orange-500 text-white text-[10px] font-black rounded-lg uppercase">المنشئ</span>}
+                              <span className="font-bold text-slate-700 text-sm">{p?.name || 'لاعب'}</span>
+                              {p?.deviceId === room?.player1?.deviceId && <span className="mr-auto px-2.5 py-0.5 bg-orange-500 text-white text-[9px] font-black rounded-md uppercase">المنشئ</span>}
                             </motion.div>
                           ))}
                         </div>
@@ -3045,7 +3339,7 @@ ${versesList}
                         <button
                           onClick={handleStartRoomV1}
                           disabled={v1IsStartingRoom || (room?.participants?.length || 0) < 2}
-                          className={`w-full py-5 text-white rounded-3xl font-black text-xl shadow-xl transition-all active:scale-95 flex items-center justify-center gap-3 ${(room?.participants?.length || 0) < 2
+                          className={`w-full py-3.5 text-white rounded-2xl font-black text-base md:text-lg shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 ${(room?.participants?.length || 0) < 2
                             ? 'bg-slate-400 opacity-50 cursor-not-allowed'
                             : v1IsStartingRoom ? 'bg-orange-400' : 'bg-brand-emerald hover:bg-brand-emerald/90'
                             }`}
@@ -3055,7 +3349,7 @@ ${versesList}
                         </button>
                       )}
 
-                      <button onClick={() => setView('home')} className="mt-8 text-slate-400 font-bold hover:text-slate-600">إلغاء والتراجع</button>
+                      <button onClick={() => setView('home')} className="mt-6 text-slate-400 font-bold hover:text-slate-600 text-xs md:text-sm">إلغاء والتراجع</button>
                     </div>
                   </motion.div>
                 ) : view === 'group_join' ? (
@@ -3063,14 +3357,14 @@ ${versesList}
                     key="group_join"
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    className="max-w-md mx-auto py-20 px-4"
+                    className="max-w-sm mx-auto py-8 md:py-12 px-4"
                   >
-                    <div className="glass p-12 rounded-[3.5rem] border-brand-emerald/10 shadow-2xl text-center">
-                      <div className="w-20 h-20 bg-brand-emerald text-white rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-xl">
-                        <Lock className="w-10 h-10" />
+                    <div className="glass p-6 md:p-8 rounded-3xl border-brand-emerald/10 shadow-xl text-center">
+                      <div className="w-14 h-14 bg-brand-emerald text-white rounded-2xl flex items-center justify-center mx-auto mb-5 shadow-lg">
+                        <Lock className="w-7 h-7" />
                       </div>
-                      <h2 className="text-3xl font-black text-slate-800 mb-4">رمز الانضمام</h2>
-                      <p className="text-slate-500 font-bold mb-8">أدخل الرمز المكون من 6 أرقام</p>
+                      <h2 className="text-2xl font-black text-slate-800 mb-2">رمز الانضمام</h2>
+                      <p className="text-slate-500 font-bold text-xs md:text-sm mb-6">أدخل الرمز المكون من 6 أرقام</p>
 
                       <input
                         type="text"
@@ -3078,18 +3372,18 @@ ${versesList}
                         placeholder="000000"
                         value={joinCode}
                         onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-                        className="w-full px-6 py-5 rounded-2xl bg-slate-50 border-2 border-slate-100 focus:border-brand-emerald focus:outline-none text-center font-black tracking-[0.5em] text-3xl mb-6 shadow-inner"
+                        className="w-full px-4 py-3 rounded-xl bg-slate-50 border-2 border-slate-100 focus:border-brand-emerald focus:outline-none text-center font-black tracking-[0.3em] text-2xl mb-5 shadow-inner"
                       />
 
                       <button
                         onClick={() => handleJoinV1(joinCode)}
                         disabled={isJoiningRoom || joinCode.length < 4}
-                        className="w-full py-5 bg-brand-emerald text-white rounded-2xl font-black text-xl shadow-xl hover:bg-brand-emerald/90 transition-all active:scale-95 flex items-center justify-center gap-3 disabled:opacity-50"
+                        className="w-full py-3 md:py-3.5 bg-brand-emerald text-white rounded-xl font-black text-base shadow-lg hover:bg-brand-emerald/90 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
                       >
-                        {isJoiningRoom ? <div className="w-6 h-6 border-4 border-white border-t-transparent rounded-full animate-spin" /> : 'دخول الغرفة'}
+                        {isJoiningRoom ? <div className="w-5 h-5 border-3 border-white border-t-transparent rounded-full animate-spin" /> : 'دخول الغرفة'}
                       </button>
 
-                      <button onClick={() => setView('group_menu')} className="mt-8 text-slate-400 font-bold hover:text-slate-600">رجوع</button>
+                      <button onClick={() => setView('group_menu')} className="mt-5 text-slate-400 font-bold hover:text-slate-600 text-xs md:text-sm">رجوع</button>
                     </div>
                   </motion.div>
                 ) : view === 'group_game' ? (
@@ -3098,21 +3392,21 @@ ${versesList}
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
-                    className="flex flex-col gap-8 max-w-6xl mx-auto py-20 px-4 min-h-[70vh]"
+                    className="flex flex-col gap-6 max-w-3xl mx-auto py-6 md:py-8 px-4 min-h-[60vh]"
                   >
                     <AnimatePresence>
                       {room?.status === 'FINISHED' ? (
                         <motion.div
                           initial={{ opacity: 0, scale: 0.9 }}
                           animate={{ opacity: 1, scale: 1 }}
-                          className="glass p-12 rounded-[4rem] text-center border-brand-gold/20 shadow-2xl relative overflow-hidden"
+                          className="glass p-6 md:p-8 rounded-3xl text-center border-brand-gold/20 shadow-xl relative overflow-hidden"
                         >
                           <div className="absolute inset-0 bg-brand-gold/5 animate-pulse" />
                           <div className="relative z-10">
-                            <Trophy className="w-20 h-20 text-brand-gold mx-auto mb-6" />
-                            <h2 className="text-4xl font-black text-brand-emerald mb-4">اكتمل السباق!</h2>
+                            <Trophy className="w-14 h-14 md:w-16 md:h-16 text-brand-gold mx-auto mb-4 drop-shadow-md" />
+                            <h2 className="text-2xl md:text-3xl font-black text-brand-emerald mb-3">اكتمل السباق!</h2>
 
-                            <div className="max-w-md mx-auto space-y-3 mb-10 text-right">
+                            <div className="max-w-md mx-auto space-y-2.5 mb-8 text-right">
                               {(room?.participants || [])
                                 .map((p: any) => ({
                                   ...p,
@@ -3130,13 +3424,13 @@ ${versesList}
                                     initial={{ opacity: 0, x: -20 }}
                                     animate={{ opacity: 1, x: 0 }}
                                     transition={{ delay: idx * 0.1 }}
-                                    className={`flex items-center gap-4 p-4 rounded-2xl border-2 ${idx === 0 ? 'bg-brand-gold/10 border-brand-gold' : 'bg-white border-slate-100 shadow-sm'}`}
+                                    className={`flex items-center gap-3 p-3 md:p-3.5 rounded-xl border ${idx === 0 ? 'bg-brand-gold/10 border-brand-gold' : 'bg-white border-slate-100 shadow-xs'}`}
                                   >
-                                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-xl ${idx === 0 ? 'bg-brand-gold text-brand-emerald' : 'bg-slate-100 text-slate-400'}`}>
+                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-sm ${idx === 0 ? 'bg-brand-gold text-brand-emerald' : 'bg-slate-100 text-slate-400'}`}>
                                       {idx + 1}
                                     </div>
                                     <div className="flex-1">
-                                      <div className="font-black text-slate-800 flex justify-between items-center">
+                                      <div className="font-black text-slate-800 flex justify-between items-center text-sm">
                                         <div className="flex flex-col items-start">
                                           <span>{p.name} {p.deviceId === deviceId && '(أنت)'}</span>
                                           {!p.isFinished && <span className="text-[10px] text-slate-400 font-bold">جاري الحل...</span>}
@@ -3153,18 +3447,18 @@ ${versesList}
                                 setRoom(null);
                                 setView('home');
                               }}
-                              className="px-12 py-5 bg-brand-emerald text-white rounded-3xl font-black text-xl shadow-xl hover:scale-105 transition-all"
+                              className="px-8 py-3.5 bg-brand-emerald text-white rounded-2xl font-black text-base md:text-lg shadow-lg hover:scale-105 transition-all"
                             >
                               العودة للرئيسية
                             </button>
                           </div>
                         </motion.div>
                       ) : (
-                        <div className="flex flex-col items-center justify-center p-6 bg-slate-50 min-h-[60vh] rounded-3xl">
-                          <h2 className="text-3xl font-black text-brand-emerald mb-2">أنهيت التحدي! 🎉</h2>
-                          <p className="text-slate-500 font-bold mb-8">راقب نتائج أصدقائك مباشرة...</p>
+                        <div className="flex flex-col items-center justify-center p-5 md:p-6 bg-slate-50 min-h-[45vh] rounded-2xl md:rounded-3xl">
+                          <h2 className="text-2xl md:text-3xl font-black text-brand-emerald mb-2">أنهيت التحدي! 🎉</h2>
+                          <p className="text-slate-500 font-bold mb-6 text-xs md:text-sm">راقب نتائج أصدقائك مباشرة...</p>
 
-                          <div className="w-full max-w-md bg-white rounded-[2.5rem] shadow-xl border border-slate-100 overflow-hidden">
+                          <div className="w-full max-w-md bg-white rounded-2xl shadow-lg border border-slate-100 overflow-hidden">
                             {/* قائمة اللاعبين الحية */}
                             {(room?.participants || [])
                               .map((p: any) => ({
@@ -3174,20 +3468,20 @@ ${versesList}
                               }))
                               .sort((a: any, b: any) => b.score - a.score)
                               .map((player: any, index: number) => (
-                                <div key={player.id} className={`flex items-center justify-between p-5 border-b border-slate-50 last:border-0 ${player.id === deviceId ? 'bg-emerald-50/50' : ''}`}>
+                                <div key={player.id} className={`flex items-center justify-between p-3.5 border-b border-slate-50 last:border-0 ${player.id === deviceId ? 'bg-emerald-50/50' : ''}`}>
 
-                                  <div className="flex items-center gap-4">
-                                    <span className="font-black text-slate-300 w-6">{index + 1}</span>
-                                    <span className={`font-black ${player.id === deviceId ? 'text-brand-emerald' : 'text-slate-700'}`}>{player.name} {player.id === deviceId && '(أنت)'}</span>
+                                  <div className="flex items-center gap-3">
+                                    <span className="font-black text-slate-300 w-5 text-sm">{index + 1}</span>
+                                    <span className={`font-black text-sm ${player.id === deviceId ? 'text-brand-emerald' : 'text-slate-700'}`}>{player.name} {player.id === deviceId && '(أنت)'}</span>
                                   </div>
 
-                                  <div className="flex items-center gap-5">
-                                    <span className="text-brand-emerald font-black tabular-nums">{player.score} نقطة</span>
+                                  <div className="flex items-center gap-4">
+                                    <span className="text-brand-emerald font-black tabular-nums text-sm">{player.score} نقطة</span>
                                     {/* حالة اللاعب: انتهى أم لا يزال يلعب */}
                                     {player.hasFinished ? (
-                                      <span className="text-[10px] bg-slate-100 text-slate-500 px-3 py-1 rounded-lg font-black uppercase">أنهى</span>
+                                      <span className="text-[9px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-md font-black uppercase">أنهى</span>
                                     ) : (
-                                      <span className="text-[10px] bg-orange-100 text-orange-600 px-3 py-1 rounded-lg font-black uppercase flex items-center gap-1.5 animate-pulse">
+                                      <span className="text-[9px] bg-orange-100 text-orange-600 px-2 py-0.5 rounded-md font-black uppercase flex items-center gap-1 animate-pulse">
                                         <div className="w-1 h-1 bg-orange-500 rounded-full animate-ping" />
                                         يلعب...
                                       </span>
@@ -3197,7 +3491,7 @@ ${versesList}
                               ))}
                           </div>
 
-                          <p className="mt-10 text-slate-400 font-bold text-sm">سيتم عرض النتائج النهائية فور انتهاء الجميع</p>
+                          <p className="mt-8 text-slate-400 font-bold text-xs md:text-sm">سيتم عرض النتائج النهائية فور انتهاء الجميع</p>
                         </div>
                       )}
                     </AnimatePresence>
@@ -3208,33 +3502,33 @@ ${versesList}
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
-                    className="flex flex-col gap-8 max-w-6xl mx-auto py-6 px-4 min-h-[70vh]"
+                    className="flex flex-col gap-6 max-w-3xl mx-auto py-4 md:py-6 px-4 min-h-[60vh]"
                   >
                     {/* Floating Timer UI */}
-                    <div className="flex justify-center mb-6 sticky top-4 z-50">
+                    <div className="flex justify-center mb-4 sticky top-4 z-50">
                       <motion.div
                         animate={{
-                          scale: speedTimeLeft <= 10 ? [1, 1.1, 1] : 1,
+                          scale: speedTimeLeft <= 10 ? [1, 1.05, 1] : 1,
                           backgroundColor: speedTimeLeft <= 10 ? '#fee2e2' : '#ffffff'
                         }}
                         transition={{ repeat: speedTimeLeft <= 10 ? Infinity : 0, duration: 0.5 }}
-                        className={`glass px-10 py-5 rounded-full shadow-2xl border-2 flex items-center gap-6 ${speedTimeLeft <= 10 ? 'border-red-500' : 'border-brand-emerald/20'}`}
+                        className={`glass px-5 md:px-7 py-2 md:py-2.5 rounded-full shadow-xl border-2 flex items-center gap-3 md:gap-4 ${speedTimeLeft <= 10 ? 'border-red-500' : 'border-brand-emerald/20'}`}
                       >
-                        <div className={`p-3 rounded-2xl ${speedTimeLeft <= 10 ? 'bg-red-500 text-white' : 'bg-brand-emerald text-white'}`}>
-                          <Zap className="w-8 h-8" />
+                        <div className={`p-1.5 md:p-2 rounded-xl ${speedTimeLeft <= 10 ? 'bg-red-500 text-white' : 'bg-brand-emerald text-white'}`}>
+                          <Zap className="w-4 h-4 md:w-5 md:h-5" />
                         </div>
                         <div className="text-right">
-                          <span className={`text-4xl font-black block tabular-nums ${speedTimeLeft <= 10 ? 'text-red-600' : 'text-slate-800'}`}>
+                          <span className={`text-base md:text-xl font-black block tabular-nums ${speedTimeLeft <= 10 ? 'text-red-600' : 'text-slate-800'}`}>
                             {speedTimeLeft} ثانية
                           </span>
-                          <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">الوقت المتبقي للآية</span>
+                          <span className="text-[9px] md:text-[10px] font-black uppercase tracking-widest text-slate-400">الوقت المتبقي للآية</span>
                         </div>
-                        <div className="w-px h-10 bg-slate-100 mx-2" />
+                        <div className="w-px h-7 bg-slate-100 mx-1" />
                         <div className="text-right">
-                          <span className="text-2xl font-black text-brand-emerald block tabular-nums">
+                          <span className="text-sm md:text-base font-black text-brand-emerald block tabular-nums">
                             {Math.floor(speedTotalTimeSpent / 60)}:{String(speedTotalTimeSpent % 60).padStart(2, '0')}
                           </span>
-                          <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">إجمالي الوقت</span>
+                          <span className="text-[9px] md:text-[10px] font-black uppercase tracking-widest text-slate-400">إجمالي الوقت</span>
                         </div>
                       </motion.div>
                     </div>
@@ -3243,28 +3537,28 @@ ${versesList}
                       <motion.div
                         initial={{ opacity: 0, scale: 0.9 }}
                         animate={{ opacity: 1, scale: 1 }}
-                        className="glass p-12 rounded-[4rem] text-center border-red-200 shadow-2xl relative overflow-hidden my-10 max-w-2xl mx-auto"
+                        className="glass p-6 md:p-8 rounded-3xl text-center border-red-200 shadow-xl relative overflow-hidden my-6 max-w-md mx-auto"
                       >
                         <div className="absolute inset-0 bg-red-50/50" />
                         <div className="relative z-10">
-                          <div className="w-24 h-24 bg-red-100 text-red-600 rounded-[2rem] flex items-center justify-center mx-auto mb-8">
-                            <AlertCircle className="w-12 h-12" />
+                          <div className="w-14 h-14 bg-red-100 text-red-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                            <AlertCircle className="w-7 h-7" />
                           </div>
-                          <h2 className="text-4xl font-black text-slate-800 mb-4">انتهى الوقت!</h2>
-                          <p className="text-xl text-slate-600 font-bold mb-10 leading-relaxed">
+                          <h2 className="text-2xl font-black text-slate-800 mb-2">انتهى الوقت!</h2>
+                          <p className="text-sm md:text-base text-slate-600 font-bold mb-6 leading-relaxed">
                             لا بأس، استعن بالله وعاود المحاولة
                           </p>
-                          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                          <div className="flex flex-col sm:flex-row gap-3 justify-center">
                             <button
                               onClick={handleStartSpeedChallenge}
-                              className="px-12 py-5 bg-red-600 text-white rounded-3xl font-black text-xl shadow-xl hover:bg-red-700 transition-all flex items-center justify-center gap-3"
+                              className="px-6 py-3 bg-red-600 text-white rounded-xl font-black text-sm md:text-base shadow-lg hover:bg-red-700 transition-all flex items-center justify-center gap-2"
                             >
-                              <RotateCcw className="w-6 h-6" />
+                              <RotateCcw className="w-4 h-4" />
                               كرر المحاولة
                             </button>
                             <button
                               onClick={() => setView('home')}
-                              className="px-12 py-5 bg-white border-2 border-slate-100 text-slate-500 rounded-3xl font-black text-xl hover:bg-slate-50 transition-all"
+                              className="px-6 py-3 bg-white border-2 border-slate-100 text-slate-500 rounded-xl font-bold text-sm md:text-base hover:bg-slate-50 transition-all"
                             >
                               العودة للرئيسية
                             </button>
@@ -3272,7 +3566,7 @@ ${versesList}
                         </div>
                       </motion.div>
                     ) : (
-                      <div className="max-w-4xl mx-auto w-full px-4 pt-10">
+                      <div className="max-w-2xl md:max-w-3xl lg:max-w-4xl mx-auto w-full px-2 md:px-4 pt-2 md:pt-4">
                         <SkillsChallengeHeader
                           mode={skillsType}
                           verseText={KEYWORD}
@@ -3330,37 +3624,40 @@ ${versesList}
                       onBack={() => setView('home')}
                       title={isSpeedMode ? 'تحدي السرعة' : 'تحدي المهارات'}
                       subtitle={isSpeedMode ? 'أسرع في الإجابة واجمع النقاط' : 'اختر التحدي الذي تفضله'}
+                      hideAudio={systemSettings.hideAudioChallenge}
+                      hideComplete={systemSettings.hideCompletionChallenge}
+                      hideSurah={systemSettings.hideSurahChallenge}
                     />
                   </motion.div>
                 ) : view === 'skills_count_selection' ? (
                   <motion.div
                     key="skills_count_selection"
-                    initial={{ opacity: 0, scale: 0.9 }}
+                    initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.9 }}
-                    className="max-w-4xl mx-auto py-20 px-6 text-center"
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    className="max-w-xl mx-auto py-6 md:py-8 px-4 text-center"
                   >
-                    <h2 className="text-4xl font-black text-brand-emerald mb-4">اختر عدد الأسئلة</h2>
-                    <p className="text-slate-500 font-bold mb-12">كم عدد الأسئلة التي تود التحدي فيها؟</p>
+                    <h2 className="text-xl md:text-2xl font-black text-brand-emerald mb-1">اختر عدد الأسئلة</h2>
+                    <p className="text-slate-500 font-bold text-xs md:text-sm mb-6">كم عدد الأسئلة التي تود التحدي فيها؟</p>
 
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 md:gap-4">
                       {[5, 10, 15, 20].map((count) => (
                         <button
                           key={count}
                           onClick={() => handleStartSkillsSession(count)}
-                          className="glass p-10 rounded-[2.5rem] border-2 border-slate-100 hover:border-brand-emerald/30 hover:shadow-2xl transition-all group active:scale-95"
+                          className="glass p-4 md:p-6 rounded-2xl border-2 border-slate-100 hover:border-brand-emerald/30 hover:shadow-lg transition-all group active:scale-95"
                         >
-                          <span className="text-5xl font-black text-brand-emerald block mb-2">{count}</span>
-                          <span className="text-slate-400 font-bold">سؤال</span>
+                          <span className="text-3xl md:text-4xl font-black text-brand-emerald block mb-1">{count}</span>
+                          <span className="text-slate-400 font-bold text-xs md:text-sm">سؤال</span>
                         </button>
                       ))}
                     </div>
 
                     <button
                       onClick={() => setView('skills_menu')}
-                      className="mt-16 text-slate-400 font-bold hover:text-brand-emerald transition-colors flex items-center gap-2 mx-auto"
+                      className="mt-6 text-slate-400 font-bold hover:text-brand-emerald transition-colors flex items-center gap-1.5 mx-auto text-xs md:text-sm"
                     >
-                      <ArrowRight className="w-5 h-5" />
+                      <ArrowRight className="w-4 h-4" />
                       العودة للأوضاع
                     </button>
                   </motion.div>
@@ -3562,6 +3859,29 @@ ${versesList}
                           </div>
                         )}
                       </div>
+
+                      {/* Account Management & Logout */}
+                      <div className="pt-8 mt-12 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4">
+                        <button
+                          onClick={() => {
+                            setPlayerName(null);
+                            setPlayerUsername(null);
+                            localStorage.removeItem('quran_player_name');
+                            localStorage.removeItem('quran_player_username');
+                            setView('home');
+                          }}
+                          className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-red-50 text-red-600 hover:bg-red-100 font-black text-sm transition-all active:scale-95 w-full sm:w-auto justify-center"
+                        >
+                          <LogOut className="w-4 h-4" />
+                          <span>تسجيل الخروج / تبديل الحساب</span>
+                        </button>
+                        <div className="text-center sm:text-right">
+                          <span className="text-xs font-bold text-slate-400 block">الحساب المسجل حالياً:</span>
+                          <span className="text-base font-black text-slate-800">
+                            {playerName} {playerUsername ? `(@${playerUsername.replace(/^@/, '')})` : ''}
+                          </span>
+                        </div>
+                      </div>
                     </div>
                   </motion.div>
                 ) : view === 'home' ? (
@@ -3570,58 +3890,229 @@ ${versesList}
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.98 }}
-                    className="flex flex-col gap-6 md:gap-10 max-w-6xl mx-auto py-6 md:py-10 px-4 overflow-visible"
+                    className="flex flex-col gap-6 md:gap-10 max-w-6xl mx-auto py-6 md:py-10 px-4 overflow-visible pb-28"
                   >
                     {/* Premium Welcome Header Section */}
                     <motion.div
                       initial={{ opacity: 0, y: -20 }}
                       animate={{ opacity: 1, y: 0 }}
-                      className="flex flex-col items-center justify-center text-center space-y-4 mb-8"
+                      className="flex flex-col items-center justify-center text-center space-y-4 mb-4"
                     >
-
-
                       <h1 className="text-3xl md:text-5xl font-black text-slate-800 tracking-tight">
                         السلام عليكم يا <span className={`underline decoration-brand-gold/30 decoration-4 underline-offset-8 transition-all ${isElite && isNameDecorated ? `text-transparent bg-clip-text bg-gradient-to-r ${currentStyle.textColor}` : 'text-brand-emerald'}`}>{playerName || 'يا ضيفنا الكريم'}</span>
                       </h1>
 
-                      {/* Motivational Quote Display - Flattened & Integrated */}
+                      {/* Motivational Quote / Hadith */}
                       {motivationalQuote && (
                         <motion.div
                           initial={{ opacity: 0 }}
                           animate={{ opacity: 1 }}
-                          transition={{ delay: 0.5 }}
-                          className="px-4"
+                          transition={{ delay: 0.3 }}
+                          className="max-w-3xl mx-auto px-4 py-2 text-center"
                         >
-                          <h3 className="font-uthmani text-lg md:text-xl lg:text-2xl text-slate-700 leading-normal max-w-3xl mx-auto text-center" dir="rtl">
+                          <h3 className="font-uthmani text-lg md:text-2xl lg:text-3xl text-emerald-950 font-bold leading-relaxed" dir="rtl">
                             "{motivationalQuote}"
                           </h3>
                         </motion.div>
                       )}
 
-                      <div className="h-1 w-20 bg-brand-gold/20 rounded-full mx-auto" />
+                      <div className="h-1 w-20 bg-brand-gold/30 rounded-full mx-auto mt-2" />
                     </motion.div>
 
-                    <Dashboard streakCount={streak} />
+                    {/* Top Interactive Hub: Prayer Times & 2x2 Stats Grid Side-by-Side */}
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 sm:gap-4 items-stretch px-1">
+                      {/* Prayer Times Box (Compact & Balanced) */}
+                      <div className="lg:col-span-6 flex flex-col">
+                        <Dashboard streakCount={streak} />
+                      </div>
 
+                      {/* 2x2 Stats Grid (مربعين فوق ومربعين تحت) */}
+                      <div className="lg:col-span-6 flex flex-col justify-between">
+                        <div className="grid grid-cols-2 gap-2.5 sm:gap-3.5 h-full">
+                          {/* 1. إجمالي الكؤوس */}
+                          <div className="glass bg-white/85 p-3.5 sm:p-4 rounded-3xl flex flex-col justify-between border border-amber-200/50 shadow-sm hover:shadow-md transition-all">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[11px] sm:text-xs font-black text-slate-400 uppercase tracking-wider">إجمالي الكؤوس</span>
+                              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-tr from-amber-500 to-yellow-400 text-white flex items-center justify-center shadow-md shadow-amber-500/20 shrink-0">
+                                <Trophy className="w-5 h-5" />
+                              </div>
+                            </div>
+                            <div className="mt-3 text-right">
+                              <span className="text-2xl sm:text-3xl font-black text-amber-600 tabular-nums leading-tight block">{cups}</span>
+                              <span className="text-[10px] text-slate-400 font-bold block mt-0.5">الأوسمة والبطولات</span>
+                            </div>
+                          </div>
 
-                    {/* Quick Stats Overview - Optimized for same level on mobile */}
-                    <div className="grid grid-cols-4 gap-2 md:gap-4 px-2">
-                      <div className="glass p-2 md:p-4 rounded-xl md:rounded-2xl flex flex-col items-center justify-center text-center">
-                        <span className="text-[7px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 leading-none">إجمالي الكؤوس</span>
-                        <span className="text-base md:text-2xl font-black text-brand-gold tabular-nums leading-none">{cups}</span>
+                          {/* 2. نقاط المهارة */}
+                          <div className="glass bg-white/85 p-3.5 sm:p-4 rounded-3xl flex flex-col justify-between border border-emerald-200/50 shadow-sm hover:shadow-md transition-all">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[11px] sm:text-xs font-black text-slate-400 uppercase tracking-wider">نقاط المهارة</span>
+                              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center shadow-md shadow-emerald-600/20 shrink-0">
+                                <Star className="w-5 h-5 text-amber-300 fill-amber-300 drop-shadow-xs" />
+                              </div>
+                            </div>
+                            <div className="mt-3 text-right">
+                              <span className="text-2xl sm:text-3xl font-black text-emerald-700 tabular-nums leading-tight block">{totalPoints}</span>
+                              <span className="text-[10px] text-slate-400 font-bold block mt-0.5">رصيد الخبرة</span>
+                            </div>
+                          </div>
+
+                          {/* 3. التقدم الكلي */}
+                          <div className="glass bg-white/85 p-3.5 sm:p-4 rounded-3xl flex flex-col justify-between border border-teal-200/50 shadow-sm hover:shadow-md transition-all">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[11px] sm:text-xs font-black text-slate-400 uppercase tracking-wider">التقدم الكلي</span>
+                              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-tr from-teal-600 to-cyan-500 text-white flex items-center justify-center shadow-md shadow-teal-600/20 shrink-0">
+                                <CheckCircle2 className="w-5 h-5" />
+                              </div>
+                            </div>
+                            <div className="mt-3 text-right">
+                              <span className="text-2xl sm:text-3xl font-black text-teal-700 tabular-nums leading-tight block">{completedChallengeIds.size}</span>
+                              <span className="text-[10px] text-slate-400 font-bold block mt-0.5">تحدياً مكتملاً</span>
+                            </div>
+                          </div>
+
+                          {/* 4. شعلة الاستمرار */}
+                          <button
+                            onClick={() => setIsStreakModalOpen(true)}
+                            className={`glass p-3.5 sm:p-4 rounded-3xl flex flex-col justify-between border shadow-sm hover:shadow-md transition-all text-right group ${
+                              streakInfo.status === 'active'
+                                ? 'bg-orange-50/80 border-orange-200/80'
+                                : streakInfo.status === 'warning'
+                                ? 'bg-amber-50/90 border-amber-300 animate-pulse'
+                                : 'bg-white/85 border-slate-200'
+                            }`}
+                            title="انقر لعرض تفاصيل الشعلة والمهلة"
+                          >
+                            <div className="flex items-center justify-between w-full">
+                              <span className="text-[11px] sm:text-xs font-black text-slate-400 uppercase tracking-wider">شعلة الاستمرار</span>
+                              <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-2xl flex items-center justify-center text-white shadow-md shrink-0 transition-transform group-hover:scale-105 ${
+                                streakInfo.status === 'active'
+                                  ? 'bg-gradient-to-tr from-orange-600 to-amber-500 shadow-orange-500/25'
+                                  : streakInfo.status === 'warning'
+                                  ? 'bg-gradient-to-tr from-slate-700 to-amber-600'
+                                  : 'bg-slate-200 text-slate-400 shadow-none'
+                              }`}>
+                                <Flame className={`w-5 h-5 fill-current ${
+                                  streakInfo.status === 'active' ? 'text-white' : streakInfo.status === 'warning' ? 'text-amber-300' : 'text-slate-400 stroke-1'
+                                }`} />
+                              </div>
+                            </div>
+                            <div className="mt-3 text-right">
+                              <div className="flex items-baseline gap-1.5">
+                                <span className={`text-2xl sm:text-3xl font-black tabular-nums leading-tight ${
+                                  streakInfo.status === 'active' ? 'text-orange-600' : streakInfo.status === 'warning' ? 'text-amber-800' : 'text-slate-600'
+                                }`}>
+                                  {streakInfo.streak}
+                                </span>
+                                <span className="text-[10px] font-bold text-slate-400">أيام</span>
+                              </div>
+                              <span className="text-[10px] text-slate-400 font-bold block mt-0.5">
+                                {streakInfo.status === 'active' ? 'نشطة ومتوقدة 🔥' : streakInfo.status === 'warning' ? 'مهلة الإنقاذ ⏳' : 'ابدأ سلسلتك اليوم'}
+                              </span>
+                            </div>
+                          </button>
+                        </div>
                       </div>
-                      <div className="glass p-2 md:p-4 rounded-xl md:rounded-2xl flex flex-col items-center justify-center text-center">
-                        <span className="text-[7px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 leading-none">نقاط المهارة</span>
-                        <span className="text-base md:text-2xl font-black text-brand-emerald tabular-nums leading-none">{totalPoints}</span>
-                      </div>
-                      <div className="glass p-2 md:p-4 rounded-xl md:rounded-2xl flex flex-col items-center justify-center text-center">
-                        <span className="text-[7px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 leading-none">التقدم الكلي</span>
-                        <span className="text-base md:text-2xl font-black text-brand-emerald tabular-nums leading-none">{completedChallengeIds.size}</span>
-                      </div>
-                      <div className="glass p-2 md:p-4 rounded-xl md:rounded-2xl flex flex-col items-center justify-center text-center">
-                        <span className="text-[7px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 leading-none">آخر زيارة</span>
-                        <span className="text-[9px] md:text-sm font-black text-slate-500 leading-none">{lastPlayedDate || 'اليوم'}</span>
-                      </div>
+                    </div>
+
+                    {/* Subtitle / Last Played Date info */}
+                    <div className="flex items-center justify-between px-3 -mt-2 text-xs text-slate-400 font-medium">
+                      <span>آخر نشاط: <strong className="text-slate-600 font-bold">{lastPlayedDate ? (lastPlayedDate === new Date().toISOString().split('T')[0] ? 'اليوم' : lastPlayedDate) : 'لم يبدأ بعد'}</strong></span>
+                      <span className="text-[11px] text-emerald-700/80 font-bold hidden sm:inline">انقر على بطاقة الشعلة لمعرفة نظام الـ 24 ساعة ومهلة الإنقاذ 💡</span>
+                    </div>
+
+                    {/* Daily Challenge Hero Banner */}
+                    <div className="px-1">
+                      {dailyCompleted ? (
+                        <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border border-emerald-200/70 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
+                          <div className="flex items-center gap-3.5">
+                            <div className="w-11 h-11 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-md shadow-emerald-600/20">
+                              <CheckCircle2 className="w-6 h-6" />
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <h4 className="font-black text-slate-800 text-sm sm:text-base">تم إنجاز التحدي اليومي بنجاح!</h4>
+                                <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">مكتمل</span>
+                              </div>
+                              <p className="text-xs text-slate-500 font-medium mt-0.5">شعلتك مشتعلة بأمان حتى الغد. استمر في تعاهد كتاب الله.</p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => setView('challenges')}
+                            className="px-4 py-2 bg-white text-emerald-800 border border-emerald-200/80 rounded-xl font-bold text-xs hover:bg-emerald-50 transition-all shadow-xs active:scale-95 shrink-0"
+                          >
+                            استكشف التحديات الأخرى
+                          </button>
+                        </div>
+                      ) : streakInfo.status === 'warning' ? (
+                        <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-r from-amber-500/15 via-rose-500/10 to-amber-500/15 border-2 border-amber-400 shadow-lg shadow-amber-500/10 flex flex-col sm:flex-row items-center justify-between gap-4">
+                          <div className="flex items-center gap-3.5">
+                            <div className="w-12 h-12 rounded-2xl bg-amber-600 text-white flex items-center justify-center shadow-md shadow-amber-600/30 shrink-0 animate-pulse">
+                              <Flame className="w-6 h-6 text-amber-200" />
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] bg-amber-500 text-white font-black px-2 py-0.5 rounded-full animate-pulse">
+                                  مهلة إنقاذ الشعلة: متبقي {streakInfo.timeLeftFormatted}
+                                </span>
+                              </div>
+                              <h4 className="font-black text-amber-950 text-sm sm:text-base mt-1">
+                                شعلتك انطفأت مؤقتاً! أنقذ سلسلتك الآن
+                              </h4>
+                              <p className="text-xs text-amber-900/80 font-medium mt-0.5">
+                                أكمل التحدي اليومي قبل انتهاء الـ 12 ساعة لتعود الشعلة للاشتعال فوراً ولا تفقد تقدمك!
+                              </p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={handleStartDaily}
+                            className="w-full sm:w-auto px-5 py-3 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white font-black text-xs sm:text-sm rounded-2xl transition-all shadow-lg shadow-orange-600/25 active:scale-95 flex items-center justify-center gap-2 shrink-0"
+                          >
+                            <Zap className="w-4 h-4 text-amber-200" />
+                            <span>أنقذ الشعلة الآن 🔥</span>
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="p-4 sm:p-6 rounded-3xl bg-gradient-to-r from-emerald-800 via-emerald-700 to-teal-800 text-white shadow-xl shadow-emerald-950/10 flex flex-col sm:flex-row items-center justify-between gap-4 relative overflow-hidden">
+                          <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-2xl pointer-events-none" />
+                          <div className="flex items-center gap-3.5 relative z-10">
+                            <div className="w-12 h-12 rounded-2xl bg-white/15 backdrop-blur-md border border-white/20 flex items-center justify-center text-amber-300 shadow-md shrink-0">
+                              <Calendar className="w-6 h-6" />
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2 mb-0.5">
+                                <h4 className="font-black text-white text-base sm:text-lg">التحدي اليومي بانتظارك</h4>
+                                <span className="text-[10px] bg-amber-400 text-emerald-950 font-black px-2 py-0.5 rounded-full">
+                                  تحدي اليوم
+                                </span>
+                              </div>
+                              <p className="text-xs sm:text-sm text-emerald-100/90 font-medium leading-relaxed">
+                                حافظ على اشتعال شعلتك اليومية واكسب نقاط مهارة إضافية في المتشابهات القرآنية
+                              </p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={handleStartDaily}
+                            className="relative z-10 w-full sm:w-auto px-6 py-3 bg-amber-400 hover:bg-amber-300 text-emerald-950 font-black text-xs sm:text-sm rounded-2xl transition-all shadow-lg shadow-amber-400/25 active:scale-95 flex items-center justify-center gap-2 shrink-0"
+                          >
+                            <span>ابدأ التحدي اليومي</span>
+                            <ArrowLeft className="w-4 h-4" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                ) : view === 'challenges' ? (
+                  <motion.div
+                    key="challenges"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.98 }}
+                    className="flex flex-col gap-6 max-w-6xl mx-auto py-6 md:py-10 px-4 pb-28"
+                  >
+                    <div className="flex items-center gap-3 px-2">
+                      <div className="w-1.5 h-7 bg-brand-gold rounded-full" />
+                      <h2 className="text-2xl md:text-3xl font-black text-brand-emerald tracking-tight">تحديات إسلامية</h2>
                     </div>
 
                     {/* Incomplete Challenge Alert */}
@@ -3630,10 +4121,8 @@ ${versesList}
                         initial={{ opacity: 0, y: -20 }}
                         animate={{ opacity: 1, y: 0 }}
                         whileHover={{ scale: 1.01 }}
-                        className="relative overflow-hidden bg-brand-gold text-brand-emerald p-4 md:p-8 rounded-2xl md:rounded-[3.5rem] flex flex-col md:flex-row items-center justify-between px-6 md:px-10 shadow-2xl shadow-brand-gold/30 group mb-10"
+                        className="relative overflow-hidden bg-brand-gold text-brand-emerald p-4 md:p-8 rounded-2xl md:rounded-[3.5rem] flex flex-col md:flex-row items-center justify-between px-6 md:px-10 shadow-2xl shadow-brand-gold/30 group mb-4"
                       >
-                        <div className="absolute top-0 right-0 w-64 h-64 bg-white/20 rounded-full -mr-32 -mt-32 blur-3xl opacity-50 transition-transform duration-700 group-hover:scale-110" />
-
                         <div className="flex items-center gap-6 relative z-10 text-center md:text-right">
                           <div className="w-14 h-14 rounded-2xl bg-white/30 backdrop-blur-md flex items-center justify-center animate-bounce">
                             <Zap className="w-8 h-8" />
@@ -3661,231 +4150,227 @@ ${versesList}
                     )}
 
                     {/* Main Challenges Grid */}
-                    <div className="space-y-6">
-                      <div className="flex items-center gap-3 px-4">
-                        <div className="w-1 h-6 bg-brand-gold rounded-full" />
-                        <h3 className="text-xl font-black text-brand-emerald tracking-tight">تحديات إسلامية</h3>
-                      </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+                      {/* Daily Challenge Card */}
+                      <motion.button
+                        whileHover={{ y: -4 }}
+                        onClick={handleStartDaily}
+                        disabled={dailyCompleted}
+                        className={`group relative p-4 md:p-6 rounded-2xl text-right overflow-hidden transition-all duration-300 flex flex-col justify-between border border-slate-100 min-h-[140px] ${dailyCompleted ? 'bg-slate-50 opacity-60 grayscale' : 'bg-white shadow-sm hover:shadow-md hover:border-brand-gold/30'}`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center transition-all duration-300 ${dailyCompleted ? 'bg-slate-200' : 'bg-brand-gold/10 text-brand-gold group-hover:bg-brand-gold group-hover:text-brand-emerald shadow-sm'}`}>
+                            <Calendar className="w-5 h-5 md:w-6 md:h-6" />
+                          </div>
+                          {!dailyCompleted && <ArrowLeft className="w-5 h-5 text-brand-gold opacity-0 group-hover:opacity-100 group-hover:-translate-x-1 transition-all" />}
+                        </div>
 
-                      <div className="grid grid-cols-2 md:grid-cols-2 gap-3 md:gap-4">
-                        {/* Daily Challenge Card */}
-                        <motion.button
-                          whileHover={{ y: -4 }}
-                          onClick={handleStartDaily}
-                          disabled={dailyCompleted}
-                          className={`group relative p-3 md:p-6 rounded-xl md:rounded-2xl text-right overflow-hidden transition-all duration-300 flex flex-col justify-between border border-slate-100 min-h-[120px] md:min-h-[160px] ${dailyCompleted ? 'bg-slate-50 opacity-60 grayscale' : 'bg-white shadow-sm hover:shadow-md hover:border-brand-gold/30'}`}
-                        >
+                        <div className="mt-4">
+                          <h2 className={`text-sm md:text-lg font-black ${dailyCompleted ? 'text-slate-400' : 'text-brand-emerald'}`}>التحدي اليومي</h2>
+                          <p className="text-slate-400 font-bold text-xs mt-1">
+                            {dailyCompleted ? 'نراك غداً' : 'مواضع يومية مختارة'}
+                          </p>
+                        </div>
+
+                        {dailyCompleted && (
+                          <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">الموعد القادم</span>
+                            <span className="text-sm font-black text-brand-emerald tabular-nums">{timeLeft}</span>
+                          </div>
+                        )}
+                      </motion.button>
+
+                      {/* Skill Challenge Card */}
+                      <motion.button
+                        whileHover={{ y: -4 }}
+                        onClick={() => {
+                          setIsSpeedMode(false);
+                          setView('skills_menu');
+                        }}
+                        className="group relative p-4 md:p-6 rounded-2xl text-right overflow-hidden transition-all duration-300 flex flex-col justify-between border border-slate-100 min-h-[140px] bg-white shadow-sm hover:shadow-md hover:border-brand-emerald/30"
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-brand-emerald/10 text-brand-emerald flex items-center justify-center transition-all duration-300 group-hover:bg-brand-emerald group-hover:text-white shadow-sm">
+                            <Zap className="w-5 h-5 md:w-6 md:h-6" />
+                          </div>
+                          <ArrowLeft className="w-5 h-5 text-brand-emerald opacity-0 group-hover:opacity-100 group-hover:-translate-x-1 transition-all" />
+                        </div>
+
+                        <div className="mt-4">
+                          <h2 className="text-sm md:text-lg font-black text-brand-emerald">تحدي المهارات</h2>
+                          <p className="text-slate-400 font-bold text-xs mt-1">صوتي، خيارات، أو اسم السورة</p>
+                        </div>
+                      </motion.button>
+
+                      {/* Group Challenge Card */}
+                      <motion.button
+                        whileHover={{ y: -4 }}
+                        onClick={() => setView('group_menu')}
+                        className="group relative p-4 md:p-6 rounded-2xl text-right overflow-hidden transition-all duration-300 flex flex-col justify-between border border-slate-100 min-h-[140px] bg-white shadow-sm hover:shadow-md hover:border-orange-300/30"
+                      >
+                        <div className="flex items-start justify-between relative z-10">
+                          <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-orange-500/10 text-orange-500 flex items-center justify-center transition-all duration-300 group-hover:bg-orange-500 group-hover:text-white shadow-sm">
+                            <Users className="w-5 h-5 md:w-6 md:h-6" />
+                          </div>
+                          <span className="text-[10px] text-orange-600 font-bold opacity-0 group-hover:opacity-100 transition-opacity">مباشر الآن</span>
+                        </div>
+
+                        <div className="mt-4 relative z-10">
                           <div className="flex items-center justify-between">
-                            <div className={`w-8 h-8 md:w-12 md:h-12 rounded-lg md:rounded-xl flex items-center justify-center transition-all duration-300 ${dailyCompleted ? 'bg-slate-200' : 'bg-brand-gold/10 text-brand-gold group-hover:bg-brand-gold group-hover:text-brand-emerald shadow-sm'}`}>
-                              <Calendar className="w-4 h-4 md:w-6 md:h-6" />
-                            </div>
-                            {!dailyCompleted && <ArrowLeft className="w-4 h-4 md:w-5 md:h-5 text-brand-gold opacity-0 group-hover:opacity-100 group-hover:-translate-x-1 transition-all" />}
+                            <h2 className="text-sm md:text-lg font-black text-orange-900 group-hover:text-orange-600 transition-colors">التحدي الجماعي</h2>
+                            <ArrowLeft className="w-5 h-5 text-orange-500 opacity-0 group-hover:opacity-100 group-hover:-translate-x-1 transition-all" />
                           </div>
+                          <p className="text-slate-400 font-bold text-xs mt-1">سباق مباشر في 3 تحديات مهارية</p>
+                        </div>
+                      </motion.button>
 
-                          <div className="mt-2 md:mt-4">
-                            <h2 className={`text-xs md:text-lg font-black ${dailyCompleted ? 'text-slate-400' : 'text-brand-emerald'}`}>التحدي اليومي</h2>
-                            <p className="text-slate-400 font-bold text-[8px] md:text-xs mt-0.5 md:mt-1">
-                              {dailyCompleted ? 'نراك غداً' : 'مواضع يومية مختارة'}
-                            </p>
+                      {/* Speed Challenge Card */}
+                      <motion.button
+                        whileHover={{ y: -4 }}
+                        onClick={() => {
+                          setIsSpeedMode(true);
+                          setView('speed_menu');
+                        }}
+                        className="group relative p-4 md:p-6 rounded-2xl text-right overflow-hidden transition-all duration-300 flex flex-col justify-between border border-slate-100 min-h-[140px] bg-white shadow-sm hover:shadow-md hover:border-red-300/30"
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-red-500/10 text-red-500 flex items-center justify-center transition-all duration-300 group-hover:bg-red-500 group-hover:text-white shadow-sm">
+                            <Zap className="w-5 h-5 md:w-6 md:h-6" />
                           </div>
+                          <span className="text-[10px] text-red-600 font-bold opacity-0 group-hover:opacity-100 transition-opacity">30 ثانية</span>
+                        </div>
 
-                          {dailyCompleted && (
-                            <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between">
-                              <span className="text-[7px] md:text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">الموعد القادم</span>
-                              <span className="text-[10px] md:text-sm font-black text-brand-emerald tabular-nums">{timeLeft}</span>
-                            </div>
-                          )}
-                        </motion.button>
-
-                        {/* Skill Challenge Card */}
-                        <motion.button
-                          whileHover={{ y: -4 }}
-                          onClick={() => {
-                            setIsSpeedMode(false);
-                            setView('skills_menu');
-                          }}
-                          className="group relative p-3 md:p-6 rounded-xl md:rounded-2xl text-right overflow-hidden transition-all duration-300 flex flex-col justify-between border border-slate-100 min-h-[120px] md:min-h-[160px] bg-white shadow-sm hover:shadow-md hover:border-brand-emerald/30"
-                        >
-                          <div className="flex items-start justify-between">
-                            <div className="w-8 h-8 md:w-12 md:h-12 rounded-lg md:rounded-xl bg-brand-emerald/10 text-brand-emerald flex items-center justify-center transition-all duration-300 group-hover:bg-brand-emerald group-hover:text-white shadow-sm">
-                              <Zap className="w-4 h-4 md:w-6 md:h-6" />
-                            </div>
-                            <ArrowLeft className="w-4 h-4 md:w-5 md:h-5 text-brand-emerald opacity-0 group-hover:opacity-100 group-hover:-translate-x-1 transition-all" />
-                          </div>
-
-                          <div className="mt-2 md:mt-4">
-                            <h2 className="text-xs md:text-lg font-black text-brand-emerald">تحدي المهارات</h2>
-                            <p className="text-slate-400 font-bold text-[8px] md:text-xs mt-0.5 md:mt-1">صوتي، خيارات، أو اسم السورة</p>
-                          </div>
-                        </motion.button>
-
-                        {/* Group Challenge Card */}
-                        <motion.button
-                          whileHover={{ y: -4 }}
-                          onClick={() => setView('group_menu')}
-                          className="group relative p-3 md:p-6 rounded-xl md:rounded-2xl text-right overflow-hidden transition-all duration-300 flex flex-col justify-between border border-slate-100 min-h-[120px] md:min-h-[160px] bg-white shadow-sm hover:shadow-md hover:border-orange-300/30"
-                        >
-                          <div className="absolute top-0 left-0 w-16 h-16 md:w-24 md:h-24 bg-orange-500/5 rounded-full -ml-8 -mt-8 md:-ml-12 md:-mt-12 transition-transform duration-700 group-hover:scale-150" />
-
-                          <div className="flex items-start justify-between relative z-10">
-                            <div className="w-8 h-8 md:w-12 md:h-12 rounded-lg md:rounded-xl bg-orange-500/10 text-orange-500 flex items-center justify-center transition-all duration-300 group-hover:bg-orange-500 group-hover:text-white shadow-sm">
-                              <Users className="w-4 h-4 md:w-6 md:h-6" />
-                            </div>
-                            <span className="text-[7px] md:text-[10px] text-orange-600 font-bold opacity-0 group-hover:opacity-100 transition-opacity">مباشر الآن</span>
-                          </div>
-
-                          <div className="mt-2 md:mt-4 relative z-10">
-                            <div className="flex items-center justify-between">
-                              <h2 className="text-xs md:text-lg font-black text-orange-900 group-hover:text-orange-600 transition-colors">التحدي الجماعي</h2>
-                              <ArrowLeft className="w-4 h-4 md:w-5 md:h-5 text-orange-500 opacity-0 group-hover:opacity-100 group-hover:-translate-x-1 transition-all" />
-                            </div>
-                            <p className="text-slate-400 font-bold text-[8px] md:text-xs mt-0.5 md:mt-1">سباق مباشر في 3 تحديات مهارية</p>
-                          </div>
-                        </motion.button>
-
-                        {/* Speed Challenge Card */}
-                        <motion.button
-                          whileHover={{ y: -4 }}
-                          onClick={() => {
-                            setIsSpeedMode(true);
-                            setView('speed_menu');
-                          }}
-                          className="group relative p-3 md:p-6 rounded-xl md:rounded-2xl text-right overflow-hidden transition-all duration-300 flex flex-col justify-between border border-slate-100 min-h-[120px] md:min-h-[160px] bg-white shadow-sm hover:shadow-md hover:border-red-300/30"
-                        >
-                          <div className="flex items-start justify-between">
-                            <div className="w-8 h-8 md:w-12 md:h-12 rounded-lg md:rounded-xl bg-red-500/10 text-red-500 flex items-center justify-center transition-all duration-300 group-hover:bg-red-500 group-hover:text-white shadow-sm">
-                              <Zap className="w-4 h-4 md:w-6 md:h-6" />
-                            </div>
-                            <span className="text-[7px] md:text-[10px] text-red-600 font-bold opacity-0 group-hover:opacity-100 transition-opacity">30 ثانية</span>
-                          </div>
-
-                          <div className="mt-2 md:mt-4">
-                            <div className="flex items-center justify-between">
-                              <h2 className="text-xs md:text-lg font-black text-red-900">تحدي السرعة</h2>
-                              <ArrowLeft className="w-4 h-4 md:w-5 md:h-5 text-red-500 opacity-0 group-hover:opacity-100 group-hover:-translate-x-1 transition-all" />
-                            </div>
-                            <p className="text-slate-400 font-bold text-[8px] md:text-xs mt-0.5 md:mt-1">اختبار السرعة المثير مع العداد</p>
-                          </div>
-                        </motion.button>
-
-                        {/* Islamic Quiz Card */}
-                        <motion.button
-                          whileHover={{ y: -4 }}
-                          onClick={() => setView('islamic_quiz')}
-                          className="group relative p-3 md:p-6 rounded-xl md:rounded-2xl text-right overflow-hidden transition-all duration-300 flex flex-col justify-between border border-slate-100 min-h-[120px] md:min-h-[160px] bg-white shadow-sm hover:shadow-md hover:border-emerald-400"
-                        >
+                        <div className="mt-4">
                           <div className="flex items-center justify-between">
-                            <div className="w-8 h-8 md:w-12 md:h-12 rounded-lg md:rounded-xl bg-emerald-600/10 text-emerald-600 flex items-center justify-center transition-all duration-300 group-hover:bg-emerald-600 group-hover:text-white shadow-sm">
-                              <Sparkles className="w-4 h-4 md:w-6 md:h-6" />
-                            </div>
-                            <ArrowLeft className="w-4 h-4 md:w-5 md:h-5 text-emerald-600 opacity-0 group-hover:opacity-100 group-hover:-translate-x-1 transition-all" />
+                            <h2 className="text-sm md:text-lg font-black text-red-900">تحدي السرعة</h2>
+                            <ArrowLeft className="w-5 h-5 text-red-500 opacity-0 group-hover:opacity-100 group-hover:-translate-x-1 transition-all" />
                           </div>
-                          <div>
-                            <h2 className="text-xs md:text-lg font-black text-slate-800 group-hover:text-emerald-600 transition-colors">مسابقة معلومات اسلامية</h2>
-                            <p className="text-slate-400 font-bold text-[8px] md:text-xs mt-0.5 md:mt-1">تحدي ثقافي شامل في العلوم الإسلامية</p>
+                          <p className="text-slate-400 font-bold text-xs mt-1">اختبار السرعة المثير مع العداد</p>
+                        </div>
+                      </motion.button>
+
+                      {/* Islamic Quiz Card */}
+                      <motion.button
+                        whileHover={{ y: -4 }}
+                        onClick={() => setView('islamic_quiz')}
+                        className="group relative p-4 md:p-6 rounded-2xl text-right overflow-hidden transition-all duration-300 flex flex-col justify-between border border-slate-100 min-h-[140px] bg-white shadow-sm hover:shadow-md hover:border-emerald-400"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-emerald-600/10 text-emerald-600 flex items-center justify-center transition-all duration-300 group-hover:bg-emerald-600 group-hover:text-white shadow-sm">
+                            <HelpCircle className="w-5 h-5 md:w-6 md:h-6" />
                           </div>
-                        </motion.button>
-                      </div>
+                          <ArrowLeft className="w-5 h-5 text-emerald-600 opacity-0 group-hover:opacity-100 group-hover:-translate-x-1 transition-all" />
+                        </div>
+                        <div className="mt-4">
+                          <h2 className="text-sm md:text-lg font-black text-slate-800 group-hover:text-emerald-600 transition-colors">مسابقة معلومات إسلامية</h2>
+                          <p className="text-slate-400 font-bold text-xs mt-1">تحدي ثقافي شامل في العلوم الإسلامية</p>
+                        </div>
+                      </motion.button>
+                    </div>
+                  </motion.div>
+                ) : view === 'library' ? (
+                  <motion.div
+                    key="library"
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.98 }}
+                    className="flex flex-col gap-6 max-w-6xl mx-auto py-6 md:py-10 px-4 pb-28"
+                  >
+                    <div className="flex items-center gap-3 px-2">
+                      <div className="w-1.5 h-7 bg-blue-500 rounded-full shadow-lg shadow-blue-500/20" />
+                      <h2 className="text-2xl md:text-3xl font-black text-slate-800 tracking-tight">المكتبة والعلوم الشرعية</h2>
                     </div>
 
-                    <div className="space-y-6">
-                      <div className="flex items-center gap-3 px-4">
-                        <div className="w-1 h-6 bg-blue-500 rounded-full shadow-lg shadow-blue-500/20" />
-                        <h3 className="text-xl font-black text-slate-800 tracking-tight">المكتبة والعلوم الشرعية</h3>
-                      </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+                      {/* Mushaf Card */}
+                      <motion.button
+                        whileHover={{ y: -4 }}
+                        onClick={() => { setView('mushaf'); setSelectedSurahId(null); }}
+                        className="group relative p-4 md:p-6 rounded-2xl text-right overflow-hidden transition-all duration-300 flex flex-col justify-between border border-slate-100 min-h-[140px] bg-white shadow-sm hover:shadow-md hover:border-blue-400"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-blue-600/10 text-blue-600 flex items-center justify-center transition-all duration-300 group-hover:bg-blue-600 group-hover:text-white shadow-sm">
+                            <BookOpen className="w-5 h-5 md:w-6 md:h-6" />
+                          </div>
+                          <ChevronLeft className="w-5 h-5 text-blue-600 opacity-0 group-hover:opacity-100 group-hover:-translate-x-1 transition-all" />
+                        </div>
+                        <div className="mt-4">
+                          <h2 className="text-sm md:text-lg font-black text-blue-950 group-hover:text-blue-600 transition-colors">المصحف الشريف</h2>
+                          <p className="text-slate-400 font-bold text-xs mt-1">تصفح القرآن الكريم كاملاً بالرسم العثماني</p>
+                        </div>
+                      </motion.button>
 
-                      <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
-                        {/* Mushaf Card */}
-                        <motion.button
-                          whileHover={{ y: -4 }}
-                          onClick={() => { setView('mushaf'); setSelectedSurahId(null); }}
-                          className="group relative p-3 md:p-6 rounded-xl md:rounded-2xl text-right overflow-hidden transition-all duration-300 flex flex-col justify-between border border-slate-100 min-h-[110px] md:min-h-[160px] bg-white shadow-sm hover:shadow-md hover:border-blue-400"
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="w-8 h-8 md:w-12 md:h-12 rounded-lg md:rounded-xl bg-blue-600/10 text-blue-600 flex items-center justify-center transition-all duration-300 group-hover:bg-blue-600 group-hover:text-white shadow-sm">
-                              <BookOpen className="w-4 h-4 md:w-6 md:h-6" />
-                            </div>
-                            <ChevronLeft className="w-4 h-4 md:w-5 md:h-5 text-blue-600 opacity-0 group-hover:opacity-100 group-hover:-translate-x-1 transition-all" />
+                      {/* Adhkar Card */}
+                      <motion.button
+                        whileHover={{ y: -4 }}
+                        onClick={() => { setView('adhkar'); setSelectedAdhkarCategoryId(null); }}
+                        className="group relative p-4 md:p-6 rounded-2xl text-right overflow-hidden transition-all duration-300 flex flex-col justify-between border border-slate-100 min-h-[140px] bg-white shadow-sm hover:shadow-md hover:border-indigo-400"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-indigo-600/10 text-indigo-600 flex items-center justify-center transition-all duration-300 group-hover:bg-indigo-600 group-hover:text-white shadow-sm">
+                            <Sun className="w-5 h-5 md:w-6 md:h-6" />
                           </div>
-                          <div>
-                            <h2 className="text-xs md:text-lg font-black text-blue-950 group-hover:text-blue-600 transition-colors">المصحف الشريف</h2>
-                            <p className="hidden md:block text-slate-400 font-bold text-xs mt-1">تصفح القرآن الكريم كاملاً بالرسم العثماني</p>
-                          </div>
-                        </motion.button>
+                          <ChevronLeft className="w-5 h-5 text-indigo-600 opacity-0 group-hover:opacity-100 group-hover:-translate-x-1 transition-all" />
+                        </div>
+                        <div className="mt-4">
+                          <h2 className="text-sm md:text-lg font-black text-indigo-950 group-hover:text-indigo-600 transition-colors">أذكار المسلم</h2>
+                          <p className="text-slate-400 font-bold text-xs mt-1">أذكار الصباح والمساء واليوم والليل</p>
+                        </div>
+                      </motion.button>
 
-                        {/* Adhkar Card */}
-                        <motion.button
-                          whileHover={{ y: -4 }}
-                          onClick={() => { setView('adhkar'); setSelectedAdhkarCategoryId(null); }}
-                          className="group relative p-3 md:p-6 rounded-xl md:rounded-2xl text-right overflow-hidden transition-all duration-300 flex flex-col justify-between border border-slate-100 min-h-[110px] md:min-h-[160px] bg-white shadow-sm hover:shadow-md hover:border-indigo-400 font-inter"
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="w-8 h-8 md:w-12 md:h-12 rounded-lg md:rounded-xl bg-indigo-600/10 text-indigo-600 flex items-center justify-center transition-all duration-300 group-hover:bg-indigo-600 group-hover:text-white shadow-sm">
-                              <Sun className="w-4 h-4 md:w-6 md:h-6" />
-                            </div>
-                            <ChevronLeft className="w-4 h-4 md:w-5 md:h-5 text-indigo-600 opacity-0 group-hover:opacity-100 group-hover:-translate-x-1 transition-all" />
+                      {/* Hadith Card */}
+                      <motion.button
+                        whileHover={{ y: -4 }}
+                        onClick={() => { setView('hadith'); setSelectedHadith(null); }}
+                        className="group relative p-4 md:p-6 rounded-2xl text-right overflow-hidden transition-all duration-300 flex flex-col justify-between border border-slate-100 min-h-[140px] bg-white shadow-sm hover:shadow-md hover:border-teal-400"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-teal-600/10 text-teal-600 flex items-center justify-center transition-all duration-300 group-hover:bg-teal-600 group-hover:text-white shadow-sm">
+                            <Quote className="w-5 h-5 md:w-6 md:h-6" />
                           </div>
-                          <div>
-                            <h2 className="text-xs md:text-lg font-black text-indigo-950 group-hover:text-indigo-600 transition-colors">أذكار المسلم</h2>
-                            <p className="hidden md:block text-slate-400 font-bold text-xs mt-1">أذكار الصباح والمساء واليوم والليل</p>
-                          </div>
-                        </motion.button>
+                          <ChevronLeft className="w-5 h-5 text-teal-600 opacity-0 group-hover:opacity-100 group-hover:-translate-x-1 transition-all" />
+                        </div>
+                        <div className="mt-4">
+                          <h2 className="text-sm md:text-lg font-black text-teal-900 group-hover:text-teal-600 transition-colors">الأربعون النووية</h2>
+                          <p className="text-slate-400 font-bold text-xs mt-1">شرح وتبسيط أحاديث الأربعون النووية</p>
+                        </div>
+                      </motion.button>
 
-                        {/* Hadith Card */}
-                        <motion.button
-                          whileHover={{ y: -4 }}
-                          onClick={() => { setView('hadith'); setSelectedHadith(null); }}
-                          className="group relative p-3 md:p-6 rounded-xl md:rounded-2xl text-right overflow-hidden transition-all duration-300 flex flex-col justify-between border border-slate-100 min-h-[110px] md:min-h-[160px] bg-white shadow-sm hover:shadow-md hover:border-teal-400"
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="w-8 h-8 md:w-12 md:h-12 rounded-lg md:rounded-xl bg-teal-600/10 text-teal-600 flex items-center justify-center transition-all duration-300 group-hover:bg-teal-600 group-hover:text-white shadow-sm">
-                              <Quote className="w-4 h-4 md:w-6 md:h-6" />
-                            </div>
-                            <ChevronLeft className="w-4 h-4 md:w-5 md:h-5 text-teal-600 opacity-0 group-hover:opacity-100 group-hover:-translate-x-1 transition-all" />
+                      {/* Book Card */}
+                      <motion.button
+                        whileHover={{ y: -4 }}
+                        onClick={() => setView('book')}
+                        className="group relative p-4 md:p-6 rounded-2xl text-right overflow-hidden transition-all duration-300 flex flex-col justify-between border border-slate-100 min-h-[140px] bg-white shadow-sm hover:shadow-md hover:border-amber-400"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-amber-600/10 text-amber-600 flex items-center justify-center transition-all duration-300 group-hover:bg-amber-600 group-hover:text-white shadow-sm">
+                            <BookOpen className="w-5 h-5 md:w-6 md:h-6" />
                           </div>
-                          <div>
-                            <h2 className="text-xs md:text-lg font-black text-teal-900 group-hover:text-teal-600 transition-colors">الأربعون النووية</h2>
-                            <p className="hidden md:block text-slate-400 font-bold text-xs mt-1">شرح وتبسيط أحاديث الأربعون النووية</p>
-                          </div>
-                        </motion.button>
+                          <ChevronLeft className="w-5 h-5 text-amber-600 opacity-0 group-hover:opacity-100 group-hover:-translate-x-1 transition-all" />
+                        </div>
+                        <div className="mt-4">
+                          <h2 className="text-sm md:text-lg font-black text-amber-950 group-hover:text-amber-600 transition-colors">كتاب المتشابهات</h2>
+                          <p className="text-slate-400 font-bold text-xs mt-1">كتاب اللؤلؤ والمرجان في متشابه القرآن</p>
+                        </div>
+                      </motion.button>
 
-
-                        {/* Book Card */}
-                        <motion.button
-                          whileHover={{ y: -4 }}
-                          onClick={() => setView('book')}
-                          className="group relative p-3 md:p-6 rounded-xl md:rounded-2xl text-right overflow-hidden transition-all duration-300 flex flex-col justify-between border border-slate-100 min-h-[110px] md:min-h-[160px] bg-white shadow-sm hover:shadow-md hover:border-amber-400"
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="w-8 h-8 md:w-12 md:h-12 rounded-lg md:rounded-xl bg-amber-600/10 text-amber-600 flex items-center justify-center transition-all duration-300 group-hover:bg-amber-600 group-hover:text-white shadow-sm">
-                              <BookOpen className="w-4 h-4 md:w-6 md:h-6" />
-                            </div>
-                            <ChevronLeft className="w-4 h-4 md:w-5 md:h-5 text-amber-600 opacity-0 group-hover:opacity-100 group-hover:-translate-x-1 transition-all" />
+                      {/* Encyclopedia Card */}
+                      <motion.button
+                        whileHover={{ y: -4 }}
+                        onClick={() => setView('encyclopedia')}
+                        className="group relative p-4 md:p-6 rounded-2xl text-right overflow-hidden transition-all duration-300 flex flex-col justify-between border border-slate-100 min-h-[140px] bg-white shadow-sm hover:shadow-md hover:border-purple-400"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-purple-600/10 text-purple-600 flex items-center justify-center transition-all duration-300 group-hover:bg-purple-600 group-hover:text-white shadow-sm">
+                            <Compass className="w-5 h-5 md:w-6 md:h-6" />
                           </div>
-                          <div>
-                            <h2 className="text-xs md:text-lg font-black text-amber-950 group-hover:text-amber-600 transition-colors">كتاب المتشابهات</h2>
-                            <p className="hidden md:block text-slate-400 font-bold text-xs mt-1">كتاب اللؤلؤ والمرجان في متشابه القرآن</p>
-                          </div>
-                        </motion.button>
-
-                        {/* Encyclopedia Card */}
-                        <motion.button
-                          whileHover={{ y: -4 }}
-                          onClick={() => setView('encyclopedia')}
-                          className="group relative p-3 md:p-6 rounded-xl md:rounded-2xl text-right overflow-hidden transition-all duration-300 flex flex-col justify-between border border-slate-100 min-h-[110px] md:min-h-[160px] bg-white shadow-sm hover:shadow-md hover:border-purple-400"
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="w-8 h-8 md:w-12 md:h-12 rounded-lg md:rounded-xl bg-purple-600/10 text-purple-600 flex items-center justify-center transition-all duration-300 group-hover:bg-purple-600 group-hover:text-white shadow-sm">
-                              <Compass className="w-4 h-4 md:w-6 md:h-6" />
-                            </div>
-                            <ChevronLeft className="w-4 h-4 md:w-5 md:h-5 text-purple-600 opacity-0 group-hover:opacity-100 group-hover:-translate-x-1 transition-all" />
-                          </div>
-                          <div>
-                            <h2 className="text-xs md:text-lg font-black text-purple-950 group-hover:text-purple-600 transition-colors">الموسوعة</h2>
-                            <p className="hidden md:block text-slate-400 font-bold text-xs mt-1">موسوعة العلوم الشرعية والمتشابهات</p>
-                          </div>
-                        </motion.button>
-                      </div>
+                          <ChevronLeft className="w-5 h-5 text-purple-600 opacity-0 group-hover:opacity-100 group-hover:-translate-x-1 transition-all" />
+                        </div>
+                        <div className="mt-4">
+                          <h2 className="text-sm md:text-lg font-black text-purple-950 group-hover:text-purple-600 transition-colors">الموسوعة</h2>
+                          <p className="text-slate-400 font-bold text-xs mt-1">موسوعة العلوم الشرعية ومتشابهات القرآن</p>
+                        </div>
+                      </motion.button>
                     </div>
                   </motion.div>
                 ) : view === 'list' ? (
@@ -4024,17 +4509,23 @@ ${versesList}
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -20 }}
-                    className="w-full max-w-6xl mx-auto space-y-8 p-4 md:p-8 transition-all duration-500"
+                    className={`w-full ${isPageModeActive ? 'max-w-full lg:max-w-[92rem] px-0' : 'md:max-w-5xl lg:max-w-6xl px-0 md:px-6'} mx-auto space-y-4 pt-1 pb-4 md:pt-2 md:pb-8 transition-all duration-500 pb-28`}
                   >
                     {!selectedSurahId && !selectedJuz && !isSearchSubmitted ? (
-                      <div className="space-y-10">
-                        {/* Header & Search */}
-                        <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-                          <h2 className="text-2xl md:text-5xl font-black text-brand-emerald flex items-center gap-2 md:gap-4">
-                            <BookOpen className="w-8 h-8 md:w-12 md:h-12 text-brand-gold" />
-                            {`الصفحة ${currentPage}`}
-                          </h2>
-                          <div className="flex flex-col md:flex-row items-center gap-4 w-full md:w-auto">
+                      <div className="space-y-6 px-2 md:px-0">
+                        {/* Header Title & Search Bar with Buttons Side-by-Side */}
+                        <div className={`flex flex-col gap-4 p-4 md:p-6 rounded-2xl md:rounded-3xl border shadow-sm transition-colors ${librarySettings.darkMode ? 'bg-slate-900/90 border-slate-800 text-slate-100' : 'bg-white/70 border-white/80 text-slate-900'
+                          }`}>
+                          <div className="flex items-center justify-between gap-4">
+                            <h2 className={`text-xl md:text-3xl font-black flex items-center gap-2 md:gap-3 ${librarySettings.darkMode ? 'text-emerald-400' : 'text-brand-emerald'
+                              }`}>
+                              <BookOpen className="w-6 h-6 md:w-8 md:h-8 text-brand-gold" />
+                              {`المصحف الشريف - الصفحة ${currentPage}`}
+                            </h2>
+                          </div>
+
+                          {/* Row 1: Search Form + Settings + Back */}
+                          <div className="flex items-center gap-2 md:gap-3 w-full">
                             <form
                               onSubmit={(e) => {
                                 e.preventDefault();
@@ -4042,215 +4533,340 @@ ${versesList}
                                   setIsSearchSubmitted(true);
                                 }
                               }}
-                              className="flex items-center gap-1.5 w-full md:w-96"
+                              className="flex items-center gap-2 flex-1 min-w-[180px]"
                             >
                               <div className="relative flex-1">
                                 <Search className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                                 <input
                                   type="text"
-                                  placeholder="ابحث عن آية..."
+                                  placeholder="ابحث عن آية أو كلمة..."
                                   value={searchQuery}
                                   onChange={(e) => {
                                     setSearchQuery(e.target.value);
                                     if (e.target.value === '') setIsSearchSubmitted(false);
                                   }}
-                                  className="w-full pr-10 pl-4 py-2 md:py-4 rounded-xl md:rounded-2xl bg-white border border-slate-100 shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-emerald/20 transition-all font-bold text-sm md:text-base"
+                                  className={`w-full pr-10 pl-4 py-2.5 md:py-3.5 rounded-2xl border shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-emerald/20 transition-all font-bold text-sm md:text-base ${librarySettings.darkMode ? 'bg-slate-800 border-slate-700 text-slate-100 placeholder-slate-400' : 'bg-white border-slate-200 text-slate-900'
+                                    }`}
                                 />
                               </div>
                               <button
                                 type="submit"
-                                className="px-4 md:px-8 py-2 md:py-4 bg-brand-emerald text-white rounded-xl md:rounded-2xl font-black hover:bg-brand-emerald/90 transition-all shadow-lg active:scale-95 whitespace-nowrap text-sm md:text-base"
+                                className="px-4 md:px-6 py-2.5 md:py-3.5 bg-brand-emerald text-white rounded-2xl font-black hover:bg-brand-emerald/90 transition-all shadow-md active:scale-95 whitespace-nowrap text-sm md:text-base shrink-0"
                               >
                                 بحث
                               </button>
                             </form>
+
+                            {/* Settings button directly adjacent to Search button */}
                             <button
                               onClick={() => setIsSettingsOpen(true)}
-                              className="p-2 md:p-4 rounded-xl md:rounded-2xl bg-white border border-slate-100 text-slate-500 hover:text-brand-emerald hover:bg-brand-emerald/5 transition-all shadow-sm flex items-center justify-center"
+                              className={`px-3.5 md:px-4 py-2.5 md:py-3.5 rounded-2xl border transition-all shadow-sm flex items-center justify-center gap-1.5 font-bold text-xs md:text-sm whitespace-nowrap shrink-0 ${librarySettings.darkMode ? 'bg-slate-800 border-slate-700 text-slate-200 hover:text-emerald-400' : 'bg-white border-slate-200 text-slate-600 hover:text-brand-emerald'
+                                }`}
                               title="إعدادات المصحف"
                             >
-                              <Settings className="w-6 h-6" />
+                              <Settings className="w-4 h-4 text-brand-emerald" />
+                              <span className="hidden sm:inline">الإعدادات</span>
                             </button>
+                          </div>
+
+                          {/* Row 2: Surah & Juz Buttons directly Underneath Search & Settings */}
+                          <div className="flex items-center gap-2.5 w-full pt-1">
                             <button
-                              onClick={handleBackToHome}
-                              className="px-4 md:px-8 py-2 md:py-4 rounded-xl md:rounded-2xl bg-slate-100 text-slate-500 font-bold hover:bg-slate-200 transition-all text-xs md:text-base whitespace-nowrap"
+                              onClick={() => {
+                                setIsSurahMenuOpen(!isSurahMenuOpen);
+                                setIsJuzMenuOpen(false);
+                              }}
+                              className={`flex-1 py-2.5 md:py-3 rounded-2xl border transition-all font-bold text-xs md:text-sm flex items-center justify-center gap-2 shadow-xs whitespace-nowrap ${isSurahMenuOpen ? 'bg-brand-emerald text-white border-brand-emerald' : (librarySettings.darkMode ? 'bg-slate-800 text-slate-200 border-slate-700 hover:bg-emerald-600 hover:text-white' : 'bg-white text-slate-700 border-slate-200 hover:bg-brand-emerald/5 hover:text-brand-emerald')
+                                }`}
+                              title="تصفح بالسور"
                             >
-                              رجوع
+                              <BookOpen className="w-4 h-4 text-brand-gold" />
+                              <span>تصفح بالسور (114 سورة)</span>
+                            </button>
+
+                            <button
+                              onClick={() => {
+                                setIsJuzMenuOpen(!isJuzMenuOpen);
+                                setIsSurahMenuOpen(false);
+                              }}
+                              className={`flex-1 py-2.5 md:py-3 rounded-2xl border transition-all font-bold text-xs md:text-sm flex items-center justify-center gap-2 shadow-xs whitespace-nowrap ${isJuzMenuOpen ? 'bg-brand-emerald text-white border-brand-emerald' : (librarySettings.darkMode ? 'bg-slate-800 text-slate-200 border-slate-700 hover:bg-emerald-600 hover:text-white' : 'bg-white text-slate-700 border-slate-200 hover:bg-brand-emerald/5 hover:text-brand-emerald')
+                                }`}
+                              title="تصفح بالأجزاء"
+                            >
+                              <ListFilter className="w-4 h-4 text-brand-gold" />
+                              <span>تصفح بالأجزاء (30 جزء)</span>
                             </button>
                           </div>
                         </div>
 
-                        {/* Juz' Curtain Selector */}
-                        <div className="bg-white/50 backdrop-blur-xl rounded-[2.5rem] border border-white/80 shadow-sm overflow-hidden">
-                          <button
-                            onClick={() => setIsJuzMenuOpen(!isJuzMenuOpen)}
-                            className="w-full flex items-center justify-between p-3 md:p-6 hover:bg-white/50 transition-all group"
-                          >
-                            <div className="flex items-center gap-4">
-                              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-colors ${isJuzMenuOpen ? 'bg-brand-emerald text-white' : 'bg-brand-emerald/5 text-brand-emerald'}`}>
-                                <ListFilter className="w-6 h-6" />
+                        {/* Surah Dropdown Popup Menu */}
+                        <AnimatePresence>
+                          {isSurahMenuOpen && (
+                            <motion.div
+                              initial={{ opacity: 0, y: -10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, y: -10 }}
+                              className={`backdrop-blur-xl p-4 rounded-3xl border shadow-lg ${librarySettings.darkMode ? 'bg-slate-900/95 border-slate-800 text-slate-100' : 'bg-white/90 border-white/80'}`}
+                            >
+                              <h3 className={`font-black text-sm mb-3 ${librarySettings.darkMode ? 'text-slate-200' : 'text-slate-800'}`}>اختر السورة (114 سورة):</h3>
+                              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2 max-h-72 overflow-y-auto">
+                                {quranData.map((surah: any) => (
+                                  <button
+                                    key={surah.id}
+                                    onClick={() => {
+                                      setCurrentPage(surahStartPages[surah.id] || 1);
+                                      setIsSurahMenuOpen(false);
+                                      setIsPageModeActive(true);
+                                    }}
+                                    className={`p-2 rounded-xl transition-all text-xs font-bold text-right flex items-center justify-between ${librarySettings.darkMode ? 'bg-slate-800 text-slate-200 hover:bg-brand-emerald hover:text-white' : 'bg-slate-50 hover:bg-brand-emerald hover:text-white'}`}
+                                  >
+                                    <span className="truncate">{surah.id}. {surah.name}</span>
+                                    <span className="text-[9px] opacity-70">ص {surahStartPages[surah.id] || 1}</span>
+                                  </button>
+                                ))}
                               </div>
-                              <div className="text-right">
-                                <h3 className="font-black text-slate-800 tracking-tight text-sm md:text-lg">تصفح بالأجزاء (1-30)</h3>
-                                <p className="text-slate-400 text-xs font-bold">افتح الستارة لاختيار الجزء المطلوب</p>
-                              </div>
-                            </div>
-                            <div className={`transition-transform duration-500 ${isJuzMenuOpen ? 'rotate-180' : ''}`}>
-                              <ChevronDown className="w-6 h-6 text-slate-300 group-hover:text-brand-emerald" />
-                            </div>
-                          </button>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
 
-                          <AnimatePresence>
-                            {isJuzMenuOpen && (
-                              <motion.div
-                                initial={{ height: 0, opacity: 0 }}
-                                animate={{ height: 'auto', opacity: 1 }}
-                                exit={{ height: 0, opacity: 0 }}
-                                transition={{ duration: 0.5, ease: "circOut" }}
-                              >
-                                <div className="p-6 pt-0">
-                                  <div className="h-px bg-slate-100 mb-6" />
-                                  <div className="grid grid-cols-5 sm:grid-cols-6 md:grid-cols-10 gap-1.5 md:gap-3">
-                                    {Array.from({ length: 30 }).map((_, i) => (
-                                      <button
-                                        key={i + 1}
-                                        onClick={() => {
-                                          setSelectedJuz(i + 1);
-                                          setIsJuzMenuOpen(false);
-                                          setCurrentPage(juzStartPages[i + 1] || 1);
-                                          setIsPageModeActive(true);
-                                        }}
-                                        className="aspect-square rounded-xl bg-white border border-slate-100 text-slate-600 font-extrabold flex flex-col items-center justify-center hover:bg-brand-emerald hover:text-white hover:border-brand-emerald transition-all shadow-sm hover:shadow-brand-emerald/20 hover:-translate-y-1"
-                                      >
-                                        <span className="text-[10px] opacity-50 uppercase mb-0.5">جزء</span>
-                                        <span className="text-sm tabular-nums">{i + 1}</span>
-                                      </button>
-                                    ))}
-                                  </div>
-                                </div>
-                              </motion.div>
-                            )}
-                          </AnimatePresence>
-                        </div>
+                        {/* Juz Dropdown Popup Menu */}
+                        <AnimatePresence>
+                          {isJuzMenuOpen && (
+                            <motion.div
+                              initial={{ opacity: 0, y: -10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, y: -10 }}
+                              className={`backdrop-blur-xl p-4 rounded-3xl border shadow-lg ${librarySettings.darkMode ? 'bg-slate-900/95 border-slate-800 text-slate-100' : 'bg-white/90 border-white/80'}`}
+                            >
+                              <h3 className={`font-black text-sm mb-3 ${librarySettings.darkMode ? 'text-slate-200' : 'text-slate-800'}`}>اختر الجزء (1-30):</h3>
+                              <div className="grid grid-cols-5 sm:grid-cols-10 gap-2">
+                                {Array.from({ length: 30 }).map((_, i) => (
+                                  <button
+                                    key={i + 1}
+                                    onClick={() => {
+                                      setSelectedJuz(i + 1);
+                                      setIsJuzMenuOpen(false);
+                                      setCurrentPage(juzStartPages[i + 1] || 1);
+                                      setIsPageModeActive(true);
+                                    }}
+                                    className={`aspect-square rounded-xl transition-all font-black text-xs flex flex-col items-center justify-center ${librarySettings.darkMode ? 'bg-slate-800 text-slate-200 hover:bg-brand-emerald hover:text-white' : 'bg-slate-50 hover:bg-brand-emerald hover:text-white'}`}
+                                  >
+                                    <span className="text-[8px] opacity-50">جزء</span>
+                                    <span>{i + 1}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
 
                         {!isPageModeActive ? (
-                          <div className="flex flex-col items-center gap-6 py-12">
+                          <div className="flex flex-col items-center justify-center py-6 gap-3">
                             <button
                               onClick={() => {
                                 setCurrentPage(1);
                                 setIsPageModeActive(true);
                               }}
-                              className="group relative px-12 py-6 rounded-[2.5rem] bg-brand-emerald text-white font-black text-2xl shadow-2xl shadow-brand-emerald/40 hover:-translate-y-2 transition-all active:scale-95 overflow-hidden"
+                              className="px-5 py-2.5 rounded-2xl bg-brand-emerald text-white font-black text-sm md:text-base shadow-md hover:bg-brand-emerald/90 transition-all active:scale-95 flex items-center gap-2"
                             >
-                              <div className="absolute inset-0 bg-linear-to-r from-white/0 via-white/20 to-white/0 -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
-                              <div className="flex items-center gap-4">
-                                <BookOpen className="w-8 h-8 text-brand-gold" />
-                                <span>فتح المصحف الشريف</span>
-                              </div>
+                              <BookOpen className="w-4 h-4 text-brand-gold" />
+                              <span>فتح المصحف الشريف الشامل</span>
                             </button>
-                            <p className="text-slate-400 font-bold text-sm">البدء من الصفحة الأولى (سورة الفاتحة)</p>
-
-                            <div className="w-full h-px bg-slate-100 my-8" />
-
-                            <div className="w-full grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 md:gap-4">
-                              {quranData.map((surah: any) => (
-                                <motion.button
-                                  key={surah.id}
-                                  whileHover={{ scale: 1.03, y: -5 }}
-                                  onClick={() => {
-                                    setCurrentPage(surahStartPages[surah.id] || 1);
-                                    setIsPageModeActive(true);
-                                  }}
-                                  className="glass p-2 md:p-6 rounded-xl md:rounded-3xl border border-white/50 text-right flex items-center gap-2 md:gap-4 hover:shadow-xl transition-all group relative overflow-hidden"
-                                >
-                                  <div className="absolute top-0 left-0 w-1 md:w-2 h-full bg-brand-emerald/10 group-hover:bg-brand-emerald transition-colors" />
-                                  <div className="w-8 h-8 md:w-12 md:h-12 rounded-lg md:rounded-2xl bg-brand-emerald/10 flex items-center justify-center text-brand-emerald font-black text-xs md:text-xl group-hover:bg-brand-emerald group-hover:text-white transition-colors flex-shrink-0">
-                                    {surah.id}
-                                  </div>
-                                  <div className="flex-1">
-                                    <div className="text-xs md:text-xl font-black text-slate-800 leading-tight">{surah.name}</div>
-                                    <div className="text-[7px] md:text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
-                                      {surah.verses.length} آ <span className="hidden md:inline">• {surah.type.toLowerCase() === 'meccan' ? 'مكية' : 'مدنية'}</span>
-                                    </div>
-                                  </div>
-                                </motion.button>
-                              ))}
-                            </div>
                           </div>
                         ) : isPageModeActive ? (
-                          <div className="flex flex-col items-center">
+                          <div className="w-full flex flex-col items-center gap-4">
+                            {/* Page Container: Premium Islamic Manuscript Background Frame */}
                             <div
-                              className="mushaf-page-container islamic-watermark w-full"
+                              className="w-full p-0 sm:p-1 md:p-2 border-0 md:border-2 md:border-brand-gold/30 md:rounded-[2.5rem] md:shadow-2xl transition-all overflow-hidden relative group"
                               style={{
-                                backgroundColor: librarySettings.darkMode ? '#0f172a' : '#fdfbf7',
+                                backgroundColor: librarySettings.darkMode ? '#0B132B' : '#fcfaf5',
                                 color: librarySettings.darkMode ? '#e2e8f0' : '#1e293b',
-                                borderColor: librarySettings.darkMode ? '#1e293b' : '#e2e8f0',
-                                paddingBottom: '2rem'
+                                backgroundImage: librarySettings.darkMode
+                                  ? 'radial-gradient(circle at center, rgba(16, 185, 129, 0.08) 0%, rgba(11, 19, 43, 0.95) 75%)'
+                                  : 'radial-gradient(circle at center, rgba(217, 119, 6, 0.05) 0%, transparent 75%)',
                               }}
                             >
+                              {/* Decorative Inner Gold Border Line for Desktop */}
+                              <div className="hidden md:block absolute inset-2 rounded-[2rem] border border-brand-gold/20 pointer-events-none" />
 
-
-
-                              {/* Mushaf Viewer with Offline Images */}
-                              <div className="w-full flex flex-col items-center gap-10 p-4 md:p-8 bg-white/40 rounded-[2.5rem] overflow-hidden min-h-[60vh]">
-                                <motion.img
-                                  key={currentPage}
-                                  initial={{ opacity: 0, scale: 0.95 }}
-                                  animate={{ opacity: 1, scale: 1 }}
-                                  src={`/quran-pages/${currentPage.toString().padStart(3, '0')}.png`}
-                                  alt={`صفحة ${currentPage}`}
-                                  className="w-full h-auto max-h-[200vh] object-contain shadow-premium rounded-2xl border border-white/60"
-                                />
-
-                                {/* Pagination controls for Page Mode */}
-                                <div className="flex flex-col items-center gap-6 mt-10">
-                                  <div className="flex items-center justify-center gap-6 glass p-2 px-6 rounded-full shadow-lg border border-white/60 mx-auto w-fit">
-                                    <button
-                                      onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                                      disabled={currentPage === 1}
-                                      className="p-3 rounded-2xl bg-white shadow-sm border border-slate-100 text-slate-500 hover:text-brand-emerald disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                              {/* Full-Width Mobile & Desktop Image reaching screen borders with 3D Page Flip & Drag Swipe */}
+                              <div className="w-full flex flex-col items-center p-0 overflow-x-auto custom-scrollbar relative z-10 [perspective:1200px]">
+                                <AnimatePresence mode="wait" initial={false}>
+                                  <motion.div
+                                    key={currentPage}
+                                    drag={mushafZoomScale === 1 ? "x" : false}
+                                    dragConstraints={{ left: 0, right: 0 }}
+                                    dragElastic={0.2}
+                                    onDragEnd={(_, info) => {
+                                      if (mushafZoomScale !== 1) return;
+                                      const swipeThreshold = 40;
+                                      if (info.offset.x > swipeThreshold) {
+                                        // Swipe Left -> Right: Go to Next Page (الأمام)
+                                        if (currentPage < 604) {
+                                          setPageTurnDirection('next');
+                                          setCurrentPage(prev => prev + 1);
+                                        }
+                                      } else if (info.offset.x < -swipeThreshold) {
+                                        // Swipe Right -> Left: Go to Previous Page (رجوع للخلف)
+                                        if (currentPage > 1) {
+                                          setPageTurnDirection('prev');
+                                          setCurrentPage(prev => prev - 1);
+                                        }
+                                      }
+                                    }}
+                                    initial={{
+                                      opacity: 0,
+                                      rotateY: pageTurnDirection === 'next' ? -25 : 25,
+                                      scale: 0.96,
+                                      transformOrigin: pageTurnDirection === 'next' ? 'left center' : 'right center'
+                                    }}
+                                    animate={{
+                                      opacity: 1,
+                                      rotateY: 0,
+                                      scale: 1,
+                                      transformOrigin: 'center center'
+                                    }}
+                                    exit={{
+                                      opacity: 0,
+                                      rotateY: pageTurnDirection === 'next' ? 25 : -25,
+                                      scale: 0.96,
+                                      transformOrigin: pageTurnDirection === 'next' ? 'right center' : 'left center'
+                                    }}
+                                    transition={{ duration: 0.35, ease: [0.25, 1, 0.5, 1] }}
+                                    className="w-full flex justify-center cursor-grab active:cursor-grabbing touch-pan-y"
+                                  >
+                                    <div
+                                      className="transition-all duration-200 ease-out flex justify-center shrink-0"
+                                      style={{
+                                        width: `${Math.round(mushafZoomScale * 100)}%`,
+                                        minWidth: `${Math.round(mushafZoomScale * 100)}%`,
+                                        maxWidth: 'none'
+                                      }}
                                     >
-                                      <ChevronRight className="w-6 h-6" />
-                                    </button>
-
-                                    <div className="flex items-center gap-2 relative group">
-                                      <input
-                                        type="text"
-                                        inputMode="numeric"
-                                        value={currentPage}
-                                        onChange={(e) => {
-                                          const val = e.target.value.replace(/[^0-9]/g, '');
-                                          if (val === '') return; // Let them delete, but we keep the last valid or just don't update
-                                          const num = parseInt(val);
-                                          if (num >= 1 && num <= 604) {
-                                            setCurrentPage(num);
-                                          }
+                                      <img
+                                        src={`/quran-pages/${currentPage.toString().padStart(3, '0')}.png`}
+                                        alt={`صفحة ${currentPage}`}
+                                        className="w-full h-auto max-h-[260vh] object-contain shadow-none md:shadow-xl rounded-none md:rounded-2xl border-none pointer-events-none select-none transition-all duration-300"
+                                        style={{
+                                          filter: librarySettings.darkMode
+                                            ? 'invert(0.92) hue-rotate(180deg) brightness(0.88) contrast(1.12)'
+                                            : 'none'
                                         }}
-                                        className="w-16 bg-transparent border-none text-center text-2xl font-black text-brand-emerald focus:outline-none appearance-none"
                                       />
-                                      <span className="text-[10px] font-bold text-slate-400 absolute -top-4 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity">صفحة</span>
                                     </div>
+                                  </motion.div>
+                                </AnimatePresence>
+                              </div>
+                            </div>
 
-                                    <button
-                                      onClick={() => setCurrentPage(prev => Math.min(604, prev + 1))}
-                                      disabled={currentPage === 604}
-                                      className="p-3 rounded-2xl bg-white shadow-sm border border-slate-100 text-slate-500 hover:text-brand-emerald disabled:opacity-30 disabled:cursor-not-allowed transition-all"
-                                    >
-                                      <ChevronLeft className="w-6 h-6" />
-                                    </button>
+                            {/* Controls Area Completely OUTSIDE & BELOW Image Frame Container */}
+                            <div className={`flex flex-col items-center gap-2 py-2.5 px-3 w-full max-w-2xl backdrop-blur-xl border rounded-2xl shadow-md mt-2 transition-colors ${librarySettings.darkMode
+                                ? 'bg-slate-900/95 border-slate-800 text-slate-100'
+                                : 'bg-white/70 border-white/80 text-slate-800'
+                              }`}>
+                              {/* Single Row: Page Navigation + Zoom Controls Side-by-Side */}
+                              <div className="flex flex-nowrap items-center justify-center gap-2 sm:gap-3 w-full overflow-x-auto">
+                                {/* Page Navigation Group */}
+                                <div className={`flex items-center gap-1 p-1 rounded-xl border shadow-xs shrink-0 ${librarySettings.darkMode ? 'bg-slate-800/90 border-slate-700/80' : 'bg-slate-100/90 border-slate-200/80'
+                                  }`}>
+                                  <button
+                                    onClick={() => {
+                                      setPageTurnDirection('prev');
+                                      setCurrentPage(prev => Math.max(1, prev - 1));
+                                    }}
+                                    disabled={currentPage === 1}
+                                    className={`p-1.5 sm:p-2 rounded-lg text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-2xs shrink-0 active:scale-95 ${librarySettings.darkMode ? 'bg-slate-700 hover:bg-emerald-600' : 'bg-slate-800 hover:bg-brand-emerald'
+                                      }`}
+                                    title="الصفحة السابقة"
+                                  >
+                                    <ChevronRight className="w-4 h-4" />
+                                  </button>
+
+                                  <div className="flex items-center gap-1 px-1">
+                                    <input
+                                      type="text"
+                                      inputMode="numeric"
+                                      value={currentPage}
+                                      onChange={(e) => {
+                                        const val = e.target.value.replace(/[^0-9]/g, '');
+                                        if (val === '') return;
+                                        const num = parseInt(val);
+                                        if (num >= 1 && num <= 604) {
+                                          setCurrentPage(num);
+                                        }
+                                      }}
+                                      className={`w-10 sm:w-12 border rounded text-center text-xs sm:text-sm font-black focus:outline-none focus:ring-1 focus:ring-brand-emerald/30 shadow-2xs py-0.5 ${librarySettings.darkMode ? 'bg-slate-900 border-slate-700 text-emerald-400' : 'bg-white border-slate-300 text-brand-emerald'
+                                        }`}
+                                    />
+                                    <span className={`text-[10px] sm:text-xs font-bold shrink-0 ${librarySettings.darkMode ? 'text-slate-400' : 'text-slate-500'}`}>من 604</span>
                                   </div>
 
                                   <button
                                     onClick={() => {
-                                      setIsPageModeActive(false);
-                                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                                      setPageTurnDirection('next');
+                                      setCurrentPage(prev => Math.min(604, prev + 1));
                                     }}
-                                    className="text-slate-500 hover:text-slate-800 font-bold transition-colors"
+                                    disabled={currentPage === 604}
+                                    className={`p-1.5 sm:p-2 rounded-lg text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-2xs shrink-0 active:scale-95 ${librarySettings.darkMode ? 'bg-slate-700 hover:bg-emerald-600' : 'bg-slate-800 hover:bg-brand-emerald'
+                                      }`}
+                                    title="الصفحة التالية"
                                   >
-                                    العودة للفهرس
+                                    <ChevronLeft className="w-4 h-4" />
+                                  </button>
+                                </div>
+
+                                {/* Separator Divider */}
+                                <div className={`w-px h-6 shrink-0 ${librarySettings.darkMode ? 'bg-slate-700' : 'bg-slate-300/80'}`} />
+
+                                {/* Zoom Controls Group */}
+                                <div className={`flex items-center gap-1 p-1 rounded-xl border shadow-xs shrink-0 ${librarySettings.darkMode ? 'bg-slate-800/90 border-slate-700/80' : 'bg-slate-100/90 border-slate-200/80'
+                                  }`}>
+                                  <button
+                                    onClick={() => setMushafZoomScale(prev => Math.min(1.8, Number((prev + 0.1).toFixed(1))))}
+                                    disabled={mushafZoomScale >= 1.8}
+                                    className={`p-1.5 sm:p-2 rounded-lg text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-2xs shrink-0 active:scale-95 ${librarySettings.darkMode ? 'bg-slate-700 hover:bg-emerald-600' : 'bg-slate-800 hover:bg-brand-emerald'
+                                      }`}
+                                    title="تكبير الصفحة"
+                                  >
+                                    <ZoomIn className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                                  </button>
+
+                                  <button
+                                    onClick={() => setMushafZoomScale(1)}
+                                    className={`px-2 py-1 rounded border text-[10px] sm:text-xs font-black transition-colors shadow-2xs shrink-0 ${mushafZoomScale === 1
+                                        ? (librarySettings.darkMode ? 'bg-emerald-900/60 border-emerald-500 text-emerald-400' : 'bg-emerald-50 border-emerald-300 text-brand-emerald font-black')
+                                        : (librarySettings.darkMode ? 'bg-slate-900 border-slate-700 text-slate-200 hover:text-emerald-400' : 'bg-white border-slate-300 text-slate-800 hover:text-brand-emerald')
+                                      }`}
+                                    title="إعادة تعيين 100%"
+                                  >
+                                    {Math.round(mushafZoomScale * 100)}%
+                                  </button>
+
+                                  <button
+                                    onClick={() => setMushafZoomScale(prev => Math.max(0.7, Number((prev - 0.1).toFixed(1))))}
+                                    disabled={mushafZoomScale <= 0.7}
+                                    className={`p-1.5 sm:p-2 rounded-lg text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-2xs shrink-0 active:scale-95 ${librarySettings.darkMode ? 'bg-slate-700 hover:bg-emerald-600' : 'bg-slate-800 hover:bg-brand-emerald'
+                                      }`}
+                                    title="تصغير الصفحة"
+                                  >
+                                    <ZoomOut className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                                   </button>
                                 </div>
                               </div>
+
+                              {/* Row 2: Index Return Button */}
+                              <button
+                                onClick={() => {
+                                  setIsPageModeActive(false);
+                                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                                }}
+                                className={`flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-white transition-all font-bold text-xs shadow-sm border active:scale-95 ${librarySettings.darkMode ? 'bg-slate-800 hover:bg-emerald-600 border-slate-700' : 'bg-slate-800 hover:bg-brand-emerald border-slate-700/50'
+                                  }`}
+                                title="العودة لفهرس السور والأجزاء"
+                              >
+                                <RotateCcw className="w-3.5 h-3.5 text-brand-gold" />
+                                <span>العودة لفهرس السور والأجزاء</span>
+                              </button>
                             </div>
                           </div>
                         ) : (
@@ -4833,26 +5449,25 @@ ${versesList}
                         <button onClick={() => setView('home')} className="mt-8 px-8 py-4 bg-red-600 text-white rounded-2xl font-black shadow-lg hover:bg-red-700 transition-all">العودة للرئيسية (Back to Home)</button>
                       </div>
                     ) : (
-                      <div key="game" className="space-y-10 max-w-4xl mx-auto w-full px-4 pt-10">
-                        {/* Floating Timer UI for Speed Mode */}
-                        {isSpeedMode && (
-                          <div className="flex justify-center mb-6 sticky top-4 z-50">
+                      <div key="game" className="space-y-2 md:space-y-4 max-w-xl md:max-w-3xl lg:max-w-4xl mx-auto w-full px-2 md:px-4 pt-1 md:pt-4">
+                        {/* Floating Timer UI for Speed Mode or Multiplayer Room with Timer */}
+                        {(isSpeedMode || (room && (room.timePerQuestion || 0) > 0)) && (
+                          <div className="flex justify-center mb-2 sticky top-2 z-50">
                             <motion.div
                               animate={{
-                                scale: speedTimeLeft <= 10 ? [1, 1.1, 1] : 1,
-                                backgroundColor: speedTimeLeft <= 10 ? '#fee2e2' : '#ffffff'
+                                scale: speedTimeLeft <= 5 ? [1, 1.05, 1] : 1,
+                                backgroundColor: speedTimeLeft <= 5 ? '#fee2e2' : '#ffffff'
                               }}
-                              transition={{ repeat: speedTimeLeft <= 10 ? Infinity : 0, duration: 0.5 }}
-                              className={`glass px-10 py-5 rounded-full shadow-2xl border-2 flex items-center gap-6 ${speedTimeLeft <= 10 ? 'border-red-500' : 'border-brand-emerald/20'}`}
+                              transition={{ repeat: speedTimeLeft <= 5 ? Infinity : 0, duration: 0.5 }}
+                              className={`glass px-3.5 md:px-4 py-1 rounded-full shadow-md border flex items-center gap-2 ${speedTimeLeft <= 5 ? 'border-red-500' : 'border-brand-emerald/20'}`}
                             >
-                              <div className={`p-3 rounded-2xl ${speedTimeLeft <= 10 ? 'bg-red-500 text-white' : 'bg-brand-emerald text-white'}`}>
-                                <Zap className="w-8 h-8" />
+                              <div className={`p-1 rounded-lg ${speedTimeLeft <= 5 ? 'bg-red-500 text-white' : 'bg-brand-emerald text-white'}`}>
+                                <Zap className="w-3.5 h-3.5" />
                               </div>
-                              <div className="text-right">
-                                <span className={`text-2xl md:text-4xl font-black block tabular-nums ${speedTimeLeft <= 10 ? 'text-red-600' : 'text-slate-800'}`}>
+                              <div className="text-right flex items-center gap-1.5">
+                                <span className={`text-xs md:text-sm font-black tabular-nums ${speedTimeLeft <= 5 ? 'text-red-600' : 'text-slate-800'}`}>
                                   {speedTimeLeft} ثانية
                                 </span>
-                                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">الوقت المتبقي للسؤال</span>
                               </div>
                             </motion.div>
                           </div>
@@ -4864,6 +5479,8 @@ ${versesList}
                           mode={skillsType}
                           verseText={KEYWORD}
                           totalPoints={totalPoints}
+                          onSkip={challengeMode !== 'daily' ? handleSkip : undefined}
+                          isComplete={isComplete}
                         />
                         {skillsType === 'audio' ? (
                           <AudioChallengeUI
@@ -4952,63 +5569,70 @@ ${versesList}
           </main>
 
           {view === 'home' && (
-            <>
-              {streak > 0 && (
-                <motion.div
-                  initial={{ scale: 0, x: 20 }}
-                  animate={{ scale: 1, x: 0 }}
-                  className="fixed bottom-6 right-6 md:bottom-10 md:right-10 z-[100] group cursor-pointer"
-                  title="شعلة الاستمرار اليومية"
-                >
-                  <div className="relative">
-                    <div className="absolute inset-0 bg-orange-500/30 blur-2xl rounded-full scale-110 streak-pulse" />
-                    <div className="glass bg-white/90 p-2.5 md:p-4 rounded-2xl md:rounded-[2rem] border-orange-200 shadow-2xl flex items-center gap-2 md:gap-3 relative z-10 transition-all group-hover:scale-105">
-                      <div className="w-8 h-8 md:w-12 md:h-12 bg-orange-500 rounded-xl md:rounded-2xl flex items-center justify-center text-white shadow-lg overflow-hidden relative">
-                        <Flame className="w-4 h-4 md:w-6 md:h-6 fill-current relative z-10" />
-                        <div className="absolute inset-0 bg-linear-to-t from-white/20 to-transparent" />
-                      </div>
-                      <div className="text-right">
-                        <span className="text-lg md:text-2xl font-black text-orange-600 tabular-nums block leading-none">{streak}</span>
-                        <span className="text-[7px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none">أيام متتالية</span>
-                      </div>
-                    </div>
+            <motion.div
+              initial={{ scale: 0, x: 20 }}
+              animate={{ scale: 1, x: 0 }}
+              onClick={() => setIsStreakModalOpen(true)}
+              className="fixed bottom-20 right-4 sm:bottom-24 sm:right-6 md:bottom-28 md:right-8 z-40 group cursor-pointer"
+              title="شعلة الاستمرار اليومية - انقر لعرض التفاصيل"
+            >
+              <div className="relative">
+                {streakInfo.status === 'active' && (
+                  <div className="absolute inset-0 bg-orange-500/30 blur-2xl rounded-full scale-110 streak-pulse" />
+                )}
+                {streakInfo.status === 'warning' && (
+                  <div className="absolute inset-0 bg-amber-500/40 blur-2xl rounded-full scale-110 animate-pulse" />
+                )}
+                <div className={`glass p-2 md:p-3 rounded-2xl md:rounded-[2rem] shadow-2xl flex items-center gap-2 md:gap-3 relative z-10 transition-all group-hover:scale-105 border ${
+                  streakInfo.status === 'active'
+                    ? 'bg-white/95 border-orange-200 shadow-orange-500/10'
+                    : streakInfo.status === 'warning'
+                    ? 'bg-amber-50/95 border-amber-300 shadow-amber-500/20 animate-pulse'
+                    : 'bg-white/90 border-slate-200 shadow-slate-900/5'
+                }`}>
+                  <div className={`w-8 h-8 md:w-11 md:h-11 rounded-xl md:rounded-2xl flex items-center justify-center text-white shadow-md overflow-hidden relative shrink-0 ${
+                    streakInfo.status === 'active'
+                      ? 'bg-gradient-to-tr from-orange-600 to-amber-500 shadow-orange-500/30'
+                      : streakInfo.status === 'warning'
+                      ? 'bg-gradient-to-tr from-slate-700 via-amber-700 to-amber-600 shadow-amber-600/30'
+                      : 'bg-slate-100 text-slate-400 border border-slate-200 shadow-none'
+                  }`}>
+                    <Flame className={`w-4 h-4 md:w-5 md:h-5 fill-current relative z-10 ${
+                      streakInfo.status === 'active'
+                        ? 'text-white'
+                        : streakInfo.status === 'warning'
+                        ? 'text-amber-200'
+                        : 'text-slate-400 stroke-1'
+                    }`} />
+                    <div className="absolute inset-0 bg-linear-to-t from-white/20 to-transparent" />
                   </div>
-                </motion.div>
-              )}
-
-              <footer className="max-w-4xl mx-auto px-4 md:px-6 pb-8 md:pb-12 relative z-10">
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
-                  className="glass p-4 md:p-5 rounded-[1.5rem] md:rounded-[2rem] border border-white/50 text-center shadow-lg hover:shadow-xl transition-all group"
-                >
-                  <div className="flex flex-col items-center gap-2">
-                    <div className="bg-brand-emerald/5 p-2 rounded-xl group-hover:scale-110 transition-transform duration-500">
-                      <Sparkles className="w-4 h-4 text-brand-gold" />
+                  <div className="text-right">
+                    <div className="flex items-center gap-1">
+                      <span className={`text-base md:text-xl font-black tabular-nums block leading-none ${
+                        streakInfo.status === 'active'
+                          ? 'text-orange-600'
+                          : streakInfo.status === 'warning'
+                          ? 'text-amber-800'
+                          : 'text-slate-600'
+                      }`}>
+                        {streakInfo.streak}
+                      </span>
+                      {streakInfo.status === 'warning' && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
+                      )}
                     </div>
-                    <div className="space-y-1">
-                      <p className="text-brand-emerald font-black text-xs md:text-base tracking-tight">
-                        قام بإنشاء هذا التطبيق <span className="text-brand-gold">علاء الدين الحجي</span>
-                      </p>
-                      <p className="text-brand-emerald font-black text-xs md:text-base tracking-tight">
-                        صاحب فكرة التطبيق<span className="text-brand-gold"> الاخ عمر سمير طبش</span>
-                      </p>
-                      <p className="text-slate-500 font-bold text-[10px] md:text-xs leading-relaxed">
-                        لا تنسونا من دعواكم، هذا التطبيق صدقة عني وعن اخي عمر وعن والدينا وأحبائنا
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2 mt-1">
-                      <div className="w-8 h-px bg-slate-200" />
-                      <div className="w-1.5 h-1.5 rounded-full bg-brand-gold/30" />
-                      <div className="w-8 h-px bg-slate-200" />
-                    </div>
+                    <span className="text-[7px] md:text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none block mt-0.5">
+                      {streakInfo.status === 'active'
+                        ? 'أيام متتالية'
+                        : streakInfo.status === 'warning'
+                        ? 'مهلة الإنقاذ ⏳'
+                        : 'ابدأ الشعلة'}
+                    </span>
                   </div>
-                </motion.div>
-              </footer>
-            </>
-          )
-          }
+                </div>
+              </div>
+            </motion.div>
+          )}
 
 
           {/* Styled scrollbar & custom animations for the shimmers */}
@@ -5023,6 +5647,73 @@ ${versesList}
         ::-webkit-scrollbar-thumb:hover { background: #064e3b40; }
         ::selection { background: #d4af3730; color: #064e3b; }
       `}} />
+
+          {/* About App Modal (نافذة عن التطبيق وصناع العمل) */}
+          <AnimatePresence>
+            {showAboutModal && (
+              <div
+                className="fixed inset-0 z-[120] flex items-center justify-center p-4 md:p-6 bg-slate-900/60 backdrop-blur-xl"
+                onClick={() => setShowAboutModal(false)}
+              >
+                <motion.div
+                  initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                  animate={{ scale: 1, opacity: 1, y: 0 }}
+                  exit={{ scale: 0.9, opacity: 0, y: 20 }}
+                  className="bg-white rounded-3xl md:rounded-[3rem] p-6 md:p-10 max-w-lg w-full shadow-2xl relative overflow-hidden text-center border border-emerald-100"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button
+                    onClick={() => setShowAboutModal(false)}
+                    className="absolute top-4 left-4 p-2 text-slate-400 hover:text-red-500 rounded-xl hover:bg-slate-100 transition-colors"
+                    title="إغلاق"
+                  >
+                    <X className="w-5 h-5 md:w-6 md:h-6" />
+                  </button>
+
+                  <div className="w-14 h-14 md:w-16 md:h-16 bg-emerald-50 text-brand-emerald rounded-2xl flex items-center justify-center mx-auto mb-4 md:mb-6 shadow-inner border border-emerald-100">
+                    <Info className="w-7 h-7 md:w-8 md:h-8 text-brand-emerald" />
+                  </div>
+
+                  <h3 className="text-xl md:text-2xl font-black text-brand-emerald mb-4">
+                    عن تطبيق المتشابهات القرآنية
+                  </h3>
+
+                  <div className="space-y-3.5 my-6 text-right">
+                    <div className="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-100">
+                      <span className="text-[10px] md:text-xs font-black text-brand-emerald block mb-1">
+                        إعداد وبرمجة التطبيق
+                      </span>
+                      <p className="text-sm md:text-base font-black text-slate-800">
+                        علاء الدين الحجي
+                      </p>
+                    </div>
+
+                    <div className="p-4 rounded-2xl bg-amber-50/70 border border-amber-100">
+                      <span className="text-[10px] md:text-xs font-black text-amber-700 block mb-1">
+                        صاحب فكرة التطبيق
+                      </span>
+                      <p className="text-sm md:text-base font-black text-slate-800">
+                        عمر سمير طبش
+                      </p>
+                    </div>
+
+                    <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 text-center">
+                      <p className="text-slate-600 font-bold text-xs md:text-sm leading-relaxed">
+                        لا تنسونا من صالح دعائكم، هذا التطبيق صدقة جارية عني وعن أخي عمر وعن والدينا وأحبائنا.
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => setShowAboutModal(false)}
+                    className="w-full py-3.5 bg-brand-emerald text-white rounded-2xl font-black text-sm shadow-lg shadow-brand-emerald/20 hover:bg-brand-emerald/90 transition-all active:scale-[0.98]"
+                  >
+                    إغلاق
+                  </button>
+                </motion.div>
+              </div>
+            )}
+          </AnimatePresence>
 
           <AnimatePresence>
             {selectedHadith && (
@@ -5057,21 +5748,54 @@ ${versesList}
                     </div>
 
                     <div className="space-y-6 md:space-y-8">
-                      <div className="glass bg-white/40 p-5 md:p-10 rounded-xl md:rounded-[2.5rem] border border-white shadow-premium">
-                        <h3 className="text-[10px] md:text-sm font-black text-teal-600 uppercase tracking-[0.2em] md:tracking-[0.3em] mb-4 md:mb-6 opacity-60">نص الحديث الشريف</h3>
-                        <p
-                          className="text-xs md:text-xl text-slate-800 leading-relaxed md:leading-relaxed text-center font-bold"
-                        >
-                          {selectedHadith.hadith.split('\n').filter(l => l.trim()).slice(1).join('\n')}
-                        </p>
+                      {/* Hadith Text Box */}
+                      <div className={`p-5 md:p-8 rounded-2xl md:rounded-[2.5rem] border shadow-lg transition-colors ${librarySettings.darkMode ? 'bg-slate-900/90 border-slate-800 text-slate-100' : 'bg-white/90 border-slate-200/80 text-slate-900 shadow-md'
+                        }`}>
+                        <h3 className="text-xs md:text-sm font-black text-teal-600 uppercase tracking-widest mb-4 opacity-80 border-b border-teal-500/20 pb-2">نص الحديث الشريف</h3>
+                        <div className="w-full space-y-3" dir="rtl">
+                          {selectedHadith.hadith
+                            .split('\n')
+                            .filter(l => l.trim())
+                            .slice(1)
+                            .map((line, i) => (
+                              <p
+                                key={i}
+                                className={`text-base sm:text-lg md:text-xl font-bold leading-relaxed md:leading-loose text-justify w-full ${librarySettings.darkMode ? 'text-slate-100' : 'text-slate-800'
+                                  }`}
+                                style={{
+                                  textAlign: 'justify',
+                                  textJustify: 'inter-word',
+                                  textAlignLast: 'right',
+                                }}
+                              >
+                                {line}
+                              </p>
+                            ))}
+                        </div>
                       </div>
 
-                      <div className="glass bg-teal-50/30 p-5 md:p-10 rounded-xl md:rounded-[2.5rem] border-teal-100 shadow-premium">
-                        <h3 className="text-[10px] md:text-sm font-black text-teal-600 uppercase tracking-[0.2em] md:tracking-[0.3em] mb-4 md:mb-6 opacity-60">الشرح والفوائد</h3>
-                        <div
-                          className="text-xs md:text-xl font-medium text-slate-700 leading-relaxed md:leading-relaxed text-center"
-                        >
-                          {selectedHadith.description}
+                      {/* Hadith Explanation & Benefits Box */}
+                      <div className={`p-5 md:p-8 rounded-2xl md:rounded-[2.5rem] border shadow-lg transition-colors ${librarySettings.darkMode ? 'bg-teal-950/40 border-teal-900/60 text-slate-100' : 'bg-teal-50/60 border-teal-100 text-slate-900 shadow-md'
+                        }`}>
+                        <h3 className="text-xs md:text-sm font-black text-teal-600 uppercase tracking-widest mb-4 opacity-80 border-b border-teal-500/20 pb-2">الشرح والفوائد</h3>
+                        <div className="w-full space-y-3" dir="rtl">
+                          {selectedHadith.description
+                            .split(/\n\s*\n/)
+                            .filter(p => p.trim())
+                            .map((paragraph, i) => (
+                              <p
+                                key={i}
+                                className={`text-sm sm:text-base md:text-xl font-medium leading-relaxed md:leading-loose text-justify w-full ${librarySettings.darkMode ? 'text-slate-200' : 'text-slate-800'
+                                  }`}
+                                style={{
+                                  textAlign: 'justify',
+                                  textJustify: 'inter-word',
+                                  textAlignLast: 'right',
+                                }}
+                              >
+                                {paragraph.split('\n').join(' ')}
+                              </p>
+                            ))}
                         </div>
                       </div>
                     </div>
@@ -5099,6 +5823,17 @@ ${versesList}
           />
 
           <ConfirmModal
+            isOpen={isResignModalOpen}
+            onClose={() => setIsResignModalOpen(false)}
+            onConfirm={handleResignGroupChallenge}
+            title="تأكيد الانسحاب من التحدي"
+            message="هل أنت تأكد من الانسحاب من هذا التحدي الجماعي؟ سيتم احتساب 0 نقاط وتسجيل أنك أنهيت اللعبة بالانسحاب."
+            confirmText="تأكيد الانسحاب"
+            cancelText="إلغاء"
+            isDanger={true}
+          />
+
+          <ConfirmModal
             isOpen={isNextChallengeModalOpen}
             onClose={() => setIsNextChallengeModalOpen(false)}
             onConfirm={confirmNextChallenge}
@@ -5114,7 +5849,15 @@ ${versesList}
             showReadingMode={view === 'mushaf'}
           />
 
-          <DailyAyah />
+          <StreakModal
+            isOpen={isStreakModalOpen}
+            onClose={() => setIsStreakModalOpen(false)}
+            streakInfo={streakInfo}
+            onStartChallenge={() => {
+              setIsStreakModalOpen(false);
+              handleStartDaily();
+            }}
+          />
 
           <AnimatePresence>
             {showCertificate && (
@@ -5196,6 +5939,77 @@ ${versesList}
               </motion.div>
             )}
           </AnimatePresence>
+
+          {/* Fixed Bottom Navigation Bar */}
+          <nav className="fixed bottom-0 left-0 right-0 z-50 glass-dark border-t border-white/15 shadow-2xl backdrop-blur-2xl py-2 px-3 sm:px-6">
+            <div className="max-w-md mx-auto flex items-center justify-around">
+
+              {/* 1. الرئيسية (Home) */}
+              <button
+                onClick={() => {
+                  setView('home');
+                  setShowScores(false);
+                }}
+                className={`flex flex-col items-center gap-1 py-1.5 px-3 rounded-2xl transition-all duration-300 ${view === 'home' && !showScores
+                    ? 'text-brand-gold bg-white/15 scale-105 shadow-inner'
+                    : 'text-white/70 hover:text-white hover:bg-white/5'
+                  }`}
+                title="الرئيسية"
+              >
+                <Home className="w-5 h-5 sm:w-6 sm:h-6" />
+                <span className="text-[10px] sm:text-xs font-bold whitespace-nowrap">الرئيسية</span>
+              </button>
+
+              {/* 2. التحديات (Challenges) */}
+              <button
+                onClick={() => {
+                  setView('challenges');
+                  setShowScores(false);
+                }}
+                className={`flex flex-col items-center gap-1 py-1.5 px-3 rounded-2xl transition-all duration-300 ${view === 'challenges'
+                    ? 'text-brand-gold bg-white/15 scale-105 shadow-inner'
+                    : 'text-white/70 hover:text-white hover:bg-white/5'
+                  }`}
+                title="التحديات"
+              >
+                <Zap className="w-5 h-5 sm:w-6 sm:h-6" />
+                <span className="text-[10px] sm:text-xs font-bold whitespace-nowrap">التحديات</span>
+              </button>
+
+              {/* 3. المكتبة والعلوم الشرعية (Library) */}
+              <button
+                onClick={() => {
+                  setView('library');
+                  setShowScores(false);
+                }}
+                className={`flex flex-col items-center gap-1 py-1.5 px-3 rounded-2xl transition-all duration-300 ${view === 'library' || view === 'mushaf' || view === 'adhkar' || view === 'hadith' || view === 'book' || view === 'encyclopedia'
+                    ? 'text-brand-gold bg-white/15 scale-105 shadow-inner'
+                    : 'text-white/70 hover:text-white hover:bg-white/5'
+                  }`}
+                title="المكتبة والعلوم الشرعية"
+              >
+                <BookOpen className="w-5 h-5 sm:w-6 sm:h-6" />
+                <span className="text-[10px] sm:text-xs font-bold whitespace-nowrap">المكتبة</span>
+              </button>
+
+              {/* 4. الإعدادات (Settings) */}
+              <button
+                onClick={() => {
+                  setView('settings');
+                  setShowScores(false);
+                }}
+                className={`flex flex-col items-center gap-1 py-1.5 px-3 rounded-2xl transition-all duration-300 ${view === 'settings'
+                    ? 'text-brand-gold bg-white/15 scale-105 shadow-inner'
+                    : 'text-white/70 hover:text-white hover:bg-white/5'
+                  }`}
+                title="الإعدادات"
+              >
+                <Settings className="w-5 h-5 sm:w-6 sm:h-6" />
+                <span className="text-[10px] sm:text-xs font-bold whitespace-nowrap">الإعدادات</span>
+              </button>
+
+            </div>
+          </nav>
         </>
       )}
     </div >

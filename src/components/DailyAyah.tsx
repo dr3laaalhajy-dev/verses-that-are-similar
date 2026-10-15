@@ -1,49 +1,170 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Quote, Copy, Share2, Sparkles, Check, BookOpen, X } from 'lucide-react';
+import { Quote, Copy, Share2, Sparkles, Check, BookOpen, X, RefreshCw } from 'lucide-react';
+import { quranData } from '../services/QuranRepository';
+import { normalizeQuranTashkeel } from '../utils/quranUtils';
+import { normalizeArabicText } from '../utils/arabic';
 
 interface AyahData {
   text: string;
   surah: string;
   number: number;
+  surahNumber?: number;
   tafsir: string;
 }
+
+// Clean and normalize Surah title so it renders seamlessly in UI fonts without font fallback
+export const cleanSurahTitle = (surahStr: string, surahNumber?: number): string => {
+  if (!surahStr) return '';
+  // If surahNumber is known, get exact clean name from local quranData
+  if (surahNumber && surahNumber >= 1 && surahNumber <= 114) {
+    const found = quranData.find((s: any) => s.id === surahNumber);
+    if (found) return `سورة ${found.name}`;
+  }
+  // Otherwise normalize and look up by simplified name
+  const normalized = normalizeQuranTashkeel(surahStr);
+  const simplified = normalizeArabicText(normalized).replace(/^سوره\s+/, '').trim();
+  const found = quranData.find((s: any) => normalizeArabicText(s.name).trim() === simplified);
+  if (found) return `سورة ${found.name}`;
+
+  // Fallback: replace Quranic sukoon and ensure clean title
+  return normalized.replace(/^سُورَةُ\s+/, 'سورة ');
+};
+
+// Helper to get local date string YYYY-MM-DD
+const getTodayKey = () => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+};
+
+// Deterministic hash to map a date string consistently to a Quran ayah (1..6236)
+const getDailyAyahNumber = (dateStr: string) => {
+  let hash = 0;
+  for (let i = 0; i < dateStr.length; i++) {
+    hash = (hash * 31 + dateStr.charCodeAt(i)) & 0x7fffffff;
+  }
+  return (hash % 6236) + 1;
+};
 
 const DailyAyah: React.FC = () => {
   const [currentAyah, setCurrentAyah] = useState<AyahData | null>(null);
   const [copied, setCopied] = useState(false);
-  const [isOpen, setIsOpen] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isOpen, setIsOpen] = useState(() => {
+    try {
+      const todayKey = getTodayKey();
+      return localStorage.getItem('quran_daily_ayah_hidden_date') !== todayKey;
+    } catch {
+      return true;
+    }
+  });
   const [isTafsirModalOpen, setIsTafsirModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchDailyAyah = async () => {
-      try {
-        const randomNumber = Math.floor(Math.random() * 6236) + 1;
-        // جلب النسخة العثمانية + التفسير الميسر ( Muyassar) لضمان الدقة
-        const response = await fetch(`https://api.alquran.cloud/v1/ayah/${randomNumber}/editions/quran-uthmani,ar.muyassar`);
-        const json = await response.json();
+  const fetchAyah = async (ayahNumber: number, saveToStorage = true) => {
+    try {
+      const response = await fetch(`https://api.alquran.cloud/v1/ayah/${ayahNumber}/editions/quran-uthmani,ar.muyassar`);
+      const json = await response.json();
 
-        if (json.code === 200 && json.data && json.data.length === 2) {
-          setCurrentAyah({
-            text: json.data[0].text, // نص الآية بالعثماني
-            surah: json.data[0].surah.name, // الاسم يضم "سُورَةُ" جاهزاً
-            number: json.data[0].numberInSurah,
-            tafsir: json.data[1].text // نص التفسير الميسر
-          });
-          setLoading(false);
+      if (json.code === 200 && json.data && json.data.length === 2) {
+        const surahNum = json.data[0].surah?.number;
+        const cleanSurah = cleanSurahTitle(json.data[0].surah.name, surahNum);
+        const ayahObj: AyahData = {
+          text: normalizeQuranTashkeel(json.data[0].text),
+          surah: cleanSurah,
+          number: json.data[0].numberInSurah,
+          surahNumber: surahNum,
+          tafsir: json.data[1].text
+        };
+        setCurrentAyah(ayahObj);
+        if (saveToStorage) {
+          localStorage.setItem('quran_daily_ayah_date', getTodayKey());
+          localStorage.setItem('quran_daily_ayah_data', JSON.stringify(ayahObj));
         }
-      } catch (error) {
-        console.error("Error fetching ayah:", error);
+        return true;
+      }
+    } catch (error) {
+      console.error("Error fetching daily ayah from network:", error);
+    }
+
+    // Offline / fallback using local quranData
+    try {
+      let count = 0;
+      for (const surah of quranData) {
+        if (count + surah.verses.length >= ayahNumber) {
+          const verseIdx = ayahNumber - count - 1;
+          const verse = surah.verses[verseIdx] || surah.verses[0];
+          const fallbackAyah: AyahData = {
+            text: normalizeQuranTashkeel(verse.text),
+            surah: `سورة ${surah.name}`,
+            number: verse.id,
+            surahNumber: surah.id,
+            tafsir: 'تفسير الآية متاح عبر المصحف الشريف.'
+          };
+          setCurrentAyah(fallbackAyah);
+          if (saveToStorage) {
+            localStorage.setItem('quran_daily_ayah_date', getTodayKey());
+            localStorage.setItem('quran_daily_ayah_data', JSON.stringify(fallbackAyah));
+          }
+          return true;
+        }
+        count += surah.verses.length;
+      }
+    } catch (e) {
+      console.error("Local fallback error:", e);
+    }
+    return false;
+  };
+
+  useEffect(() => {
+    const loadDailyAyah = async () => {
+      const todayKey = getTodayKey();
+      try {
+        const cachedDate = localStorage.getItem('quran_daily_ayah_date');
+        const cachedData = localStorage.getItem('quran_daily_ayah_data');
+
+        if (cachedDate === todayKey && cachedData) {
+          const parsed = JSON.parse(cachedData);
+          parsed.text = normalizeQuranTashkeel(parsed.text);
+          parsed.surah = cleanSurahTitle(parsed.surah, parsed.surahNumber);
+          setCurrentAyah(parsed);
+          setLoading(false);
+          return;
+        }
+
+        const ayahNumber = getDailyAyahNumber(todayKey);
+        await fetchAyah(ayahNumber, true);
+      } catch (e) {
+        console.error(e);
+      } finally {
         setLoading(false);
       }
     };
-    fetchDailyAyah();
+
+    loadDailyAyah();
   }, []);
+
+  const handleNextAyah = async () => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    const newAyahNum = Math.floor(Math.random() * 6236) + 1;
+    await fetchAyah(newAyahNum, true);
+    setIsRefreshing(false);
+  };
+
+  const handleHide = () => {
+    setIsOpen(false);
+    try {
+      localStorage.setItem('quran_daily_ayah_hidden_date', getTodayKey());
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   const handleCopy = () => {
     if (!currentAyah) return;
-    const shareText = `"${currentAyah.text}"\n${currentAyah.surah} - آية ${currentAyah.number}\n\nتطبيق المتشابهات القرآنية`;
+    const surahTitle = cleanSurahTitle(currentAyah.surah, currentAyah.surahNumber);
+    const shareText = `"${currentAyah.text}"\n${surahTitle} - آية ${currentAyah.number}\n\nتطبيق المتشابهات القرآنية`;
     navigator.clipboard.writeText(shareText);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -51,7 +172,8 @@ const DailyAyah: React.FC = () => {
 
   const handleShare = async () => {
     if (!currentAyah) return;
-    const shareText = `"${currentAyah.text}"\n${currentAyah.surah} - آية ${currentAyah.number}`;
+    const surahTitle = cleanSurahTitle(currentAyah.surah, currentAyah.surahNumber);
+    const shareText = `"${currentAyah.text}"\n${surahTitle} - آية ${currentAyah.number}`;
     if (navigator.share) {
       try {
         await navigator.share({
@@ -72,35 +194,33 @@ const DailyAyah: React.FC = () => {
 
   return (
     <>
-      <div className="fixed top-6 left-6 z-[100] pointer-events-none">
+      <div className="sticky top-[52px] sm:top-[60px] md:top-[56px] z-40 w-full max-w-5xl mx-auto px-3 sm:px-6 py-2 pointer-events-none">
         <AnimatePresence>
           {isOpen ? (
             <motion.div
               key="expanded"
-              initial={{ opacity: 0, x: -50, scale: 0.95 }}
-              animate={{ opacity: 1, x: 0, scale: 1 }}
-              exit={{ opacity: 0, x: -50, scale: 0.95 }}
-              className="pointer-events-auto relative group max-w-[95vw] md:max-w-4xl"
+              initial={{ opacity: 0, y: -12, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -12, scale: 0.97 }}
+              className="pointer-events-auto relative group w-full"
             >
-              <div className="absolute inset-0 bg-emerald-500/10 blur-2xl rounded-full scale-105" />
-
-              <div className="relative glass p-3 md:p-5 rounded-2xl md:rounded-[2rem] border-emerald-100/50 shadow-2xl flex flex-col md:flex-row items-center gap-2 md:gap-8 bg-white/95 backdrop-blur-xl islamic-watermark-small transition-all duration-500">
+              <div className="relative glass p-3.5 md:p-3.5 md:px-7 rounded-[2rem] md:rounded-full border border-slate-200/80 shadow-xl flex flex-col md:flex-row items-center gap-3 md:gap-6 bg-white/95 backdrop-blur-2xl transition-all duration-500">
 
                 {/* Mobile Section: Label & Close Icon */}
                 <div className="flex items-center justify-between w-full md:w-auto md:border-r border-slate-100 md:pr-6 md:shrink-0 pb-2 md:pb-0 border-b md:border-b-0">
                   <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 md:w-10 md:h-10 bg-emerald-100/50 text-emerald-600 rounded-lg md:rounded-xl flex items-center justify-center shadow-inner">
-                      <Quote className="w-4 h-4 md:w-5 md:h-5" />
+                    <div className="w-8 h-8 md:w-9 md:h-9 bg-emerald-50 text-emerald-700 rounded-lg md:rounded-xl flex items-center justify-center shadow-inner">
+                      <Quote className="w-4 h-4 md:w-4.5 md:h-4.5" />
                     </div>
                     <div className="flex flex-col items-start leading-none">
-                      <span className="text-[8px] md:text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">آية اليوم</span>
-                      <Sparkles className="w-2 h-2 text-brand-gold animate-pulse mt-0.5" />
+                      <span className="text-[10px] md:text-[11px] font-black uppercase tracking-[0.1em] text-emerald-800">آية اليوم</span>
                     </div>
                   </div>
 
                   <button
-                    onClick={() => setIsOpen(false)}
-                    className="md:hidden p-1.5 text-slate-500 hover:text-red-500 transition-all"
+                    onClick={handleHide}
+                    className="md:hidden p-1.5 text-slate-400 hover:text-red-500 transition-all rounded-lg hover:bg-slate-100"
+                    title="إخفاء لهذا اليوم"
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -108,51 +228,69 @@ const DailyAyah: React.FC = () => {
 
                 {/* Content: The Ayah Text */}
                 <div className="flex-1 min-w-0 py-1 md:py-0 w-full md:w-auto text-center md:text-right">
-                  <h2
-                    className="!text-xl md:!text-2xl lg:!text-3xl text-slate-800 leading-normal text-center !font-quran font-normal !tracking-normal"
-                    dir="rtl"
-                    style={{ letterSpacing: '0', wordSpacing: 'normal', fontFeatureSettings: '"rlig" 1, "calt" 1' }}
-                  >
-                    {currentAyah.text}
-                  </h2>
-                  <div className="mt-0.5 flex items-center justify-center md:justify-start gap-1.5">
-                    <span className="!text-[7px] md:!text-[8px] lg:!text-[9px] font-medium text-slate-700 bg-emerald-50 px-2 py-0.5 rounded-full" dir="rtl">
-                      {currentAyah.surah} • {currentAyah.number}
+                  <AnimatePresence mode="wait">
+                    <motion.h2
+                      key={currentAyah.text}
+                      initial={{ opacity: 0, y: 4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -4 }}
+                      transition={{ duration: 0.2 }}
+                      className="!text-lg md:!text-xl lg:!text-2xl text-slate-800 leading-relaxed text-center !font-quran font-normal !tracking-normal"
+                      dir="rtl"
+                      style={{ letterSpacing: '0', wordSpacing: 'normal', fontFeatureSettings: '"rlig" 1, "calt" 1' }}
+                    >
+                      {currentAyah.text}
+                    </motion.h2>
+                  </AnimatePresence>
+                  <div className="mt-1 flex items-center justify-center md:justify-start gap-1.5">
+                    <span className="!text-[10px] md:!text-xs font-bold text-slate-600 bg-slate-100 border border-slate-200/60 px-2.5 py-0.5 rounded-full" dir="rtl">
+                      {cleanSurahTitle(currentAyah.surah, currentAyah.surahNumber)} • آية {currentAyah.number}
                     </span>
                   </div>
                 </div>
 
                 {/* Actions Section */}
-                <div className="flex items-center justify-center gap-1.5 md:gap-2 md:border-l border-slate-100 md:pl-6 shrink-0 w-full md:w-auto pt-2 md:pt-0 border-t md:border-t-0">
+                <div className="flex items-center justify-center gap-1.5 sm:gap-2 md:border-l border-slate-100 md:pl-6 shrink-0 w-full md:w-auto pt-2.5 md:pt-0 border-t md:border-t-0 flex-wrap">
                   <button
                     onClick={() => setIsTafsirModalOpen(true)}
-                    className="flex items-center gap-1.5 px-3 md:px-4 py-1.5 md:py-2.5 bg-emerald-50 text-emerald-700 rounded-lg md:rounded-xl font-black text-[10px] md:text-xs hover:bg-emerald-100 transition-all"
+                    className="flex items-center gap-1.5 px-3 md:px-3.5 py-1.5 md:py-2 bg-emerald-50 text-emerald-700 rounded-xl font-black text-xs hover:bg-emerald-100 transition-all shadow-sm"
                   >
-                    <BookOpen className="w-3.5 h-3.5 md:w-4 md:h-4" />
+                    <BookOpen className="w-4 h-4 text-emerald-600" />
                     <span>التفسير</span>
                   </button>
 
                   <button
+                    onClick={handleNextAyah}
+                    disabled={isRefreshing}
+                    className="flex items-center gap-1.5 px-3 md:px-3.5 py-1.5 md:py-2 bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200/60 rounded-xl font-black text-xs transition-all shadow-sm active:scale-95 disabled:opacity-60"
+                    title="إظهار آية أخرى"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 text-amber-600 ${isRefreshing ? 'animate-spin' : ''}`} />
+                    <span>آية أخرى</span>
+                  </button>
+
+                  <button
                     onClick={handleCopy}
-                    className="p-1.5 md:p-2.5 bg-white border border-slate-100 text-slate-400 rounded-lg md:rounded-xl hover:bg-emerald-50 transition-all"
+                    className="p-1.5 md:p-2 bg-white border border-slate-200/70 text-slate-600 rounded-xl hover:bg-emerald-50 transition-all shadow-sm"
                     title="نسخ"
                   >
-                    {copied ? <Check className="w-3.5 h-3.5 md:w-4 md:h-4 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 md:w-4 md:h-4" />}
+                    {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
                   </button>
 
                   <button
                     onClick={handleShare}
-                    className="p-1.5 md:p-2.5 bg-emerald-600 text-white rounded-lg md:rounded-xl shadow-lg shadow-emerald-200 hover:bg-emerald-700 transition-all"
+                    className="p-1.5 md:p-2 bg-emerald-600 text-white rounded-xl shadow-md shadow-emerald-200 hover:bg-emerald-700 transition-all"
                     title="مشاركة"
                   >
-                    <Share2 className="w-3.5 h-3.5 md:w-4 md:h-4" />
+                    <Share2 className="w-4 h-4" />
                   </button>
 
-                  <div className="hidden md:block w-px h-6 bg-slate-100 mx-1" />
+                  <div className="hidden md:block w-px h-5 bg-slate-200 mx-1" />
 
                   <button
-                    onClick={() => setIsOpen(false)}
-                    className="hidden md:block px-2 py-2 text-[10px] md:text-[10px] font-black text-slate-400 hover:text-red-500 rounded-lg transition-all"
+                    onClick={handleHide}
+                    className="hidden md:block px-2.5 py-1.5 text-xs font-bold text-slate-400 hover:text-red-500 rounded-lg transition-all"
+                    title="إخفاء لهذا اليوم"
                   >
                     إخفاء
                   </button>
@@ -160,19 +298,20 @@ const DailyAyah: React.FC = () => {
               </div>
             </motion.div>
           ) : (
-            <motion.button
-              key="minimized"
-              initial={{ opacity: 0, scale: 0.5, x: -50 }}
-              animate={{ opacity: 1, scale: 1, x: 0 }}
-              exit={{ opacity: 0, scale: 0.5, x: -50 }}
-              onClick={() => setIsOpen(true)}
-              className="pointer-events-auto w-10 h-10 md:w-12 md:h-12 bg-emerald-600 text-white rounded-lg md:rounded-xl flex items-center justify-center shadow-xl shadow-emerald-600/30 hover:bg-emerald-700 hover:scale-110 active:scale-95 transition-all group relative"
-            >
-              <Sparkles className="w-4 h-4 md:w-5 md:h-5 group-hover:rotate-12 transition-transform" />
-              <div className="absolute top-1/2 left-full -translate-y-1/2 ml-3 bg-slate-800 text-white text-[9px] md:text-[10px] font-black px-2 md:px-3 py-1 md:py-1.5 rounded-md md:rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
-                آية اليوم
-              </div>
-            </motion.button>
+            <div className="flex justify-start pointer-events-auto">
+              <motion.button
+                key="minimized"
+                initial={{ opacity: 0, scale: 0.85 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.85 }}
+                onClick={() => setIsOpen(true)}
+                className="flex items-center gap-2 px-3 py-1.5 bg-emerald-700/95 text-white rounded-xl shadow-xl shadow-emerald-950/20 hover:bg-emerald-800 active:scale-95 transition-all text-xs font-bold group border border-white/20"
+                title="عرض آية اليوم"
+              >
+                <Quote className="w-3.5 h-3.5 text-emerald-200" />
+                <span>آية اليوم</span>
+              </motion.button>
+            </div>
           )}
         </AnimatePresence>
       </div>
@@ -213,7 +352,7 @@ const DailyAyah: React.FC = () => {
                       {currentAyah.text}
                     </p>
                     <p className="text-sm font-bold text-emerald-600 mt-4" dir="rtl">
-                      [{currentAyah.surah} • {currentAyah.number}]
+                      [{cleanSurahTitle(currentAyah.surah, currentAyah.surahNumber)} • {currentAyah.number}]
                     </p>
                   </div>
 

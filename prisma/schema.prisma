@@ -17,14 +17,16 @@ datasource db {
 model Admin {
   id           Int     @id @default(autoincrement())
   username     String  @unique
+  name         String?
   password     String
   isSuperAdmin Boolean @default(false)
+  role         String  @default("ADMIN") // "FOUNDER", "CO_FOUNDER", "ADMIN"
 }
 
 model AdminCode {
   id        Int      @id @default(autoincrement())
   code      String   @unique
-  role      String   @default("ADMIN") // "ADMIN" or "SUPERADMIN"
+  role      String   @default("ADMIN") // "FOUNDER", "CO_FOUNDER", "ADMIN"
   isUsed    Boolean  @default(false)
   createdAt DateTime @default(now())
 }
@@ -47,6 +49,8 @@ model Player {
   id                    Int      @id @default(autoincrement())
   deviceId              String   @unique
   name                  String
+  username              String?  @unique
+  password              String?  @default("1234")
   points                Int      @default(0)
   cups                  Int      @default(0)
   completedChallengeIds Json     @default("[]")
@@ -86,3 +90,12 @@ model Room {
   player2         Player?  @relation("Player2Rooms", fields: [player2Id], references: [id])
   winner          Player?  @relation("WinnerRooms", fields: [winnerId], references: [id])
 }
+
+model SystemSetting {
+  id                      Int      @id @default(1)
+  hideAudioChallenge      Boolean  @default(false)
+  hideCompletionChallenge Boolean  @default(false)
+  hideSurahChallenge      Boolean  @default(false)
+  updatedAt               DateTime @updatedAt
+}
+

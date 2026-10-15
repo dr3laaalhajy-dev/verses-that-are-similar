@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Plus, Edit2, Trash2, Save, X, BookOpen,
   LayoutDashboard, Search, Sparkles, AlertCircle, ArrowRight,
-  Hash, List, ChevronDown, ChevronUp, Users, Shield, UserPlus, Key, Loader2, Home
+  Hash, List, ChevronDown, ChevronUp, Users, Shield, UserPlus, Key, Loader2, Home,
+  Crown, Lock, KeyRound, Copy, Check, User
 } from 'lucide-react';
 import { searchGroupedAyahsByStart, GroupedAyah } from '../../services/QuranRepository';
 import ConfirmModal from '../ConfirmModal';
@@ -30,17 +31,40 @@ interface Challenge {
 interface Admin {
   id: number;
   username: string;
+  name?: string;
   isSuperAdmin: boolean;
+  role?: string;
 }
 
 interface AdminDashboardProps {
   token: string;
   isSuperAdmin: boolean;
+  adminRole?: string;
+  currentUsername?: string;
+  currentName?: string;
+  currentAdminId?: number | null;
+  systemSettings?: {
+    hideAudioChallenge: boolean;
+    hideCompletionChallenge: boolean;
+    hideSurahChallenge: boolean;
+  };
+  onSettingsUpdated?: () => void;
   onLogout: () => void;
   onBackHome: () => void;
 }
 
-export default function AdminDashboard({ token, isSuperAdmin, onLogout, onBackHome }: AdminDashboardProps) {
+export default function AdminDashboard({ 
+  token, 
+  isSuperAdmin, 
+  adminRole, 
+  currentUsername, 
+  currentName,
+  currentAdminId,
+  systemSettings,
+  onSettingsUpdated,
+  onLogout, 
+  onBackHome 
+}: AdminDashboardProps) {
   const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [admins, setAdmins] = useState<Admin[]>([]);
   const [inviteCodes, setInviteCodes] = useState<any[]>([]);
@@ -55,10 +79,102 @@ export default function AdminDashboard({ token, isSuperAdmin, onLogout, onBackHo
   const [isAddingAdmin, setIsAddingAdmin] = useState(false);
   const [isDeletingAdmin, setIsDeletingAdmin] = useState(null as number | null);
 
-  // Admin form states
+  // Permissions
+  const isCurrentUserFounder = adminRole === 'FOUNDER' || currentUsername?.toLowerCase() === 'alaa' || currentUsername === 'علاء';
+  const isCurrentUserCoFounder = adminRole === 'CO_FOUNDER' || (!isCurrentUserFounder && isSuperAdmin);
+
+  // Strict check for Founder Alaa (ID: 5)
+  const isFounderAlaa = currentAdminId === 5 || 
+    (isCurrentUserFounder && (currentUsername?.toLowerCase() === 'alaa' || currentUsername === 'علاء'));
+
+  // Global settings state
+  const [localSettings, setLocalSettings] = useState({
+    hideAudioChallenge: systemSettings?.hideAudioChallenge ?? false,
+    hideCompletionChallenge: systemSettings?.hideCompletionChallenge ?? false,
+    hideSurahChallenge: systemSettings?.hideSurahChallenge ?? false,
+  });
+  const [isUpdatingSettings, setIsUpdatingSettings] = useState(false);
+  const [isSettingsDropdownOpen, setIsSettingsDropdownOpen] = useState(false);
+
+  useEffect(() => {
+    if (systemSettings) {
+      setLocalSettings(systemSettings);
+    }
+  }, [systemSettings]);
+
+  // Synchronize activeTab if current tab is hidden and user is not viewing it intentionally
+  useEffect(() => {
+    if (!isFounderAlaa && activeTab !== 'admins') {
+      const isCurrentHidden = 
+        (activeTab === 'STANDARD' && localSettings.hideAudioChallenge) ||
+        (activeTab === 'COMPLETION' && localSettings.hideCompletionChallenge) ||
+        (activeTab === 'SURAH' && localSettings.hideSurahChallenge);
+
+      if (isCurrentHidden) {
+        if (!localSettings.hideAudioChallenge) setActiveTab('STANDARD');
+        else if (!localSettings.hideCompletionChallenge) setActiveTab('COMPLETION');
+        else if (!localSettings.hideSurahChallenge) setActiveTab('SURAH');
+        else if (isSuperAdmin) setActiveTab('admins');
+      }
+    }
+  }, [localSettings, isFounderAlaa, activeTab, isSuperAdmin]);
+
+  const handleToggleSetting = async (key: 'hideAudioChallenge' | 'hideCompletionChallenge' | 'hideSurahChallenge', nextVal: boolean) => {
+    setIsUpdatingSettings(true);
+    const updated = { ...localSettings, [key]: nextVal };
+    setLocalSettings(updated);
+
+    // If hiding the currently active tab, automatically switch activeTab to first visible tab
+    if (nextVal) {
+      if (key === 'hideAudioChallenge' && activeTab === 'STANDARD') {
+        if (!updated.hideCompletionChallenge) setActiveTab('COMPLETION');
+        else if (!updated.hideSurahChallenge) setActiveTab('SURAH');
+        else if (isSuperAdmin) setActiveTab('admins');
+      } else if (key === 'hideCompletionChallenge' && activeTab === 'COMPLETION') {
+        if (!updated.hideAudioChallenge) setActiveTab('STANDARD');
+        else if (!updated.hideSurahChallenge) setActiveTab('SURAH');
+        else if (isSuperAdmin) setActiveTab('admins');
+      } else if (key === 'hideSurahChallenge' && activeTab === 'SURAH') {
+        if (!updated.hideAudioChallenge) setActiveTab('STANDARD');
+        else if (!updated.hideCompletionChallenge) setActiveTab('COMPLETION');
+        else if (isSuperAdmin) setActiveTab('admins');
+      }
+    }
+
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(updated)
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'فشل تحديث الإعدادات');
+      if (onSettingsUpdated) onSettingsUpdated();
+      showAlert('نجاح', data.message || 'تم تحديث ظهور التحديات بنجاح');
+    } catch (err: any) {
+      setLocalSettings(localSettings); // Revert on failure
+      showAlert('خطأ', err.message);
+    } finally {
+      setIsUpdatingSettings(false);
+    }
+  };
+
+  // Admin form and modal states
+  const [newAdminName, setNewAdminName] = useState('');
   const [newAdminUsername, setNewAdminUsername] = useState('');
   const [newAdminPassword, setNewAdminPassword] = useState('');
-  const [newAdminIsSuper, setNewAdminIsSuper] = useState(false);
+  const [newAdminRole, setNewAdminRole] = useState<'ADMIN' | 'CO_FOUNDER'>('ADMIN');
+  const [isAddAdminModalOpen, setIsAddAdminModalOpen] = useState(false);
+  const [isInviteCodesModalOpen, setIsInviteCodesModalOpen] = useState(false);
+  const [copiedCodeId, setCopiedCodeId] = useState<number | null>(null);
+
+  // Password change states
+  const [changingPasswordAdmin, setChangingPasswordAdmin] = useState<Admin | null>(null);
+  const [newPasswordVal, setNewPasswordVal] = useState('');
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
   
   // Custom Modal States
   const [modalConfig, setModalConfig] = useState({
@@ -127,7 +243,7 @@ export default function AdminDashboard({ token, isSuperAdmin, onLogout, onBackHo
     }
   };
 
-  const generateInviteCode = async (role: 'ADMIN' | 'SUPERADMIN' = 'ADMIN') => {
+  const generateInviteCode = async (role: 'ADMIN' | 'SUPERADMIN' | 'CO_FOUNDER' = 'ADMIN') => {
     if (inviteLoading) return;
     setInviteLoading(true);
     try {
@@ -374,7 +490,8 @@ export default function AdminDashboard({ token, isSuperAdmin, onLogout, onBackHo
 
   const handleAddAdmin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newAdminUsername.trim() || !newAdminPassword.trim()) {
+    const cleanUsername = newAdminUsername.trim().replace(/^@+/, '');
+    if (!cleanUsername || !newAdminPassword.trim()) {
       showAlert('تنبيه', 'يرجى إدخال اسم المستخدم وكلمة المرور');
       return;
     }
@@ -389,9 +506,11 @@ export default function AdminDashboard({ token, isSuperAdmin, onLogout, onBackHo
         },
         body: JSON.stringify({ 
           action: 'manage',
-          username: newAdminUsername, 
+          name: newAdminName.trim() || cleanUsername,
+          username: cleanUsername, 
           password: newAdminPassword,
-          isSuperAdmin: newAdminIsSuper
+          role: isCurrentUserFounder ? newAdminRole : 'ADMIN',
+          isSuperAdmin: newAdminRole === 'CO_FOUNDER'
         }),
       });
 
@@ -401,14 +520,46 @@ export default function AdminDashboard({ token, isSuperAdmin, onLogout, onBackHo
       }
 
       showAlert('نجاح', 'تم إضافة المشرف بنجاح!');
+      setNewAdminName('');
       setNewAdminUsername('');
       setNewAdminPassword('');
-      setNewAdminIsSuper(false);
+      setNewAdminRole('ADMIN');
       fetchAdmins();
     } catch (err: any) {
       showAlert('خطأ', err.message);
     } finally {
       setIsAddingAdmin(false);
+    }
+  };
+
+  const handleChangePasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!changingPasswordAdmin || !newPasswordVal.trim()) return;
+    setIsChangingPassword(true);
+    try {
+      const res = await fetch('/api/admin', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          action: 'change-password',
+          id: changingPasswordAdmin.id,
+          newPassword: newPasswordVal
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'فشل تغيير كلمة المرور');
+
+      showAlert('نجاح', data.message || 'تم تغيير كلمة المرور بنجاح');
+      setChangingPasswordAdmin(null);
+      setNewPasswordVal('');
+    } catch (err: any) {
+      showAlert('خطأ', err.message);
+    } finally {
+      setIsChangingPassword(false);
     }
   };
 
@@ -421,7 +572,10 @@ export default function AdminDashboard({ token, isSuperAdmin, onLogout, onBackHo
           headers: { 'Authorization': `Bearer ${token}` }
         });
 
-        if (!res.ok) throw new Error('فشل حذف المشرف');
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.message || 'فشل حذف المشرف');
+        }
         fetchAdmins();
       } catch (err: any) {
         showAlert('خطأ', err.message);
@@ -492,7 +646,7 @@ export default function AdminDashboard({ token, isSuperAdmin, onLogout, onBackHo
       {/* Sidebar/Header */}
       <header className="bg-white/80 backdrop-blur-xl border-b border-slate-100 sticky top-0 z-50 px-4 md:px-8 py-3 md:py-4 shadow-sm">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center justify-between w-full md:w-auto">
+          <div className="flex items-center justify-between w-full md:w-auto gap-4">
             <div className="flex items-center gap-3">
               <div className="bg-brand-emerald p-2 rounded-2xl shadow-lg shadow-brand-emerald/20 flex-shrink-0">
                 <LayoutDashboard className="w-5 h-5 md:w-6 md:h-6 text-white" />
@@ -502,10 +656,41 @@ export default function AdminDashboard({ token, isSuperAdmin, onLogout, onBackHo
                 <p className="text-[9px] md:text-[10px] uppercase font-black text-slate-400 tracking-widest truncate">لوحة التحكم المركزية</p>
               </div>
             </div>
+
+            {/* Current Logged In Admin Profile Badge */}
+            <div className="flex items-center gap-2.5 px-3.5 py-1.5 rounded-2xl bg-slate-100/90 border border-slate-200/60 shadow-xs">
+              <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-white shadow-xs shrink-0 ${
+                isCurrentUserFounder ? 'bg-amber-500 shadow-amber-500/20' : isCurrentUserCoFounder ? 'bg-indigo-600 shadow-indigo-600/20' : 'bg-brand-emerald shadow-emerald-500/20'
+              }`}>
+                {isCurrentUserFounder ? <Crown className="w-4 h-4" /> : isCurrentUserCoFounder ? <Shield className="w-4 h-4" /> : <Users className="w-4 h-4" />}
+              </div>
+              <div className="flex flex-col text-right leading-tight min-w-0">
+                <span className="text-[9px] text-slate-400 font-bold truncate">الحساب المسجل:</span>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-xs md:text-sm font-black text-slate-800 truncate">
+                    {currentName || (currentUsername ? (currentUsername.startsWith('@') ? currentUsername : `@${currentUsername}`) : 'المشرف')}
+                  </span>
+                  {currentName && currentUsername && (
+                    <span className="text-[10px] text-slate-400 font-mono font-medium truncate" dir="ltr">
+                      {currentUsername.startsWith('@') ? currentUsername : `@${currentUsername}`}
+                    </span>
+                  )}
+                  <span className={`text-[9px] px-2 py-0.5 rounded-full font-black shrink-0 ${
+                    isCurrentUserFounder 
+                      ? 'bg-amber-100 text-amber-800 border border-amber-200' 
+                      : isCurrentUserCoFounder 
+                        ? 'bg-indigo-100 text-indigo-800 border border-indigo-200' 
+                        : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                  }`}>
+                    {isCurrentUserFounder ? 'المؤسس' : isCurrentUserCoFounder ? 'مساعد مؤسس' : 'مشرف'}
+                  </span>
+                </div>
+              </div>
+            </div>
             
             <button 
               onClick={onLogout} 
-              className="md:hidden flex items-center justify-center w-10 h-10 bg-slate-100 text-slate-500 rounded-xl hover:bg-slate-200 transition-all active:scale-90"
+              className="md:hidden flex items-center justify-center w-10 h-10 bg-slate-100 text-slate-500 rounded-xl hover:bg-slate-200 transition-all active:scale-90 shrink-0"
               title="خروج"
             >
               <X className="w-5 h-5" />
@@ -514,33 +699,55 @@ export default function AdminDashboard({ token, isSuperAdmin, onLogout, onBackHo
 
           <div className="flex flex-col sm:flex-row items-center gap-3 md:gap-4 w-full md:w-auto">
             <div className="flex bg-slate-100/80 p-1 rounded-2xl w-full sm:w-auto">
-              <button
-                onClick={() => { resetForm(); setActiveTab('STANDARD'); }}
-                className={`flex-1 sm:flex-none px-3 md:px-5 py-2 rounded-xl text-xs md:text-sm font-black transition-all ${activeTab === 'STANDARD' ? 'bg-white text-brand-emerald shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-              >
-                <div className="flex items-center justify-center gap-2">
-                  <BookOpen className="w-4 h-4" />
-                  <span>المتشابهات</span>
-                </div>
-              </button>
-              <button
-                onClick={() => { resetForm(); setActiveTab('COMPLETION'); }}
-                className={`flex-1 sm:flex-none px-3 md:px-5 py-2 rounded-xl text-xs md:text-sm font-black transition-all ${activeTab === 'COMPLETION' ? 'bg-white text-brand-emerald shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-              >
-                <div className="flex items-center justify-center gap-2">
-                  <Edit2 className="w-4 h-4" />
-                  <span>تكملة الآية</span>
-                </div>
-              </button>
-              <button
-                onClick={() => { resetForm(); setActiveTab('SURAH'); }}
-                className={`flex-1 sm:flex-none px-3 md:px-5 py-2 rounded-xl text-xs md:text-sm font-black transition-all ${activeTab === 'SURAH' ? 'bg-white text-brand-emerald shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-              >
-                <div className="flex items-center justify-center gap-2">
-                  <Hash className="w-4 h-4" />
-                  <span>اسم السورة</span>
-                </div>
-              </button>
+              {/* زر المتشابهات */}
+              {(!localSettings.hideAudioChallenge || (isFounderAlaa && activeTab === 'STANDARD')) && (
+                <button
+                  onClick={() => { resetForm(); setActiveTab('STANDARD'); }}
+                  className={`flex-1 sm:flex-none px-3 md:px-5 py-2 rounded-xl text-xs md:text-sm font-black transition-all ${activeTab === 'STANDARD' ? 'bg-white text-brand-emerald shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                  <div className="flex items-center justify-center gap-1.5 md:gap-2">
+                    <BookOpen className="w-4 h-4" />
+                    <span>المتشابهات</span>
+                    {localSettings.hideAudioChallenge && isFounderAlaa && (
+                      <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-800 font-black">مخفي 🔒</span>
+                    )}
+                  </div>
+                </button>
+              )}
+
+              {/* زر تكملة الآية */}
+              {(!localSettings.hideCompletionChallenge || (isFounderAlaa && activeTab === 'COMPLETION')) && (
+                <button
+                  onClick={() => { resetForm(); setActiveTab('COMPLETION'); }}
+                  className={`flex-1 sm:flex-none px-3 md:px-5 py-2 rounded-xl text-xs md:text-sm font-black transition-all ${activeTab === 'COMPLETION' ? 'bg-white text-brand-emerald shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                  <div className="flex items-center justify-center gap-1.5 md:gap-2">
+                    <Edit2 className="w-4 h-4" />
+                    <span>تكملة الآية</span>
+                    {localSettings.hideCompletionChallenge && isFounderAlaa && (
+                      <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-800 font-black">مخفي 🔒</span>
+                    )}
+                  </div>
+                </button>
+              )}
+
+              {/* زر اسم السورة */}
+              {(!localSettings.hideSurahChallenge || (isFounderAlaa && activeTab === 'SURAH')) && (
+                <button
+                  onClick={() => { resetForm(); setActiveTab('SURAH'); }}
+                  className={`flex-1 sm:flex-none px-3 md:px-5 py-2 rounded-xl text-xs md:text-sm font-black transition-all ${activeTab === 'SURAH' ? 'bg-white text-brand-emerald shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                  <div className="flex items-center justify-center gap-1.5 md:gap-2">
+                    <Hash className="w-4 h-4" />
+                    <span>اسم السورة</span>
+                    {localSettings.hideSurahChallenge && isFounderAlaa && (
+                      <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-800 font-black">مخفي 🔒</span>
+                    )}
+                  </div>
+                </button>
+              )}
+
+              {/* المشرفين */}
               {isSuperAdmin && (
                 <button
                   onClick={() => { resetForm(); setActiveTab('admins'); }}
@@ -594,6 +801,248 @@ export default function AdminDashboard({ token, isSuperAdmin, onLogout, onBackHo
       <main className="max-w-6xl mx-auto p-8">
         {activeTab !== 'admins' ? (
           <>
+            {/* Founder Alaa's Global Challenge Visibility Control - Collapsible Dropdown */}
+            {isFounderAlaa && (
+              <div className="mb-8 rounded-2xl md:rounded-[2rem] bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-white border border-amber-300/40 shadow-sm overflow-hidden transition-all">
+                {/* Header / Dropdown Trigger */}
+                <button
+                  type="button"
+                  onClick={() => setIsSettingsDropdownOpen(prev => !prev)}
+                  className="w-full p-4 md:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 text-right hover:bg-amber-500/5 transition-colors cursor-pointer select-none"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl bg-amber-500 text-white flex items-center justify-center shadow-lg shadow-amber-500/20 shrink-0">
+                      <Crown className="w-5 h-5 md:w-6 md:h-6" />
+                    </div>
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-base md:text-lg font-black text-slate-800">إدارة ظهور التحديات للعامة</h3>
+                        <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 font-black border border-amber-200">
+                          خاص بالمؤسس علاء (ID: 5)
+                        </span>
+                      </div>
+                      <p className="text-[11px] md:text-xs text-slate-500 font-bold mt-0.5">
+                        إخفاء أو إظهار التحديات من الشريط العلوي وشاشات اللعب مع بقاء كافة البيانات المضافة محفوظة
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 self-end md:self-auto">
+                    {/* Status Badges */}
+                    <div className="hidden sm:flex items-center gap-1.5 text-[10px] font-black">
+                      <span className={`px-2 py-0.5 rounded-lg border ${localSettings.hideAudioChallenge ? 'bg-red-50 text-red-700 border-red-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
+                        المتشابهات: {localSettings.hideAudioChallenge ? 'مخفي' : 'ظاهر'}
+                      </span>
+                      <span className={`px-2 py-0.5 rounded-lg border ${localSettings.hideCompletionChallenge ? 'bg-red-50 text-red-700 border-red-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
+                        التكملة: {localSettings.hideCompletionChallenge ? 'مخفي' : 'ظاهر'}
+                      </span>
+                      <span className={`px-2 py-0.5 rounded-lg border ${localSettings.hideSurahChallenge ? 'bg-red-50 text-red-700 border-red-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
+                        السورة: {localSettings.hideSurahChallenge ? 'مخفي' : 'ظاهر'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-100/80 hover:bg-amber-100 text-amber-900 text-xs font-black border border-amber-200 shadow-sm transition-all">
+                      <span>{isSettingsDropdownOpen ? 'طي القائمة' : 'تعديل خيارات الظهور'}</span>
+                      <motion.div
+                        animate={{ rotate: isSettingsDropdownOpen ? 180 : 0 }}
+                        transition={{ duration: 0.2 }}
+                      >
+                        <ChevronDown className="w-4 h-4 text-amber-700" />
+                      </motion.div>
+                    </div>
+                  </div>
+                </button>
+
+                {/* Dropdown Body */}
+                <AnimatePresence>
+                  {isSettingsDropdownOpen && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.25, ease: 'easeInOut' }}
+                      className="border-t border-amber-200/60 p-4 md:p-6 bg-white/70"
+                    >
+                      {/* Explanatory Banner */}
+                      <div className="mb-4 p-3 rounded-xl bg-amber-50/80 border border-amber-200 text-amber-900 text-xs font-bold flex items-center justify-between gap-2">
+                        <span>
+                          💡 <strong>تنبيه المؤسس:</strong> عند إخفاء أي تحدي يختفي فوراً من شاشات اللعب للعامة ومن الشريط العلوي لإدارة المشرفين، وتبقى جميع الأسئلة والتحديات المضافة محفوظة بالكامل في قاعدة البيانات دون أي حذف.
+                        </span>
+                        {isUpdatingSettings && (
+                          <div className="flex items-center gap-1.5 text-amber-700 shrink-0">
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            <span>جاري الحفظ...</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Toggles Grid */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        {/* Audio / Similar Challenge Toggle */}
+                        <div className={`p-4 rounded-2xl border transition-all flex flex-col justify-between ${
+                          localSettings.hideAudioChallenge 
+                            ? 'bg-red-50/70 border-red-200 text-red-900' 
+                            : 'bg-white border-slate-200 text-slate-800 shadow-sm'
+                        }`}>
+                          <div>
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-sm font-black flex items-center gap-2">
+                                🎤 المتشابهات والتحدي الصوتي
+                              </span>
+                              <button
+                                type="button"
+                                disabled={isUpdatingSettings}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleToggleSetting('hideAudioChallenge', !localSettings.hideAudioChallenge);
+                                }}
+                                className={`w-12 h-6 rounded-full p-1 transition-colors ${
+                                  localSettings.hideAudioChallenge ? 'bg-red-500' : 'bg-brand-emerald'
+                                }`}
+                              >
+                                <div className={`w-4 h-4 rounded-full bg-white transition-transform ${
+                                  localSettings.hideAudioChallenge ? '-translate-x-6' : 'translate-x-0'
+                                }`} />
+                              </button>
+                            </div>
+                            <div className="text-[11px] font-bold mb-3">
+                              {localSettings.hideAudioChallenge ? (
+                                <span className="text-red-600">❌ مخفي من الشريط العلوي واللعبة</span>
+                              ) : (
+                                <span className="text-brand-emerald">✅ متاح وظاهر للجميع</span>
+                              )}
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              resetForm();
+                              setActiveTab('STANDARD');
+                            }}
+                            className="mt-2 w-full py-1.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-black transition-all flex items-center justify-center gap-1.5"
+                          >
+                            <BookOpen className="w-3.5 h-3.5" />
+                            <span>إدارة وإضافة الأسئلة</span>
+                          </button>
+                        </div>
+
+                        {/* Completion Challenge Toggle */}
+                        <div className={`p-4 rounded-2xl border transition-all flex flex-col justify-between ${
+                          localSettings.hideCompletionChallenge 
+                            ? 'bg-red-50/70 border-red-200 text-red-900' 
+                            : 'bg-white border-slate-200 text-slate-800 shadow-sm'
+                        }`}>
+                          <div>
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-sm font-black flex items-center gap-2">
+                                ✍️ تحدي إكمال الآية
+                              </span>
+                              <button
+                                type="button"
+                                disabled={isUpdatingSettings}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleToggleSetting('hideCompletionChallenge', !localSettings.hideCompletionChallenge);
+                                }}
+                                className={`w-12 h-6 rounded-full p-1 transition-colors ${
+                                  localSettings.hideCompletionChallenge ? 'bg-red-500' : 'bg-brand-emerald'
+                                }`}
+                              >
+                                <div className={`w-4 h-4 rounded-full bg-white transition-transform ${
+                                  localSettings.hideCompletionChallenge ? '-translate-x-6' : 'translate-x-0'
+                                }`} />
+                              </button>
+                            </div>
+                            <div className="text-[11px] font-bold mb-3">
+                              {localSettings.hideCompletionChallenge ? (
+                                <span className="text-red-600">❌ مخفي من الشريط العلوي واللعبة</span>
+                              ) : (
+                                <span className="text-brand-emerald">✅ متاح وظاهر للجميع</span>
+                              )}
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              resetForm();
+                              setActiveTab('COMPLETION');
+                            }}
+                            className="mt-2 w-full py-1.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-black transition-all flex items-center justify-center gap-1.5"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                            <span>إدارة وإضافة الأسئلة</span>
+                          </button>
+                        </div>
+
+                        {/* Surah Challenge Toggle */}
+                        <div className={`p-4 rounded-2xl border transition-all flex flex-col justify-between ${
+                          localSettings.hideSurahChallenge 
+                            ? 'bg-red-50/70 border-red-200 text-red-900' 
+                            : 'bg-white border-slate-200 text-slate-800 shadow-sm'
+                        }`}>
+                          <div>
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-sm font-black flex items-center gap-2">
+                                📖 تحدي اسم السورة
+                              </span>
+                              <button
+                                type="button"
+                                disabled={isUpdatingSettings}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleToggleSetting('hideSurahChallenge', !localSettings.hideSurahChallenge);
+                                }}
+                                className={`w-12 h-6 rounded-full p-1 transition-colors ${
+                                  localSettings.hideSurahChallenge ? 'bg-red-500' : 'bg-brand-emerald'
+                                }`}
+                              >
+                                <div className={`w-4 h-4 rounded-full bg-white transition-transform ${
+                                  localSettings.hideSurahChallenge ? '-translate-x-6' : 'translate-x-0'
+                                }`} />
+                              </button>
+                            </div>
+                            <div className="text-[11px] font-bold mb-3">
+                              {localSettings.hideSurahChallenge ? (
+                                <span className="text-red-600">❌ مخفي من الشريط العلوي واللعبة</span>
+                              ) : (
+                                <span className="text-brand-emerald">✅ متاح وظاهر للجميع</span>
+                              )}
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              resetForm();
+                              setActiveTab('SURAH');
+                            }}
+                            className="mt-2 w-full py-1.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-black transition-all flex items-center justify-center gap-1.5"
+                          >
+                            <Hash className="w-3.5 h-3.5" />
+                            <span>إدارة وإضافة الأسئلة</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Collapse Button */}
+                      <div className="mt-4 pt-3 border-t border-amber-200/40 flex justify-center">
+                        <button
+                          type="button"
+                          onClick={() => setIsSettingsDropdownOpen(false)}
+                          className="px-4 py-1.5 rounded-xl bg-amber-100/60 hover:bg-amber-100 text-amber-800 text-xs font-black transition-all flex items-center gap-1.5"
+                        >
+                          <ChevronUp className="w-3.5 h-3.5" />
+                          <span>إغلاق القائمة المنسدلة</span>
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
+
             <AnimatePresence>
               {isAdding && (
                 <motion.div
@@ -1005,183 +1454,418 @@ export default function AdminDashboard({ token, isSuperAdmin, onLogout, onBackHo
                   </div>
                 </motion.div>
               ))}
+
+              {!loading && challenges.filter(c => ((c.type === 'AUDIO' || !c.type) ? 'STANDARD' : c.type) === activeTab).length === 0 && (
+                <div className="col-span-full py-16 text-center bg-white rounded-3xl border border-dashed border-slate-200 p-8 shadow-sm">
+                  <BookOpen className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                  <p className="text-slate-600 font-black text-base">لا توجد أسئلة أو تحديات في هذا القسم حالياً</p>
+                  <p className="text-slate-400 font-bold text-xs mt-1">كافة البيانات والأسئلة محفوظة بأمان في قاعدة البيانات، ويمكنك الضغط على زر الإضافة لإضافة المزيد.</p>
+                </div>
+              )}
             </div>
 
           </>
         ) : (
-          <div className="space-y-10">
-            {/* Add Admin Form */}
-            <motion.div 
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="bg-white p-8 rounded-[3rem] shadow-xl border border-slate-200 max-w-2xl mx-auto"
-            >
-              <h3 className="text-xl font-black text-slate-800 mb-6 flex items-center gap-3">
-                <UserPlus className="w-6 h-6 text-brand-emerald" />
-                إضافة مشرف جديد
-              </h3>
-              <form onSubmit={handleAddAdmin} className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <label className="block text-[10px] font-black text-slate-400 uppercase mr-2">اسم المستخدم</label>
-                    <div className="relative">
-                      <Users className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
-                      <input
-                        type="text"
-                        value={newAdminUsername}
-                        onChange={(e) => setNewAdminUsername(e.target.value)}
-                        className="w-full px-10 py-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:border-brand-emerald transition-all font-bold"
-                        placeholder="admin_new"
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="block text-[10px] font-black text-slate-400 uppercase mr-2">كلمة المرور</label>
-                    <div className="relative">
-                      <Key className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
-                      <input
-                        type="password"
-                        value={newAdminPassword}
-                        onChange={(e) => setNewAdminPassword(e.target.value)}
-                        className="w-full px-10 py-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:border-brand-emerald transition-all font-bold"
-                        placeholder="••••••••"
-                      />
-                    </div>
-                  </div>
+          <div className="space-y-8">
+            {/* Admins Header with Action Buttons */}
+            <div className="bg-white p-6 md:p-8 rounded-[2.5rem] border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-5">
+              <div className="flex items-center gap-3.5">
+                <div className="w-12 h-12 rounded-2xl bg-brand-emerald/10 text-brand-emerald flex items-center justify-center shadow-xs shrink-0">
+                  <Shield className="w-6 h-6" />
                 </div>
+                <div>
+                  <h3 className="text-lg md:text-xl font-black text-slate-800">إدارة المشرفين والصلاحيات</h3>
+                  <p className="text-xs text-slate-400 font-bold mt-0.5">
+                    التحكم في حسابات المشرفين وتعديل الصلاحيات وإدارة أكواد الدعوة
+                  </p>
+                </div>
+              </div>
 
-                <label className="flex items-center gap-3 p-4 bg-slate-50 rounded-2xl cursor-pointer hover:bg-slate-100 transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={newAdminIsSuper}
-                    onChange={(e) => setNewAdminIsSuper(e.target.checked)}
-                    className="w-5 h-5 accent-brand-emerald rounded-lg"
-                  />
-                  <div className="flex flex-col">
-                    <span className="text-sm font-black text-slate-700">منح صلاحيات مشرف رئيسي (Superadmin)</span>
-                    <span className="text-[10px] text-slate-500 font-bold">سيتمكن هذا الحساب من إضافة وحذف المشرفين الآخرين</span>
-                  </div>
-                </label>
-
+              {/* Action Buttons */}
+              <div className="flex flex-wrap items-center gap-3">
+                {/* زر إضافة مشرف جديد */}
                 <button
-                  type="submit"
-                  disabled={isAddingAdmin || !newAdminUsername || !newAdminPassword}
-                  className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black shadow-xl hover:bg-slate-800 transition-all active:scale-[0.98] disabled:opacity-50"
+                  type="button"
+                  onClick={() => setIsAddAdminModalOpen(true)}
+                  className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-3 bg-brand-emerald text-white rounded-2xl font-black text-xs md:text-sm shadow-lg shadow-brand-emerald/20 hover:bg-brand-emerald/90 transition-all active:scale-95"
                 >
-                  {isAddingAdmin ? (
-                    <Loader2 className="w-5 h-5 animate-spin mx-auto" />
-                  ) : 'تأكيد الإضافة'}
+                  <UserPlus className="w-4 h-4" />
+                  <span>إضافة مشرف جديد</span>
                 </button>
-              </form>
-            </motion.div>
+
+                {/* زر أكواد الدعوة */}
+                {(isCurrentUserFounder || isCurrentUserCoFounder) && (
+                  <button
+                    type="button"
+                    onClick={() => setIsInviteCodesModalOpen(true)}
+                    className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-3 bg-slate-900 text-white rounded-2xl font-black text-xs md:text-sm shadow-lg hover:bg-slate-800 transition-all active:scale-95"
+                  >
+                    <Key className="w-4 h-4 text-amber-400" />
+                    <span>أكواد الدعوة</span>
+                    {inviteCodes.filter(c => !c.isUsed).length > 0 && (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-brand-emerald text-white font-black">
+                        {inviteCodes.filter(c => !c.isUsed).length}
+                      </span>
+                    )}
+                  </button>
+                )}
+              </div>
+            </div>
 
             {/* Admins List */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {adminLoading ? (
                 <div className="col-span-full py-10 text-center text-slate-400 font-bold">جاري تحميل المشرفين...</div>
-              ) : admins.map(admin => (
-                <motion.div
-                  key={admin.id}
-                  layout
-                  className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm flex items-center justify-between"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-2xl bg-brand-emerald/10 flex items-center justify-center">
-                      <Shield className="w-6 h-6 text-brand-emerald" />
-                    </div>
-                    <div>
-                      <div className="font-bold text-slate-800">{admin.username}</div>
-                      <div className="text-[10px] font-black text-brand-emerald opacity-60">
-                        {admin.isSuperAdmin ? 'SUPERADMIN ROLE' : 'ADMIN ROLE'}
+              ) : admins.map(admin => {
+                const isThisFounder = admin.role === 'FOUNDER' || admin.username.toLowerCase() === 'alaa' || admin.username === 'علاء';
+                const isThisCoFounder = admin.role === 'CO_FOUNDER';
+                
+                // Permission checks
+                const canDeleteThisAdmin = !isThisFounder && (isCurrentUserFounder || (isCurrentUserCoFounder && !isThisCoFounder));
+                const canChangeThisPassword = isCurrentUserFounder || (isCurrentUserCoFounder && !isThisFounder && !isThisCoFounder);
+
+                return (
+                  <motion.div
+                    key={admin.id}
+                    layout
+                    className={`bg-white p-6 rounded-[2rem] border shadow-sm flex items-center justify-between gap-4 transition-all ${
+                      isThisFounder 
+                        ? 'border-amber-300 ring-2 ring-amber-100 bg-gradient-to-br from-amber-50/40 via-white to-white' 
+                        : isThisCoFounder
+                          ? 'border-indigo-200 ring-1 ring-indigo-50 bg-gradient-to-br from-indigo-50/20 via-white to-white'
+                          : 'border-slate-200'
+                    }`}
+                  >
+                    <div className="flex items-center gap-4 min-w-0">
+                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${
+                        isThisFounder ? 'bg-amber-100 text-amber-600 shadow-sm' : isThisCoFounder ? 'bg-indigo-100 text-indigo-600 shadow-sm' : 'bg-brand-emerald/10 text-brand-emerald'
+                      }`}>
+                        {isThisFounder ? <Crown className="w-6 h-6 text-amber-600" /> : isThisCoFounder ? <Shield className="w-6 h-6 text-indigo-600" /> : <Users className="w-6 h-6 text-brand-emerald" />}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-black text-slate-800 text-base flex items-center gap-2 flex-wrap">
+                          <span>{admin.name || admin.username}</span>
+                          <span className="text-xs text-brand-emerald font-mono font-bold bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-100" dir="ltr">
+                            {admin.username.startsWith('@') ? admin.username : `@${admin.username}`}
+                          </span>
+                          {isThisFounder && (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-black border border-amber-200">
+                              المؤسس
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] mt-0.5">
+                          {isThisFounder ? (
+                            <span className="text-amber-600 font-black">👑 صلاحيات كاملة (محمي)</span>
+                          ) : isThisCoFounder ? (
+                            <span className="text-indigo-600 font-bold">🛡️ مساعد مؤسس</span>
+                          ) : (
+                            <span className="text-slate-400 font-bold">مشرف محتوى عادي</span>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <button
-                    onClick={() => handleDeleteAdmin(admin.id)}
-                    disabled={isDeletingAdmin !== null}
-                    className="p-3 text-slate-300 hover:text-red-500 transition-colors bg-slate-50 rounded-xl disabled:opacity-30"
-                  >
-                    {isDeletingAdmin === admin.id ? <Loader2 className="w-5 h-5 animate-spin" /> : <Trash2 className="w-5 h-5" />}
-                  </button>
-                </motion.div>
-              ))}
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {/* Change Password Button */}
+                      {canChangeThisPassword && (
+                        <button
+                          onClick={() => {
+                            setChangingPasswordAdmin(admin);
+                            setNewPasswordVal('');
+                          }}
+                          title="تغيير كلمة المرور لهذا المشرف"
+                          className="p-3 text-slate-400 hover:text-brand-emerald hover:bg-brand-emerald/10 transition-colors bg-slate-50 rounded-xl"
+                        >
+                          <KeyRound className="w-4 h-4" />
+                        </button>
+                      )}
+
+                      {/* Delete Button or Protected Lock */}
+                      {isThisFounder ? (
+                        <div 
+                          title="حساب المؤسس محمي تماماً ولا يمكن حذفه"
+                          className="p-3 text-amber-500 bg-amber-50 rounded-xl cursor-not-allowed border border-amber-200/50"
+                        >
+                          <Lock className="w-4 h-4" />
+                        </div>
+                      ) : canDeleteThisAdmin ? (
+                        <button
+                          onClick={() => handleDeleteAdmin(admin.id)}
+                          disabled={isDeletingAdmin !== null}
+                          title="حذف هذا المشرف"
+                          className="p-3 text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors bg-slate-50 rounded-xl disabled:opacity-30"
+                        >
+                          {isDeletingAdmin === admin.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                        </button>
+                      ) : (
+                        <div 
+                          title="ليس لديك صلاحية لحذف هذا المشرف"
+                          className="p-3 text-slate-200 bg-slate-50 rounded-xl cursor-not-allowed"
+                        >
+                          <Lock className="w-4 h-4" />
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                );
+              })}
             </div>
 
-            {/* Invite Codes Section */}
-            {isSuperAdmin && (
-              <div className="mt-20 space-y-8">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-xl font-black text-slate-800 flex items-center gap-3">
-                    <Key className="w-6 h-6 text-brand-emerald" />
-                    أكواد الدعوة (Invitation Codes)
-                  </h3>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => generateInviteCode('ADMIN')}
-                      disabled={inviteLoading}
-                      className="flex items-center gap-2 px-6 py-2.5 bg-slate-900 text-white rounded-2xl font-black text-sm shadow-xl hover:bg-slate-800 transition-all active:scale-95 disabled:opacity-50"
-                    >
-                      {inviteLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                      كود مشرف عادي
-                    </button>
-                    <button
-                      onClick={() => generateInviteCode('SUPERADMIN')}
-                      disabled={inviteLoading}
-                      className="flex items-center gap-2 px-6 py-2.5 bg-brand-emerald text-white rounded-2xl font-black text-sm shadow-xl shadow-brand-emerald/10 hover:bg-brand-emerald/90 transition-all active:scale-95 disabled:opacity-50"
-                    >
-                      {inviteLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Shield className="w-4 h-4" />}
-                      كود مشرف رئيسي
-                    </button>
+          </div>
+        )}
+      </main>
+
+      {/* Add Admin Modal Window */}
+      <AnimatePresence>
+        {isAddAdminModalOpen && (
+          <div className="fixed inset-0 z-[120] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-[2.5rem] p-6 md:p-8 max-w-lg w-full shadow-2xl border border-slate-100"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-brand-emerald/10 text-brand-emerald flex items-center justify-center shadow-xs">
+                    <UserPlus className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h4 className="font-black text-slate-800 text-lg">إضافة مشرف جديد</h4>
+                    <p className="text-xs text-slate-400 font-bold">إنشاء حساب جديد للوصول إلى لوحة التحكم</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setIsAddAdminModalOpen(false)}
+                  className="p-2 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={async (e) => {
+                await handleAddAdmin(e);
+                setIsAddAdminModalOpen(false);
+              }} className="space-y-5">
+                <div className="space-y-2">
+                  <label className="block text-[10px] font-black text-slate-400 uppercase mr-2">الاسم الكامل / المستعار</label>
+                  <div className="relative">
+                    <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
+                    <input
+                      type="text"
+                      value={newAdminName}
+                      onChange={(e) => setNewAdminName(e.target.value)}
+                      className="w-full px-10 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-brand-emerald transition-all font-bold text-sm"
+                      placeholder="مثال: أحمد محمد"
+                    />
                   </div>
                 </div>
 
-                <div className="bg-white rounded-[2.5rem] border border-slate-200 overflow-hidden shadow-sm">
-                  <table className="w-full text-right border-collapse">
+                <div className="space-y-2">
+                  <label className="block text-[10px] font-black text-slate-400 uppercase mr-2">اسم المستخدم</label>
+                  <div className="relative flex items-center">
+                    <span className="absolute right-4 text-brand-emerald font-black text-base select-none z-10 pointer-events-none">@</span>
+                    <input
+                      type="text"
+                      value={newAdminUsername}
+                      onChange={(e) => setNewAdminUsername(e.target.value.replace(/@/g, '').trim())}
+                      className="w-full pl-10 pr-9 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-brand-emerald transition-all font-bold text-sm font-mono text-left"
+                      dir="ltr"
+                      placeholder="username"
+                      required
+                    />
+                    <Users className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300 pointer-events-none" />
+                  </div>
+                  <p className="text-[10px] text-slate-400 mr-2 font-medium">علامة @ تضاف تلقائياً في بداية اسم المستخدم</p>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="block text-[10px] font-black text-slate-400 uppercase mr-2">كلمة المرور</label>
+                  <div className="relative">
+                    <Key className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-300" />
+                    <input
+                      type="password"
+                      value={newAdminPassword}
+                      onChange={(e) => setNewAdminPassword(e.target.value)}
+                      className="w-full px-10 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-brand-emerald transition-all font-bold text-sm"
+                      placeholder="••••••••"
+                      required
+                    />
+                  </div>
+                </div>
+
+                {isCurrentUserFounder ? (
+                  <div className="space-y-2">
+                    <label className="block text-[10px] font-black text-slate-400 uppercase mr-2">صلاحية الحساب</label>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 p-2 bg-slate-50 rounded-2xl border border-slate-200">
+                      <button
+                        type="button"
+                        onClick={() => setNewAdminRole('ADMIN')}
+                        className={`py-2.5 px-3 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-2 ${newAdminRole === 'ADMIN' ? 'bg-white shadow text-slate-800' : 'text-slate-400 hover:text-slate-600'}`}
+                      >
+                        <Users className="w-4 h-4 text-slate-400" />
+                        مشرف عادي
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNewAdminRole('CO_FOUNDER')}
+                        className={`py-2.5 px-3 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-2 ${newAdminRole === 'CO_FOUNDER' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20' : 'text-slate-400 hover:text-slate-600'}`}
+                      >
+                        <Shield className="w-4 h-4" />
+                        مساعد مؤسس
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 text-xs text-slate-500 font-bold flex items-center gap-2">
+                    <Shield className="w-4 h-4 text-indigo-500" />
+                    بصفتك مساعد مؤسس، سيتم إنشاء الحساب بصلاحية: <strong>مشرف عادي</strong>
+                  </div>
+                )}
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="submit"
+                    disabled={isAddingAdmin || !newAdminUsername || !newAdminPassword}
+                    className="flex-1 py-3.5 bg-brand-emerald text-white rounded-2xl font-black text-sm shadow-lg shadow-brand-emerald/20 hover:bg-brand-emerald/90 transition-all active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {isAddingAdmin ? <Loader2 className="w-4 h-4 animate-spin" /> : 'تأكيد الإضافة'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsAddAdminModalOpen(false)}
+                    className="px-6 py-3.5 bg-slate-100 text-slate-600 rounded-2xl font-black text-sm hover:bg-slate-200 transition-all"
+                  >
+                    إلغاء
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Invite Codes Modal Window / Interface */}
+      <AnimatePresence>
+        {isInviteCodesModalOpen && (
+          <div className="fixed inset-0 z-[120] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-[2.5rem] p-6 md:p-8 max-w-3xl w-full shadow-2xl border border-slate-100 max-h-[90vh] flex flex-col"
+            >
+              {/* Modal Header */}
+              <div className="flex items-center justify-between pb-6 border-b border-slate-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center shadow-xs shrink-0">
+                    <Key className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h4 className="font-black text-slate-800 text-lg md:text-xl">واجهة أكواد الدعوة (Invitation Codes)</h4>
+                    <p className="text-xs text-slate-400 font-bold">توليد أكواد دعوة للمشرفين الجدد وإدارتها</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setIsInviteCodesModalOpen(false)}
+                  className="p-2 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Generator Actions */}
+              <div className="py-5 flex flex-wrap items-center justify-between gap-3 border-b border-slate-100">
+                <span className="text-xs font-black text-slate-600">توليد كود دعوة جديد:</span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={() => generateInviteCode('ADMIN')}
+                    disabled={inviteLoading}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-slate-900 text-white rounded-xl font-black text-xs shadow-md hover:bg-slate-800 transition-all active:scale-95 disabled:opacity-50"
+                  >
+                    {inviteLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                    <span>كود مشرف عادي</span>
+                  </button>
+
+                  {isCurrentUserFounder && (
+                    <button
+                      onClick={() => generateInviteCode('CO_FOUNDER')}
+                      disabled={inviteLoading}
+                      className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl font-black text-xs shadow-md shadow-indigo-600/20 hover:bg-indigo-700 transition-all active:scale-95 disabled:opacity-50"
+                    >
+                      {inviteLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Shield className="w-4 h-4" />}
+                      <span>كود مساعد مؤسس</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Codes Table List */}
+              <div className="flex-1 overflow-y-auto py-4">
+                <div className="border border-slate-200 rounded-2xl overflow-hidden">
+                  <table className="w-full text-right border-collapse text-xs md:text-sm">
                     <thead className="bg-slate-50 text-slate-400 text-[10px] font-black uppercase tracking-widest border-b border-slate-100">
                       <tr>
-                        <th className="px-8 py-4">الكود</th>
-                        <th className="px-8 py-4">الصلاحية</th>
-                        <th className="px-8 py-4 text-center">الحالة</th>
-                        <th className="px-8 py-4">تاريخ الإنشاء</th>
-                        <th className="px-8 py-4">الإجراء</th>
+                        <th className="px-5 py-3.5">الكود</th>
+                        <th className="px-5 py-3.5">الصلاحية</th>
+                        <th className="px-5 py-3.5 text-center">الحالة</th>
+                        <th className="px-5 py-3.5">تاريخ الإنشاء</th>
+                        <th className="px-5 py-3.5 text-center">الإجراء</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-50">
+                    <tbody className="divide-y divide-slate-100">
                       {inviteCodes.length === 0 ? (
                         <tr>
-                          <td colSpan={4} className="px-8 py-12 text-center text-slate-400 font-bold italic">لا توجد أكواد مولدة بعد</td>
+                          <td colSpan={5} className="px-5 py-10 text-center text-slate-400 font-bold italic">لا توجد أكواد مولدة بعد</td>
                         </tr>
                       ) : inviteCodes.map(c => (
                         <tr key={c.id} className="hover:bg-slate-50/50 transition-colors">
-                          <td className="px-8 py-5 border-l border-slate-50/50">
-                            <span className="font-mono font-black text-brand-emerald bg-brand-emerald/5 px-4 py-1.5 rounded-xl border border-brand-emerald/10 select-all">
-                              {c.code}
-                            </span>
-                          </td>
-                          <td className="px-8 py-5">
-                            <span className={`text-[10px] font-black px-3 py-1 rounded-full ${c.role === 'SUPERADMIN' ? 'bg-brand-emerald/10 text-brand-emerald' : 'bg-slate-100 text-slate-500'}`}>
-                              {c.role === 'SUPERADMIN' ? 'SUPERADMIN' : 'ADMIN'}
-                            </span>
-                          </td>
-                          <td className="px-8 py-5">
-                            <div className="flex justify-center">
-                              {c.isUsed ? (
-                                <span className="px-3 py-1 bg-slate-100 text-slate-400 text-[10px] font-black rounded-full uppercase">تم استخدامه</span>
-                              ) : (
-                                <span className="px-3 py-1 bg-green-100 text-green-600 text-[10px] font-black rounded-full uppercase">متاح</span>
-                              )}
+                          <td className="px-5 py-3.5 border-l border-slate-100 font-mono font-black text-brand-emerald">
+                            <div className="flex items-center gap-2">
+                              <span className="bg-brand-emerald/5 px-2.5 py-1 rounded-lg border border-brand-emerald/10 select-all">
+                                {c.code}
+                              </span>
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(c.code);
+                                  setCopiedCodeId(c.id);
+                                  setTimeout(() => setCopiedCodeId(null), 2000);
+                                }}
+                                className="p-1.5 text-slate-400 hover:text-brand-emerald hover:bg-brand-emerald/10 rounded-lg transition-colors"
+                                title="نسخ الكود"
+                              >
+                                {copiedCodeId === c.id ? <Check className="w-3.5 h-3.5 text-brand-emerald" /> : <Copy className="w-3.5 h-3.5" />}
+                              </button>
                             </div>
                           </td>
-                          <td className="px-8 py-5 text-sm text-slate-500 font-medium">
+                          <td className="px-5 py-3.5">
+                            <span className={`text-[10px] font-black px-2.5 py-1 rounded-full ${
+                              c.role === 'CO_FOUNDER' || c.role === 'SUPERADMIN' 
+                                ? 'bg-indigo-100 text-indigo-700' 
+                                : 'bg-slate-100 text-slate-600'
+                            }`}>
+                              {c.role === 'CO_FOUNDER' || c.role === 'SUPERADMIN' ? 'مساعد مؤسس' : 'مشرف عادي'}
+                            </span>
+                          </td>
+                          <td className="px-5 py-3.5 text-center">
+                            {c.isUsed ? (
+                              <span className="px-2.5 py-1 bg-slate-100 text-slate-400 text-[10px] font-black rounded-full">تم استخدامه</span>
+                            ) : (
+                              <span className="px-2.5 py-1 bg-emerald-100 text-emerald-700 text-[10px] font-black rounded-full">متاح</span>
+                            )}
+                          </td>
+                          <td className="px-5 py-3.5 text-xs text-slate-500 font-medium">
                             {new Date(c.createdAt).toLocaleDateString('ar-EG')}
                           </td>
-                          <td className="px-8 py-5">
+                          <td className="px-5 py-3.5 text-center">
                             <button
                               onClick={() => deleteInviteCode(c.id)}
                               disabled={inviteLoading}
-                              className="p-2 text-slate-300 hover:text-red-500 transition-colors disabled:opacity-30"
+                              className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-30"
+                              title="حذف الكود"
                             >
-                              {inviteLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Trash2 className="w-5 h-5" />}
+                              {inviteLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
                             </button>
                           </td>
                         </tr>
@@ -1190,10 +1874,85 @@ export default function AdminDashboard({ token, isSuperAdmin, onLogout, onBackHo
                   </table>
                 </div>
               </div>
-            )}
+
+              {/* Modal Footer */}
+              <div className="pt-4 border-t border-slate-100 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setIsInviteCodesModalOpen(false)}
+                  className="px-6 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-black text-xs transition-all"
+                >
+                  إغلاق
+                </button>
+              </div>
+            </motion.div>
           </div>
         )}
-      </main>
+      </AnimatePresence>
+
+      {/* Change Password Modal */}
+      <AnimatePresence>
+        {changingPasswordAdmin && (
+          <div className="fixed inset-0 z-[120] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-[2rem] p-8 max-w-md w-full shadow-2xl border border-slate-100"
+            >
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-brand-emerald/10 flex items-center justify-center text-brand-emerald">
+                    <KeyRound className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h4 className="font-black text-slate-800 text-lg">تعديل كلمة المرور</h4>
+                    <p className="text-xs text-slate-400 font-bold">للمشرف: {changingPasswordAdmin.username}</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setChangingPasswordAdmin(null)}
+                  className="p-2 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleChangePasswordSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-black text-slate-600 mb-2">كلمة المرور الجديدة</label>
+                  <input
+                    type="password"
+                    value={newPasswordVal}
+                    onChange={(e) => setNewPasswordVal(e.target.value)}
+                    placeholder="أدخل كلمة المرور الجديدة (4 أحرف فأكثر)"
+                    className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl font-bold outline-none focus:border-brand-emerald transition-all"
+                    required
+                    minLength={4}
+                    autoFocus
+                  />
+                </div>
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="submit"
+                    disabled={isChangingPassword || !newPasswordVal.trim()}
+                    className="flex-1 py-3.5 bg-brand-emerald text-white rounded-2xl font-black text-sm shadow-lg shadow-brand-emerald/20 hover:bg-brand-emerald/90 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {isChangingPassword ? <Loader2 className="w-4 h-4 animate-spin" /> : 'حفظ كلمة المرور'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setChangingPasswordAdmin(null)}
+                    className="px-6 py-3.5 bg-slate-100 text-slate-600 rounded-2xl font-black text-sm hover:bg-slate-200 transition-all"
+                  >
+                    إلغاء
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       <ConfirmModal
         isOpen={modalConfig.isOpen}

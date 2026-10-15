@@ -9,6 +9,9 @@ interface ConfirmModalProps {
   title: string;
   message: string;
   isAlert?: boolean;
+  confirmText?: string;
+  cancelText?: string;
+  isDanger?: boolean;
 }
 
 const ConfirmModal: React.FC<ConfirmModalProps> = ({ 
@@ -17,7 +20,10 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
   onConfirm, 
   title, 
   message,
-  isAlert = false
+  isAlert = false,
+  confirmText = 'حسناً',
+  cancelText = 'إلغاء',
+  isDanger = false
 }) => {
   return (
     <AnimatePresence>
@@ -48,8 +54,8 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
             </button>
 
             {/* Icon */}
-            <div className="w-20 h-20 bg-brand-gold/10 rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-xl shadow-brand-gold/5">
-              <AlertCircle className="w-10 h-10 text-brand-gold" />
+            <div className={`w-20 h-20 ${isDanger ? 'bg-red-500/10' : 'bg-brand-gold/10'} rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-xl ${isDanger ? 'shadow-red-500/5' : 'shadow-brand-gold/5'}`}>
+              <AlertCircle className={`w-10 h-10 ${isDanger ? 'text-red-500' : 'text-brand-gold'}`} />
             </div>
 
             {/* Content */}
@@ -67,16 +73,16 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
                   onConfirm();
                   onClose();
                 }}
-                className={`${isAlert ? 'px-16' : 'flex-1'} py-4 bg-brand-emerald text-white rounded-2xl font-black text-lg shadow-xl shadow-brand-emerald/20 hover:bg-brand-emerald/90 transition-all active:scale-95`}
+                className={`${isAlert ? 'px-16' : 'flex-1'} py-4 ${isDanger ? 'bg-red-500 hover:bg-red-600 shadow-red-500/20' : 'bg-brand-emerald hover:bg-brand-emerald/90 shadow-brand-emerald/20'} text-white rounded-2xl font-black text-lg shadow-xl transition-all active:scale-95`}
               >
-                حسناً
+                {confirmText}
               </button>
               {!isAlert && (
                 <button
                   onClick={onClose}
                   className="flex-1 py-4 bg-slate-50 text-slate-500 rounded-2xl font-black text-lg border border-slate-100 hover:bg-slate-100 transition-all active:scale-95"
                 >
-                  إلغاء
+                  {cancelText}
                 </button>
               )}
             </div>

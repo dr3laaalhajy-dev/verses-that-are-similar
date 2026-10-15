@@ -15,6 +15,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ],
       select: {
         name: true,
+        username: true,
         points: true,
         cups: true,
         seerahCompleted: true,
@@ -22,6 +23,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         quranCompleted: true
       }
     })
+    
 
     return res.status(200).json({ leaderboard: players })
   } catch (error: any) {
