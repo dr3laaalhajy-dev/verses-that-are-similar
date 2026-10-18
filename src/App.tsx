@@ -37,6 +37,17 @@ import DailyAyah from './components/DailyAyah';
 import { renderQuranText } from './utils/quranUtils';
 import { calculateStreakInfo, StreakInfo } from './utils/streakManager';
 import { StreakModal } from './components/StreakModal';
+import { generateCompletionChallenges } from './services/challengeGenerator';
+import SettingsView from './components/Settings/SettingsView';
+import IslamicOccasionsModal from './components/IslamicOccasionsModal';
+import {
+  getHijriDate,
+  getUpcomingOccasions,
+  getNearestOccasion,
+  syncAladhanHijri,
+  HijriDateInfo,
+  IslamicOccasion
+} from './services/IslamicOccasionsService';
 
 function useWindowSize() {
   const [windowSize, setWindowSize] = useState({
@@ -126,7 +137,7 @@ interface VerseCardProps {
   wordStates: Record<number, 'correct' | 'skipped'>;
 }
 
-const SkillsChallengeHeader = ({ index, total, mode, verseText, totalPoints: pts, onSkip, isComplete }: any) => (
+const SkillsChallengeHeader = ({ index, total, mode, title, verseText, totalPoints: pts, onSkip, isComplete }: any) => (
   <div className="flex justify-between items-start gap-2 mb-2 md:mb-4 relative z-10 w-full">
     <div className="flex items-center gap-2 md:gap-3 min-w-0 pt-0.5">
       <div className="w-7 h-7 md:w-11 md:h-11 bg-brand-gold/10 rounded-lg md:rounded-xl flex items-center justify-center text-brand-gold shrink-0">
@@ -134,9 +145,9 @@ const SkillsChallengeHeader = ({ index, total, mode, verseText, totalPoints: pts
       </div>
       <div className="text-right min-w-0">
         <span className={`font-black text-brand-emerald block leading-tight ${mode === 'complete' ? 'text-xs md:text-lg' : 'text-[9px] md:text-xs mb-0.5'}`}>
-          {mode === 'audio' ? 'تحدي التلاوة' : mode === 'surah' ? 'تحدي السور' : 'تحدي الإكمال'}
+          {title ? title : (mode === 'audio' ? 'تحدي التلاوة' : mode === 'surah' ? 'تحدي السور' : 'تحدي الإكمال')}
         </span>
-        {mode !== 'complete' && (
+        {mode !== 'complete' && !title && (
           <h2 className="text-xs md:text-base font-bold text-slate-700 quran-text truncate max-w-[140px] sm:max-w-xs md:max-w-md">
             {verseText ? renderQuranText(verseText.substring(0, 25) + (verseText.length > 25 ? '...' : '')) : 'جاري التحميل...'}
           </h2>
@@ -371,7 +382,7 @@ const SurahChallengeUI = ({ verseText, inputs, onInputChange, onSubmit, feedback
   </div>
 );
 
-const CompleteChallengeUI = ({ verseText, options, selectedOption, onOptionSelect, onConfirm, feedback, onSkip, isComplete, challengeMode, saveScore, KEYWORD, score, setDailyCompleted, updateStatsAfterWin, handlePromptNextChallenge, onViewTafsir, currentChallenge }: any) => (
+const CompleteChallengeUI = ({ verseText, options, selectedOption, onOptionSelect, onConfirm, feedback, onSkip, isComplete, challengeMode, saveScore, KEYWORD, score, setDailyCompleted, updateStatsAfterWin, handlePromptNextChallenge, onViewTafsir, currentChallenge, onFinishDaily }: any) => (
   <div className="flex flex-col items-center gap-2 md:gap-4 w-full max-w-xl md:max-w-3xl lg:max-w-4xl mx-auto">
     <div className="glass p-3.5 md:p-8 lg:p-10 rounded-2xl md:rounded-3xl w-full text-center border-white/80 shadow-lg relative overflow-hidden">
       <div className="absolute top-0 inset-x-0 h-1 bg-linear-to-r from-transparent via-brand-emerald/30 to-transparent" />
@@ -453,6 +464,7 @@ const CompleteChallengeUI = ({ verseText, options, selectedOption, onOptionSelec
                   localStorage.setItem('quran_daily_completed', todayStr);
                   setDailyCompleted(true);
                   updateStatsAfterWin();
+                  if (onFinishDaily) onFinishDaily();
                 }}
                 className="px-6 py-3 bg-brand-gold text-brand-emerald rounded-xl font-bold text-sm md:text-base hover:bg-white transition-all shadow-lg"
               >
@@ -710,6 +722,7 @@ export default function App() {
   const [adminRole, setAdminRole] = useState<string>(() => localStorage.getItem('quran_admin_role') || '');
   const [adminUsername, setAdminUsername] = useState<string>(() => localStorage.getItem('quran_admin_username') || '');
   const [adminName, setAdminName] = useState<string>(() => localStorage.getItem('quran_admin_name') || '');
+  const [canManageUsers, setCanManageUsers] = useState<boolean>(() => localStorage.getItem('quran_admin_can_manage_users') === 'true');
   const [adminId, setAdminId] = useState<number | null>(() => {
     const saved = localStorage.getItem('quran_admin_id');
     return saved ? parseInt(saved) : null;
@@ -748,7 +761,7 @@ export default function App() {
   const [challenges, setChallenges] = useState<any[]>([]);
   const [completedChallengeIds, setCompletedChallengeIds] = useState<Set<number>>(() => {
     try {
-      const saved = localStorage.getItem('quran_completed_ids');
+      const saved = localStorage.getItem('quran_completed_ids') || localStorage.getItem('quran_completed_challenges');
       return saved ? new Set(JSON.parse(saved)) : new Set();
     } catch {
       return new Set();
@@ -769,36 +782,45 @@ export default function App() {
     return id;
   });
   const [totalPoints, setTotalPoints] = useState<number>(() => Number(localStorage.getItem('quran_total_points')) || 0);
-  const [cups, setCups] = useState(() => parseInt(localStorage.getItem('quran_total_cups') || '0'));
+  const [cups, setCups] = useState(() => parseInt(localStorage.getItem('quran_total_cups') || localStorage.getItem('quran_cups') || '0'));
+
+  // Islamic Occasions & Sunan (مواسم الطاعات وسنن الأيام)
+  const [isOccasionsModalOpen, setIsOccasionsModalOpen] = useState(false);
+  const [hijriDate, setHijriDate] = useState<HijriDateInfo>(() => getHijriDate());
+  const [upcomingOccasions, setUpcomingOccasions] = useState<IslamicOccasion[]>(() => getUpcomingOccasions(15));
+  const [nearestOccasion, setNearestOccasion] = useState<IslamicOccasion>(() => getNearestOccasion());
+
+  useEffect(() => {
+    const h = getHijriDate();
+    setHijriDate(h);
+    setUpcomingOccasions(getUpcomingOccasions(15));
+    setNearestOccasion(getNearestOccasion());
+    syncAladhanHijri().catch(() => {});
+  }, []);
   const [showProfileDecoration, setShowProfileDecoration] = useState(() => localStorage.getItem('quran_show_decoration') !== 'false');
   const [userCertificates, setUserCertificates] = useState<{ category: string, date: string, name: string }[]>(() => JSON.parse(localStorage.getItem('quran_user_certificates') || '[]'));
   const [showCertificate, setShowCertificate] = useState(false);
   const [showAboutModal, setShowAboutModal] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState<'seerah' | 'general' | 'quran'>('seerah');
+  const [selectedCategory, setSelectedCategory] = useState<'seerah' | 'general'>('seerah');
 
   // Game Gamification: Explicit Decoration State
   const [activeFrame, setActiveFrame] = useState<string | null>(() => localStorage.getItem('quran_active_frame'));
   const [isNameDecorated, setIsNameDecorated] = useState(() => localStorage.getItem('quran_name_decorated') === 'true');
 
-  // Gamification: Achievement Style Definitions
+  // Gamification: Achievement Style Definitions (Only official frames: seerah and general)
   const achievementStyles: Record<string, { className: string, icon: string, textColor: string }> = {
-    quran: {
-      className: 'bg-gradient-to-tr from-yellow-300 via-amber-400 to-yellow-600 shadow-lg shadow-yellow-500/50 p-[3px]',
-      icon: '📖',
-      textColor: 'from-yellow-600 to-amber-700'
-    },
     seerah: {
-      className: 'bg-[url("/golden_seerah_achievement_frame.png")] bg-center bg-no-repeat bg-contain',
+      className: 'rounded-full bg-[url("/golden_seerah_achievement_frame.png")] bg-center bg-no-repeat bg-contain scale-110',
       icon: '/icons/seerah.png',
-      textColor: 'from-emerald-700 to-green-800'
+      textColor: 'from-amber-600 via-yellow-600 to-amber-700'
     },
     general: {
-      className: 'bg-gradient-to-tr from-cyan-300 via-blue-500 to-indigo-600 shadow-lg shadow-blue-500/50 p-[3px]',
+      className: 'rounded-full bg-[url("/golden_general_achievement_frame.png")] bg-center bg-no-repeat bg-contain scale-110',
       icon: '/icons/general.png',
-      textColor: 'from-blue-600 to-indigo-800'
+      textColor: 'from-blue-600 via-sky-500 to-indigo-700'
     },
     none: {
-      className: 'bg-slate-200 p-[3px]',
+      className: 'rounded-full bg-slate-200',
       icon: '',
       textColor: 'from-slate-600 to-slate-800'
     }
@@ -806,10 +828,7 @@ export default function App() {
 
   // Determine user's active achievement
   const getActiveAchievement = () => {
-    // 1. Check Quran (High mastery: 15+ challenges completed)
-    if (completedChallengeIds.size >= 15) return 'quran';
-
-    // 2. Check Seerah (Full Completion: 3 groups)
+    // 1. Check Seerah (Full Completion: 3 groups)
     const seerahSaved = localStorage.getItem('quran_quiz_progress_seerah');
     if (seerahSaved) {
       try {
@@ -820,7 +839,7 @@ export default function App() {
       } catch { }
     }
 
-    // 3. Check General (Full Completion: 5 groups)
+    // 2. Check General (Full Completion: 5 groups)
     const generalSaved = localStorage.getItem('quran_quiz_progress_general');
     if (generalSaved) {
       try {
@@ -836,7 +855,7 @@ export default function App() {
   const userAchievement = activeFrame || getActiveAchievement();
   const safeAchievement = userAchievement && achievementStyles[userAchievement] ? userAchievement : 'none';
   const currentStyle = achievementStyles[safeAchievement];
-  const isElite = (safeAchievement !== 'none') && showProfileDecoration;
+  const isElite = safeAchievement !== 'none';
 
   const [leaderboard, setLeaderboard] = useState<{ name: string, cups: number, points: number }[]>(() => {
     try {
@@ -875,7 +894,7 @@ export default function App() {
   const [isNextChallengeModalOpen, setIsNextChallengeModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
-  const [playerAuthMode, setPlayerAuthMode] = useState<'register' | 'login'>('register');
+  const [playerAuthMode, setPlayerAuthMode] = useState<'register' | 'login'>('login');
   const [nameInput, setNameInput] = useState('');
   const [usernameInput, setUsernameInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
@@ -977,22 +996,41 @@ export default function App() {
     }
   }, []);
 
+  const [dbCompletionChallenges, setDbCompletionChallenges] = useState<any[]>([]);
+
+  const fetchCompletionChallenges = useCallback(async () => {
+    try {
+      const res = await fetch('/api/challenges?type=COMPLETION');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          setDbCompletionChallenges(data);
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to fetch completion challenges for daily:', e);
+    }
+  }, []);
+
   // Fetch challenges from API
   useEffect(() => {
     fetchChallenges();
-  }, [fetchChallenges]);
+    fetchCompletionChallenges();
+  }, [fetchChallenges, fetchCompletionChallenges]);
 
-  const handleAdminLogin = (token: string, superAdmin?: boolean, role?: string, username?: string, id?: number, name?: string) => {
+  const handleAdminLogin = (token: string, superAdmin?: boolean, role?: string, username?: string, id?: number, name?: string, canManageUsersFlag?: boolean) => {
     setAdminToken(token);
     setIsSuperAdmin(!!superAdmin);
     const resolvedRole = role || (superAdmin ? 'CO_FOUNDER' : 'ADMIN');
     setAdminRole(resolvedRole);
+    setCanManageUsers(!!canManageUsersFlag);
     if (username) setAdminUsername(username);
     if (id) setAdminId(id);
     if (name) setAdminName(name);
     localStorage.setItem('quran_admin_token', token);
     localStorage.setItem('quran_admin_super', String(!!superAdmin));
     localStorage.setItem('quran_admin_role', resolvedRole);
+    localStorage.setItem('quran_admin_can_manage_users', String(!!canManageUsersFlag));
     if (username) localStorage.setItem('quran_admin_username', username);
     if (id) localStorage.setItem('quran_admin_id', id.toString());
     if (name) localStorage.setItem('quran_admin_name', name);
@@ -1005,15 +1043,47 @@ export default function App() {
     setAdminUsername('');
     setAdminName('');
     setAdminId(null);
+    setCanManageUsers(false);
     localStorage.removeItem('quran_admin_token');
     localStorage.removeItem('quran_admin_super');
     localStorage.removeItem('quran_admin_role');
     localStorage.removeItem('quran_admin_username');
     localStorage.removeItem('quran_admin_name');
     localStorage.removeItem('quran_admin_id');
+    localStorage.removeItem('quran_admin_can_manage_users');
     fetchChallenges(); // Refresh data after admin work
     setView('home');
   };
+
+  useEffect(() => {
+    if (!adminToken) return;
+    const verifyAdmin = async () => {
+      try {
+        const res = await fetch('/api/admin?action=me', {
+          headers: { 'Authorization': `Bearer ${adminToken}` }
+        });
+        if (res.status === 401) {
+          handleAdminLogout();
+        } else if (res.ok) {
+          const data = await res.json();
+          const serverCanManage = Boolean(data.canManageUsers);
+          setCanManageUsers(serverCanManage);
+          localStorage.setItem('quran_admin_can_manage_users', String(serverCanManage));
+          if (data.role) {
+            setAdminRole(data.role);
+            localStorage.setItem('quran_admin_role', data.role);
+          }
+          if (data.username) {
+            setAdminUsername(data.username);
+            localStorage.setItem('quran_admin_username', data.username);
+          }
+        }
+      } catch {
+        // ignore
+      }
+    };
+    verifyAdmin();
+  }, [adminToken]);
 
   const handlePlayerAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1111,10 +1181,21 @@ export default function App() {
         if (p.cups !== undefined) {
           setCups(p.cups);
           localStorage.setItem('quran_total_cups', p.cups.toString());
+          localStorage.setItem('quran_cups', p.cups.toString());
         }
         if (Array.isArray(p.completedChallengeIds)) {
           setCompletedChallengeIds(new Set(p.completedChallengeIds));
+          localStorage.setItem('quran_completed_ids', JSON.stringify(p.completedChallengeIds));
           localStorage.setItem('quran_completed_challenges', JSON.stringify(p.completedChallengeIds));
+        }
+
+        if (p.activeFrame === 'seerah' || p.activeFrame === 'general') {
+          setActiveFrame(p.activeFrame);
+          setIsNameDecorated(true);
+          setShowProfileDecoration(true);
+          localStorage.setItem('quran_active_frame', p.activeFrame);
+          localStorage.setItem('quran_name_decorated', 'true');
+          localStorage.setItem('quran_show_decoration', 'true');
         }
       }
     } catch (err: any) {
@@ -1146,6 +1227,20 @@ export default function App() {
       if (!result || result.length === 0) {
         console.log('App: Recycling challenges for type:', dbType);
         result = await fetchChallenges(dbType, count, []);
+        // Reset completed IDs for this mode so the cycle starts fresh
+        setCompletedChallengeIds(prev => {
+          const next = new Set(prev);
+          if (allChallenges.length > 0) {
+            allChallenges
+              .filter(c => (dbType === 'STANDARD' ? (!c.type || c.type === 'STANDARD' || c.type === 'AUDIO') : c.type === dbType))
+              .forEach(c => next.delete(c.id));
+          } else {
+            next.clear();
+          }
+          localStorage.setItem('quran_completed_ids', JSON.stringify(Array.from(next)));
+          localStorage.setItem('quran_completed_challenges', JSON.stringify(Array.from(next)));
+          return next;
+        });
       }
       if (result && result.length > 0) {
         pool = result;
@@ -1181,8 +1276,24 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('quran_mushaf_settings', JSON.stringify(librarySettings));
   }, [librarySettings]);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageInput, setPageInput] = useState('1');
+  const [currentPage, setCurrentPage] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('quran_last_read_page');
+      return saved ? Math.max(1, Math.min(604, parseInt(saved, 10))) : 1;
+    } catch {
+      return 1;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('quran_last_read_page', currentPage.toString());
+    } catch {
+      // ignore
+    }
+  }, [currentPage]);
+
+  const [pageInput, setPageInput] = useState(() => currentPage.toString());
 
   // Sync selectedSurahId with currentPage
   useEffect(() => {
@@ -1197,12 +1308,49 @@ export default function App() {
   const [dailyCompleted, setDailyCompleted] = useState(false);
   const [timeLeft, setTimeLeft] = useState('');
 
+  const completionChallenges = useMemo(() => {
+    // 1. Prioritize completion challenges added by the user/admin in the database
+    if (dbCompletionChallenges.length > 0) {
+      return dbCompletionChallenges;
+    }
+    const fromAll = allChallenges.filter((c: any) => c.type === 'COMPLETION');
+    if (fromAll.length > 0) {
+      return fromAll;
+    }
+    // 2. Fallback: generated challenges from local Quran dataset if none added yet
+    try {
+      const generated = generateCompletionChallenges(50);
+      return generated.map((c, idx) => ({
+        id: 99000 + idx,
+        type: 'COMPLETION',
+        keyword: c.prompt,
+        verseText: c.prompt,
+        text: c.prompt,
+        options: c.options.map(opt => ({
+          text: opt,
+          isCorrect: opt === c.options[c.correctIndex]
+        })),
+        correctText: c.options[c.correctIndex],
+        verses: [{
+          id: `gen-comp-${idx}`,
+          number: 1,
+          text: c.prompt,
+          surah: c.verseSource
+        }]
+      }));
+    } catch (e) {
+      console.warn('Fallback generator failed:', e);
+      return [];
+    }
+  }, [dbCompletionChallenges, allChallenges]);
+
   const dailyChallengeIndex = useMemo(() => {
-    if (challenges.length === 0) return 0;
+    const pool = completionChallenges.length > 0 ? completionChallenges : challenges;
+    if (pool.length === 0) return 0;
     const today = new Date();
-    const daysSinceEpoch = Math.floor(today.getTime() / 86400000);
-    return daysSinceEpoch % challenges.length;
-  }, [challenges]);
+    const daysSinceEpoch = Math.floor(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()) / 86400000);
+    return Math.abs(daysSinceEpoch) % pool.length;
+  }, [completionChallenges, challenges]);
 
   const [allTargetVerses, setAllTargetVerses] = useState<Verse[]>([]);
   const [matchedIds, setMatchedIds] = useState<Set<string>>(new Set());
@@ -1227,9 +1375,15 @@ export default function App() {
     if (view === 'group_game') {
       return challenges[currentChallengeIndex];
     }
+    if (challengeMode === 'daily') {
+      if (completionChallenges.length > 0) {
+        return completionChallenges[dailyChallengeIndex % completionChallenges.length];
+      }
+      return challenges[dailyChallengeIndex] || null;
+    }
     if (challenges.length === 0) return null;
-    return challengeMode === 'daily' ? challenges[dailyChallengeIndex] : challenges[currentChallengeIndex];
-  }, [view, challenges, room?.challenges, challengeMode, dailyChallengeIndex, currentChallengeIndex]);
+    return challenges[currentChallengeIndex];
+  }, [view, challenges, room?.challenges, challengeMode, dailyChallengeIndex, currentChallengeIndex, completionChallenges]);
 
   const KEYWORD = currentChallenge?.verseText || currentChallenge?.text || currentChallenge?.keyword || '';
 
@@ -1356,6 +1510,12 @@ export default function App() {
     setTotalPoints(newTotalPoints);
     localStorage.setItem('quran_total_points', newTotalPoints.toString());
 
+    const hasSeerah = userCertificates.some(c => c.category === 'seerah');
+    const hasGeneral = userCertificates.some(c => c.category === 'general');
+    const effectiveFrame = (activeFrame === 'seerah' || activeFrame === 'general')
+      ? activeFrame
+      : (hasGeneral ? 'general' : (hasSeerah ? 'seerah' : null));
+
     // Sync completion status with backend
     fetch('/api/player-score', {
       method: 'POST',
@@ -1365,9 +1525,9 @@ export default function App() {
         playerId: deviceId,
         score: newTotalPoints,
         totalPoints: newTotalPoints,
-        seerahCompleted: (getActiveAchievement() === 'seerah'),
-        generalCompleted: (getActiveAchievement() === 'general'),
-        quranCompleted: (completedChallengeIds.size >= 15)
+        seerahCompleted: hasSeerah,
+        generalCompleted: hasGeneral,
+        activeFrame: effectiveFrame
       })
     }).catch(err => console.error('Failed to sync quiz completion:', err));
 
@@ -1448,7 +1608,7 @@ export default function App() {
         toast.success('تم دخول الغرفة بنجاح');
         window.history.replaceState({}, '', window.location.pathname);
       } else {
-        setV1Error(data.message || 'فشل الانضمام للعبة');
+        setV1Error(data.message || 'فشل الانضمام للتحدي');
       }
     } catch (err) {
       setV1Error('حدث خطأ في الاتصال');
@@ -1758,11 +1918,17 @@ export default function App() {
   const handleStartDaily = () => {
     if (dailyCompleted) return;
     setChallengeMode('daily');
+    setSkillsType('complete');
+    setSelectedOption(null);
+    setSkillsFeedback(false);
     setView('challenge');
 
     // Save as incomplete if not finished
-    const firstVerse = challenges[dailyChallengeIndex]?.verses?.[0];
-    const info = { index: dailyChallengeIndex, mode: 'daily' as const, surah: firstVerse?.surah || '' };
+    const activeDaily = completionChallenges.length > 0
+      ? completionChallenges[dailyChallengeIndex % completionChallenges.length]
+      : challenges[dailyChallengeIndex];
+    const firstVerse = activeDaily?.verses?.[0];
+    const info = { index: dailyChallengeIndex, mode: 'daily' as const, surah: firstVerse?.surah || activeDaily?.keyword || '' };
     setIncompleteChallenge(info);
     localStorage.setItem('quran_incomplete_challenge', JSON.stringify(info));
   };
@@ -1937,8 +2103,13 @@ export default function App() {
 
       const rawSelected = selectedOption ? (typeof selectedOption === 'object' ? selectedOption.text : selectedOption) : null;
       const rawCorrect = currentQuestion.correctText || "";
+      const isObjectCorrect = selectedOption && typeof selectedOption === 'object' && selectedOption.isCorrect === true;
+      const isTextMatch = !!(
+        (rawSelected && rawCorrect && superNormalizeArabic(rawSelected) === superNormalizeArabic(rawCorrect)) ||
+        (rawSelected && rawCorrect && String(rawSelected).trim().includes(String(rawCorrect).trim()))
+      );
 
-      const isCorrect = rawSelected && String(rawSelected).trim().includes(String(rawCorrect).trim());
+      const isCorrect = isObjectCorrect || isTextMatch;
       const answer = rawSelected || "لم يتم اختيار إجابة (انتهى الوقت)";
 
       if (isCorrect) {
@@ -1949,8 +2120,10 @@ export default function App() {
         }
         if (window.navigator.vibrate) window.navigator.vibrate(50);
 
-        if (view === 'group_game' && currentQuestion.verses) {
-          const allVerseIds = currentQuestion.verses.map((v: any) => v.id);
+        if ((view === 'group_game' || challengeMode === 'daily') && (targetVerses.length > 0 || currentQuestion.verses)) {
+          const allVerseIds = targetVerses.length > 0
+            ? targetVerses.map((v: any) => v.id)
+            : currentQuestion.verses.map((v: any) => v.id);
           setMatchedIds(new Set(allVerseIds));
         }
 
@@ -1959,8 +2132,14 @@ export default function App() {
             const next = new Set(prev);
             next.add(currentQuestion.id);
             localStorage.setItem('quran_completed_ids', JSON.stringify(Array.from(next)));
+            localStorage.setItem('quran_completed_challenges', JSON.stringify(Array.from(next)));
             return next;
           });
+        }
+
+        if (challengeMode === 'daily') {
+          setSkillsFeedback(false);
+          return;
         }
       } else {
         setSessionWrong(prev => prev + 1);
@@ -1970,6 +2149,14 @@ export default function App() {
           userAnswer: answer || "لا يوجد إجابة",
           correctAnswer: rawCorrect
         }]);
+
+        if (challengeMode === 'daily') {
+          setTimeout(() => {
+            setSkillsFeedback(false);
+            setSelectedOption(null);
+          }, 1200);
+          return;
+        }
       }
 
       setTimeout(() => {
@@ -2105,41 +2292,127 @@ export default function App() {
     try {
       // 1. Proactive sync of achievement flags before fetching rankings
       if (deviceId && playerName) {
-        await fetch('/api/player-score', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            deviceId,
-            playerId: deviceId,
-            score: totalPoints,
-            totalPoints: totalPoints,
-            seerahCompleted: (getActiveAchievement() === 'seerah'),
-            generalCompleted: (getActiveAchievement() === 'general'),
-            quranCompleted: (completedChallengeIds.size >= 15)
-          })
-        }).catch(err => console.warn('Pre-fetch sync failed:', err));
+        const hasSeerah = userCertificates.some(c => c.category === 'seerah') || 
+                          (Boolean(localStorage.getItem('quran_quiz_progress_seerah')) && (() => {
+                            try {
+                              const p = JSON.parse(localStorage.getItem('quran_quiz_progress_seerah') || '{}');
+                              return (p.easy >= 3 || p.hard >= 3);
+                            } catch { return false; }
+                          })());
+        const hasGeneral = userCertificates.some(c => c.category === 'general') || 
+                          (Boolean(localStorage.getItem('quran_quiz_progress_general')) && (() => {
+                            try {
+                              const p = JSON.parse(localStorage.getItem('quran_quiz_progress_general') || '{}');
+                              return (p.easy >= 5 || p.hard >= 5);
+                            } catch { return false; }
+                          })());
+        const storedFrame = localStorage.getItem('quran_active_frame') || activeFrame;
+        const effectiveFrame = (storedFrame === 'seerah' || storedFrame === 'general')
+          ? storedFrame
+          : (storedFrame === 'none' ? 'none' : (hasSeerah ? 'seerah' : (hasGeneral ? 'general' : null)));
+
+        try {
+          const scoreRes = await fetch('/api/player-score', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              deviceId,
+              playerId: deviceId,
+              name: playerName,
+              username: playerUsername,
+              score: totalPoints,
+              totalPoints: totalPoints,
+              totalCups: cups,
+              seerahCompleted: hasSeerah,
+              generalCompleted: hasGeneral,
+              activeFrame: effectiveFrame
+            })
+          });
+          if (scoreRes.ok) {
+            const pData = await scoreRes.json();
+            if (pData) {
+              if (typeof pData.cups === 'number' && pData.cups > 0) {
+                setCups(prev => {
+                  const best = Math.max(prev, pData.cups);
+                  localStorage.setItem('quran_total_cups', best.toString());
+                  localStorage.setItem('quran_cups', best.toString());
+                  return best;
+                });
+              }
+              if (typeof pData.points === 'number' && pData.points > 0) {
+                setTotalPoints(prev => {
+                  const best = Math.max(prev, pData.points);
+                  localStorage.setItem('quran_total_points', best.toString());
+                  return best;
+                });
+              }
+            }
+          }
+        } catch (err) {
+          console.warn('Pre-fetch sync failed:', err);
+        }
       }
 
-      const response = await fetch('/api/leaderboard');
+      const response = await fetch(`/api/leaderboard?t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: {
+          'Pragma': 'no-cache',
+          'Cache-Control': 'no-cache'
+        }
+      });
       if (!response.ok) {
         const text = await response.text();
         throw new Error(`Leaderboard sync failed: ${text.substring(0, 100)}`);
       }
       const data = await response.json();
-      if (data.leaderboard) {
-        setLeaderboard(data.leaderboard);
-        localStorage.setItem('quran_leaderboard', JSON.stringify(data.leaderboard));
+      if (data.leaderboard && Array.isArray(data.leaderboard)) {
+        const seenNames = new Set<string>();
+        const unique = data.leaderboard.filter((p: any) => {
+          const norm = (p.name || '').trim().toLowerCase();
+          if (!norm || seenNames.has(norm)) return false;
+          seenNames.add(norm);
+          return true;
+        });
+        setLeaderboard(unique);
+        localStorage.setItem('quran_leaderboard', JSON.stringify(unique));
+
+        // Synchronize cups and points from leaderboard for current player
+        const myEntry = unique.find((p: any) => {
+          if (deviceId && p.deviceId && p.deviceId === deviceId) return true;
+          if (playerUsername && p.username && p.username.replace(/^@+/, '').toLowerCase() === playerUsername.replace(/^@+/, '').toLowerCase()) return true;
+          if (playerName && p.name && p.name.trim().toLowerCase() === playerName.trim().toLowerCase()) return true;
+          return false;
+        });
+
+        if (myEntry) {
+          if (typeof myEntry.cups === 'number' && myEntry.cups > 0) {
+            setCups(prev => {
+              const best = Math.max(prev, myEntry.cups);
+              localStorage.setItem('quran_total_cups', best.toString());
+              localStorage.setItem('quran_cups', best.toString());
+              return best;
+            });
+          }
+          if (typeof myEntry.points === 'number' && myEntry.points > 0) {
+            setTotalPoints(prev => {
+              const best = Math.max(prev, myEntry.points);
+              localStorage.setItem('quran_total_points', best.toString());
+              return best;
+            });
+          }
+        }
       }
     } catch (error) {
       console.error('Leaderboard sync failed:', error);
     } finally {
       setIsSyncing(false);
     }
-  }, [deviceId, playerName, totalPoints, completedChallengeIds]);
+  }, [deviceId, playerName, playerUsername, cups, totalPoints, completedChallengeIds, activeFrame, userCertificates]);
 
   useEffect(() => {
     localStorage.setItem('quran_total_points', totalPoints.toString());
     localStorage.setItem('quran_cups', cups.toString());
+    localStorage.setItem('quran_total_cups', cups.toString());
     localStorage.setItem('quran_leaderboard', JSON.stringify(leaderboard));
     if (playerName) localStorage.setItem('quran_player_name', playerName);
     localStorage.setItem('quran_settings', JSON.stringify(librarySettings));
@@ -2147,7 +2420,24 @@ export default function App() {
 
   useEffect(() => {
     syncLeaderboard();
-  }, []);
+  }, [activeFrame, userCertificates.length]);
+
+  // Sync leaderboard immediately when opened or when window gains focus (Zero periodic polling on server)
+  useEffect(() => {
+    if (showScores) {
+      syncLeaderboard();
+      const onFocus = () => syncLeaderboard();
+      const onVisibility = () => {
+        if (document.visibilityState === 'visible') syncLeaderboard();
+      };
+      window.addEventListener('focus', onFocus);
+      document.addEventListener('visibilitychange', onVisibility);
+      return () => {
+        window.removeEventListener('focus', onFocus);
+        document.removeEventListener('visibilitychange', onVisibility);
+      };
+    }
+  }, [showScores, syncLeaderboard]);
 
 
 
@@ -2187,6 +2477,7 @@ export default function App() {
       const newCupsCount = cups + 1;
       setCups(newCupsCount);
       localStorage.setItem('quran_total_cups', newCupsCount.toString());
+      localStorage.setItem('quran_cups', newCupsCount.toString());
 
       // Sync with backend using deviceId
       fetch('/api/player-score', {
@@ -2297,13 +2588,13 @@ export default function App() {
       // Use verses stored in the database if available
       verses = currentChallenge.verses as Verse[];
       console.log('App: Loaded verses from DB challenge:', currentChallenge.keyword, verses);
-    } else if (currentChallenge && (skillsType === 'complete' || skillsType === 'surah' || roomGameMode === 'complete' || roomGameMode === 'surah')) {
+    } else if (currentChallenge && (skillsType === 'complete' || skillsType === 'surah' || roomGameMode === 'complete' || roomGameMode === 'surah' || challengeMode === 'daily')) {
       // Create a virtual verse from the keyword for Completion/Surah challenges that lack explicit verses
       verses = [{
-        id: `virtual-${currentChallenge.id}`,
+        id: `comp-${currentChallenge.id || 'daily'}`,
         number: 1,
-        text: currentChallenge.keyword,
-        surah: currentChallenge.correctText || 'سورة',
+        text: currentChallenge.keyword || currentChallenge.verseText || currentChallenge.prompt || '',
+        surah: currentChallenge.correctText || (currentChallenge.verses?.[0]?.surah) || 'إكمال الآية',
       }] as Verse[];
       console.log('App: Using virtual verse from keyword:', currentChallenge.keyword);
     } else {
@@ -2328,19 +2619,17 @@ export default function App() {
     const isSkillsMode = view === 'challenge' || view === 'group_game';
     const effectiveType = view === 'group_game' ? roomGameMode : skillsType;
 
-    if (isSkillsMode && (effectiveType === 'complete' || effectiveType === 'surah') && targetVerses.length > 0) {
-      if (effectiveType === 'surah') {
+    if ((isSkillsMode || challengeMode === 'daily') && (effectiveType === 'complete' || effectiveType === 'surah' || challengeMode === 'daily') && targetVerses.length > 0) {
+      if (effectiveType === 'surah' && challengeMode !== 'daily') {
         generateOptions('surah', targetVerses[0]?.surah || '');
       } else {
         const firstUnmatched = targetVerses.find(v => !matchedIds.has(v.id));
-        if (firstUnmatched) {
-          const words = firstUnmatched.text.split(' ').filter(Boolean);
-          const lastWord = words[words.length - 1];
-          generateOptions('complete', lastWord);
-        }
+        const lastWord = firstUnmatched ? firstUnmatched.text.split(' ').filter(Boolean).slice(-1)[0] : '';
+        const correctVal = currentChallenge?.correctText || lastWord;
+        generateOptions('complete', correctVal);
       }
     }
-  }, [view, skillsType, targetVerses, matchedIds.size, generateOptions, roomGameMode, currentChallenge?.id || currentChallenge?.keyword]);
+  }, [view, skillsType, targetVerses, matchedIds.size, generateOptions, roomGameMode, currentChallenge?.id || currentChallenge?.keyword, challengeMode]);
 
   const keywordWordCount = useMemo(() => KEYWORD.split(' ').filter(Boolean).length, [KEYWORD]);
 
@@ -2630,10 +2919,19 @@ ${versesList}
               currentUsername={adminUsername}
               currentName={adminName}
               currentAdminId={adminId}
+              canManageUsers={canManageUsers}
+              onPermissionsUpdated={(updated) => {
+                setCanManageUsers(updated);
+                localStorage.setItem('quran_admin_can_manage_users', String(updated));
+              }}
               systemSettings={systemSettings}
               onSettingsUpdated={fetchSettings}
               onLogout={handleAdminLogout}
-              onBackHome={() => setView('home')}
+              onBackHome={() => {
+                setView('home');
+                fetchChallenges();
+                fetchCompletionChallenges();
+              }}
             />
           ) : (
             <AdminLogin
@@ -2707,18 +3005,24 @@ ${versesList}
                     className="flex items-center gap-2 sm:gap-2.5 pr-2 sm:pr-2.5 border-r border-white/20 mr-0.5 sm:mr-1 shrink-0 cursor-pointer group"
                     title="ملفي الشخصي"
                   >
-                    <div className="relative shrink-0">
-                      <div className="w-8 h-8 sm:w-9 sm:h-9 md:w-9 md:h-9 rounded-full flex items-center justify-center text-white font-black text-xs sm:text-sm bg-gradient-to-br from-brand-emerald to-emerald-700 border-2 border-white/30 shadow-md group-hover:scale-105 transition-transform">
-                        {playerName.charAt(0).toUpperCase()}
+                    <div className="relative shrink-0 flex items-center justify-center">
+                      <div className="relative z-10 w-8 h-8 sm:w-9 sm:h-9 md:w-9 md:h-9 rounded-full flex items-center justify-center text-white font-black text-xs sm:text-sm bg-gradient-to-br from-brand-emerald to-emerald-700 border-2 border-white/30 shadow-md group-hover:scale-105 transition-transform">
+                        {(playerName || '').trim().charAt(0).toUpperCase()}
                       </div>
                       {isElite && (
-                        <div className={`absolute -inset-1.5 pointer-events-none z-10 ${currentStyle.className}`} />
+                        safeAchievement === 'seerah' ? (
+                          <div className="absolute -inset-1.5 rounded-full pointer-events-none z-20 bg-[url('/golden_seerah_achievement_frame.png')] bg-center bg-no-repeat bg-contain scale-110" />
+                        ) : safeAchievement === 'general' ? (
+                          <div className="absolute -inset-1.5 rounded-full pointer-events-none z-20 bg-[url('/golden_general_achievement_frame.png')] bg-center bg-no-repeat bg-contain scale-110" />
+                        ) : (
+                          <div className={`absolute -inset-1 rounded-full pointer-events-none z-0 ${currentStyle.className}`} />
+                        )
                       )}
                       {isElite && (
                         <motion.div
                           initial={{ scale: 0 }}
                           animate={{ scale: 1 }}
-                          className="absolute -bottom-1 -left-1 z-[60] flex h-4 w-4 sm:h-5 sm:w-5 items-center justify-center bg-transparent drop-shadow-lg"
+                          className="absolute -bottom-1 -left-1 z-30 flex h-4 w-4 sm:h-5 sm:w-5 items-center justify-center bg-transparent drop-shadow-lg"
                           title={userAchievement}
                         >
                           {currentStyle.icon.startsWith('/') ? (
@@ -2810,7 +3114,7 @@ ${versesList}
                   <p className="text-slate-500 font-bold text-xs md:text-sm mb-6">
                     {playerAuthMode === 'register'
                       ? 'أنشئ حسابك لحفظ تقدمك والتنافس في لوحة المتصدرين'
-                      : 'أدخل بيانات حسابك لمتابعة اللعب وحفظ نقاطك'}
+                      : 'أدخل بيانات حسابك لمتابعة التحدي وحفظ نقاطك'}
                   </p>
 
                   {registrationError && (
@@ -2900,12 +3204,12 @@ ${versesList}
                         <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                       ) : playerAuthMode === 'register' ? (
                         <>
-                          <span>ابدأ اللعب</span>
+                          <span>ابدأ التحدي</span>
                           <ArrowLeft className="w-5 h-5" />
                         </>
                       ) : (
                         <>
-                          <span>تسجيل الدخول ومتابعة اللعب</span>
+                          <span>تسجيل الدخول ومتابعة التحدي</span>
                           <LogIn className="w-5 h-5" />
                         </>
                       )}
@@ -2923,7 +3227,7 @@ ${versesList}
                         }}
                         className="text-xs md:text-sm font-black text-brand-emerald hover:text-brand-emerald/80 hover:underline transition-colors py-1"
                       >
-                        لدي حساب بالفعل
+                        لدي حساب بالفعل؟ تسجيل الدخول
                       </button>
                     ) : (
                       <button
@@ -2934,7 +3238,7 @@ ${versesList}
                         }}
                         className="text-xs md:text-sm font-black text-brand-emerald hover:text-brand-emerald/80 hover:underline transition-colors py-1"
                       >
-                        ليس لدي حساب؟ أنشئ حساباً جديداً
+                        ليس لدي حساب، إنشاء حساب جديد
                       </button>
                     )}
                   </div>
@@ -2998,107 +3302,199 @@ ${versesList}
                 {showScores ? (
                   <motion.div
                     key="scores"
-                    initial={{ opacity: 0, scale: 0.95 }}
+                    initial={{ opacity: 0, scale: 0.96 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.95 }}
-                    className="glass p-4 md:p-10 rounded-2xl md:rounded-[3rem] max-w-3xl mx-auto"
+                    exit={{ opacity: 0, scale: 0.96 }}
+                    className="bg-white/90 backdrop-blur-xl p-4 sm:p-7 md:p-10 rounded-3xl md:rounded-[2.5rem] border border-amber-200/60 shadow-2xl shadow-emerald-950/10 max-w-3xl mx-auto text-right relative overflow-hidden"
+                    dir="rtl"
                   >
-                    <div className="flex items-center justify-between mb-6 md:mb-10">
-                      <h2 className="text-xl md:text-3xl font-black text-brand-emerald flex items-center gap-2 md:gap-3">
-                        <Trophy className="w-6 h-6 md:w-8 md:h-8 text-brand-gold" />
-                        لوحة المتصدرين العالمية
-                      </h2>
+                    {/* Background Ambient Glows */}
+                    <div className="absolute top-0 right-0 w-72 h-72 bg-gradient-to-br from-amber-400/10 via-yellow-300/5 to-transparent rounded-full -mr-20 -mt-20 blur-3xl pointer-events-none" />
+                    <div className="absolute bottom-0 left-0 w-72 h-72 bg-gradient-to-tr from-emerald-500/10 via-teal-400/5 to-transparent rounded-full -ml-20 -mb-20 blur-3xl pointer-events-none" />
+
+                    {/* Header Bar */}
+                    <div className="flex items-center justify-between gap-3 mb-6 sm:mb-8 pb-4 sm:pb-5 border-b border-slate-200/80 relative z-10">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-tr from-amber-500 via-amber-600 to-yellow-500 text-white flex items-center justify-center shadow-lg shadow-amber-500/25 shrink-0">
+                          <Trophy className="w-6 h-6 sm:w-7 sm:h-7 text-yellow-100" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h2 className="text-xl sm:text-2xl md:text-3xl font-black text-slate-900 tracking-tight">
+                              لوحة المتصدرين
+                            </h2>
+                            <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-black px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-900 border border-amber-400/50">
+                              <Sparkles className="w-3 h-3 text-amber-600" />
+                              <span>المراكز الأولى</span>
+                            </span>
+                          </div>
+                          <p className="text-xs sm:text-sm text-slate-500 font-bold mt-0.5">
+                            فرسان التنافس في المتشابهات القرآنية والسنة النبوية
+                          </p>
+                        </div>
+                      </div>
+
                       <button
                         onClick={() => syncLeaderboard()}
                         disabled={isSyncing}
-                        className={`p-2 md:p-3 rounded-xl md:rounded-2xl bg-brand-emerald/5 text-brand-emerald border border-brand-emerald/10 hover:bg-brand-emerald/10 transition-all ${isSyncing ? 'animate-spin' : ''}`}
+                        title="تحديث القائمة"
+                        className={`p-2.5 sm:p-3 rounded-2xl bg-white border border-slate-200 hover:border-emerald-300 hover:bg-emerald-50 text-slate-600 hover:text-emerald-700 transition-all shadow-sm active:scale-95 cursor-pointer ${isSyncing ? 'animate-spin' : ''}`}
                       >
-                        <RotateCcw className="w-4 h-4 md:w-5 md:h-5" />
+                        <RotateCcw className="w-4 h-4 sm:w-5 sm:h-5" />
                       </button>
                     </div>
 
                     {isSyncing && leaderboard.length === 0 ? (
-                      <div className="text-center py-12 md:py-20 bg-slate-50/50 rounded-2xl md:rounded-3xl border border-dashed border-slate-200">
-                        <div className="w-8 h-8 md:w-10 md:h-10 border-4 border-brand-emerald border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-                        <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px] md:text-sm">جاري جلب قائمة المتصدرين...</p>
+                      <div className="text-center py-16 sm:py-24 bg-slate-50/60 rounded-3xl border border-dashed border-slate-200">
+                        <div className="w-10 h-10 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+                        <p className="text-slate-500 font-bold text-sm">جاري جلب قائمة الأبطال والمتصدرين...</p>
                       </div>
                     ) : leaderboard.length === 0 ? (
-                      <div className="text-center py-12 md:py-20 bg-slate-50/50 rounded-2xl md:rounded-3xl border border-dashed border-slate-200">
-                        <Sparkles className="w-10 h-10 md:w-12 md:h-12 text-slate-200 mx-auto mb-4" />
-                        <p className="text-slate-400 font-bold uppercase tracking-widest text-[10px] md:text-sm">كن أول من يسجل اسمه هنا</p>
+                      <div className="text-center py-16 sm:py-24 bg-slate-50/60 rounded-3xl border border-dashed border-slate-200">
+                        <Sparkles className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+                        <p className="text-slate-400 font-bold text-sm">كن أول من يسجل اسمه ويتصدر القائمة!</p>
                       </div>
                     ) : (
-                      <div className="space-y-2 md:space-y-4 pr-1 md:pr-3 max-h-[60vh] overflow-y-auto custom-scrollbar">
+                      <div className="space-y-3 sm:space-y-4 max-h-[65vh] overflow-y-auto custom-scrollbar pr-1 relative z-10">
                         {leaderboard.map((player: any, index) => {
-                          const isCurrentPlayer = player.name.trim().toLowerCase() === playerName.trim().toLowerCase();
+                          const isCurrentPlayer = (playerName && player.name)
+                            ? player.name.trim().toLowerCase() === playerName.trim().toLowerCase()
+                            : false;
 
                           // INDIVIDUAL PLAYER ACHIEVEMENT LOGIC (Global visibility)
                           const getPlayerAchievement = (p: any) => {
+                            if (p.activeFrame === 'seerah' || p.activeFrame === 'general') return p.activeFrame;
+                            if (p.activeFrame === 'none') return 'none';
                             if (p.seerahCompleted) return 'seerah';
-                            if (p.quranCompleted || (p.cups >= 15 || p.points >= 600)) return 'quran';
-                            if (p.generalCompleted || p.points >= 200) return 'general';
+                            if (p.generalCompleted) return 'general';
                             return 'none';
                           };
 
-                          // Use individual player data for everyone in the list
-                          const achievement = getPlayerAchievement(player);
+                          // Use individual player data for everyone in the list, and ensure current player uses active userAchievement
+                          const achievement = (isCurrentPlayer && userAchievement && userAchievement !== 'none')
+                            ? userAchievement
+                            : getPlayerAchievement(player);
                           const style = achievementStyles[achievement];
 
-                          // Decoration visibility (always show for others, follow settings for self)
-                          const isPlayerElite = (achievement !== 'none') && (isCurrentPlayer ? showProfileDecoration : true);
+                          // Decoration visibility (solely determined by selected frame: none or active frame)
+                          const isPlayerElite = achievement !== 'none';
+
+                          const isRank1 = index === 0;
+                          const isRank2 = index === 1;
+                          const isRank3 = index === 2;
 
                           return (
                             <motion.div
                               initial={{ x: 20, opacity: 0 }}
                               animate={{ x: 0, opacity: 1 }}
                               transition={{ delay: index * 0.05 }}
-                              key={player.name}
-                              className={`flex justify-between items-center p-3 md:p-6 rounded-2xl md:rounded-3xl border transition-all group overflow-visible ${isCurrentPlayer ? 'bg-brand-emerald/5 border-brand-emerald/20 shadow-lg' : 'bg-white/60 border-white hover:shadow-xl'}`}
+                              key={player.name + index}
+                              className={`flex justify-between items-center p-3 sm:p-4 md:p-5 rounded-2xl md:rounded-3xl border transition-all group overflow-visible relative ${
+                                isRank1
+                                  ? 'bg-gradient-to-r from-amber-500/10 via-yellow-400/15 to-white border-2 border-amber-400/80 shadow-md shadow-amber-500/10'
+                                  : isRank2
+                                  ? 'bg-gradient-to-r from-slate-100/60 via-white to-slate-50/40 border border-slate-300 shadow-sm'
+                                  : isRank3
+                                  ? 'bg-gradient-to-r from-amber-700/10 via-white to-orange-50/30 border border-amber-600/30 shadow-sm'
+                                  : 'bg-white/90 border-slate-200/90 hover:border-slate-300 hover:shadow-md'
+                              } ${isCurrentPlayer ? 'ring-2 ring-emerald-500/80 border-emerald-400 bg-emerald-50/50 shadow-md shadow-emerald-600/10' : ''}`}
                             >
-                              <div className="flex items-center gap-3 md:gap-6">
-                                {/* Rank Indicator */}
-                                <div className="w-8 md:w-10 flex flex-col items-center justify-center text-center">
-                                  <span className={`text-[7px] md:text-[8px] font-black uppercase tracking-widest ${index === 0 ? 'text-brand-gold' : 'text-slate-400'}`}>الرتبة</span>
-                                  <span className={`text-xs md:text-lg font-black tabular-nums ${index === 0 ? 'text-brand-gold drop-shadow-sm scale-110' : 'text-slate-500'}`}>
-                                    {index === 0 ? '👑' : index + 1}
-                                  </span>
+                              <div className="flex items-center gap-3 sm:gap-4 md:gap-5 min-w-0">
+                                {/* Rank Pill Badge */}
+                                <div className="w-9 sm:w-11 flex flex-col items-center justify-center shrink-0">
+                                  {isRank1 ? (
+                                    <div className="flex flex-col items-center">
+                                      <span className="text-xl sm:text-2xl drop-shadow-sm animate-bounce">👑</span>
+                                      <span className="text-[9px] font-black text-amber-700 tracking-wider">الأول</span>
+                                    </div>
+                                  ) : isRank2 ? (
+                                    <div className="w-8 h-8 rounded-full bg-slate-200 border border-slate-300 text-slate-700 flex items-center justify-center font-black text-xs sm:text-sm shadow-xs">
+                                      🥈 2
+                                    </div>
+                                  ) : isRank3 ? (
+                                    <div className="w-8 h-8 rounded-full bg-amber-100 border border-amber-300 text-amber-900 flex items-center justify-center font-black text-xs sm:text-sm shadow-xs">
+                                      🥉 3
+                                    </div>
+                                  ) : (
+                                    <div className="w-7 h-7 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-black text-xs">
+                                      #{index + 1}
+                                    </div>
+                                  )}
                                 </div>
 
-                                <div className="relative group">
-                                  <div className={`w-10 h-10 md:w-14 md:h-14 rounded-full flex items-center justify-center text-white font-black text-sm md:text-xl transition-transform group-hover:scale-105 bg-brand-emerald shadow-inner border-2 border-white/20`}>
-                                    {player.name.charAt(0).toUpperCase()}
+                                {/* Avatar & Frame */}
+                                <div className="relative group shrink-0 flex items-center justify-center w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16">
+                                  {/* Inner Avatar */}
+                                  <div className="relative z-10 w-10 h-10 sm:w-11 sm:h-11 md:w-12 md:h-12 rounded-full flex items-center justify-center text-white font-black text-sm sm:text-base md:text-lg transition-transform group-hover:scale-105 bg-gradient-to-br from-brand-emerald to-emerald-700 shadow-md border-2 border-white/50">
+                                    {(player.name || '').trim().charAt(0).toUpperCase()}
                                   </div>
+
+                                  {/* Frame / Achievement Decoration */}
                                   {isPlayerElite && (
-                                    <div className={`absolute -inset-1.5 md:-inset-2 pointer-events-none z-10 ${style.className}`} />
+                                    achievement === 'seerah' ? (
+                                      <div className="absolute -inset-2 sm:-inset-2.5 md:-inset-3 rounded-full pointer-events-none z-20 bg-[url('/golden_seerah_achievement_frame.png')] bg-center bg-no-repeat bg-contain scale-110" />
+                                    ) : achievement === 'general' ? (
+                                      <div className="absolute -inset-2 sm:-inset-2.5 md:-inset-3 rounded-full pointer-events-none z-20 bg-[url('/golden_general_achievement_frame.png')] bg-center bg-no-repeat bg-contain scale-110" />
+                                    ) : (
+                                      <div className={`absolute -inset-1 rounded-full pointer-events-none z-0 ${style.className}`} />
+                                    )
                                   )}
+
+                                  {/* Badge Icon */}
                                   {isPlayerElite && (
-                                    <motion.div
-                                      initial={{ scale: 0 }}
-                                      animate={{ scale: 1 }}
-                                      className="absolute -bottom-1 -left-1 z-[60] flex h-5 w-5 md:h-6 md:w-6 items-center justify-center bg-transparent drop-shadow-lg"
-                                    >
+                                    <div className="absolute -bottom-1 -left-1 z-30 flex h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6 items-center justify-center bg-transparent drop-shadow-lg">
                                       {style.icon.startsWith('/') ? (
                                         <img src={style.icon} className="w-full h-full object-contain" alt="Badge" />
                                       ) : (
-                                        <div className="flex items-center justify-center bg-transparent text-white text-[8px] md:text-[10px] drop-shadow-lg w-full h-full">
+                                        <div className="flex items-center justify-center text-[10px] w-full h-full">
                                           {style.icon}
                                         </div>
                                       )}
-                                    </motion.div>
+                                    </div>
                                   )}
                                 </div>
-                                <div className="text-right">
-                                  <span className={`font-black text-sm md:text-xl block leading-tight ${isPlayerElite ? `text-transparent bg-clip-text bg-gradient-to-r ${style.textColor}` : 'text-slate-800'}`}>
-                                    {player.name}
-                                    {isCurrentPlayer && <span className="mr-2 text-[10px] text-brand-emerald opacity-60">(أنت)</span>}
-                                  </span>
-                                  <span className="text-[8px] md:text-[10px] uppercase font-black tracking-widest text-slate-400">{player.points} نقطة</span>
+
+                                {/* Name & Stats */}
+                                <div className="text-right min-w-0">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className={`font-black text-sm sm:text-base md:text-lg leading-tight truncate ${
+                                      isPlayerElite
+                                        ? `text-transparent bg-clip-text bg-gradient-to-r ${style.textColor}`
+                                        : 'text-slate-800'
+                                    }`}>
+                                      {player.name}
+                                    </span>
+                                    {isCurrentPlayer && (
+                                      <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-600 text-white shadow-xs">
+                                        أنت
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-2 mt-0.5">
+                                    <span className="text-[10px] sm:text-xs font-bold text-slate-400">
+                                      {player.points} نقطة
+                                    </span>
+                                    {player.username && (
+                                      <span className="text-[10px] text-slate-300 font-medium hidden sm:inline">
+                                        @{player.username.replace(/^@+/, '')}
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
-                              <div className="flex items-center gap-2 md:gap-4">
-                                <div className="flex items-center gap-1 bg-brand-gold/10 px-2 py-1 md:px-4 md:py-2 rounded-xl md:rounded-2xl border border-brand-gold/20">
-                                  <Trophy className="w-3 h-3 md:w-4 md:h-4 text-brand-gold" />
-                                  <span className="font-black text-base md:text-2xl text-brand-emerald tabular-nums">{player.cups}</span>
+
+                              {/* Cups Counter Pill */}
+                              <div className="shrink-0 flex items-center pr-2">
+                                <div className={`flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 rounded-2xl border transition-all ${
+                                  isRank1
+                                    ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-amber-950 border-amber-400 shadow-md shadow-amber-500/20'
+                                    : 'bg-brand-gold/10 text-emerald-800 border-brand-gold/30'
+                                }`}>
+                                  <Trophy className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${isRank1 ? 'text-amber-950 fill-amber-950' : 'text-brand-gold'}`} />
+                                  <span className={`font-black text-sm sm:text-lg tabular-nums ${isRank1 ? 'text-amber-950' : 'text-emerald-800'}`}>
+                                    {player.cups}
+                                  </span>
+                                  <span className="text-[10px] font-bold opacity-80 hidden sm:inline">كأس</span>
                                 </div>
                               </div>
                             </motion.div>
@@ -3477,13 +3873,13 @@ ${versesList}
 
                                   <div className="flex items-center gap-4">
                                     <span className="text-brand-emerald font-black tabular-nums text-sm">{player.score} نقطة</span>
-                                    {/* حالة اللاعب: انتهى أم لا يزال يلعب */}
+                                    {/* حالة اللاعب: انتهى أم لا يزال في التحدي */}
                                     {player.hasFinished ? (
                                       <span className="text-[9px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-md font-black uppercase">أنهى</span>
                                     ) : (
                                       <span className="text-[9px] bg-orange-100 text-orange-600 px-2 py-0.5 rounded-md font-black uppercase flex items-center gap-1 animate-pulse">
                                         <div className="w-1 h-1 bg-orange-500 rounded-full animate-ping" />
-                                        يلعب...
+                                        في التحدي...
                                       </span>
                                     )}
                                   </div>
@@ -3771,119 +4167,111 @@ ${versesList}
                     </div>
                   </motion.div>
                 ) : view === 'settings' ? (
-                  <motion.div
-                    key="settings"
-                    initial={{ opacity: 0, scale: 0.98 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.98 }}
-                    className="max-w-4xl mx-auto py-10 px-6 bg-white rounded-[3rem] shadow-2xl border border-slate-100 relative overflow-hidden"
-                  >
-                    <div className="absolute top-0 right-0 w-64 h-64 bg-brand-emerald/5 rounded-full -mr-32 -mt-32 blur-3xl opacity-50" />
+                  <SettingsView
+                    playerName={playerName}
+                    playerUsername={playerUsername}
+                    deviceId={deviceId}
+                    totalPoints={totalPoints}
+                    cups={cups}
+                    activeFrame={activeFrame}
+                    showProfileDecoration={showProfileDecoration}
+                    setShowProfileDecoration={setShowProfileDecoration}
+                    userCertificates={userCertificates}
+                    onOpenCertificate={(cat) => {
+                      setSelectedCategory(cat);
+                      setShowCertificate(true);
+                    }}
+                    onActivateFrameAndCertificate={(cat) => {
+                      const todayDate = new Date().toLocaleDateString('ar-EG', {
+                        day: 'numeric',
+                        month: 'long',
+                        year: 'numeric'
+                      });
+                      const certEntry = {
+                        category: cat,
+                        date: todayDate,
+                        name: playerName || 'علاء'
+                      };
+                      const filtered = userCertificates.filter(c => c.category !== cat);
+                      const updated = [...filtered, certEntry];
+                      setUserCertificates(updated);
+                      localStorage.setItem('quran_user_certificates', JSON.stringify(updated));
 
-                    <div className="relative z-10 text-right">
-                      <div className="flex items-center justify-between mb-12">
-                        <button
-                          onClick={() => setView('home')}
-                          className="p-4 rounded-2xl bg-slate-50 text-slate-400 hover:text-brand-emerald transition-colors"
-                        >
-                          <ChevronRight className="w-6 h-6" />
-                        </button>
-                        <div>
-                          <h2 className="text-3xl font-black text-slate-800">إعدادات الحساب والخصوصية</h2>
-                          <p className="text-slate-400 font-bold mt-1">خصص تجربتك في تحدي المتشابهات</p>
-                        </div>
-                      </div>
+                      setActiveFrame(cat);
+                      setIsNameDecorated(true);
+                      setShowProfileDecoration(true);
+                      localStorage.setItem('quran_active_frame', cat);
+                      localStorage.setItem('quran_name_decorated', 'true');
+                      localStorage.setItem('quran_show_decoration', 'true');
 
-                      {/* Privacy Section */}
-                      <div className="space-y-6 mb-16">
-                        <h3 className="text-xl font-black text-brand-emerald flex items-center gap-2 justify-end">
-                          الخصوصية والظهور
-                          <Lock className="w-5 h-5" />
-                        </h3>
+                      // Immediately sync active frame and achievement to database
+                      if (deviceId || playerName) {
+                        fetch('/api/player-score', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            deviceId,
+                            playerId: deviceId,
+                            name: playerName,
+                            username: playerUsername,
+                            seerahCompleted: cat === 'seerah' || userCertificates.some(c => c.category === 'seerah'),
+                            generalCompleted: cat === 'general' || userCertificates.some(c => c.category === 'general'),
+                            activeFrame: cat
+                          })
+                        }).then(() => syncLeaderboard()).catch(err => console.error('Frame sync failed:', err));
+                      }
 
-                        <div className="p-6 rounded-[2rem] bg-slate-50 border border-slate-100 flex items-center justify-between">
-                          <button
-                            onClick={() => {
-                              const newVal = !showProfileDecoration;
-                              setShowProfileDecoration(newVal);
-                              localStorage.setItem('quran_show_decoration', String(newVal));
-                            }}
-                            className={`w-14 h-7 rounded-full relative transition-all duration-300 ${showProfileDecoration ? 'bg-emerald-500' : 'bg-slate-300'}`}
-                          >
-                            <div className={`absolute top-1 w-5 h-5 bg-white rounded-full shadow-md transition-all duration-300 ${showProfileDecoration ? 'left-8' : 'left-1'}`} />
-                          </button>
+                      setSelectedCategory(cat);
+                      setShowCertificate(true);
+                    }}
+                    onSelectFrame={(frame) => {
+                      setActiveFrame(frame);
+                      if (frame) {
+                        setIsNameDecorated(true);
+                        setShowProfileDecoration(true);
+                        localStorage.setItem('quran_active_frame', frame);
+                        localStorage.setItem('quran_name_decorated', 'true');
+                        localStorage.setItem('quran_show_decoration', 'true');
+                      } else {
+                        setIsNameDecorated(false);
+                        setShowProfileDecoration(false);
+                        localStorage.setItem('quran_active_frame', 'none');
+                        localStorage.removeItem('quran_name_decorated');
+                        localStorage.removeItem('quran_show_decoration');
+                      }
 
-                          <div className="text-right">
-                            <h4 className="font-black text-slate-800 text-lg">إظهار الزخرفة والإطار في قائمة المتصدرين</h4>
-                            <p className="text-slate-400 font-bold text-sm mt-1">يتحكم هذا الخيار في ظهور إطار التميز والاسم الملون للآخرين</p>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* My Certificates Section */}
-                      <div className="space-y-6">
-                        <h3 className="text-xl font-black text-brand-gold flex items-center gap-2 justify-end">
-                          شهاداتي وإنجازاتي
-                          <Award className="w-5 h-5" />
-                        </h3>
-
-                        {userCertificates.length === 0 ? (
-                          <div className="p-12 text-center bg-slate-50/50 rounded-[2rem] border-2 border-dashed border-slate-100">
-                            <Award className="w-12 h-12 text-slate-200 mx-auto mb-4" />
-                            <p className="text-slate-400 font-bold">لم تحصل على أي شهادات بعد. أكمل أقسام المسابقة للحصول عليها!</p>
-                          </div>
-                        ) : (
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            {userCertificates.slice().reverse().map((cert, i) => (
-                              <div key={i} className="p-6 rounded-[2rem] bg-white border border-slate-100 shadow-sm hover:shadow-md transition-all flex items-center justify-between group">
-                                <button
-                                  onClick={() => {
-                                    setSelectedCategory(cert.category === 'seerah' ? 'seerah' : 'general');
-                                    setShowCertificate(true);
-                                  }}
-                                  className="p-3 rounded-xl bg-slate-50 text-slate-400 hover:bg-brand-emerald hover:text-white transition-all opacity-0 group-hover:opacity-100"
-                                >
-                                  <Eye className="w-5 h-5" />
-                                </button>
-                                <div className="flex items-center gap-4">
-                                  <div className="text-right">
-                                    <h4 className="font-black text-slate-800">{cert.category === 'seerah' ? 'شهادة السيرة النبوية' : 'شهادة الأسئلة العامة'}</h4>
-                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{cert.date}</p>
-                                  </div>
-                                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${cert.category === 'seerah' ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'}`}>
-                                    <Trophy className="w-6 h-6" />
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Account Management & Logout */}
-                      <div className="pt-8 mt-12 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4">
-                        <button
-                          onClick={() => {
-                            setPlayerName(null);
-                            setPlayerUsername(null);
-                            localStorage.removeItem('quran_player_name');
-                            localStorage.removeItem('quran_player_username');
-                            setView('home');
-                          }}
-                          className="flex items-center gap-2 px-5 py-3 rounded-2xl bg-red-50 text-red-600 hover:bg-red-100 font-black text-sm transition-all active:scale-95 w-full sm:w-auto justify-center"
-                        >
-                          <LogOut className="w-4 h-4" />
-                          <span>تسجيل الخروج / تبديل الحساب</span>
-                        </button>
-                        <div className="text-center sm:text-right">
-                          <span className="text-xs font-bold text-slate-400 block">الحساب المسجل حالياً:</span>
-                          <span className="text-base font-black text-slate-800">
-                            {playerName} {playerUsername ? `(@${playerUsername.replace(/^@/, '')})` : ''}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </motion.div>
+                      if (deviceId || playerName) {
+                        fetch('/api/player-score', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            deviceId,
+                            playerId: deviceId,
+                            name: playerName,
+                            username: playerUsername,
+                            activeFrame: frame || 'none'
+                          })
+                        }).then(() => syncLeaderboard()).catch(err => console.error('Frame select sync failed:', err));
+                      }
+                    }}
+                    onLogout={() => {
+                      setPlayerName(null);
+                      setPlayerUsername(null);
+                      localStorage.removeItem('quran_player_name');
+                      localStorage.removeItem('quran_player_username');
+                      setView('home');
+                    }}
+                    onBackToHome={() => setView('home')}
+                    onUpdatePlayer={(name, username) => {
+                      setPlayerName(name);
+                      setPlayerUsername(username);
+                      localStorage.setItem('quran_player_name', name);
+                      localStorage.setItem('quran_player_username', username);
+                    }}
+                    onStartQuizCategory={(_cat) => {
+                      setView('islamic_quiz');
+                    }}
+                  />
                 ) : view === 'home' ? (
                   <motion.div
                     key="home"
@@ -3971,43 +4359,34 @@ ${versesList}
                             </div>
                           </div>
 
-                          {/* 4. شعلة الاستمرار */}
+                          {/* 4. مواسم الطاعات وسنن الأيام */}
                           <button
-                            onClick={() => setIsStreakModalOpen(true)}
-                            className={`glass p-3.5 sm:p-4 rounded-3xl flex flex-col justify-between border shadow-sm hover:shadow-md transition-all text-right group ${
-                              streakInfo.status === 'active'
-                                ? 'bg-orange-50/80 border-orange-200/80'
-                                : streakInfo.status === 'warning'
-                                ? 'bg-amber-50/90 border-amber-300 animate-pulse'
-                                : 'bg-white/85 border-slate-200'
-                            }`}
-                            title="انقر لعرض تفاصيل الشعلة والمهلة"
+                            onClick={() => setIsOccasionsModalOpen(true)}
+                            className="glass bg-white/85 p-3.5 sm:p-4 rounded-3xl flex flex-col justify-between border border-amber-200/60 shadow-sm hover:shadow-md transition-all text-right group hover:border-amber-300 cursor-pointer"
+                            title="انقر لاستعراض أقرب مواسم الطاعات وسُنن الأيام والأحاديث الواردة فيها"
                           >
                             <div className="flex items-center justify-between w-full">
-                              <span className="text-[11px] sm:text-xs font-black text-slate-400 uppercase tracking-wider">شعلة الاستمرار</span>
-                              <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-2xl flex items-center justify-center text-white shadow-md shrink-0 transition-transform group-hover:scale-105 ${
-                                streakInfo.status === 'active'
-                                  ? 'bg-gradient-to-tr from-orange-600 to-amber-500 shadow-orange-500/25'
-                                  : streakInfo.status === 'warning'
-                                  ? 'bg-gradient-to-tr from-slate-700 to-amber-600'
-                                  : 'bg-slate-200 text-slate-400 shadow-none'
-                              }`}>
-                                <Flame className={`w-5 h-5 fill-current ${
-                                  streakInfo.status === 'active' ? 'text-white' : streakInfo.status === 'warning' ? 'text-amber-300' : 'text-slate-400 stroke-1'
-                                }`} />
+                              <span className="text-[11px] sm:text-xs font-black text-slate-400 uppercase tracking-wider">
+                                مواسم الطاعات
+                              </span>
+                              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-tr from-amber-500 via-orange-500 to-emerald-600 text-white flex items-center justify-center shadow-md shadow-amber-500/20 shrink-0 transition-transform group-hover:scale-105">
+                                <Moon className="w-5 h-5 text-amber-200 fill-amber-200" />
                               </div>
                             </div>
-                            <div className="mt-3 text-right">
-                              <div className="flex items-baseline gap-1.5">
-                                <span className={`text-2xl sm:text-3xl font-black tabular-nums leading-tight ${
-                                  streakInfo.status === 'active' ? 'text-orange-600' : streakInfo.status === 'warning' ? 'text-amber-800' : 'text-slate-600'
-                                }`}>
-                                  {streakInfo.streak}
+                            <div className="mt-2.5 text-right">
+                              <span className="text-base sm:text-lg font-black text-slate-800 leading-tight block truncate">
+                                {nearestOccasion.title}
+                              </span>
+                              <div className="flex items-center gap-1.5 mt-1">
+                                <span className="text-[10px] bg-amber-100 text-amber-800 font-black px-1.5 py-0.2 rounded-md shrink-0">
+                                  {nearestOccasion.timingBadge}
                                 </span>
-                                <span className="text-[10px] font-bold text-slate-400">أيام</span>
+                                <span className="text-[10px] text-slate-400 font-bold truncate">
+                                  {nearestOccasion.hijriDateText}
+                                </span>
                               </div>
-                              <span className="text-[10px] text-slate-400 font-bold block mt-0.5">
-                                {streakInfo.status === 'active' ? 'نشطة ومتوقدة 🔥' : streakInfo.status === 'warning' ? 'مهلة الإنقاذ ⏳' : 'ابدأ سلسلتك اليوم'}
+                              <span className="text-[10px] text-amber-600 font-bold block mt-1 group-hover:underline">
+                                استعراض السُنن والأحاديث 🌙
                               </span>
                             </div>
                           </button>
@@ -4018,7 +4397,7 @@ ${versesList}
                     {/* Subtitle / Last Played Date info */}
                     <div className="flex items-center justify-between px-3 -mt-2 text-xs text-slate-400 font-medium">
                       <span>آخر نشاط: <strong className="text-slate-600 font-bold">{lastPlayedDate ? (lastPlayedDate === new Date().toISOString().split('T')[0] ? 'اليوم' : lastPlayedDate) : 'لم يبدأ بعد'}</strong></span>
-                      <span className="text-[11px] text-emerald-700/80 font-bold hidden sm:inline">انقر على بطاقة الشعلة لمعرفة نظام الـ 24 ساعة ومهلة الإنقاذ 💡</span>
+                      <span className="text-[11px] text-emerald-700/80 font-bold hidden sm:inline">انقر على شعلة الزاوية لمعرفة نظام الـ 24 ساعة ومهلة الإنقاذ 🔥</span>
                     </div>
 
                     {/* Daily Challenge Hero Banner */}
@@ -4081,13 +4460,13 @@ ${versesList}
                             </div>
                             <div>
                               <div className="flex items-center gap-2 mb-0.5">
-                                <h4 className="font-black text-white text-base sm:text-lg">التحدي اليومي بانتظارك</h4>
+                                <h4 className="font-black text-white text-base sm:text-lg">التحدي اليومي: إكمال الآية</h4>
                                 <span className="text-[10px] bg-amber-400 text-emerald-950 font-black px-2 py-0.5 rounded-full">
                                   تحدي اليوم
                                 </span>
                               </div>
                               <p className="text-xs sm:text-sm text-emerald-100/90 font-medium leading-relaxed">
-                                حافظ على اشتعال شعلتك اليومية واكسب نقاط مهارة إضافية في المتشابهات القرآنية
+                                أكمل الآية الكريمة، وحافظ على اشتعال شعلتك اليومية واكسب نقاط المهارة القرآنية
                               </p>
                             </div>
                           </div>
@@ -4168,7 +4547,7 @@ ${versesList}
                         <div className="mt-4">
                           <h2 className={`text-sm md:text-lg font-black ${dailyCompleted ? 'text-slate-400' : 'text-brand-emerald'}`}>التحدي اليومي</h2>
                           <p className="text-slate-400 font-bold text-xs mt-1">
-                            {dailyCompleted ? 'نراك غداً' : 'مواضع يومية مختارة'}
+                            {dailyCompleted ? 'نراك غداً' : 'إكمال الآية اليومية'}
                           </p>
                         </div>
 
@@ -5476,13 +5855,14 @@ ${versesList}
                         <SkillsChallengeHeader
                           index={challengeMode === 'daily' ? dailyChallengeIndex : (view === 'challenge' ? currentChallengeIndex : sessionCurrentIndex)}
                           total={challengeMode === 'daily' ? 1 : (challenges.length > 50 ? 20 : Math.max(challenges.length, 1))}
-                          mode={skillsType}
+                          mode={challengeMode === 'daily' ? 'complete' : skillsType}
+                          title={challengeMode === 'daily' ? 'التحدي اليومي: إكمال الآية' : undefined}
                           verseText={KEYWORD}
                           totalPoints={totalPoints}
                           onSkip={challengeMode !== 'daily' ? handleSkip : undefined}
                           isComplete={isComplete}
                         />
-                        {skillsType === 'audio' ? (
+                        {skillsType === 'audio' && challengeMode !== 'daily' ? (
                           <AudioChallengeUI
                             targetVerses={targetVerses}
                             matchedIds={matchedIds}
@@ -5502,7 +5882,7 @@ ${versesList}
                             handlePromptNextChallenge={handlePromptNextChallenge}
                             onViewTafsir={handleOpenTafsir}
                           />
-                        ) : skillsType === 'surah' ? (
+                        ) : skillsType === 'surah' && challengeMode !== 'daily' ? (
                           <SurahChallengeUI
                             verseText={KEYWORD}
                             inputs={surahInputs}
@@ -5533,7 +5913,7 @@ ${versesList}
                             onOptionSelect={handleOptionSelect}
                             onConfirm={handleConfirmAnswer}
                             feedback={skillsFeedback}
-                            onSkip={handleSkip}
+                            onSkip={challengeMode !== 'daily' ? handleSkip : undefined}
                             isComplete={isComplete}
                             challengeMode={challengeMode}
                             saveScore={saveScore}
@@ -5544,6 +5924,10 @@ ${versesList}
                             handlePromptNextChallenge={handlePromptNextChallenge}
                             onViewTafsir={handleOpenTafsir}
                             currentChallenge={currentChallenge}
+                            onFinishDaily={() => {
+                              setChallengeMode('normal');
+                              setView('home');
+                            }}
                           />
                         )}
 
@@ -5827,7 +6211,7 @@ ${versesList}
             onClose={() => setIsResignModalOpen(false)}
             onConfirm={handleResignGroupChallenge}
             title="تأكيد الانسحاب من التحدي"
-            message="هل أنت تأكد من الانسحاب من هذا التحدي الجماعي؟ سيتم احتساب 0 نقاط وتسجيل أنك أنهيت اللعبة بالانسحاب."
+            message="هل أنت متأكد من الانسحاب من هذا التحدي الجماعي؟ سيتم احتساب 0 نقاط وتسجيل أنك أنهيت التحدي بالانسحاب."
             confirmText="تأكيد الانسحاب"
             cancelText="إلغاء"
             isDanger={true}
@@ -5859,6 +6243,14 @@ ${versesList}
             }}
           />
 
+          <IslamicOccasionsModal
+            isOpen={isOccasionsModalOpen}
+            onClose={() => setIsOccasionsModalOpen(false)}
+            occasions={upcomingOccasions}
+            hijriDate={hijriDate}
+            initialSelectedId={nearestOccasion?.id}
+          />
+
           <AnimatePresence>
             {showCertificate && (
               <CertificateGenerator
@@ -5880,6 +6272,23 @@ ${versesList}
                   setIsNameDecorated(true);
                   localStorage.setItem('quran_active_frame', category);
                   localStorage.setItem('quran_name_decorated', 'true');
+
+                  // Immediately sync to server so others see the frame in the leaderboard
+                  if (deviceId || playerName) {
+                    fetch('/api/player-score', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        deviceId,
+                        playerId: deviceId,
+                        name: playerName,
+                        username: playerUsername,
+                        seerahCompleted: category === 'seerah' || userCertificates.some(c => c.category === 'seerah'),
+                        generalCompleted: category === 'general' || userCertificates.some(c => c.category === 'general'),
+                        activeFrame: category
+                      })
+                    }).then(() => syncLeaderboard()).catch(err => console.error('Certificate save sync failed:', err));
+                  }
                 }}
               />
             )}

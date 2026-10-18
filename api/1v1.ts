@@ -36,17 +36,23 @@ async function getFullRoom(roomId: string) {
   const playerIds = Object.keys(progress).map(id => parseInt(id)).filter(id => !isNaN(id))
   const players = await prisma.player.findMany({
     where: { id: { in: playerIds } },
-    select: { id: true, name: true, deviceId: true }
+    select: { id: true, name: true, deviceId: true, activeFrame: true, seerahCompleted: true, generalCompleted: true }
   })
 
   const challenges = await prisma.challenge.findMany({ 
     where: { id: { in: room.challengeIds as number[] } }
   })
 
+  // Ensure challenges are ordered exactly as chosen in challengeIds
+  const challengeMap = new Map(challenges.map(c => [c.id, c]))
+  const orderedChallenges = (room.challengeIds as number[])
+    .map(id => challengeMap.get(id))
+    .filter(Boolean)
+
   return { 
     ...room, 
     participants: players, 
-    challenges: mapChallenges(challenges) 
+    challenges: mapChallenges(orderedChallenges) 
   }
 }
 
@@ -78,12 +84,6 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
       if (!existing) isUnique = true
     }
 
-    // No-Repeat Filtering logic
-    let seenIds: number[] = []
-    if (Array.isArray(player1.completedChallengeIds)) {
-      seenIds = player1.completedChallengeIds as number[]
-    }
-
     let selectedChallenges: any[] = []
     if (Array.isArray(questionIds) && questionIds.length > 0) {
       if (questionIds.length !== maxQuestions) {
@@ -96,7 +96,6 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({ message: 'بعض الأسئلة المختارة غير موجودة' })
       }
     } else {
-      // Priority Fallback Logic: New Questions first, then Fallback to seen
       let whereClause: any = {}
       
       // Strict Category Filtering
@@ -113,48 +112,30 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
         whereClause.type = { in: ['STANDARD', 'AUDIO', ''] }
       }
 
-      // 1. Fetch new questions (not in seenIds)
-      selectedChallenges = await prisma.challenge.findMany({
-        where: {
-          ...whereClause,
-          id: { notIn: seenIds }
-        },
-        take: maxQuestions
+      // In group/room challenges, select randomly from ALL matching challenges
+      // so all players get the exact same questions and it's not restricted by player history.
+      const allMatching = await prisma.challenge.findMany({
+        where: whereClause,
+        select: { id: true }
       })
 
-      // 2. If deficit, fetch more from seen pool randomly
-      if (selectedChallenges.length < maxQuestions) {
-        const deficit = maxQuestions - selectedChallenges.length
-        const fallbackChallenges = await prisma.challenge.findMany({
-          where: {
-            ...whereClause,
-            id: { in: seenIds }
-          },
-          take: deficit
-        })
-        selectedChallenges = [...selectedChallenges, ...fallbackChallenges]
-      }
-
-      // If still no challenges found (e.g. database empty or filter too strict), return error
-      if (selectedChallenges.length === 0) {
+      if (allMatching.length === 0) {
         return res.status(400).json({ 
           message: 'لا توجد تحديات متوفرة تطابق هذا التصنيف أو النمط. يرجى اختيار تصنيف آخر.' 
         })
       }
 
-      // 3. Shuffle the combined list to mix new and old questions
-      selectedChallenges = selectedChallenges.sort(() => 0.5 - Math.random())
+      const shuffledIds = allMatching.map(c => c.id).sort(() => Math.random() - 0.5)
+      const chosenIds = shuffledIds.slice(0, maxQuestions)
+
+      const fetchedChallenges = await prisma.challenge.findMany({
+        where: { id: { in: chosenIds } }
+      })
+      const mapById = new Map(fetchedChallenges.map(c => [c.id, c]))
+      selectedChallenges = chosenIds.map(id => mapById.get(id)).filter(Boolean) as any[]
     }
 
     const selectedIds = selectedChallenges.map(c => c.id)
-
-    // Update player1's completedChallengeIds with the new ones immediately to prevent repeat if they create another room
-    const newSeenIds = Array.from(new Set([...seenIds, ...selectedIds]))
-    await prisma.player.update({
-      where: { id: player1.id },
-      data: { completedChallengeIds: newSeenIds }
-    })
-
     const finalQuestionCount = selectedChallenges.length
 
     const roomData = await prisma.room.create({
@@ -182,23 +163,43 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
 }
 
 async function handleJoin(req: VercelRequest, res: VercelResponse) {
-  const { code, player2Id } = req.body
-  if (!code || !player2Id) return res.status(400).json({ message: 'Missing fields' })
+  const { code, player2Id, playerName } = req.body
+  if (!code || !player2Id) return res.status(400).json({ message: 'يرجى إدخال رمز الغرفة' })
+
+  const cleanCode = String(code).trim().toUpperCase()
 
   try {
-    const room = await prisma.room.findUnique({ where: { code }, include: { player1: true } })
-    if (!room) return res.status(404).json({ message: 'الغرفة غير موجودة' })
+    const room = await prisma.room.findFirst({ 
+      where: { 
+        code: { equals: cleanCode, mode: 'insensitive' } 
+      }, 
+      include: { player1: true } 
+    })
+    
+    if (!room) return res.status(404).json({ message: 'الغرفة غير موجودة، تأكد من صحة الرمز المكون من 6 خانات' })
     
     // Status can be WAITING or PLAYING (allow late join if within maxPlayers)
-    if (room.status === 'FINISHED') return res.status(400).json({ message: 'هذه اللعبة انتهت بالفعل' })
+    if (room.status === 'FINISHED') return res.status(400).json({ message: 'هذا التحدي انتهى بالفعل' })
 
-    const player = await prisma.player.findUnique({ where: { deviceId: player2Id } })
-    if (!player) return res.status(404).json({ message: 'اللاعب غير مسجل' })
-
-    let playersProgress = room.playersProgress as any || {}
-    const playerIds = Object.keys(playersProgress)
+    let player = await prisma.player.findUnique({ where: { deviceId: player2Id } })
     
-    // Room capacity limit removed - always allow join if room exists
+    // Auto-register player if not in database yet
+    if (!player) {
+      const defaultName = (playerName && String(playerName).trim()) || 'متسابق جديد'
+      player = await prisma.player.create({
+        data: {
+          deviceId: player2Id,
+          name: defaultName
+        }
+      })
+    } else if (playerName && String(playerName).trim() && player.name !== String(playerName).trim()) {
+      player = await prisma.player.update({
+        where: { id: player.id },
+        data: { name: String(playerName).trim() }
+      })
+    }
+
+    let playersProgress = (room.playersProgress as any) || {}
 
     // Add player if not already in
     if (!playersProgress[player.id]) {
@@ -209,20 +210,20 @@ async function handleJoin(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    const updatedRoomData = await prisma.room.update({
+    await prisma.room.update({
       where: { id: room.id },
       data: { 
         playersProgress,
         // Keep player2Id compatibility for 1v1 if needed, but primary is playersProgress
         player2Id: room.player2Id || (room.player1Id !== player.id ? player.id : room.player2Id)
-      },
-      include: { player1: true, player2: true }
+      }
     })
 
     const fullRoom = await getFullRoom(room.id)
     return res.status(200).json(fullRoom)
   } catch (error: any) {
-    return res.status(500).json({ message: 'Failed to join room', error: error.message })
+    console.error('Error in handleJoin:', error)
+    return res.status(500).json({ message: 'فشل الانضمام للغرفة', error: error.message })
   }
 }
 

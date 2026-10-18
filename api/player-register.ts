@@ -6,7 +6,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ message: 'Method not allowed' })
   }
 
-  const { action, deviceId, name, username, password } = req.body || {};
+  const {
+    action,
+    deviceId,
+    name,
+    username,
+    password,
+    currentPassword,
+    newPassword
+  } = req.body || {};
 
   try {
     // ==========================================
@@ -38,6 +46,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!player) {
         return res.status(401).json({
           error: 'لم يتم العثور على حساب بهذا الاسم أو اسم المستخدم'
+        });
+      }
+
+      if ((player as any).isBlocked) {
+        return res.status(403).json({
+          error: 'تم حظر هذا الحساب من تسجيل الدخول من قِبل إدارة التطبيق'
         });
       }
 
@@ -74,7 +88,134 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // ==========================================
-    // 2. REGISTER MODE (إنشاء حساب جديد للاعب)
+    // 2. CHANGE PASSWORD MODE (تغيير كلمة المرور)
+    // ==========================================
+    if (action === 'change-password') {
+      if (!deviceId) {
+        return res.status(400).json({ error: 'معرف الجهاز مطلوب' });
+      }
+
+      const curPass = (currentPassword || '').trim();
+      const newPass = (newPassword || '').trim();
+
+      if (!curPass) {
+        return res.status(400).json({ error: 'يرجى إدخال كلمة المرور الحالية' });
+      }
+      if (!newPass || newPass.length < 4) {
+        return res.status(400).json({ error: 'كلمة المرور الجديدة يجب أن تتكون من 4 خانات على الأقل' });
+      }
+
+      const player = await prisma.player.findUnique({ where: { deviceId } });
+      if (!player) {
+        return res.status(404).json({ error: 'لم يتم العثور على حساب اللاعب' });
+      }
+
+      const effectivePassword = player.password || '1234';
+      if (effectivePassword !== curPass) {
+        return res.status(400).json({ error: 'كلمة المرور الحالية غير صحيحة' });
+      }
+
+      const updated = await prisma.player.update({
+        where: { id: player.id },
+        data: { password: newPass }
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: 'تم تغيير كلمة المرور بنجاح',
+        player: updated
+      });
+    }
+
+    // ==========================================
+    // 3. UPDATE PROFILE MODE (تغيير الاسم واسم المستخدم)
+    // ==========================================
+    if (action === 'update-profile') {
+      if (!deviceId) {
+        return res.status(400).json({ error: 'معرف الجهاز مطلوب' });
+      }
+
+      const player = await prisma.player.findUnique({ where: { deviceId } });
+      if (!player) {
+        return res.status(404).json({ error: 'لم يتم العثور على حساب اللاعب' });
+      }
+
+      const trimmedName = (name || '').trim();
+      const cleanNewUsername = (username || '').trim().replace(/^@+/, '');
+
+      const updateData: any = {};
+
+      // 1. Check Display Name
+      if (trimmedName && trimmedName !== player.name) {
+        const existingName = await prisma.player.findFirst({
+          where: {
+            name: { equals: trimmedName, mode: 'insensitive' },
+            NOT: { id: player.id }
+          }
+        });
+        if (existingName) {
+          return res.status(400).json({ error: 'هذا الاسم مستخدم بالفعل، يرجى اختيار اسم آخر' });
+        }
+        updateData.name = trimmedName;
+      }
+
+      // 2. Check Username
+      if (cleanNewUsername && cleanNewUsername !== player.username) {
+        // Enforce 30-day rule for username changes
+        const changedAt = (player as any).usernameChangedAt;
+        if (changedAt) {
+          const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
+          const elapsed = Date.now() - new Date(changedAt).getTime();
+          if (elapsed < thirtyDaysMs) {
+            const daysRemaining = Math.ceil((thirtyDaysMs - elapsed) / (1000 * 60 * 60 * 24));
+            return res.status(400).json({
+              error: `لا يمكنك تغيير اسم المستخدم إلا بعد مرور 30 يوماً من آخر تغيير (متبقي ${daysRemaining} يوم).`,
+              daysRemaining
+            });
+          }
+        }
+
+        // Check if username taken by another player
+        const existingUsername = await prisma.player.findFirst({
+          where: {
+            OR: [
+              { username: cleanNewUsername },
+              { username: '@' + cleanNewUsername }
+            ],
+            NOT: { id: player.id }
+          }
+        });
+
+        if (existingUsername) {
+          return res.status(400).json({ error: 'اسم المستخدم هذا مستخدم بالفعل، يرجى اختيار اسم آخر' });
+        }
+
+        updateData.username = cleanNewUsername;
+        updateData.usernameChangedAt = new Date();
+      }
+
+      if (Object.keys(updateData).length === 0) {
+        return res.status(200).json({
+          success: true,
+          message: 'لم يتم إجراء أي تغييرات',
+          player
+        });
+      }
+
+      const updated = await prisma.player.update({
+        where: { id: player.id },
+        data: updateData
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: 'تم تحديث بيانات الحساب بنجاح',
+        player: updated
+      });
+    }
+
+    // ==========================================
+    // 4. REGISTER MODE (إنشاء حساب جديد للاعب)
     // ==========================================
     const trimmedName = (name || '').trim();
     const cleanUsername = (username || '').trim().replace(/^@+/, '');

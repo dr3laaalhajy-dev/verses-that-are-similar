@@ -16,7 +16,7 @@ const SkillsMenu: React.FC<SkillsMenuProps> = ({
   onBack, 
   onSelectMode, 
   title = 'تحدي المهارات', 
-  subtitle = 'اختر نمط اللعب الذي تفضله لتبدأ الرحلة',
+  subtitle = 'اختر نمط التحدي الذي تفضله لتبدأ الرحلة',
   hideAudio = false,
   hideComplete = false,
   hideSurah = false

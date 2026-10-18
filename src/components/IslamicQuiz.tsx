@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trophy, RotateCcw, ChevronLeft, CheckCircle2, XCircle, Loader2, Award, Sparkles, Lock, Play, ChevronRight, Flame } from 'lucide-react';
+import { Trophy, RotateCcw, ChevronLeft, CheckCircle2, XCircle, Loader2, Award, Sparkles, Lock, Play, ChevronRight, Flame, Eye, BookOpen } from 'lucide-react';
 import { quizQuestions, Question } from '../data/quizQuestionsData';
 import CertificateGenerator from './CertificateGenerator';
 
@@ -10,10 +10,10 @@ const getStorageKey = (category: string | null) => `quran_quiz_progress_${catego
 const IslamicQuiz: React.FC<{
   onBack?: () => void,
   onWin?: () => void,
-  onShowCertificate?: (category: 'seerah' | 'general' | 'quran') => void,
+  onShowCertificate?: (category: 'seerah' | 'general') => void,
   claimedCategories?: string[]
 }> = ({ onBack, onWin, onShowCertificate, claimedCategories = [] }) => {
-  const [gameStatus, setGameStatus] = useState<'categories' | 'difficulty' | 'levels' | 'playing' | 'result'>('categories');
+  const [gameStatus, setGameStatus] = useState<'categories' | 'difficulty' | 'levels' | 'playing' | 'result' | 'review'>('categories');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [difficulty, setDifficulty] = useState<'easy' | 'hard' | null>(null);
@@ -68,18 +68,29 @@ const IslamicQuiz: React.FC<{
     setSelectedAnswer(null);
   };
 
-  const handleStartGroup = (groupNum: number) => {
-    let groupQuestions: Question[] = [];
-
+  const getGroupQuestions = (groupNum: number): Question[] => {
     if (selectedCategory === 'general') {
-      if (!difficulty) return;
+      if (!difficulty) return [];
       const allFiltered = quizQuestions.filter(q => (q.category || 'general') === 'general' && q.difficulty === difficulty);
-      groupQuestions = allFiltered.slice((groupNum - 1) * 20, groupNum * 20);
+      return allFiltered.slice((groupNum - 1) * 20, groupNum * 20);
     } else if (selectedCategory === 'seerah') {
       const allFiltered = quizQuestions.filter(q => q.category === 'seerah');
-      groupQuestions = allFiltered.slice((groupNum - 1) * 20, groupNum * 20);
+      return allFiltered.slice((groupNum - 1) * 20, groupNum * 20);
+    }
+    return [];
+  };
+
+  const handleStartGroup = (groupNum: number) => {
+    const isSeerah = selectedCategory === 'seerah';
+    const currentProgress = isSeerah ? unlockedLevels.easy : (difficulty ? unlockedLevels[difficulty] : 1);
+
+    // If this group was already passed, do not allow retaking; open review instead
+    if (groupNum < currentProgress) {
+      handleReviewGroup(groupNum);
+      return;
     }
 
+    const groupQuestions = getGroupQuestions(groupNum);
     if (groupQuestions.length === 0) return;
 
     setQuestions(groupQuestions);
@@ -88,6 +99,15 @@ const IslamicQuiz: React.FC<{
     setCurrentIndex(0);
     setScore(0);
     setSelectedAnswer(null);
+  };
+
+  const handleReviewGroup = (groupNum: number) => {
+    const groupQuestions = getGroupQuestions(groupNum);
+    if (groupQuestions.length === 0) return;
+
+    setQuestions(groupQuestions);
+    setSelectedGroup(groupNum);
+    setGameStatus('review');
   };
 
   const handleAnswerSelect = (option: string) => {
@@ -353,36 +373,92 @@ const IslamicQuiz: React.FC<{
           )}
         </AnimatePresence>
 
-        <div className="grid grid-cols-1 gap-2.5 max-w-sm mx-auto">
+        <div className="grid grid-cols-1 gap-3 max-w-sm sm:max-w-md mx-auto">
           {Array.from({ length: totalGroups }).map((_, i) => {
             const num = i + 1;
+            const isPassed = num < progress;
             const isLocked = num > progress;
+
+            if (isPassed) {
+              return (
+                <div
+                  key={num}
+                  className="flex items-center justify-between p-3.5 md:p-4 rounded-2xl border-2 border-emerald-100 bg-emerald-50/40 shadow-xs transition-all"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl flex items-center justify-center font-black text-base bg-emerald-100 text-emerald-700 shrink-0">
+                      <CheckCircle2 className="w-5 h-5" />
+                    </div>
+                    <div className="text-right">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-black text-sm md:text-base text-slate-800">المجموعة {num}</h3>
+                        <span className="text-[10px] font-black text-emerald-700 bg-emerald-100/90 px-2 py-0.5 rounded-md border border-emerald-200">
+                          تم الاجتياز ✓
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 font-bold mt-0.5">20 سؤالاً • مكتملة بنجاح</p>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => handleReviewGroup(num)}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white text-emerald-700 border border-emerald-200 hover:bg-emerald-600 hover:text-white hover:border-emerald-600 transition-all text-xs font-black shadow-xs active:scale-95 shrink-0"
+                    title="استعراض الأسئلة والإجابات"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    <span>عرض الأسئلة</span>
+                  </button>
+                </div>
+              );
+            }
+
+            if (isLocked) {
+              return (
+                <div
+                  key={num}
+                  className="flex items-center justify-between p-3.5 md:p-4 rounded-2xl border-2 border-slate-100 bg-slate-50/60 opacity-60 grayscale cursor-not-allowed transition-all"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl flex items-center justify-center font-black text-base bg-slate-200 text-slate-400 shrink-0">
+                      {num}
+                    </div>
+                    <div className="text-right">
+                      <h3 className="font-black text-sm md:text-base text-slate-400">المجموعة {num}</h3>
+                      <p className="text-[10px] text-slate-400 font-bold">20 سؤالاً إسلامياً • مقفلة</p>
+                    </div>
+                  </div>
+                  <Lock className="w-4 h-4 text-slate-300 shrink-0" />
+                </div>
+              );
+            }
+
+            // Current Active Group waiting to be played
             return (
               <motion.button
                 key={num}
-                disabled={isLocked}
-                whileHover={!isLocked ? { scale: 1.01, x: -3 } : {}}
-                whileTap={!isLocked ? { scale: 0.99 } : {}}
+                whileHover={{ scale: 1.01, x: -3 }}
+                whileTap={{ scale: 0.99 }}
                 onClick={() => handleStartGroup(num)}
-                className={`relative flex items-center justify-between p-3.5 md:p-4 rounded-2xl border-2 transition-all ${isLocked
-                  ? 'bg-slate-50 border-slate-100 opacity-60 grayscale cursor-not-allowed'
-                  : 'bg-white border-slate-100 hover:border-emerald-500 hover:shadow-md shadow-xs'
-                  }`}
+                className="relative flex items-center justify-between p-3.5 md:p-4 rounded-2xl border-2 border-emerald-500 bg-white hover:bg-emerald-50/30 transition-all text-right shadow-md shadow-emerald-500/5 group"
               >
                 <div className="flex items-center gap-3">
-                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-base ${isLocked ? 'bg-slate-200 text-slate-400' : 'bg-emerald-50 text-emerald-600'}`}>
+                  <div className="w-9 h-9 rounded-xl flex items-center justify-center font-black text-base bg-emerald-600 text-white shadow-xs shrink-0">
                     {num}
                   </div>
                   <div className="text-right">
-                    <h3 className={`font-black text-sm md:text-base ${isLocked ? 'text-slate-400' : 'text-slate-800'}`}>المجموعة {num}</h3>
-                    <p className="text-[10px] text-slate-400 font-bold">20 سؤالاً إسلامياً</p>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-black text-sm md:text-base text-slate-800">المجموعة {num}</h3>
+                      <span className="text-[10px] font-black text-amber-700 bg-amber-100 px-2 py-0.5 rounded-md animate-pulse">
+                        التحدي التالي
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 font-bold mt-0.5">20 سؤالاً • اضغط للبدء</p>
                   </div>
                 </div>
-                {isLocked ? (
-                  <Lock className="w-4 h-4 text-slate-300" />
-                ) : (
-                  <Play className="w-4 h-4 text-emerald-500 fill-emerald-500" />
-                )}
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 font-black text-xs group-hover:bg-emerald-600 group-hover:text-white transition-all shrink-0">
+                  <span>ابدأ</span>
+                  <Play className="w-3.5 h-3.5 fill-current" />
+                </div>
               </motion.button>
             );
           })}
@@ -506,13 +582,23 @@ const IslamicQuiz: React.FC<{
               </button>
             )}
 
-            <button
-              onClick={() => restartQuiz()}
-              className="flex items-center justify-center gap-2 py-4 bg-white border-2 border-slate-100 text-slate-600 rounded-2xl font-black text-lg hover:bg-slate-50 transition-all"
-            >
-              <RotateCcw className="w-5 h-5" />
-              <span>إعادة الاختبار</span>
-            </button>
+            {isPassed ? (
+              <button
+                onClick={() => handleReviewGroup(selectedGroup)}
+                className="flex items-center justify-center gap-2 py-4 bg-white border-2 border-emerald-200 text-emerald-700 rounded-2xl font-black text-lg hover:bg-emerald-50 transition-all shadow-xs"
+              >
+                <Eye className="w-5 h-5" />
+                <span>عرض أسئلة المجموعة</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => handleStartGroup(selectedGroup)}
+                className="flex items-center justify-center gap-2 py-4 bg-white border-2 border-slate-100 text-slate-600 rounded-2xl font-black text-lg hover:bg-slate-50 transition-all"
+              >
+                <RotateCcw className="w-5 h-5" />
+                <span>إعادة المحاولة</span>
+              </button>
+            )}
 
             <button
               onClick={() => {
@@ -526,6 +612,109 @@ const IslamicQuiz: React.FC<{
           </div>
         </div>
       </motion.div>
+    );
+  }
+
+  if (gameStatus === 'review') {
+    const isSeerah = selectedCategory === 'seerah';
+    const categoryTitle = isSeerah ? 'السيرة النبوية' : `الأسئلة العامة (${difficulty === 'easy' ? 'المستوى السهل' : 'المستوى الصعب'})`;
+
+    return (
+      <div className="max-w-2xl mx-auto px-4 py-4 md:py-6" dir="rtl">
+        {/* Header Bar */}
+        <div className="bg-white rounded-3xl p-5 md:p-6 shadow-md border border-slate-100 mb-6 islamic-watermark">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className={`px-2.5 py-0.5 rounded-full text-xs font-black ${isSeerah ? 'bg-amber-100 text-amber-700' : (difficulty === 'easy' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-800 text-white')}`}>
+                  {categoryTitle}
+                </span>
+                <span className="text-xs font-black text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                  تم الاجتياز ✓
+                </span>
+              </div>
+              <h2 className="text-xl md:text-2xl font-black text-slate-800">
+                مراجعة أسئلة المجموعة {selectedGroup}
+              </h2>
+              <p className="text-xs md:text-sm text-slate-400 font-bold mt-1">
+                استعراض كامل لجميع أسئلة المجموعة ({questions.length} سؤالاً) مع الإجابات الصحيحة
+              </p>
+            </div>
+
+            <button
+              onClick={() => setGameStatus('levels')}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 font-bold text-xs md:text-sm transition-all shrink-0"
+            >
+              <ChevronLeft className="w-4 h-4 rotate-180" />
+              <span>العودة للمجموعات</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Questions List */}
+        <div className="space-y-4">
+          {questions.map((q, idx) => (
+            <motion.div
+              key={idx}
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: Math.min(idx * 0.03, 0.4) }}
+              className="bg-white rounded-2xl md:rounded-3xl p-5 md:p-6 shadow-xs border border-slate-100 hover:shadow-md transition-all relative overflow-hidden"
+            >
+              {/* Question Header */}
+              <div className="flex items-center justify-between gap-2 mb-3">
+                <span className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 font-black text-xs">
+                  السؤال {idx + 1} من {questions.length}
+                </span>
+                <span className="text-[11px] font-bold text-slate-400">
+                  {q.difficulty === 'hard' ? 'مستوى متقدم' : 'مستوى أساسي'}
+                </span>
+              </div>
+
+              {/* Question Text */}
+              <h3 className="text-base md:text-lg font-black text-slate-800 leading-snug mb-4">
+                {q.question}
+              </h3>
+
+              {/* Options */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                {q.options.map((opt, optIdx) => {
+                  const isCorrect = opt === q.answer;
+                  return (
+                    <div
+                      key={optIdx}
+                      className={`p-3 rounded-xl border-2 text-right font-bold text-xs sm:text-sm flex items-center justify-between transition-all ${
+                        isCorrect
+                          ? 'bg-emerald-50 border-emerald-500 text-emerald-900 shadow-xs'
+                          : 'bg-slate-50/70 border-slate-100 text-slate-600'
+                      }`}
+                    >
+                      <span className={isCorrect ? 'font-black text-emerald-950' : ''}>{opt}</span>
+                      {isCorrect && (
+                        <div className="flex items-center gap-1 shrink-0 text-emerald-600 mr-2">
+                          <span className="text-[10px] font-black bg-emerald-200/60 px-1.5 py-0.5 rounded">صحيح</span>
+                          <CheckCircle2 className="w-4 h-4" />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </motion.div>
+          ))}
+        </div>
+
+        {/* Bottom Back Button */}
+        <div className="text-center mt-8 pb-8">
+          <button
+            onClick={() => setGameStatus('levels')}
+            className="px-8 py-3.5 bg-emerald-600 text-white rounded-2xl font-black text-sm md:text-base hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-600/20 active:scale-95 flex items-center gap-2 mx-auto"
+          >
+            <ChevronLeft className="w-4 h-4 rotate-180" />
+            <span>العودة للمجموعات</span>
+          </button>
+        </div>
+      </div>
     );
   }
 

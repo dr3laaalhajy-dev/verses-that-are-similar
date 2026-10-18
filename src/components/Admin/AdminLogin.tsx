@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Lock, User, Loader2, Key, ArrowRight, ShieldCheck, AtSign } from 'lucide-react';
 
 interface AdminLoginProps {
-  onLogin: (token: string, isSuperAdmin?: boolean, role?: string, username?: string, adminId?: number, name?: string) => void;
+  onLogin: (token: string, isSuperAdmin?: boolean, role?: string, username?: string, adminId?: number, name?: string, canManageUsers?: boolean) => void;
   onBack: () => void;
 }
 
@@ -79,7 +79,7 @@ export default function AdminLogin({ onLogin, onBack }: AdminLoginProps) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || 'بيانات الدخول غير صحيحة');
 
-      onLogin(data.token, data.isSuperAdmin, data.role, data.username, data.adminId, data.name);
+      onLogin(data.token, data.isSuperAdmin, data.role, data.username, data.adminId, data.name, data.canManageUsers);
     } catch (err: any) {
       setError(err.message);
     } finally {

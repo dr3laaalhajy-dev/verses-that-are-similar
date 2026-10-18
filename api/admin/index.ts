@@ -7,7 +7,7 @@ import { v4 as uuidv4 } from 'uuid'
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const { action } = req.method === 'GET' || req.method === 'DELETE' ? req.query : req.body
+  const action = (req.query.action as string) || (req.body && req.body.action)
 
   // Actions that DON'T require auth
   if (req.method === 'POST' && action === 'login') {
@@ -47,19 +47,43 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     })
   }
 
-  // General permission check: only FOUNDER or CO_FOUNDER or isSuperAdmin can manage/invite
-  const isPrivileged = currentAdmin.role === 'FOUNDER' || currentAdmin.role === 'CO_FOUNDER' || currentAdmin.isSuperAdmin
+  // General permission check: only FOUNDER or CO_FOUNDER can manage/invite
+  const isPrivileged = currentAdmin.role === 'FOUNDER' || currentAdmin.role === 'CO_FOUNDER'
   if ((action === 'invite' || action === 'manage' || action === 'change-password') && !isPrivileged) {
     return res.status(403).json({ message: 'هذا الإجراء مسموح للمؤسس ومساعدي المؤسس فقط' })
   }
 
+  const isFounder = currentAdmin.role === 'FOUNDER' || currentAdmin.username.toLowerCase() === 'alaa' || currentAdmin.username === 'علاء'
+  const canManageUsers = isFounder || (currentAdmin.role === 'CO_FOUNDER' && currentAdmin.canManageUsers)
+
+  if (action === 'users' && !canManageUsers) {
+    return res.status(403).json({ message: 'ليس لديك صلاحية لإدارة المستخدمين' })
+  }
+
+  if (action === 'toggle-user-permission' && !isFounder) {
+    return res.status(403).json({ message: 'تعديل صلاحيات إدارة المستخدمين متاح للمؤسس فقط' })
+  }
+
   switch (action) {
+    case 'me':
+      return res.status(200).json({
+        id: currentAdmin.id,
+        username: currentAdmin.username,
+        name: currentAdmin.name,
+        role: (currentAdmin.username.toLowerCase() === 'alaa' || currentAdmin.username === 'علاء') ? 'FOUNDER' : (currentAdmin.role || 'ADMIN'),
+        isSuperAdmin: currentAdmin.isSuperAdmin,
+        canManageUsers: !!canManageUsers
+      })
     case 'invite':
       return handleInvite(req, res, currentAdmin)
     case 'manage':
       return handleManage(req, res, currentAdmin)
     case 'change-password':
       return handleChangePassword(req, res, currentAdmin)
+    case 'users':
+      return handleUsers(req, res, currentAdmin)
+    case 'toggle-user-permission':
+      return handleToggleUserPermission(req, res, currentAdmin)
     default:
       return res.status(400).json({ message: 'Invalid action' })
   }
@@ -96,14 +120,16 @@ async function handleLogin(req: VercelRequest, res: VercelResponse) {
 
     // Ensure 'alaa' / 'علاء' is always FOUNDER
     const isAlaa = admin.username.toLowerCase() === 'alaa' || admin.username === 'علاء' || cleanUsername.toLowerCase() === 'alaa' || cleanUsername === 'علاء'
-    const effectiveRole = isAlaa ? 'FOUNDER' : (admin.role || (admin.isSuperAdmin ? 'CO_FOUNDER' : 'ADMIN'))
+    const effectiveRole = isAlaa ? 'FOUNDER' : (admin.role || 'ADMIN')
+    const isSuper = effectiveRole === 'FOUNDER' || effectiveRole === 'CO_FOUNDER'
+
     if (isAlaa && admin.role !== 'FOUNDER') {
       await prisma.admin.update({ where: { id: admin.id }, data: { role: 'FOUNDER', isSuperAdmin: true } })
       admin.role = 'FOUNDER'
     }
 
     const token = jwt.sign(
-      { adminId: admin.id, username: admin.username, isSuperAdmin: admin.isSuperAdmin || effectiveRole === 'FOUNDER' || effectiveRole === 'CO_FOUNDER', role: effectiveRole },
+      { adminId: admin.id, username: admin.username, isSuperAdmin: isSuper, role: effectiveRole },
       JWT_SECRET,
       { expiresIn: '7d' }
     )
@@ -113,8 +139,9 @@ async function handleLogin(req: VercelRequest, res: VercelResponse) {
       username: admin.username,
       name: admin.name || admin.username,
       adminId: admin.id,
-      isSuperAdmin: admin.isSuperAdmin || effectiveRole === 'FOUNDER' || effectiveRole === 'CO_FOUNDER',
-      role: effectiveRole
+      isSuperAdmin: isSuper,
+      role: effectiveRole,
+      canManageUsers: isAlaa || effectiveRole === 'FOUNDER' || !!admin.canManageUsers
     })
   } catch (error) {
     console.error('Login error:', error)
@@ -197,14 +224,22 @@ async function handleInvite(req: VercelRequest, res: VercelResponse, currentAdmi
 async function handleManage(req: VercelRequest, res: VercelResponse, currentAdmin: any) {
   if (req.method === 'GET') {
     const admins = await prisma.admin.findMany({
-      select: { id: true, username: true, name: true, isSuperAdmin: true, role: true },
+      select: { id: true, username: true, name: true, isSuperAdmin: true, role: true, canManageUsers: true },
       orderBy: { id: 'asc' }
     })
     // Ensure alaa is always shown as FOUNDER
-    const mapped = admins.map(a => ({
+    let mapped = admins.map(a => ({
       ...a,
-      role: (a.username.toLowerCase() === 'alaa' || a.username === 'علاء') ? 'FOUNDER' : (a.role || 'ADMIN')
+      role: (a.username.toLowerCase() === 'alaa' || a.username === 'علاء') ? 'FOUNDER' : (a.role || 'ADMIN'),
+      canManageUsers: (a.username.toLowerCase() === 'alaa' || a.username === 'علاء' || a.role === 'FOUNDER') ? true : !!a.canManageUsers
     }))
+
+    // Only the Founder himself can see the Founder card
+    const isCallerFounder = currentAdmin.role === 'FOUNDER' || currentAdmin.username.toLowerCase() === 'alaa' || currentAdmin.username === 'علاء'
+    if (!isCallerFounder) {
+      mapped = mapped.filter(a => a.role !== 'FOUNDER' && a.username.toLowerCase() !== 'alaa' && a.username !== 'علاء')
+    }
+
     return res.status(200).json(mapped)
   }
 
@@ -324,4 +359,140 @@ async function handleChangePassword(req: VercelRequest, res: VercelResponse, cur
   })
 
   return res.status(200).json({ message: `تم تغيير كلمة المرور للمشرف (${targetAdmin.username}) بنجاح` })
+}
+
+async function handleUsers(req: VercelRequest, res: VercelResponse, currentAdmin: any) {
+  if (req.method === 'GET') {
+    const search = (req.query.search as string || '').trim();
+    const players = await prisma.player.findMany({
+      where: search ? {
+        OR: [
+          { name: { contains: search, mode: 'insensitive' as const } },
+          { username: { contains: search, mode: 'insensitive' as const } }
+        ]
+      } : undefined,
+      orderBy: [
+        { cups: 'desc' },
+        { points: 'desc' },
+        { createdAt: 'desc' }
+      ],
+      select: {
+        id: true,
+        name: true,
+        username: true,
+        points: true,
+        cups: true,
+        isBlocked: true,
+        activeFrame: true,
+        seerahCompleted: true,
+        generalCompleted: true,
+        quranCompleted: true,
+        createdAt: true,
+        updatedAt: true
+      }
+    });
+    return res.status(200).json(players);
+  }
+
+  if (req.method === 'POST') {
+    const { subAction, id, name, username, points, cups, newPassword, isBlocked } = req.body;
+    if (!id) return res.status(400).json({ message: 'معرف المستخدم مطلوب' });
+
+    const player = await prisma.player.findUnique({ where: { id: Number(id) } });
+    if (!player) return res.status(404).json({ message: 'المستخدم غير موجود' });
+
+    if (subAction === 'update-info') {
+      const cleanU = (username || '').trim().replace(/^@+/, '');
+      const cleanN = (name || '').trim();
+
+      if (cleanU && cleanU !== player.username?.replace(/^@+/, '')) {
+        const existing = await prisma.player.findFirst({
+          where: {
+            OR: [{ username: cleanU }, { username: '@' + cleanU }],
+            NOT: { id: player.id }
+          }
+        });
+        if (existing) {
+          return res.status(400).json({ message: 'اسم المستخدم هذا مستخدم بالفعل لمستخدم آخر' });
+        }
+      }
+
+      const updated = await prisma.player.update({
+        where: { id: player.id },
+        data: {
+          ...(cleanN ? { name: cleanN } : {}),
+          ...(cleanU ? { username: cleanU } : {}),
+          ...(points !== undefined ? { points: Number(points) } : {}),
+          ...(cups !== undefined ? { cups: Number(cups) } : {})
+        }
+      });
+      return res.status(200).json({ success: true, message: 'تم تحديث بيانات المستخدم بنجاح', player: updated });
+    }
+
+    if (subAction === 'reset-password') {
+      if (!newPassword || !String(newPassword).trim()) {
+        return res.status(400).json({ message: 'كلمة المرور الجديدة مطلوبة' });
+      }
+      await prisma.player.update({
+        where: { id: player.id },
+        data: { password: String(newPassword).trim() }
+      });
+      return res.status(200).json({ success: true, message: 'تم إعادة تعيين كلمة المرور بنجاح' });
+    }
+
+    if (subAction === 'toggle-block') {
+      const updated = await prisma.player.update({
+        where: { id: player.id },
+        data: { isBlocked: Boolean(isBlocked) }
+      });
+      return res.status(200).json({
+        success: true,
+        message: updated.isBlocked ? 'تم حظر المستخدم ومنعه من تسجيل الدخول' : 'تم إلغاء حظر المستخدم بنجاح',
+        player: updated
+      });
+    }
+
+    return res.status(400).json({ message: 'إجراء غير معروف' });
+  }
+
+  if (req.method === 'DELETE') {
+    const id = Number(req.query.id);
+    if (!id) return res.status(400).json({ message: 'معرف المستخدم مطلوب' });
+
+    // Safely delete associated rooms
+    await prisma.room.deleteMany({
+      where: {
+        OR: [
+          { player1Id: id },
+          { player2Id: id },
+          { winnerId: id }
+        ]
+      }
+    }).catch(() => {});
+
+    await prisma.player.delete({ where: { id } });
+    return res.status(200).json({ success: true, message: 'تم حذف حساب المستخدم نهائياً' });
+  }
+
+  return res.status(405).json({ message: 'Method not allowed' });
+}
+
+async function handleToggleUserPermission(req: VercelRequest, res: VercelResponse, currentAdmin: any) {
+  if (req.method !== 'POST') return res.status(405).json({ message: 'Method not allowed' });
+  const { adminId, canManageUsers } = req.body;
+  if (!adminId) return res.status(400).json({ message: 'معرف المشرف مطلوب' });
+
+  const targetAdmin = await prisma.admin.findUnique({ where: { id: Number(adminId) } });
+  if (!targetAdmin) return res.status(404).json({ message: 'المشرف غير موجود' });
+
+  const updated = await prisma.admin.update({
+    where: { id: targetAdmin.id },
+    data: { canManageUsers: Boolean(canManageUsers) }
+  });
+
+  return res.status(200).json({
+    success: true,
+    message: updated.canManageUsers ? 'تم منح صلاحية إدارة المستخدمين' : 'تم سحب صلاحية إدارة المستخدمين',
+    admin: updated
+  });
 }

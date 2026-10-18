@@ -53,24 +53,55 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       console.log('Fetching challenges with query:', JSON.stringify(where));
 
-      const challenges = await prisma.challenge.findMany({
-        where,
-        select: {
-          id: true,
-          keyword: true,
-          verses: true,
-          category: true,
-          level: true,
-          type: true,
-          audioUrl: true,
-          options: true,
-          correctText: true,
-          createdAt: true,
-          updatedAt: true
-        },
-        take: isNaN(take as any) ? undefined : take,
-        orderBy: { createdAt: 'desc' }
-      })
+      let challenges: any[] = [];
+      if (take && req.query.adminView !== 'true') {
+        const matching = await prisma.challenge.findMany({
+          where,
+          select: { id: true }
+        });
+        const shuffledIds = matching.map(m => m.id).sort(() => Math.random() - 0.5);
+        const sampledIds = shuffledIds.slice(0, take);
+
+        if (sampledIds.length > 0) {
+          const selected = await prisma.challenge.findMany({
+            where: { id: { in: sampledIds } },
+            select: {
+              id: true,
+              keyword: true,
+              verses: true,
+              category: true,
+              level: true,
+              type: true,
+              audioUrl: true,
+              options: true,
+              correctText: true,
+              createdAt: true,
+              updatedAt: true
+            }
+          });
+          const idMap = new Map(selected.map(item => [item.id, item]));
+          challenges = sampledIds.map(id => idMap.get(id)).filter(Boolean);
+        }
+      } else {
+        challenges = await prisma.challenge.findMany({
+          where,
+          select: {
+            id: true,
+            keyword: true,
+            verses: true,
+            category: true,
+            level: true,
+            type: true,
+            audioUrl: true,
+            options: true,
+            correctText: true,
+            createdAt: true,
+            updatedAt: true
+          },
+          take: isNaN(take as any) ? undefined : take,
+          orderBy: { createdAt: 'desc' }
+        });
+      }
       return res.status(200).json(mapChallenges(challenges) || [])
     } catch (error: any) {
       console.error('Fetch Challenges API Crash:', {
