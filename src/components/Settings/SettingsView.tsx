@@ -1158,8 +1158,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </div>
             </div>
             <a
-              href="/المتشابهات.apk"
-              download="المتشابهات.apk"
+              href="https://drive.google.com/file/d/1A6mGhpmKHDv4fO5lEKMRWbBitd2FhP3N/view?usp=sharing"
+              target="_blank"
+              rel="noopener noreferrer"
               className="w-full sm:w-auto px-5 py-2.5 sm:px-6 sm:py-3 bg-gradient-to-r from-brand-gold to-amber-500 hover:from-amber-400 hover:to-amber-500 text-slate-900 rounded-xl font-black text-xs sm:text-sm shadow-md hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0"
             >
               <Download className="w-4 h-4 text-slate-900" />

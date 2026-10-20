@@ -812,7 +812,7 @@ export default function App() {
   const [shareCopied, setShareCopied] = useState(false);
 
   const handleShareApp = useCallback(async () => {
-    const downloadUrl = typeof window !== 'undefined' ? `${window.location.origin}/المتشابهات.apk` : '';
+    const downloadUrl = 'https://drive.google.com/file/d/1A6mGhpmKHDv4fO5lEKMRWbBitd2FhP3N/view?usp=sharing';
     const shareData = {
       title: 'تطبيق المتشابهات القرآنية للأندرويد',
       text: 'حمّل تطبيق المتشابهات القرآنية للأندرويد الآن واستمتع بكافة التحديات والمتشابهات والقرآن كاملاً بدون إنترنت!\nرابط تحميل التطبيق المباشر:',
@@ -4771,8 +4771,9 @@ ${versesList}
                               )}
                             </button>
                             <a
-                              href="/المتشابهات.apk"
-                              download="المتشابهات.apk"
+                              href="https://drive.google.com/file/d/1A6mGhpmKHDv4fO5lEKMRWbBitd2FhP3N/view?usp=sharing"
+                              target="_blank"
+                              rel="noopener noreferrer"
                               className="flex-1 md:flex-initial px-5 py-2.5 sm:px-6 sm:py-3 bg-gradient-to-r from-brand-gold to-amber-500 hover:from-amber-400 hover:to-amber-500 text-slate-900 rounded-xl font-black text-xs sm:text-sm shadow-md hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
                             >
                               <Download className="w-4 h-4 text-slate-900" />
@@ -6505,8 +6506,9 @@ ${versesList}
                     {!isNativeApp && (
                       <div className="flex flex-col sm:flex-row gap-2 mb-2.5">
                         <a
-                          href="/المتشابهات.apk"
-                          download="المتشابهات.apk"
+                          href="https://drive.google.com/file/d/1A6mGhpmKHDv4fO5lEKMRWbBitd2FhP3N/view?usp=sharing"
+                          target="_blank"
+                          rel="noopener noreferrer"
                           className="flex-1 py-3 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-2xl font-black text-sm shadow-md flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-95 cursor-pointer"
                         >
                           <Smartphone className="w-5 h-5 text-emerald-200" />
