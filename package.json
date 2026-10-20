@@ -10,9 +10,14 @@
     "postinstall": "prisma generate",
     "preview": "vite preview",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "android:sync": "npm run build && npx cap sync && rm -f android/app/src/main/assets/public/*.apk",
+    "android:open": "npx cap open android"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/cli": "^8.5.3",
+    "@capacitor/core": "^8.5.3",
     "@google/genai": "^1.46.0",
     "@prisma/client": "^6.4.1",
     "@tailwindcss/vite": "^4.1.14",

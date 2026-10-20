@@ -4,7 +4,7 @@ import {
   ChevronRight, ChevronLeft, LayoutGrid, Heart, History, Compass, Home, Plane, Award, Star,
   ListFilter, Sun, Moon, Calendar, Settings, Copy, Check, Lightbulb, ChevronDown, User, Users, Quote,
   ArrowRight, ArrowLeft, Zap, Lock, AlertCircle, Hash, XCircle, Eye, List, Loader2, Flame, ZoomIn, ZoomOut, Maximize2, LogOut,
-  Info, HelpCircle, AtSign, Key, LogIn, UserPlus
+  Info, HelpCircle, AtSign, Key, LogIn, UserPlus, Smartphone, Download, Share2
 } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import CertificateGenerator from './components/CertificateGenerator';
@@ -43,6 +43,7 @@ import { StreakModal } from './components/StreakModal';
 import { generateCompletionChallenges } from './services/challengeGenerator';
 import SettingsView from './components/Settings/SettingsView';
 import IslamicOccasionsModal from './components/IslamicOccasionsModal';
+import { defaultChallenges } from './data/defaultChallenges';
 import { PullToRefresh } from './components/PullToRefresh';
 import {
   GroupChallengeEmblem,
@@ -803,14 +804,60 @@ export default function App() {
     return saved ? parseInt(saved) : null;
   });
 
+  const isNativeApp = typeof window !== 'undefined' && (
+    !!(window as any).Capacitor?.isNativePlatform?.() || 
+    window.location.protocol === 'capacitor:'
+  );
+
+  const [shareCopied, setShareCopied] = useState(false);
+
+  const handleShareApp = useCallback(async () => {
+    const downloadUrl = typeof window !== 'undefined' ? `${window.location.origin}/المتشابهات.apk` : '';
+    const shareData = {
+      title: 'تطبيق المتشابهات القرآنية للأندرويد',
+      text: 'حمّل تطبيق المتشابهات القرآنية للأندرويد الآن واستمتع بكافة التحديات والمتشابهات والقرآن كاملاً بدون إنترنت!\nرابط تحميل التطبيق المباشر:',
+      url: downloadUrl
+    };
+
+    if (navigator.share) {
+      try {
+        await navigator.share(shareData);
+        return;
+      } catch (err: any) {
+        if (err?.name === 'AbortError') return;
+      }
+    }
+
+    try {
+      if (downloadUrl) {
+        await navigator.clipboard.writeText(downloadUrl);
+        setShareCopied(true);
+        setTimeout(() => setShareCopied(false), 2500);
+      }
+    } catch {}
+  }, []);
+
   const [systemSettings, setSystemSettings] = useState<{
     hideAudioChallenge: boolean;
     hideCompletionChallenge: boolean;
     hideSurahChallenge: boolean;
-  }>({
-    hideAudioChallenge: false,
-    hideCompletionChallenge: false,
-    hideSurahChallenge: false
+  }>(() => {
+    try {
+      const saved = localStorage.getItem('cached_system_settings');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return {
+          hideAudioChallenge: parsed.hideAudioChallenge !== undefined ? !!parsed.hideAudioChallenge : true,
+          hideCompletionChallenge: !!parsed.hideCompletionChallenge,
+          hideSurahChallenge: !!parsed.hideSurahChallenge
+        };
+      }
+    } catch {}
+    return {
+      hideAudioChallenge: true, // Hidden by founder default
+      hideCompletionChallenge: false,
+      hideSurahChallenge: false
+    };
   });
 
   const fetchSettings = useCallback(async () => {
@@ -818,14 +865,18 @@ export default function App() {
       const res = await fetch('/api/settings');
       if (res.ok) {
         const data = await res.json();
-        setSystemSettings({
+        const newSettings = {
           hideAudioChallenge: !!data.hideAudioChallenge,
           hideCompletionChallenge: !!data.hideCompletionChallenge,
           hideSurahChallenge: !!data.hideSurahChallenge
-        });
+        };
+        setSystemSettings(newSettings);
+        try {
+          localStorage.setItem('cached_system_settings', JSON.stringify(newSettings));
+        } catch {}
       }
     } catch (e) {
-      console.warn('Failed to fetch settings:', e);
+      console.warn('Failed to fetch settings (offline fallback active):', e);
     }
   }, []);
 
@@ -833,7 +884,18 @@ export default function App() {
     fetchSettings();
   }, [fetchSettings]);
 
-  const [challenges, setChallenges] = useState<any[]>([]);
+  const getInitialChallenges = (): any[] => {
+    try {
+      const saved = localStorage.getItem('cached_challenges');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return defaultChallenges;
+  };
+
+  const [challenges, setChallenges] = useState<any[]>(getInitialChallenges);
   const [completedChallengeIds, setCompletedChallengeIds] = useState<Set<number>>(() => {
     try {
       const saved = localStorage.getItem('quran_completed_ids') || localStorage.getItem('quran_completed_challenges');
@@ -843,7 +905,7 @@ export default function App() {
     }
   });
   const [activeListTab, setActiveListTab] = useState<'available' | 'completed'>('available');
-  const [challengesLoading, setChallengesLoading] = useState(true);
+  const [challengesLoading, setChallengesLoading] = useState(false);
   const [challengesError, setChallengesError] = useState<string | null>(null);
 
   const [playerName, setPlayerName] = useState<string | null>(localStorage.getItem('quran_player_name'));
@@ -1044,11 +1106,9 @@ export default function App() {
   const [sessionMistakes, setSessionMistakes] = useState<any[]>([]);
   const [sessionCurrentIndex, setSessionCurrentIndex] = useState(0);
   const [showMistakes, setShowMistakes] = useState(false);
-  const [allChallenges, setAllChallenges] = useState<any[]>([]);
+  const [allChallenges, setAllChallenges] = useState<any[]>(getInitialChallenges);
 
-  const fetchChallenges = useCallback(async (type?: string, limit?: number, excludeIds?: number[], retryCount = 1): Promise<any[]> => {
-    setChallengesLoading(true);
-    setChallengesError(null);
+  const fetchChallenges = useCallback(async (type?: string, limit?: number, excludeIds?: number[], retryCount = 0): Promise<any[]> => {
     try {
       let url = '/api/challenges';
       const params = new URLSearchParams();
@@ -1061,24 +1121,35 @@ export default function App() {
 
       const res = await fetch(url);
       if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`Server error: ${text.substring(0, 100)}`);
+        throw new Error(`Server returned ${res.status}`);
       }
       const data = await res.json();
-      if (!type && !limit && (!excludeIds || excludeIds.length === 0)) {
-        setAllChallenges(data);
+      if (Array.isArray(data) && data.length > 0) {
+        if (!type && !limit && (!excludeIds || excludeIds.length === 0)) {
+          setAllChallenges(data);
+          try {
+            localStorage.setItem('cached_challenges', JSON.stringify(data));
+          } catch {}
+        }
+        setChallenges(data);
+        setChallengesError(null);
+        return data;
       }
-      setChallenges(data);
-      return data; // Return data for recycling logic
+      return challenges;
     } catch (err: any) {
       if (retryCount > 0) {
-        console.warn('Retrying fetchChallenges in 1.5s (database wake-up)...');
-        await new Promise(r => setTimeout(r, 1500));
+        await new Promise(r => setTimeout(r, 1000));
         return fetchChallenges(type, limit, excludeIds, retryCount - 1);
       }
-      console.error('Failed to fetch challenges:', err);
-      setChallengesError(err.message || 'فشل تحميل التحديات');
-      return [];
+      console.warn('Network offline or server unavailable, using local/cached challenges:', err);
+      // Offline fallback: load from cached_challenges or defaultChallenges
+      const fallback = getInitialChallenges();
+      if (!type && !limit && (!excludeIds || excludeIds.length === 0)) {
+        setAllChallenges(fallback);
+      }
+      setChallenges(fallback);
+      setChallengesError(null);
+      return fallback;
     } finally {
       setChallengesLoading(false);
     }
@@ -3101,6 +3172,7 @@ ${versesList}
                   <span className="hidden sm:inline">{showScores ? 'العودة' : 'المتصدرين'}</span>
                 </button>
 
+
                 <button
                   onClick={() => setShowAboutModal(true)}
                   className="flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3.5 sm:py-1.5 rounded-xl bg-white/10 text-white hover:bg-white/20 border border-white/10 transition-all text-xs sm:text-sm font-bold shadow-md hover:scale-105 active:scale-95"
@@ -4658,6 +4730,58 @@ ${versesList}
                         </div>
                       )}
                     </div>
+
+                    {/* Android App Download Banner (Web Version Only) - Moved to Bottom */}
+                    {!isNativeApp && (
+                      <div className="px-1 mt-1">
+                        <motion.div
+                          initial={{ opacity: 0, y: 12 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="bg-gradient-to-r from-emerald-950 via-emerald-900 to-teal-950 rounded-2xl md:rounded-3xl p-4 sm:p-5 text-white shadow-xl border border-emerald-500/30 flex flex-col md:flex-row items-center justify-between gap-4 relative overflow-hidden"
+                        >
+                          <div className="absolute top-0 right-0 w-48 h-48 bg-emerald-500/10 rounded-full blur-2xl pointer-events-none" />
+                          <div className="flex items-center gap-3.5 text-right relative z-10 w-full md:w-auto">
+                            <div className="w-12 h-12 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center shrink-0 shadow-inner">
+                              <Smartphone className="w-6 h-6 text-brand-gold animate-pulse" />
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <h4 className="font-black text-sm sm:text-base md:text-lg text-white">تطبيق الأندرويد متوفر الآن (أوفلاين)</h4>
+                                <span className="bg-brand-gold/20 text-brand-gold text-[10px] font-black px-2 py-0.5 rounded-md border border-brand-gold/30">جديد</span>
+                              </div>
+                              <p className="text-xs sm:text-sm text-emerald-100/90 font-medium mt-0.5">ثبّت التطبيق على هاتفك واستمتع بكافة التحديات والمتشابهات والقرآن كاملاً بدون إنترنت!</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2.5 w-full md:w-auto shrink-0 relative z-10">
+                            <button
+                              onClick={handleShareApp}
+                              className="flex-1 md:flex-initial px-4 py-2.5 sm:px-5 sm:py-3 bg-white/10 hover:bg-white/20 border border-white/20 text-white rounded-xl font-black text-xs sm:text-sm shadow-md hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                              title="مشاركة رابط تحميل تطبيق الأندرويد"
+                            >
+                              {shareCopied ? (
+                                <>
+                                  <Check className="w-4 h-4 text-emerald-300" />
+                                  <span>تم النسخ</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Share2 className="w-4 h-4 text-emerald-200" />
+                                  <span>مشاركة الرابط</span>
+                                </>
+                              )}
+                            </button>
+                            <a
+                              href="/المتشابهات.apk"
+                              download="المتشابهات.apk"
+                              className="flex-1 md:flex-initial px-5 py-2.5 sm:px-6 sm:py-3 bg-gradient-to-r from-brand-gold to-amber-500 hover:from-amber-400 hover:to-amber-500 text-slate-900 rounded-xl font-black text-xs sm:text-sm shadow-md hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                            >
+                              <Download className="w-4 h-4 text-slate-900" />
+                              <span>تحميل التطبيق (APK)</span>
+                            </a>
+                          </div>
+                        </motion.div>
+                      </div>
+                    )}
                   </motion.div>
                 ) : view === 'challenges' ? (
                   <motion.div
@@ -6378,8 +6502,38 @@ ${versesList}
                     </div>
                   </div>
 
-                  <button
-                    onClick={() => setShowAboutModal(false)}
+                    {!isNativeApp && (
+                      <div className="flex flex-col sm:flex-row gap-2 mb-2.5">
+                        <a
+                          href="/المتشابهات.apk"
+                          download="المتشابهات.apk"
+                          className="flex-1 py-3 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-2xl font-black text-sm shadow-md flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-95 cursor-pointer"
+                        >
+                          <Smartphone className="w-5 h-5 text-emerald-200" />
+                          <span>تحميل التطبيق (APK)</span>
+                        </a>
+                        <button
+                          onClick={handleShareApp}
+                          className="py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl font-black text-sm border border-slate-200 flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-95 cursor-pointer"
+                          title="مشاركة رابط تحميل تطبيق الأندرويد"
+                        >
+                          {shareCopied ? (
+                            <>
+                              <Check className="w-4 h-4 text-emerald-600" />
+                              <span>تم النسخ</span>
+                            </>
+                          ) : (
+                            <>
+                              <Share2 className="w-4 h-4 text-slate-600" />
+                              <span>مشاركة</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    )}
+
+                    <button
+                      onClick={() => setShowAboutModal(false)}
                     className="w-full py-3.5 bg-brand-emerald text-white rounded-2xl font-black text-sm shadow-lg shadow-brand-emerald/20 hover:bg-brand-emerald/90 transition-all active:scale-[0.98]"
                   >
                     إغلاق
