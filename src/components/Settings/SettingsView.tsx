@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronRight,
+  ChevronDown,
   User,
   AtSign,
   Lock,
@@ -63,6 +64,21 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [usernameInput, setUsernameInput] = useState(playerUsername ? playerUsername.replace(/^@+/, '') : '');
   const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
   const [profileMsg, setProfileMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  // Collapsible Accordion Sections ("برداية")
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({
+    profile: false,
+    password: false,
+    frames: false,
+    certificates: false,
+  });
+
+  const toggleSection = (section: string) => {
+    setOpenSections(prev => ({
+      ...prev,
+      [section]: !prev[section]
+    }));
+  };
 
   // Owner Account Detection (alaa)
   const isOwner = useMemo(() => {
@@ -310,240 +326,327 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         {/* ================================================= */}
         {/* SECTION 1: PROFILE & USERNAME                     */}
         {/* ================================================= */}
-        <div className="bg-white rounded-3xl p-4 sm:p-7 border border-slate-200/80 shadow-sm relative overflow-hidden">
-          <div className="flex items-center justify-between pb-4 mb-5 border-b border-slate-100">
-            <div className="flex items-center gap-2 text-emerald-800 font-black text-sm sm:text-base">
-              <User className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-600" />
-              <span>البيانات الشخصية واسم الحساب</span>
-            </div>
-            {playerUsername && (
-              <span className="text-[11px] sm:text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/60 px-2.5 py-1 rounded-full">
-                @{playerUsername.replace(/^@+/, '')}
-              </span>
-            )}
-          </div>
-
-          <form onSubmit={handleSaveProfileClick} className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* Display Name Input */}
+        <div className="bg-white rounded-2xl border border-slate-150 shadow-xs overflow-hidden transition-all duration-200 hover:border-emerald-300">
+          <button
+            type="button"
+            onClick={() => toggleSection('profile')}
+            className="w-full flex items-center justify-between p-4 sm:p-5 text-right cursor-pointer hover:bg-slate-50/70 transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                <User className="w-5 h-5" />
+              </div>
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  الاسم الكامل / الظاهر:
-                </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={nameInput}
-                    onChange={(e) => setNameInput(e.target.value)}
-                    placeholder="أدخل اسمك"
-                    className="w-full pl-3 pr-10 py-2.5 sm:py-3 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-xs sm:text-sm text-slate-800 focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all"
-                  />
-                  <User className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                </div>
-              </div>
-
-              {/* Username Input */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center justify-between">
-                  <span>اسم المستخدم الفريد (المعرف):</span>
-                  {daysRemainingForUsernameChange > 0 && (
-                    <span className="text-[10px] text-amber-600 font-bold bg-amber-50 px-2 py-0.5 rounded-md">
-                      متاح التغيير بعد {daysRemainingForUsernameChange} يوم
-                    </span>
-                  )}
-                </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={usernameInput}
-                    onChange={(e) => setUsernameInput(e.target.value)}
-                    disabled={daysRemainingForUsernameChange > 0}
-                    placeholder="username"
-                    className="w-full pl-3 pr-10 py-2.5 sm:py-3 bg-slate-50 border border-slate-200 rounded-2xl font-mono font-bold text-xs sm:text-sm text-slate-800 focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all disabled:opacity-60 disabled:cursor-not-allowed"
-                    dir="ltr"
-                  />
-                  <AtSign className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-                </div>
+                <h3 className="font-black text-slate-800 text-sm sm:text-base">
+                  البيانات الشخصية واسم الحساب
+                </h3>
+                <p className="text-xs text-slate-400 font-bold mt-0.5">
+                  {nameInput || playerName || 'المستخدم'} {playerUsername ? `(@${playerUsername.replace(/^@+/, '')})` : ''}
+                </p>
               </div>
             </div>
 
-            {/* Note on 30-day username rule */}
-            <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-2xl text-[11px] sm:text-xs text-slate-600 flex items-start gap-2">
-              <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-              <span>
-                <strong>تنبيه:</strong> اسم المستخدم هو هويتك الفريدة في اللعبة ولوحة المتصدرين. عند تغييره لن تتمكن من تغييره مجدداً إلا بعد مرور <strong>30 يوماً</strong>.
-              </span>
+            <div className="flex items-center gap-2">
+              {playerUsername && (
+                <span className="hidden sm:inline text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/60 px-2.5 py-1 rounded-full">
+                  @{playerUsername.replace(/^@+/, '')}
+                </span>
+              )}
+              <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-300 ${openSections.profile ? 'rotate-180 text-emerald-600' : ''}`} />
             </div>
+          </button>
 
-            {/* Feedback Message */}
-            {profileMsg && (
-              <div
-                className={`p-3 rounded-2xl text-xs font-bold flex items-center gap-2 ${
-                  profileMsg.type === 'success'
-                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                    : 'bg-red-50 text-red-800 border border-red-200'
-                }`}
+          <AnimatePresence initial={false}>
+            {openSections.profile && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.25, ease: 'easeInOut' }}
+                className="overflow-hidden border-t border-slate-100"
               >
-                {profileMsg.type === 'success' ? (
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                ) : (
-                  <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
-                )}
-                <span>{profileMsg.text}</span>
-              </div>
+                <div className="p-4 sm:p-6 bg-slate-50/30">
+                  <form onSubmit={handleSaveProfileClick} className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {/* Display Name Input */}
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                          الاسم الكامل / الظاهر:
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            value={nameInput}
+                            onChange={(e) => setNameInput(e.target.value)}
+                            placeholder="أدخل اسمك"
+                            className="w-full pl-3 pr-10 py-2.5 sm:py-3 bg-white border border-slate-200 rounded-2xl font-bold text-xs sm:text-sm text-slate-800 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all"
+                          />
+                          <User className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                        </div>
+                      </div>
+
+                      {/* Username Input */}
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center justify-between">
+                          <span>اسم المستخدم الفريد (المعرف):</span>
+                          {daysRemainingForUsernameChange > 0 && (
+                            <span className="text-[10px] text-amber-600 font-bold bg-amber-50 px-2 py-0.5 rounded-md">
+                              متاح التغيير بعد {daysRemainingForUsernameChange} يوم
+                            </span>
+                          )}
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            value={usernameInput}
+                            onChange={(e) => setUsernameInput(e.target.value)}
+                            disabled={daysRemainingForUsernameChange > 0}
+                            placeholder="username"
+                            className="w-full pl-3 pr-10 py-2.5 sm:py-3 bg-white border border-slate-200 rounded-2xl font-mono font-bold text-xs sm:text-sm text-slate-800 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                            dir="ltr"
+                          />
+                          <AtSign className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Note on 30-day username rule */}
+                    <div className="p-3 bg-white border border-slate-200/80 rounded-2xl text-[11px] sm:text-xs text-slate-600 flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                      <span>
+                        <strong>تنبيه:</strong> اسم المستخدم هو هويتك الفريدة في اللعبة ولوحة المتصدرين. عند تغييره لن تتمكن من تغييره مجدداً إلا بعد مرور <strong>30 يوماً</strong>.
+                      </span>
+                    </div>
+
+                    {/* Feedback Message */}
+                    {profileMsg && (
+                      <div
+                        className={`p-3 rounded-2xl text-xs font-bold flex items-center gap-2 ${
+                          profileMsg.type === 'success'
+                            ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                            : 'bg-red-50 text-red-800 border border-red-200'
+                        }`}
+                      >
+                        {profileMsg.type === 'success' ? (
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                        ) : (
+                          <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+                        )}
+                        <span>{profileMsg.text}</span>
+                      </div>
+                    )}
+
+                    <div className="flex justify-end pt-2">
+                      <button
+                        type="submit"
+                        disabled={isUpdatingProfile}
+                        className="px-6 py-2.5 sm:py-3 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl sm:rounded-2xl font-black text-xs sm:text-sm transition-all shadow-md shadow-emerald-700/20 disabled:opacity-50 cursor-pointer"
+                      >
+                        {isUpdatingProfile ? 'جاري الحفظ...' : 'حفظ البيانات الشخصية'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </motion.div>
             )}
-
-            <div className="flex justify-end pt-2">
-              <button
-                type="submit"
-                disabled={isUpdatingProfile}
-                className="px-6 py-2.5 sm:py-3 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white rounded-xl sm:rounded-2xl font-black text-xs sm:text-sm transition-all shadow-md shadow-emerald-700/20 disabled:opacity-50 cursor-pointer"
-              >
-                {isUpdatingProfile ? 'جاري الحفظ...' : 'حفظ البيانات الشخصية'}
-              </button>
-            </div>
-          </form>
+          </AnimatePresence>
         </div>
 
         {/* ================================================= */}
         {/* SECTION 2: PASSWORD CHANGE                        */}
         {/* ================================================= */}
-        <div className="bg-white rounded-3xl p-4 sm:p-7 border border-slate-200/80 shadow-sm relative overflow-hidden">
-          <div className="flex items-center gap-2 pb-4 mb-5 border-b border-slate-100 text-slate-800 font-black text-sm sm:text-base">
-            <Lock className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-600" />
-            <span>تغيير كلمة المرور والأمان</span>
-          </div>
-
-          <form onSubmit={handleChangePassword} className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {/* Current Password */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  كلمة المرور الحالية:
-                </label>
-                <div className="relative">
-                  <input
-                    type={showCurrentPass ? 'text' : 'password'}
-                    value={currentPassword}
-                    onChange={(e) => setCurrentPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full pl-9 pr-3 py-2.5 sm:py-3 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-xs sm:text-sm text-slate-800 focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowCurrentPass(!showCurrentPass)}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer p-0.5"
-                  >
-                    {showCurrentPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                  </button>
-                </div>
+        <div className="bg-white rounded-2xl border border-slate-150 shadow-xs overflow-hidden transition-all duration-200 hover:border-amber-300">
+          <button
+            type="button"
+            onClick={() => toggleSection('password')}
+            className="w-full flex items-center justify-between p-4 sm:p-5 text-right cursor-pointer hover:bg-slate-50/70 transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                <Lock className="w-5 h-5" />
               </div>
-
-              {/* New Password */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  كلمة المرور الجديدة:
-                </label>
-                <div className="relative">
-                  <input
-                    type={showNewPass ? 'text' : 'password'}
-                    value={newPassword}
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full pl-9 pr-3 py-2.5 sm:py-3 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-xs sm:text-sm text-slate-800 focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowNewPass(!showNewPass)}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer p-0.5"
-                  >
-                    {showNewPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                  </button>
-                </div>
-              </div>
-
-              {/* Confirm New Password */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  تأكيد كلمة المرور الجديدة:
-                </label>
-                <div className="relative">
-                  <input
-                    type={showConfirmPass ? 'text' : 'password'}
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full pl-9 pr-3 py-2.5 sm:py-3 bg-slate-50 border border-slate-200 rounded-2xl font-bold text-xs sm:text-sm text-slate-800 focus:bg-white focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmPass(!showConfirmPass)}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer p-0.5"
-                  >
-                    {showConfirmPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                  </button>
-                </div>
+                <h3 className="font-black text-slate-800 text-sm sm:text-base">
+                  تغيير كلمة المرور والأمان
+                </h3>
+                <p className="text-xs text-slate-400 font-bold mt-0.5">
+                  تحديث كلمة سر الدخول وحماية الحساب
+                </p>
               </div>
             </div>
 
-            {/* Password Feedback Message */}
-            {passwordMsg && (
-              <div
-                className={`p-3 rounded-2xl text-xs font-bold flex items-center gap-2 ${
-                  passwordMsg.type === 'success'
-                    ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                    : 'bg-red-50 text-red-800 border border-red-200'
-                }`}
+            <div className="flex items-center gap-2">
+              <span className="hidden sm:inline text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200/60 px-2.5 py-1 rounded-full">
+                حماية الحساب
+              </span>
+              <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-300 ${openSections.password ? 'rotate-180 text-amber-600' : ''}`} />
+            </div>
+          </button>
+
+          <AnimatePresence initial={false}>
+            {openSections.password && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.25, ease: 'easeInOut' }}
+                className="overflow-hidden border-t border-slate-100"
               >
-                {passwordMsg.type === 'success' ? (
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                ) : (
-                  <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
-                )}
-                <span>{passwordMsg.text}</span>
-              </div>
+                <div className="p-4 sm:p-6 bg-slate-50/30">
+                  <form onSubmit={handleChangePassword} className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      {/* Current Password */}
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                          كلمة المرور الحالية:
+                        </label>
+                        <div className="relative">
+                          <input
+                            type={showCurrentPass ? 'text' : 'password'}
+                            value={currentPassword}
+                            onChange={(e) => setCurrentPassword(e.target.value)}
+                            placeholder="••••••••"
+                            className="w-full pl-9 pr-3 py-2.5 sm:py-3 bg-white border border-slate-200 rounded-2xl font-bold text-xs sm:text-sm text-slate-800 focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 outline-none transition-all"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowCurrentPass(!showCurrentPass)}
+                            className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer p-0.5"
+                          >
+                            {showCurrentPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* New Password */}
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                          كلمة المرور الجديدة:
+                        </label>
+                        <div className="relative">
+                          <input
+                            type={showNewPass ? 'text' : 'password'}
+                            value={newPassword}
+                            onChange={(e) => setNewPassword(e.target.value)}
+                            placeholder="••••••••"
+                            className="w-full pl-9 pr-3 py-2.5 sm:py-3 bg-white border border-slate-200 rounded-2xl font-bold text-xs sm:text-sm text-slate-800 focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 outline-none transition-all"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowNewPass(!showNewPass)}
+                            className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer p-0.5"
+                          >
+                            {showNewPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Confirm New Password */}
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                          تأكيد كلمة المرور الجديدة:
+                        </label>
+                        <div className="relative">
+                          <input
+                            type={showConfirmPass ? 'text' : 'password'}
+                            value={confirmPassword}
+                            onChange={(e) => setConfirmPassword(e.target.value)}
+                            placeholder="••••••••"
+                            className="w-full pl-9 pr-3 py-2.5 sm:py-3 bg-white border border-slate-200 rounded-2xl font-bold text-xs sm:text-sm text-slate-800 focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 outline-none transition-all"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowConfirmPass(!showConfirmPass)}
+                            className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer p-0.5"
+                          >
+                            {showConfirmPass ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Password Feedback Message */}
+                    {passwordMsg && (
+                      <div
+                        className={`p-3 rounded-2xl text-xs font-bold flex items-center gap-2 ${
+                          passwordMsg.type === 'success'
+                            ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                            : 'bg-red-50 text-red-800 border border-red-200'
+                        }`}
+                      >
+                        {passwordMsg.type === 'success' ? (
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                        ) : (
+                          <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
+                        )}
+                        <span>{passwordMsg.text}</span>
+                      </div>
+                    )}
+
+                    <div className="flex justify-end pt-2">
+                      <button
+                        type="submit"
+                        disabled={isChangingPass}
+                        className="flex items-center gap-2 px-6 py-2.5 sm:py-3 bg-slate-900 hover:bg-slate-800 active:scale-95 text-white rounded-xl sm:rounded-2xl font-black text-xs sm:text-sm transition-all shadow-md disabled:opacity-50 cursor-pointer"
+                      >
+                        <KeyRound className="w-4 h-4 text-amber-300" />
+                        <span>{isChangingPass ? 'جاري التحديث...' : 'تحديث كلمة المرور'}</span>
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </motion.div>
             )}
-
-            <div className="flex justify-end pt-2">
-              <button
-                type="submit"
-                disabled={isChangingPass}
-                className="flex items-center gap-2 px-6 py-2.5 sm:py-3 bg-slate-900 hover:bg-slate-800 active:scale-95 text-white rounded-xl sm:rounded-2xl font-black text-xs sm:text-sm transition-all shadow-md disabled:opacity-50 cursor-pointer"
-              >
-                <KeyRound className="w-4 h-4 text-amber-300" />
-                <span>{isChangingPass ? 'جاري التحديث...' : 'تحديث كلمة المرور'}</span>
-              </button>
-            </div>
-          </form>
+          </AnimatePresence>
         </div>
 
         {/* ================================================= */}
         {/* SECTION 3: AVATAR FRAMES SHOWCASE & SELECTOR      */}
         {/* ================================================= */}
-        <div className="bg-white rounded-3xl p-4 sm:p-8 border border-slate-200/80 shadow-sm relative overflow-hidden text-right">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-5 mb-6 border-b border-slate-200/80">
+        <div className="bg-white rounded-2xl border border-slate-150 shadow-xs overflow-hidden transition-all duration-200 hover:border-amber-300">
+          <button
+            type="button"
+            onClick={() => toggleSection('frames')}
+            className="w-full flex items-center justify-between p-4 sm:p-5 text-right cursor-pointer hover:bg-slate-50/70 transition-colors"
+          >
             <div className="flex items-center gap-3">
-              <div className="w-11 h-11 sm:w-13 sm:h-13 rounded-2xl bg-gradient-to-tr from-amber-500 via-amber-600 to-yellow-500 text-white flex items-center justify-center shadow-lg shadow-amber-500/25 shrink-0">
-                <Sparkles className="w-6 h-6 sm:w-7 sm:h-7 text-yellow-100" />
+              <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                <Sparkles className="w-5 h-5 text-amber-500" />
               </div>
               <div>
-                <h2 className="text-lg sm:text-2xl font-black text-slate-900 flex items-center gap-2">
+                <h3 className="font-black text-slate-800 text-sm sm:text-base flex items-center gap-1.5">
                   <span>إطارات الإنجاز واختيار المظهر</span>
                   <Award className="w-4 h-4 text-brand-gold" />
-                </h2>
-                <p className="text-xs sm:text-sm text-slate-500 font-bold mt-0.5">
-                  اختر الإطار المحيط بصورتك الرمزية الذي يظهر للجميع في لوحة المتصدرين. الإطارات المغلقة 🔒 تتطلب إتمام التحدي المخصص لفتحها.
+                </h3>
+                <p className="text-xs text-slate-400 font-bold mt-0.5">
+                  تخصيص الإطار المحيط بصورتك الرمزية في لوحة المتصدرين
                 </p>
               </div>
             </div>
 
-            <div className="text-[11px] font-bold text-slate-700 bg-slate-50 border border-slate-200 px-3.5 py-1.5 rounded-2xl shadow-xs shrink-0 self-start sm:self-auto">
-              الإطار المفعّل: <span className="font-black text-emerald-700">{activeFrame === 'seerah' ? 'السيرة النبوية 🕌' : activeFrame === 'general' ? 'الأسئلة العامة 💎' : 'بدون إطار'}</span>
+            <div className="flex items-center gap-2">
+              <span className="hidden sm:inline text-[11px] font-bold bg-slate-50 text-slate-700 border border-slate-200 px-2.5 py-1 rounded-full">
+                {activeFrame === 'seerah' ? 'السيرة النبوية 🕌' : activeFrame === 'general' ? 'الأسئلة العامة 💎' : 'بدون إطار'}
+              </span>
+              <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-300 ${openSections.frames ? 'rotate-180 text-amber-600' : ''}`} />
             </div>
-          </div>
+          </button>
 
-          {/* Frames Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
+          <AnimatePresence initial={false}>
+            {openSections.frames && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.25, ease: 'easeInOut' }}
+                className="overflow-hidden border-t border-slate-100"
+              >
+                <div className="p-4 sm:p-6 bg-slate-50/30">
+                  <p className="text-xs text-slate-500 font-bold mb-4">
+                    اختر الإطار المحيط بصورتك الرمزية الذي يظهر للجميع في لوحة المتصدرين. الإطارات المغلقة 🔒 تتطلب إتمام التحدي المخصص لفتحها:
+                  </p>
+                  {/* Frames Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
             {/* 1. SEERAH FRAME */}
             <div
               className={`rounded-3xl p-5 border transition-all flex flex-col justify-between relative overflow-hidden ${
@@ -792,48 +895,76 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 )}
               </div>
             </div>
-          </div>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* ================================================= */}
-        {/* SECTION 5: MY CERTIFICATES & ACHIEVEMENTS         */}
+        {/* SECTION 4: MY CERTIFICATES & ACHIEVEMENTS         */}
         {/* ================================================= */}
-        <div className="bg-gradient-to-br from-amber-500/5 via-white to-emerald-500/5 rounded-3xl p-4 sm:p-8 border border-amber-200/60 shadow-lg shadow-amber-900/5 relative overflow-hidden">
-          {/* Header Bar */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-5 mb-6 border-b border-amber-200/50">
+        <div className="bg-white rounded-2xl border border-slate-150 shadow-xs overflow-hidden transition-all duration-200 hover:border-amber-300">
+          <button
+            type="button"
+            onClick={() => toggleSection('certificates')}
+            className="w-full flex items-center justify-between p-4 sm:p-5 text-right cursor-pointer hover:bg-slate-50/70 transition-colors"
+          >
             <div className="flex items-center gap-3">
-              <div className="w-11 h-11 sm:w-13 sm:h-13 rounded-2xl bg-gradient-to-tr from-amber-500 to-yellow-400 text-white flex items-center justify-center shadow-lg shadow-amber-500/30">
-                <Award className="w-6 h-6 sm:w-7 sm:h-7" />
+              <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                <Award className="w-5 h-5 text-amber-600" />
               </div>
               <div>
-                <h2 className="text-lg sm:text-2xl font-black text-slate-900 flex items-center gap-2">
+                <h3 className="font-black text-slate-800 text-sm sm:text-base flex items-center gap-1.5">
                   <span>لوحة شهاداتي وإنجازاتي</span>
                   <Sparkles className="w-4 h-4 text-amber-500" />
-                </h2>
-                <p className="text-xs sm:text-sm text-slate-500 font-bold mt-0.5">
+                </h3>
+                <p className="text-xs text-slate-400 font-bold mt-0.5">
                   الأوسمة والشهادات التقديرية المعتمدة التي حققتها في المسابقة
                 </p>
               </div>
             </div>
 
-            {/* Quick Stats Ribbon */}
-            <div className="flex items-center gap-2 sm:gap-3 bg-white/90 border border-amber-200/60 px-3.5 py-1.5 rounded-2xl shadow-xs self-stretch sm:self-auto justify-around">
-              <div className="flex items-center gap-1.5 text-xs font-black text-amber-700">
-                <Trophy className="w-4 h-4 text-amber-500" />
+            <div className="flex items-center gap-2">
+              <div className="hidden sm:flex items-center gap-1.5 text-[11px] font-black text-amber-700 bg-amber-50 border border-amber-200/60 px-2.5 py-1 rounded-full">
+                <Trophy className="w-3.5 h-3.5 text-amber-500" />
                 <span>{cups} كأس</span>
+                <span className="text-slate-300">|</span>
+                <span className="text-emerald-700">{totalPoints} نقطة</span>
               </div>
-              <span className="text-slate-300">|</span>
-              <div className="flex items-center gap-1.5 text-xs font-black text-emerald-700">
-                <Star className="w-4 h-4 text-emerald-500 fill-emerald-500" />
-                <span>{totalPoints} نقطة</span>
-              </div>
-              <span className="text-slate-300">|</span>
-              <div className="flex items-center gap-1.5 text-xs font-black text-slate-700">
-                <Award className="w-4 h-4 text-amber-600" />
-                <span>{userCertificates.length}/2 شهادات</span>
-              </div>
+              <ChevronDown className={`w-5 h-5 text-slate-400 transition-transform duration-300 ${openSections.certificates ? 'rotate-180 text-amber-600' : ''}`} />
             </div>
-          </div>
+          </button>
+
+          <AnimatePresence initial={false}>
+            {openSections.certificates && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.25, ease: 'easeInOut' }}
+                className="overflow-hidden border-t border-slate-100"
+              >
+                <div className="p-4 sm:p-6 bg-slate-50/30">
+                  {/* Quick Stats Ribbon */}
+                  <div className="flex items-center gap-2 sm:gap-3 bg-white border border-amber-200/60 px-3.5 py-2 rounded-2xl shadow-xs justify-around mb-6">
+                    <div className="flex items-center gap-1.5 text-xs font-black text-amber-700">
+                      <Trophy className="w-4 h-4 text-amber-500" />
+                      <span>{cups} كأس</span>
+                    </div>
+                    <span className="text-slate-200">|</span>
+                    <div className="flex items-center gap-1.5 text-xs font-black text-emerald-700">
+                      <Star className="w-4 h-4 text-emerald-500 fill-emerald-500" />
+                      <span>{totalPoints} نقطة</span>
+                    </div>
+                    <span className="text-slate-200">|</span>
+                    <div className="flex items-center gap-1.5 text-xs font-black text-slate-700">
+                      <Award className="w-4 h-4 text-amber-600" />
+                      <span>{userCertificates.length}/2 شهادات</span>
+                    </div>
+                  </div>
+
 
           {/* VIP Owner Control Panel - Only visible for @alaa */}
           {isOwner && (
@@ -1005,6 +1136,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             })}
           </div>
         </div>
+      </motion.div>
+    )}
+  </AnimatePresence>
+</div>
 
         {/* ================================================= */}
         {/* SECTION 5: ACCOUNT LOGOUT                         */}

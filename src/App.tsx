@@ -33,6 +33,9 @@ import SkillsMenu from './components/SkillsMenu';
 import BookReader from './components/BookReader';
 import Encyclopedia from './components/Encyclopedia';
 import IslamicQuiz from './components/IslamicQuiz';
+import IslamicRoomConfigModal from './components/IslamicRoomConfigModal';
+import { getRandomIslamicRoomQuestions } from './utils/islamicChallengeHelper';
+import { islamicCategoriesList } from './data/islamicCategories';
 import DailyAyah from './components/DailyAyah';
 import { renderQuranText } from './utils/quranUtils';
 import { calculateStreakInfo, StreakInfo } from './utils/streakManager';
@@ -40,6 +43,19 @@ import { StreakModal } from './components/StreakModal';
 import { generateCompletionChallenges } from './services/challengeGenerator';
 import SettingsView from './components/Settings/SettingsView';
 import IslamicOccasionsModal from './components/IslamicOccasionsModal';
+import { PullToRefresh } from './components/PullToRefresh';
+import {
+  GroupChallengeEmblem,
+  DailyChallengeEmblem,
+  SkillsChallengeEmblem,
+  SpeedChallengeEmblem,
+  IslamicQuizEmblem,
+  MushafLibraryIcon,
+  AdhkarLibraryIcon,
+  HadithLibraryIcon,
+  BookLibraryIcon,
+  EncyclopediaLibraryIcon
+} from './components/IslamicChallengeEmblems';
 import {
   getHijriDate,
   getUpcomingOccasions,
@@ -71,6 +87,13 @@ function useWindowSize() {
 }
 
 type View = 'home' | 'difficulty' | 'challenge' | 'mushaf' | 'adhkar' | 'hadith' | 'admin' | 'list' | 'group_menu' | 'group_waiting' | 'group_game' | 'speed_challenge' | 'skills_menu' | 'speed_menu' | 'group_create' | 'group_join' | 'book' | 'encyclopedia' | 'skills_count_selection' | 'skills_results' | 'islamic_quiz' | 'settings' | 'library' | 'challenges';
+const VALID_VIEWS: View[] = [
+  'home', 'difficulty', 'challenge', 'mushaf', 'adhkar', 'hadith', 'admin',
+  'list', 'group_menu', 'group_waiting', 'group_game', 'speed_challenge',
+  'skills_menu', 'speed_menu', 'group_create', 'group_join', 'book',
+  'encyclopedia', 'skills_count_selection', 'skills_results', 'islamic_quiz',
+  'settings', 'library', 'challenges'
+];
 type Difficulty = 'easy' | 'medium' | 'hard';
 
 const toast = {
@@ -716,7 +739,59 @@ const LibrarySettingsModal = ({ isOpen, onClose, settings, setSettings, showRead
 };
 
 export default function App() {
-  const [view, setView] = useState<View>('home');
+  const [view, setViewState] = useState<View>(() => {
+    try {
+      const saved = sessionStorage.getItem('current_app_view');
+      if (saved && VALID_VIEWS.includes(saved as View)) {
+        return saved as View;
+      }
+    } catch (e) {}
+    return 'home';
+  });
+
+  const isPoppingRef = useRef(false);
+
+  const setView = useCallback((next: View | ((prev: View) => View), pushToHistory = true) => {
+    setViewState(prev => {
+      const nextView = typeof next === 'function' ? next(prev) : next;
+      if (nextView === prev) return prev;
+
+      try {
+        sessionStorage.setItem('current_app_view', nextView);
+      } catch (e) {}
+
+      if (pushToHistory && !isPoppingRef.current) {
+        window.history.pushState({ view: nextView }, '', '');
+      }
+      return nextView;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!window.history.state || window.history.state.view !== view) {
+      window.history.replaceState({ view }, '', '');
+    }
+
+    const handlePopState = (e: PopStateEvent) => {
+      isPoppingRef.current = true;
+      const targetView = (e.state && e.state.view && VALID_VIEWS.includes(e.state.view))
+        ? (e.state.view as View)
+        : 'home';
+
+      try {
+        sessionStorage.setItem('current_app_view', targetView);
+      } catch (err) {}
+
+      setViewState(targetView);
+
+      setTimeout(() => {
+        isPoppingRef.current = false;
+      }, 50);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
   const [adminToken, setAdminToken] = useState<string | null>(localStorage.getItem('quran_admin_token'));
   const [isSuperAdmin, setIsSuperAdmin] = useState<boolean>(localStorage.getItem('quran_admin_super') === 'true');
   const [adminRole, setAdminRole] = useState<string>(() => localStorage.getItem('quran_admin_role') || '');
@@ -865,6 +940,15 @@ export default function App() {
     }
   });
 
+  const [totalUsersCount, setTotalUsersCount] = useState<number>(() => {
+    return Number(localStorage.getItem('quran_total_users_count')) || 0;
+  });
+
+  const [userLeaderboardRank, setUserLeaderboardRank] = useState<number | null>(() => {
+    const saved = localStorage.getItem('quran_user_leaderboard_rank');
+    return saved ? Number(saved) : null;
+  });
+
   const [isSyncing, setIsSyncing] = useState(false);
   const [selectedSurahId, setSelectedSurahId] = useState<number | null>(null);
   const [selectedAdhkarCategoryId, setSelectedAdhkarCategoryId] = useState<string | null>(null);
@@ -915,7 +999,11 @@ export default function App() {
   const [joinCode, setJoinCode] = useState('');
   const [v1Error, setV1Error] = useState<string | null>(null);
   const [v1Polling, setV1Polling] = useState(false);
-  const [v1GameMode, setV1GameMode] = useState<'audio' | 'complete' | 'surah'>('audio');
+  const [v1GameMode, setV1GameMode] = useState<'audio' | 'complete' | 'surah' | 'islamic'>('audio');
+  const [islamicRoomCategory, setIslamicRoomCategory] = useState<string>('akida');
+  const [islamicRoomLevel, setIslamicRoomLevel] = useState<1 | 2 | 3>(1);
+  const [islamicRoomTopic, setIslamicRoomTopic] = useState<string>('all');
+  const [showIslamicConfigModal, setShowIslamicConfigModal] = useState<boolean>(false);
   const [v1Timer, setV1Timer] = useState(false);
   const [v1QuestionCount, setV1QuestionCount] = useState(5);
   const [v1TimePerQuestion, setV1TimePerQuestion] = useState(15);
@@ -1589,7 +1677,7 @@ export default function App() {
       if (res.ok) {
         setRoom(data);
         if (data.status === 'PLAYING') {
-          const roomMode = data.gameMode === 'STANDARD' ? 'audio' : data.gameMode === 'COMPLETION' ? 'complete' : 'surah';
+          const roomMode = data.gameMode === 'STANDARD' ? 'audio' : (data.gameMode === 'COMPLETION' || data.gameMode === 'ISLAMIC') ? 'complete' : 'surah';
           setSkillsType(roomMode);
           const mapped = (data.challenges || []).map((q: any) => ({ ...q, verseText: q.verseText || q.keyword || q.text }));
           setChallenges(mapped);
@@ -1622,14 +1710,20 @@ export default function App() {
     setIsCreatingRoom(true);
     setV1Error(null);
     try {
+      const isIslamicMode = v1GameMode === 'islamic';
+      const customChallenges = isIslamicMode
+        ? getRandomIslamicRoomQuestions(islamicRoomCategory, islamicRoomLevel, islamicRoomTopic, v1QuestionCount)
+        : undefined;
+
       const requestBody = {
         action: 'create',
         player1Id: deviceId,
         player1Name: playerName,
-        gameMode: v1GameMode === 'audio' ? 'STANDARD' : v1GameMode === 'complete' ? 'COMPLETION' : 'SURAH',
-        category: v1Category,
+        gameMode: isIslamicMode ? 'ISLAMIC' : (v1GameMode === 'audio' ? 'STANDARD' : v1GameMode === 'complete' ? 'COMPLETION' : 'SURAH'),
+        category: isIslamicMode ? islamicRoomCategory : v1Category,
         questionCount: v1QuestionCount,
-        timePerQuestion: v1Timer ? v1TimePerQuestion : 0
+        timePerQuestion: v1Timer ? v1TimePerQuestion : 0,
+        customChallenges: customChallenges
       };
 
       console.log('Request Body being sent:', requestBody);
@@ -1679,7 +1773,7 @@ export default function App() {
         setSelectedOption(null);
         setMatchedIds(new Set());
 
-        const mode = v1GameMode === 'audio' ? 'audio' : v1GameMode === 'complete' ? 'complete' : 'surah';
+        const mode = v1GameMode === 'audio' ? 'audio' : (v1GameMode === 'complete' || v1GameMode === 'islamic') ? 'complete' : 'surah';
         setSkillsType(mode);
         setRoom(data);
         const roomTime = (data.timePerQuestion && data.timePerQuestion > 0) ? data.timePerQuestion : 0;
@@ -1715,7 +1809,7 @@ export default function App() {
           prevParticipantsCount.current = newCount;
 
           if (view === 'group_waiting' && data.status === 'PLAYING') {
-            const roomMode = data.gameMode === 'STANDARD' ? 'audio' : data.gameMode === 'COMPLETION' ? 'complete' : 'surah';
+            const roomMode = data.gameMode === 'STANDARD' ? 'audio' : (data.gameMode === 'COMPLETION' || data.gameMode === 'ISLAMIC') ? 'complete' : 'surah';
             setSkillsType(roomMode);
             const mapped = (data.challenges || []).map((q: any) => ({ ...q, verseText: q.verseText || q.keyword || q.text }));
             setChallenges(mapped);
@@ -2353,7 +2447,12 @@ export default function App() {
         }
       }
 
-      const response = await fetch(`/api/leaderboard?t=${Date.now()}`, {
+      const params = new URLSearchParams({ t: Date.now().toString() });
+      if (deviceId) params.append('deviceId', deviceId);
+      if (playerName) params.append('name', playerName);
+      if (playerUsername) params.append('username', playerUsername);
+
+      const response = await fetch(`/api/leaderboard?${params.toString()}`, {
         cache: 'no-store',
         headers: {
           'Pragma': 'no-cache',
@@ -2375,6 +2474,27 @@ export default function App() {
         });
         setLeaderboard(unique);
         localStorage.setItem('quran_leaderboard', JSON.stringify(unique));
+
+        if (typeof data.totalUsers === 'number') {
+          setTotalUsersCount(data.totalUsers);
+          localStorage.setItem('quran_total_users_count', data.totalUsers.toString());
+        }
+
+        if (typeof data.userRank === 'number') {
+          setUserLeaderboardRank(data.userRank);
+          localStorage.setItem('quran_user_leaderboard_rank', data.userRank.toString());
+        } else if (data.userRank === null) {
+          const localIdx = unique.findIndex((p: any) => {
+            if (deviceId && p.deviceId && p.deviceId === deviceId) return true;
+            if (playerUsername && p.username && p.username.replace(/^@+/, '').toLowerCase() === playerUsername.replace(/^@+/, '').toLowerCase()) return true;
+            if (playerName && p.name && p.name.trim().toLowerCase() === playerName.trim().toLowerCase()) return true;
+            return false;
+          });
+          if (localIdx !== -1) {
+            setUserLeaderboardRank(localIdx + 1);
+            localStorage.setItem('quran_user_leaderboard_rank', (localIdx + 1).toString());
+          }
+        }
 
         // Synchronize cups and points from leaderboard for current player
         const myEntry = unique.find((p: any) => {
@@ -3248,7 +3368,8 @@ ${versesList}
           </AnimatePresence>
 
           {/* Main Content*/}
-          <main className={`${view === 'mushaf'
+          <PullToRefresh>
+            <main className={`${view === 'mushaf'
               ? (isPageModeActive ? 'max-w-[96rem] px-0 sm:px-2 md:px-4 pt-1 sm:pt-2 md:pt-3' : 'max-w-6xl px-6 pt-1 sm:pt-2 md:pt-3')
               : (view === 'challenge' || view === 'speed_challenge' || view === 'islamic_quiz' || view === 'group_game' || view === 'skills_count_selection' || view === 'skills_menu' || view === 'speed_menu')
                 ? 'max-w-4xl px-3 sm:px-4 pt-1 sm:pt-2 md:pt-3 pb-8 md:pb-12'
@@ -3302,61 +3423,82 @@ ${versesList}
                 {showScores ? (
                   <motion.div
                     key="scores"
-                    initial={{ opacity: 0, scale: 0.96 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.96 }}
-                    className="bg-white/90 backdrop-blur-xl p-4 sm:p-7 md:p-10 rounded-3xl md:rounded-[2.5rem] border border-amber-200/60 shadow-2xl shadow-emerald-950/10 max-w-3xl mx-auto text-right relative overflow-hidden"
+                    initial={{ opacity: 0, y: 15 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.98 }}
+                    className="flex flex-col gap-4 max-w-3xl mx-auto py-3 md:py-5 px-3 sm:px-4 pb-24 text-right"
                     dir="rtl"
                   >
-                    {/* Background Ambient Glows */}
-                    <div className="absolute top-0 right-0 w-72 h-72 bg-gradient-to-br from-amber-400/10 via-yellow-300/5 to-transparent rounded-full -mr-20 -mt-20 blur-3xl pointer-events-none" />
-                    <div className="absolute bottom-0 left-0 w-72 h-72 bg-gradient-to-tr from-emerald-500/10 via-teal-400/5 to-transparent rounded-full -ml-20 -mb-20 blur-3xl pointer-events-none" />
-
-                    {/* Header Bar */}
-                    <div className="flex items-center justify-between gap-3 mb-6 sm:mb-8 pb-4 sm:pb-5 border-b border-slate-200/80 relative z-10">
-                      <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-tr from-amber-500 via-amber-600 to-yellow-500 text-white flex items-center justify-center shadow-lg shadow-amber-500/25 shrink-0">
-                          <Trophy className="w-6 h-6 sm:w-7 sm:h-7 text-yellow-100" />
-                        </div>
+                    {/* Clean Header matching Challenges & Library */}
+                    <div className="flex items-center justify-between px-1">
+                      <div className="flex items-center gap-2.5 sm:gap-3">
+                        <div className="w-1.5 h-7 sm:h-8 bg-brand-gold rounded-full" />
                         <div>
                           <div className="flex items-center gap-2">
-                            <h2 className="text-xl sm:text-2xl md:text-3xl font-black text-slate-900 tracking-tight">
+                            <h2 className="text-xl sm:text-2xl font-black text-brand-emerald tracking-tight">
                               لوحة المتصدرين
                             </h2>
-                            <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-black px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-900 border border-amber-400/50">
-                              <Sparkles className="w-3 h-3 text-amber-600" />
-                              <span>المراكز الأولى</span>
+                            <span className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
+                              <Trophy className="w-3 h-3 text-amber-500" />
+                              <span>أفضل 10 متصدرين</span>
                             </span>
                           </div>
-                          <p className="text-xs sm:text-sm text-slate-500 font-bold mt-0.5">
-                            فرسان التنافس في المتشابهات القرآنية والسنة النبوية
+                          <p className="text-xs font-bold text-slate-400 mt-0.5">
+                            فرسان التنافس في المتشابهات القرآنية والمسابقات الإسلامية
                           </p>
                         </div>
                       </div>
 
-                      <button
-                        onClick={() => syncLeaderboard()}
-                        disabled={isSyncing}
-                        title="تحديث القائمة"
-                        className={`p-2.5 sm:p-3 rounded-2xl bg-white border border-slate-200 hover:border-emerald-300 hover:bg-emerald-50 text-slate-600 hover:text-emerald-700 transition-all shadow-sm active:scale-95 cursor-pointer ${isSyncing ? 'animate-spin' : ''}`}
-                      >
-                        <RotateCcw className="w-4 h-4 sm:w-5 sm:h-5" />
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => syncLeaderboard()}
+                          disabled={isSyncing}
+                          title="تحديث القائمة"
+                          className={`p-2 rounded-xl bg-white border border-slate-200 hover:border-emerald-300 hover:bg-emerald-50 text-slate-600 hover:text-emerald-700 transition-all shadow-xs active:scale-95 cursor-pointer ${isSyncing ? 'animate-spin' : ''}`}
+                        >
+                          <RotateCcw className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Minimalist Summary Ribbon */}
+                    <div className="bg-white rounded-xl sm:rounded-2xl border border-slate-150 p-2.5 sm:p-3 shadow-xs flex flex-wrap items-center justify-between gap-2 text-xs">
+                      <div className="flex items-center gap-2 text-slate-600 font-bold text-xs">
+                        <Users className="w-4 h-4 text-emerald-600" />
+                        <span>عدد المستخدمين: <strong className="text-slate-900 font-black">{totalUsersCount || leaderboard.length}</strong> مستخدم</span>
+                      </div>
+                      {playerName && (
+                        <div className="text-[11px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg flex items-center gap-1.5 flex-wrap">
+                          <span>حسابك: <strong className="font-black text-slate-900">{playerName}</strong></span>
+                          <span className="text-emerald-300 font-normal">|</span>
+                          <span className="font-black text-amber-700">
+                            {userLeaderboardRank === 1
+                              ? 'ترتيبك: الأول 👑'
+                              : userLeaderboardRank === 2
+                              ? 'ترتيبك: الثاني 🥈'
+                              : userLeaderboardRank === 3
+                              ? 'ترتيبك: الثالث 🥉'
+                              : userLeaderboardRank !== null
+                              ? `ترتيبك: #${userLeaderboardRank}`
+                              : 'ترتيبك: غير مصنف بعد'}
+                          </span>
+                        </div>
+                      )}
                     </div>
 
                     {isSyncing && leaderboard.length === 0 ? (
-                      <div className="text-center py-16 sm:py-24 bg-slate-50/60 rounded-3xl border border-dashed border-slate-200">
-                        <div className="w-10 h-10 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-                        <p className="text-slate-500 font-bold text-sm">جاري جلب قائمة الأبطال والمتصدرين...</p>
+                      <div className="text-center py-12 bg-white rounded-2xl border border-slate-150 shadow-xs">
+                        <div className="w-8 h-8 border-3 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                        <p className="text-slate-500 font-bold text-xs sm:text-sm">جاري جلب قائمة الأبطال والمتصدرين...</p>
                       </div>
                     ) : leaderboard.length === 0 ? (
-                      <div className="text-center py-16 sm:py-24 bg-slate-50/60 rounded-3xl border border-dashed border-slate-200">
-                        <Sparkles className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-                        <p className="text-slate-400 font-bold text-sm">كن أول من يسجل اسمه ويتصدر القائمة!</p>
+                      <div className="text-center py-12 bg-white rounded-2xl border border-slate-150 shadow-xs">
+                        <Sparkles className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+                        <p className="text-slate-400 font-bold text-xs sm:text-sm">كن أول من يسجل اسمه ويتصدر القائمة!</p>
                       </div>
                     ) : (
-                      <div className="space-y-3 sm:space-y-4 max-h-[65vh] overflow-y-auto custom-scrollbar pr-1 relative z-10">
-                        {leaderboard.map((player: any, index) => {
+                      <div className="space-y-2">
+                        {leaderboard.slice(0, 10).map((player: any, index) => {
                           const isCurrentPlayer = (playerName && player.name)
                             ? player.name.trim().toLowerCase() === playerName.trim().toLowerCase()
                             : false;
@@ -3385,68 +3527,67 @@ ${versesList}
 
                           return (
                             <motion.div
-                              initial={{ x: 20, opacity: 0 }}
+                              initial={{ x: 15, opacity: 0 }}
                               animate={{ x: 0, opacity: 1 }}
-                              transition={{ delay: index * 0.05 }}
+                              transition={{ delay: Math.min(index * 0.03, 0.3) }}
                               key={player.name + index}
-                              className={`flex justify-between items-center p-3 sm:p-4 md:p-5 rounded-2xl md:rounded-3xl border transition-all group overflow-visible relative ${
+                              className={`flex justify-between items-center px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl sm:rounded-2xl border transition-all duration-200 group relative ${
                                 isRank1
-                                  ? 'bg-gradient-to-r from-amber-500/10 via-yellow-400/15 to-white border-2 border-amber-400/80 shadow-md shadow-amber-500/10'
+                                  ? 'bg-gradient-to-l from-amber-500/10 via-amber-500/5 to-white border-amber-300 shadow-xs'
                                   : isRank2
-                                  ? 'bg-gradient-to-r from-slate-100/60 via-white to-slate-50/40 border border-slate-300 shadow-sm'
+                                  ? 'bg-gradient-to-l from-slate-100/80 via-slate-50/40 to-white border-slate-200 shadow-xs'
                                   : isRank3
-                                  ? 'bg-gradient-to-r from-amber-700/10 via-white to-orange-50/30 border border-amber-600/30 shadow-sm'
-                                  : 'bg-white/90 border-slate-200/90 hover:border-slate-300 hover:shadow-md'
-                              } ${isCurrentPlayer ? 'ring-2 ring-emerald-500/80 border-emerald-400 bg-emerald-50/50 shadow-md shadow-emerald-600/10' : ''}`}
+                                  ? 'bg-gradient-to-l from-amber-600/10 via-amber-600/5 to-white border-amber-200 shadow-xs'
+                                  : 'bg-white border-slate-150 hover:border-amber-300 shadow-xs'
+                              } ${isCurrentPlayer ? 'ring-1.5 ring-emerald-500 border-emerald-400 bg-emerald-50/40' : ''}`}
                             >
-                              <div className="flex items-center gap-3 sm:gap-4 md:gap-5 min-w-0">
-                                {/* Rank Pill Badge */}
-                                <div className="w-9 sm:w-11 flex flex-col items-center justify-center shrink-0">
+                              <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
+                                {/* Rank Badge */}
+                                <div className="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center shrink-0">
                                   {isRank1 ? (
-                                    <div className="flex flex-col items-center">
-                                      <span className="text-xl sm:text-2xl drop-shadow-sm animate-bounce">👑</span>
-                                      <span className="text-[9px] font-black text-amber-700 tracking-wider">الأول</span>
+                                    <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-amber-500/15 border border-amber-300 text-amber-800 flex items-center justify-center font-black text-xs sm:text-sm shadow-xs">
+                                      👑
                                     </div>
                                   ) : isRank2 ? (
-                                    <div className="w-8 h-8 rounded-full bg-slate-200 border border-slate-300 text-slate-700 flex items-center justify-center font-black text-xs sm:text-sm shadow-xs">
-                                      🥈 2
+                                    <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-slate-100 border border-slate-200 text-slate-700 flex items-center justify-center font-black text-xs sm:text-sm shadow-xs">
+                                      🥈
                                     </div>
                                   ) : isRank3 ? (
-                                    <div className="w-8 h-8 rounded-full bg-amber-100 border border-amber-300 text-amber-900 flex items-center justify-center font-black text-xs sm:text-sm shadow-xs">
-                                      🥉 3
+                                    <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-amber-100/70 border border-amber-200 text-amber-900 flex items-center justify-center font-black text-xs sm:text-sm shadow-xs">
+                                      🥉
                                     </div>
                                   ) : (
-                                    <div className="w-7 h-7 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-black text-xs">
+                                    <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-slate-50 border border-slate-100 text-slate-400 flex items-center justify-center font-black text-[11px] sm:text-xs">
                                       #{index + 1}
                                     </div>
                                   )}
                                 </div>
 
                                 {/* Avatar & Frame */}
-                                <div className="relative group shrink-0 flex items-center justify-center w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16">
+                                <div className="relative group shrink-0 flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10">
                                   {/* Inner Avatar */}
-                                  <div className="relative z-10 w-10 h-10 sm:w-11 sm:h-11 md:w-12 md:h-12 rounded-full flex items-center justify-center text-white font-black text-sm sm:text-base md:text-lg transition-transform group-hover:scale-105 bg-gradient-to-br from-brand-emerald to-emerald-700 shadow-md border-2 border-white/50">
+                                  <div className="relative z-10 w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-white font-black text-xs sm:text-sm bg-gradient-to-br from-brand-emerald to-emerald-700 shadow-xs border border-white/60">
                                     {(player.name || '').trim().charAt(0).toUpperCase()}
                                   </div>
 
                                   {/* Frame / Achievement Decoration */}
                                   {isPlayerElite && (
                                     achievement === 'seerah' ? (
-                                      <div className="absolute -inset-2 sm:-inset-2.5 md:-inset-3 rounded-full pointer-events-none z-20 bg-[url('/golden_seerah_achievement_frame.png')] bg-center bg-no-repeat bg-contain scale-110" />
+                                      <div className="absolute -inset-1 rounded-full pointer-events-none z-20 bg-[url('/golden_seerah_achievement_frame.png')] bg-center bg-no-repeat bg-contain scale-110" />
                                     ) : achievement === 'general' ? (
-                                      <div className="absolute -inset-2 sm:-inset-2.5 md:-inset-3 rounded-full pointer-events-none z-20 bg-[url('/golden_general_achievement_frame.png')] bg-center bg-no-repeat bg-contain scale-110" />
+                                      <div className="absolute -inset-1 rounded-full pointer-events-none z-20 bg-[url('/golden_general_achievement_frame.png')] bg-center bg-no-repeat bg-contain scale-110" />
                                     ) : (
-                                      <div className={`absolute -inset-1 rounded-full pointer-events-none z-0 ${style.className}`} />
+                                      <div className={`absolute -inset-0.5 rounded-full pointer-events-none z-0 ${style.className}`} />
                                     )
                                   )}
 
                                   {/* Badge Icon */}
                                   {isPlayerElite && (
-                                    <div className="absolute -bottom-1 -left-1 z-30 flex h-4 w-4 sm:h-5 sm:w-5 md:h-6 md:w-6 items-center justify-center bg-transparent drop-shadow-lg">
+                                    <div className="absolute -bottom-1 -left-1 z-30 flex h-3.5 w-3.5 sm:h-4 sm:w-4 items-center justify-center bg-transparent drop-shadow">
                                       {style.icon.startsWith('/') ? (
                                         <img src={style.icon} className="w-full h-full object-contain" alt="Badge" />
                                       ) : (
-                                        <div className="flex items-center justify-center text-[10px] w-full h-full">
+                                        <div className="flex items-center justify-center text-[8px] w-full h-full">
                                           {style.icon}
                                         </div>
                                       )}
@@ -3457,7 +3598,7 @@ ${versesList}
                                 {/* Name & Stats */}
                                 <div className="text-right min-w-0">
                                   <div className="flex items-center gap-1.5 flex-wrap">
-                                    <span className={`font-black text-sm sm:text-base md:text-lg leading-tight truncate ${
+                                    <span className={`font-black text-xs sm:text-sm leading-tight truncate ${
                                       isPlayerElite
                                         ? `text-transparent bg-clip-text bg-gradient-to-r ${style.textColor}`
                                         : 'text-slate-800'
@@ -3465,13 +3606,13 @@ ${versesList}
                                       {player.name}
                                     </span>
                                     {isCurrentPlayer && (
-                                      <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-600 text-white shadow-xs">
+                                      <span className="text-[9px] font-black px-1.5 py-0.2 rounded-md bg-emerald-600 text-white shadow-xs">
                                         أنت
                                       </span>
                                     )}
                                   </div>
                                   <div className="flex items-center gap-2 mt-0.5">
-                                    <span className="text-[10px] sm:text-xs font-bold text-slate-400">
+                                    <span className="text-[10px] sm:text-[11px] font-bold text-slate-400">
                                       {player.points} نقطة
                                     </span>
                                     {player.username && (
@@ -3484,17 +3625,17 @@ ${versesList}
                               </div>
 
                               {/* Cups Counter Pill */}
-                              <div className="shrink-0 flex items-center pr-2">
-                                <div className={`flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 rounded-2xl border transition-all ${
+                              <div className="shrink-0 flex items-center pr-1.5">
+                                <div className={`flex items-center gap-1 px-2.5 py-1 sm:px-3 sm:py-1 rounded-xl border transition-all ${
                                   isRank1
-                                    ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-amber-950 border-amber-400 shadow-md shadow-amber-500/20'
-                                    : 'bg-brand-gold/10 text-emerald-800 border-brand-gold/30'
+                                    ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-amber-950 border-amber-400 shadow-xs'
+                                    : 'bg-amber-50 text-amber-900 border-amber-200/80'
                                 }`}>
-                                  <Trophy className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${isRank1 ? 'text-amber-950 fill-amber-950' : 'text-brand-gold'}`} />
-                                  <span className={`font-black text-sm sm:text-lg tabular-nums ${isRank1 ? 'text-amber-950' : 'text-emerald-800'}`}>
+                                  <Trophy className={`w-3 h-3 sm:w-3.5 sm:h-3.5 ${isRank1 ? 'text-amber-950 fill-amber-950' : 'text-amber-600'}`} />
+                                  <span className={`font-black text-xs sm:text-sm tabular-nums ${isRank1 ? 'text-amber-950' : 'text-amber-900'}`}>
                                     {player.cups}
                                   </span>
-                                  <span className="text-[10px] font-bold opacity-80 hidden sm:inline">كأس</span>
+                                  <span className="text-[9px] font-bold opacity-75 hidden sm:inline">كأس</span>
                                 </div>
                               </div>
                             </motion.div>
@@ -3572,29 +3713,67 @@ ${versesList}
                       <div className="space-y-6">
                         <div>
                           <label className="block text-xs font-black text-slate-400 mb-4 uppercase tracking-widest text-center">اختر مهارة التحدي</label>
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
                             {[
                               { id: 'audio', label: 'التحدي الصوتي', icon: Mic, color: 'emerald', bg: 'bg-brand-emerald/10', desc: 'تحدى نفسك بقراءة بداية الآيات', hidden: systemSettings.hideAudioChallenge },
                               { id: 'complete', label: 'تحدي إكمال الآية', icon: CheckCircle, color: 'blue', bg: 'bg-blue-600/10', desc: 'توقع الكلمات المفقودة في الآية', hidden: systemSettings.hideCompletionChallenge },
-                              { id: 'surah', label: 'تحديد اسم السورة', icon: BookOpen, color: 'purple', bg: 'bg-purple-600/10', desc: 'تعرف على اسم السورة من الآية', hidden: systemSettings.hideSurahChallenge }
+                              { id: 'surah', label: 'تحديد اسم السورة', icon: BookOpen, color: 'purple', bg: 'bg-purple-600/10', desc: 'تعرف على اسم السورة من الآية', hidden: systemSettings.hideSurahChallenge },
+                              { id: 'islamic', label: 'تحدي معلومات إسلامية', icon: Sparkles, color: 'amber', bg: 'bg-amber-500/10', desc: 'أسئلة في العقيدة، الفقه، والتفسير', hidden: false }
                             ].filter(m => !m.hidden).map(mode => (
                               <button
                                 key={mode.id}
-                                onClick={() => setV1GameMode(mode.id as any)}
-                                className={`p-4 md:p-5 rounded-2xl border-2 transition-all flex flex-col items-center text-center gap-2 relative overflow-hidden ${v1GameMode === mode.id
+                                onClick={() => {
+                                  setV1GameMode(mode.id as any);
+                                  if (mode.id === 'islamic') {
+                                    setShowIslamicConfigModal(true);
+                                  }
+                                }}
+                                className={`p-3.5 md:p-4 rounded-2xl border-2 transition-all flex flex-col items-center text-center gap-1.5 relative overflow-hidden ${v1GameMode === mode.id
                                   ? `border-brand-emerald bg-brand-emerald/5 shadow-lg scale-[1.02]`
                                   : 'border-slate-100 hover:border-slate-200 bg-white'
                                   }`}
                               >
-                                <div className={`w-12 h-12 rounded-xl flex items-center justify-center mb-0.5 shadow-sm ${v1GameMode === mode.id ? `bg-brand-emerald text-white shadow-brand-emerald/20` : 'bg-slate-50 text-slate-400'}`}>
-                                  <mode.icon className="w-6 h-6" />
+                                <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center mb-0.5 shadow-sm ${v1GameMode === mode.id ? `bg-brand-emerald text-white shadow-brand-emerald/20` : 'bg-slate-50 text-slate-400'}`}>
+                                  <mode.icon className="w-5 h-5 md:w-6 md:h-6" />
                                 </div>
-                                <div className={`text-sm md:text-base font-black ${v1GameMode === mode.id ? `text-brand-emerald` : 'text-slate-700'}`}>{mode.label}</div>
-                                <div className="text-[10px] md:text-[11px] text-slate-400 font-bold leading-tight">{mode.desc}</div>
-                                {v1GameMode === mode.id && <div className={`absolute top-3 right-3 w-2.5 h-2.5 rounded-full bg-brand-emerald animate-pulse`} />}
+                                <div className={`text-xs md:text-sm font-black ${v1GameMode === mode.id ? `text-brand-emerald` : 'text-slate-700'}`}>{mode.label}</div>
+                                <div className="text-[9px] md:text-[10px] text-slate-400 font-bold leading-tight line-clamp-2">{mode.desc}</div>
+                                {v1GameMode === mode.id && <div className={`absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-brand-emerald animate-pulse`} />}
                               </button>
                             ))}
                           </div>
+
+                          {/* Islamic Quiz Active Config Banner */}
+                          {v1GameMode === 'islamic' && (
+                            <motion.div
+                              initial={{ opacity: 0, y: -5 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              className="mt-3.5 p-3.5 bg-amber-50/80 rounded-2xl border border-amber-200 flex items-center justify-between text-right gap-3"
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0">
+                                  <Sparkles className="w-4 h-4" />
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="text-xs font-black text-amber-900 truncate">
+                                    {islamicCategoriesList.find(c => c.id === islamicRoomCategory)?.title || 'العقيدة الإسلامية'}
+                                    <span className="mx-1 text-amber-400">•</span>
+                                    المستوى {islamicRoomLevel}
+                                    <span className="mx-1 text-amber-400">•</span>
+                                    {islamicRoomTopic === 'all' ? 'جميع الموضوعات' : islamicRoomTopic}
+                                  </div>
+                                  <div className="text-[10px] font-bold text-amber-700/80 mt-0.5">تم تخصيص الأسئلة وفق هذا التحديد</div>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setShowIslamicConfigModal(true)}
+                                className="px-3 py-1.5 bg-white text-amber-800 text-xs font-black rounded-xl border border-amber-300 shadow-xs hover:bg-amber-100 transition-all shrink-0"
+                              >
+                                تخصيص ⚙️
+                              </button>
+                            </motion.div>
+                          )}
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 pt-2">
@@ -4318,43 +4497,43 @@ ${versesList}
                       <div className="lg:col-span-6 flex flex-col justify-between">
                         <div className="grid grid-cols-2 gap-2.5 sm:gap-3.5 h-full">
                           {/* 1. إجمالي الكؤوس */}
-                          <div className="glass bg-white/85 p-3.5 sm:p-4 rounded-3xl flex flex-col justify-between border border-amber-200/50 shadow-sm hover:shadow-md transition-all">
+                          <div className="bg-white p-3.5 sm:p-4 rounded-2xl flex flex-col justify-between border border-slate-150 shadow-xs hover:border-amber-300 hover:shadow-md transition-all duration-200">
                             <div className="flex items-center justify-between">
                               <span className="text-[11px] sm:text-xs font-black text-slate-400 uppercase tracking-wider">إجمالي الكؤوس</span>
-                              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-tr from-amber-500 to-yellow-400 text-white flex items-center justify-center shadow-md shadow-amber-500/20 shrink-0">
-                                <Trophy className="w-5 h-5" />
+                              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                                <Trophy className="w-4 h-4 text-amber-500" />
                               </div>
                             </div>
                             <div className="mt-3 text-right">
-                              <span className="text-2xl sm:text-3xl font-black text-amber-600 tabular-nums leading-tight block">{cups}</span>
+                              <span className="text-2xl sm:text-3xl font-black text-slate-800 tabular-nums leading-tight block">{cups}</span>
                               <span className="text-[10px] text-slate-400 font-bold block mt-0.5">الأوسمة والبطولات</span>
                             </div>
                           </div>
 
                           {/* 2. نقاط المهارة */}
-                          <div className="glass bg-white/85 p-3.5 sm:p-4 rounded-3xl flex flex-col justify-between border border-emerald-200/50 shadow-sm hover:shadow-md transition-all">
+                          <div className="bg-white p-3.5 sm:p-4 rounded-2xl flex flex-col justify-between border border-slate-150 shadow-xs hover:border-emerald-300 hover:shadow-md transition-all duration-200">
                             <div className="flex items-center justify-between">
                               <span className="text-[11px] sm:text-xs font-black text-slate-400 uppercase tracking-wider">نقاط المهارة</span>
-                              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center shadow-md shadow-emerald-600/20 shrink-0">
-                                <Star className="w-5 h-5 text-amber-300 fill-amber-300 drop-shadow-xs" />
+                              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                                <Star className="w-4 h-4 text-emerald-600 fill-emerald-600" />
                               </div>
                             </div>
                             <div className="mt-3 text-right">
-                              <span className="text-2xl sm:text-3xl font-black text-emerald-700 tabular-nums leading-tight block">{totalPoints}</span>
+                              <span className="text-2xl sm:text-3xl font-black text-slate-800 tabular-nums leading-tight block">{totalPoints}</span>
                               <span className="text-[10px] text-slate-400 font-bold block mt-0.5">رصيد الخبرة</span>
                             </div>
                           </div>
 
                           {/* 3. التقدم الكلي */}
-                          <div className="glass bg-white/85 p-3.5 sm:p-4 rounded-3xl flex flex-col justify-between border border-teal-200/50 shadow-sm hover:shadow-md transition-all">
+                          <div className="bg-white p-3.5 sm:p-4 rounded-2xl flex flex-col justify-between border border-slate-150 shadow-xs hover:border-teal-300 hover:shadow-md transition-all duration-200">
                             <div className="flex items-center justify-between">
                               <span className="text-[11px] sm:text-xs font-black text-slate-400 uppercase tracking-wider">التقدم الكلي</span>
-                              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-tr from-teal-600 to-cyan-500 text-white flex items-center justify-center shadow-md shadow-teal-600/20 shrink-0">
-                                <CheckCircle2 className="w-5 h-5" />
+                              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center shrink-0">
+                                <CheckCircle2 className="w-4 h-4 text-teal-600" />
                               </div>
                             </div>
                             <div className="mt-3 text-right">
-                              <span className="text-2xl sm:text-3xl font-black text-teal-700 tabular-nums leading-tight block">{completedChallengeIds.size}</span>
+                              <span className="text-2xl sm:text-3xl font-black text-slate-800 tabular-nums leading-tight block">{completedChallengeIds.size}</span>
                               <span className="text-[10px] text-slate-400 font-bold block mt-0.5">تحدياً مكتملاً</span>
                             </div>
                           </div>
@@ -4362,23 +4541,23 @@ ${versesList}
                           {/* 4. مواسم الطاعات وسنن الأيام */}
                           <button
                             onClick={() => setIsOccasionsModalOpen(true)}
-                            className="glass bg-white/85 p-3.5 sm:p-4 rounded-3xl flex flex-col justify-between border border-amber-200/60 shadow-sm hover:shadow-md transition-all text-right group hover:border-amber-300 cursor-pointer"
+                            className="bg-white p-3.5 sm:p-4 rounded-2xl flex flex-col justify-between border border-slate-150 shadow-xs hover:border-amber-300 hover:shadow-md transition-all duration-200 text-right group cursor-pointer"
                             title="انقر لاستعراض أقرب مواسم الطاعات وسُنن الأيام والأحاديث الواردة فيها"
                           >
                             <div className="flex items-center justify-between w-full">
                               <span className="text-[11px] sm:text-xs font-black text-slate-400 uppercase tracking-wider">
                                 مواسم الطاعات
                               </span>
-                              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-gradient-to-tr from-amber-500 via-orange-500 to-emerald-600 text-white flex items-center justify-center shadow-md shadow-amber-500/20 shrink-0 transition-transform group-hover:scale-105">
-                                <Moon className="w-5 h-5 text-amber-200 fill-amber-200" />
+                              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                                <Moon className="w-4 h-4 text-amber-500 fill-amber-500" />
                               </div>
                             </div>
-                            <div className="mt-2.5 text-right">
-                              <span className="text-base sm:text-lg font-black text-slate-800 leading-tight block truncate">
+                            <div className="mt-2 text-right">
+                              <span className="text-sm sm:text-base font-black text-slate-800 leading-tight block truncate group-hover:text-amber-700 transition-colors">
                                 {nearestOccasion.title}
                               </span>
                               <div className="flex items-center gap-1.5 mt-1">
-                                <span className="text-[10px] bg-amber-100 text-amber-800 font-black px-1.5 py-0.2 rounded-md shrink-0">
+                                <span className="text-[10px] bg-amber-50 text-amber-800 border border-amber-200/60 font-bold px-1.5 py-0.2 rounded-md shrink-0">
                                   {nearestOccasion.timingBadge}
                                 </span>
                                 <span className="text-[10px] text-slate-400 font-bold truncate">
@@ -4400,34 +4579,34 @@ ${versesList}
                       <span className="text-[11px] text-emerald-700/80 font-bold hidden sm:inline">انقر على شعلة الزاوية لمعرفة نظام الـ 24 ساعة ومهلة الإنقاذ 🔥</span>
                     </div>
 
-                    {/* Daily Challenge Hero Banner */}
+                    {/* Daily Challenge Card on Home */}
                     <div className="px-1">
                       {dailyCompleted ? (
-                        <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border border-emerald-200/70 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
+                        <div className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-150 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xs">
                           <div className="flex items-center gap-3.5">
-                            <div className="w-11 h-11 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-md shadow-emerald-600/20">
-                              <CheckCircle2 className="w-6 h-6" />
+                            <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                              <CheckCircle2 className="w-5 h-5" />
                             </div>
                             <div>
                               <div className="flex items-center gap-2">
                                 <h4 className="font-black text-slate-800 text-sm sm:text-base">تم إنجاز التحدي اليومي بنجاح!</h4>
-                                <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">مكتمل</span>
+                                <span className="text-[10px] bg-emerald-50 text-emerald-800 border border-emerald-200/60 font-bold px-2 py-0.5 rounded-full">مكتمل</span>
                               </div>
-                              <p className="text-xs text-slate-500 font-medium mt-0.5">شعلتك مشتعلة بأمان حتى الغد. استمر في تعاهد كتاب الله.</p>
+                              <p className="text-xs text-slate-400 font-bold mt-0.5">شعلتك مشتعلة بأمان حتى الغد. استمر في تعاهد كتاب الله.</p>
                             </div>
                           </div>
                           <button
                             onClick={() => setView('challenges')}
-                            className="px-4 py-2 bg-white text-emerald-800 border border-emerald-200/80 rounded-xl font-bold text-xs hover:bg-emerald-50 transition-all shadow-xs active:scale-95 shrink-0"
+                            className="px-4 py-2 bg-slate-50 hover:bg-emerald-50 text-emerald-800 border border-slate-200 hover:border-emerald-300 rounded-xl font-bold text-xs transition-all shadow-xs active:scale-95 shrink-0"
                           >
                             استكشف التحديات الأخرى
                           </button>
                         </div>
                       ) : streakInfo.status === 'warning' ? (
-                        <div className="p-4 sm:p-5 rounded-3xl bg-gradient-to-r from-amber-500/15 via-rose-500/10 to-amber-500/15 border-2 border-amber-400 shadow-lg shadow-amber-500/10 flex flex-col sm:flex-row items-center justify-between gap-4">
+                        <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-amber-500/10 via-rose-500/5 to-amber-500/10 border-2 border-amber-400 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
                           <div className="flex items-center gap-3.5">
-                            <div className="w-12 h-12 rounded-2xl bg-amber-600 text-white flex items-center justify-center shadow-md shadow-amber-600/30 shrink-0 animate-pulse">
-                              <Flame className="w-6 h-6 text-amber-200" />
+                            <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 animate-pulse">
+                              <Flame className="w-5 h-5 text-amber-200" />
                             </div>
                             <div>
                               <div className="flex items-center gap-2">
@@ -4438,41 +4617,40 @@ ${versesList}
                               <h4 className="font-black text-amber-950 text-sm sm:text-base mt-1">
                                 شعلتك انطفأت مؤقتاً! أنقذ سلسلتك الآن
                               </h4>
-                              <p className="text-xs text-amber-900/80 font-medium mt-0.5">
-                                أكمل التحدي اليومي قبل انتهاء الـ 12 ساعة لتعود الشعلة للاشتعال فوراً ولا تفقد تقدمك!
+                              <p className="text-xs text-amber-900/80 font-bold mt-0.5">
+                                أكمل التحدي اليومي قبل انتهاء المهلة لتعود الشعلة للاشتعال فوراً ولا تفقد تقدمك!
                               </p>
                             </div>
                           </div>
                           <button
                             onClick={handleStartDaily}
-                            className="w-full sm:w-auto px-5 py-3 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white font-black text-xs sm:text-sm rounded-2xl transition-all shadow-lg shadow-orange-600/25 active:scale-95 flex items-center justify-center gap-2 shrink-0"
+                            className="w-full sm:w-auto px-5 py-2.5 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white font-black text-xs sm:text-sm rounded-xl transition-all shadow-xs active:scale-95 flex items-center justify-center gap-2 shrink-0"
                           >
                             <Zap className="w-4 h-4 text-amber-200" />
                             <span>أنقذ الشعلة الآن 🔥</span>
                           </button>
                         </div>
                       ) : (
-                        <div className="p-4 sm:p-6 rounded-3xl bg-gradient-to-r from-emerald-800 via-emerald-700 to-teal-800 text-white shadow-xl shadow-emerald-950/10 flex flex-col sm:flex-row items-center justify-between gap-4 relative overflow-hidden">
-                          <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full blur-2xl pointer-events-none" />
-                          <div className="flex items-center gap-3.5 relative z-10">
-                            <div className="w-12 h-12 rounded-2xl bg-white/15 backdrop-blur-md border border-white/20 flex items-center justify-center text-amber-300 shadow-md shrink-0">
-                              <Calendar className="w-6 h-6" />
-                            </div>
+                        <div className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-150 hover:border-emerald-400 transition-all duration-200 shadow-xs hover:shadow-md flex flex-col sm:flex-row items-center justify-between gap-4 text-right group">
+                          <div className="flex items-center gap-3.5">
+                            <DailyChallengeEmblem className="w-11 h-11 shrink-0 transition-transform duration-200 group-hover:scale-105" />
                             <div>
                               <div className="flex items-center gap-2 mb-0.5">
-                                <h4 className="font-black text-white text-base sm:text-lg">التحدي اليومي: إكمال الآية</h4>
-                                <span className="text-[10px] bg-amber-400 text-emerald-950 font-black px-2 py-0.5 rounded-full">
+                                <h4 className="font-black text-slate-800 text-base group-hover:text-brand-emerald transition-colors">
+                                  التحدي اليومي: إكمال الآية
+                                </h4>
+                                <span className="text-[10px] bg-emerald-50 text-emerald-800 border border-emerald-200/60 font-black px-2 py-0.5 rounded-full">
                                   تحدي اليوم
                                 </span>
                               </div>
-                              <p className="text-xs sm:text-sm text-emerald-100/90 font-medium leading-relaxed">
+                              <p className="text-xs text-slate-400 font-bold leading-relaxed">
                                 أكمل الآية الكريمة، وحافظ على اشتعال شعلتك اليومية واكسب نقاط المهارة القرآنية
                               </p>
                             </div>
                           </div>
                           <button
                             onClick={handleStartDaily}
-                            className="relative z-10 w-full sm:w-auto px-6 py-3 bg-amber-400 hover:bg-amber-300 text-emerald-950 font-black text-xs sm:text-sm rounded-2xl transition-all shadow-lg shadow-amber-400/25 active:scale-95 flex items-center justify-center gap-2 shrink-0"
+                            className="w-full sm:w-auto px-5 py-2.5 bg-brand-emerald hover:bg-[#033628] text-white font-black text-xs sm:text-sm rounded-xl transition-all shadow-xs active:scale-95 flex items-center justify-center gap-2 shrink-0 cursor-pointer"
                           >
                             <span>ابدأ التحدي اليومي</span>
                             <ArrowLeft className="w-4 h-4" />
@@ -4484,31 +4662,40 @@ ${versesList}
                 ) : view === 'challenges' ? (
                   <motion.div
                     key="challenges"
-                    initial={{ opacity: 0, y: 20 }}
+                    initial={{ opacity: 0, y: 15 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.98 }}
-                    className="flex flex-col gap-6 max-w-6xl mx-auto py-6 md:py-10 px-4 pb-28"
+                    className="flex flex-col gap-6 max-w-6xl mx-auto py-4 md:py-6 px-4 pb-28"
                   >
-                    <div className="flex items-center gap-3 px-2">
-                      <div className="w-1.5 h-7 bg-brand-gold rounded-full" />
-                      <h2 className="text-2xl md:text-3xl font-black text-brand-emerald tracking-tight">تحديات إسلامية</h2>
+                    {/* Clean Header */}
+                    <div className="flex items-center justify-between px-1">
+                      <div className="flex items-center gap-3">
+                        <div className="w-1.5 h-8 bg-brand-gold rounded-full" />
+                        <div>
+                          <h2 className="text-2xl md:text-3xl font-black text-brand-emerald tracking-tight">
+                            التحديات الإسلامية
+                          </h2>
+                          <p className="text-xs sm:text-sm font-bold text-slate-400 mt-0.5">
+                            مسابقات قرآنية وثقافية لتثبيت الحفظ والمنافسة الشريفة
+                          </p>
+                        </div>
+                      </div>
                     </div>
 
                     {/* Incomplete Challenge Alert */}
                     {incompleteChallenge && (
                       <motion.div
-                        initial={{ opacity: 0, y: -20 }}
+                        initial={{ opacity: 0, y: -10 }}
                         animate={{ opacity: 1, y: 0 }}
-                        whileHover={{ scale: 1.01 }}
-                        className="relative overflow-hidden bg-brand-gold text-brand-emerald p-4 md:p-8 rounded-2xl md:rounded-[3.5rem] flex flex-col md:flex-row items-center justify-between px-6 md:px-10 shadow-2xl shadow-brand-gold/30 group mb-4"
+                        className="bg-amber-50 border border-amber-200/80 p-4 sm:p-5 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 text-right shadow-xs"
                       >
-                        <div className="flex items-center gap-6 relative z-10 text-center md:text-right">
-                          <div className="w-14 h-14 rounded-2xl bg-white/30 backdrop-blur-md flex items-center justify-center animate-bounce">
-                            <Zap className="w-8 h-8" />
+                        <div className="flex items-center gap-3 w-full sm:w-auto">
+                          <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs">
+                            <Zap className="w-5 h-5 animate-bounce" />
                           </div>
-                          <div className="flex flex-col gap-1">
-                            <span className="font-black text-xl md:text-2xl leading-tight">لديك تحدي لم يكتمل بعد!</span>
-                            <span className="font-bold text-sm opacity-80 uppercase tracking-widest">استمر في رحلتك وسجل اسمك بين المتصدرين</span>
+                          <div>
+                            <span className="font-black text-slate-800 text-sm sm:text-base block">لديك تحدٍ لم يكتمل بعد!</span>
+                            <span className="text-xs font-bold text-slate-500">استمر في رحلتك وسجل اسمك بين المتصدرين</span>
                           </div>
                         </div>
 
@@ -4520,236 +4707,338 @@ ${versesList}
                             }
                             setView('challenge');
                           }}
-                          className="mt-6 md:mt-0 relative z-10 px-10 py-4 bg-brand-emerald text-white rounded-2xl font-black text-lg hover:bg-white hover:text-brand-emerald transition-all shadow-xl active:scale-95 flex items-center gap-3 group/btn"
+                          className="w-full sm:w-auto px-5 py-2.5 bg-brand-emerald text-white rounded-xl font-black text-xs sm:text-sm hover:bg-[#033628] transition-all shadow-xs active:scale-95 flex items-center justify-center gap-2"
                         >
-                          <span>متابعة التحدي الآن</span>
-                          <ArrowLeft className="w-5 h-5 transition-transform group-hover/btn:-translate-x-1" />
+                          <span>متابعة التحدي</span>
+                          <ArrowLeft className="w-4 h-4" />
                         </button>
                       </motion.div>
                     )}
 
-                    {/* Main Challenges Grid */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
-                      {/* Daily Challenge Card */}
+                    {/* Clean & Beautiful Challenges Grid */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
+
+                      {/* 1. Group Live Challenge Card (التحدي الجماعي) */}
                       <motion.button
-                        whileHover={{ y: -4 }}
-                        onClick={handleStartDaily}
-                        disabled={dailyCompleted}
-                        className={`group relative p-4 md:p-6 rounded-2xl text-right overflow-hidden transition-all duration-300 flex flex-col justify-between border border-slate-100 min-h-[140px] ${dailyCompleted ? 'bg-slate-50 opacity-60 grayscale' : 'bg-white shadow-sm hover:shadow-md hover:border-brand-gold/30'}`}
+                        whileHover={{ y: -3 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => setView('group_menu')}
+                        className="group relative p-5 md:p-6 rounded-2xl text-right overflow-hidden transition-all duration-200 flex flex-col justify-between border border-slate-150 hover:border-amber-400 bg-white shadow-xs hover:shadow-md min-h-[160px]"
                       >
-                        <div className="flex items-center justify-between">
-                          <div className={`w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center transition-all duration-300 ${dailyCompleted ? 'bg-slate-200' : 'bg-brand-gold/10 text-brand-gold group-hover:bg-brand-gold group-hover:text-brand-emerald shadow-sm'}`}>
-                            <Calendar className="w-5 h-5 md:w-6 md:h-6" />
+                        <div className="flex items-start justify-between">
+                          <GroupChallengeEmblem className="w-12 h-12 shrink-0 transition-transform duration-200 group-hover:scale-105" />
+                          <div className="flex items-center gap-2">
+                            <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-black border border-emerald-200/50">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                              <span>مباشر الآن</span>
+                            </span>
+                            <ArrowLeft className="w-5 h-5 text-slate-300 group-hover:text-amber-600 group-hover:-translate-x-1 transition-all" />
                           </div>
-                          {!dailyCompleted && <ArrowLeft className="w-5 h-5 text-brand-gold opacity-0 group-hover:opacity-100 group-hover:-translate-x-1 transition-all" />}
                         </div>
 
                         <div className="mt-4">
-                          <h2 className={`text-sm md:text-lg font-black ${dailyCompleted ? 'text-slate-400' : 'text-brand-emerald'}`}>التحدي اليومي</h2>
-                          <p className="text-slate-400 font-bold text-xs mt-1">
-                            {dailyCompleted ? 'نراك غداً' : 'إكمال الآية اليومية'}
+                          <h3 className="text-base md:text-lg font-black text-slate-800 group-hover:text-amber-700 transition-colors">
+                            التحدي الجماعي
+                          </h3>
+                          <p className="text-slate-400 font-bold text-xs mt-1 leading-relaxed">
+                            سباق مباشر في غرف خاصة وعامة في المتشابهات والمعلومات الإسلامية
+                          </p>
+                        </div>
+                      </motion.button>
+
+                      {/* 2. Daily Challenge Card (التحدي اليومي) */}
+                      <motion.button
+                        whileHover={{ y: dailyCompleted ? 0 : -3 }}
+                        whileTap={{ scale: dailyCompleted ? 1 : 0.98 }}
+                        onClick={handleStartDaily}
+                        disabled={dailyCompleted}
+                        className={`group relative p-5 md:p-6 rounded-2xl text-right overflow-hidden transition-all duration-200 flex flex-col justify-between border min-h-[160px] ${
+                          dailyCompleted
+                            ? 'bg-slate-50 border-slate-150 opacity-70 grayscale'
+                            : 'bg-white border-slate-150 hover:border-emerald-400 shadow-xs hover:shadow-md'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between">
+                          <DailyChallengeEmblem className="w-12 h-12 shrink-0 transition-transform duration-200 group-hover:scale-105" />
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200/40">
+                              {dailyCompleted ? 'تم إنجازه' : 'كل 24 ساعة'}
+                            </span>
+                            {!dailyCompleted && (
+                              <ArrowLeft className="w-5 h-5 text-slate-300 group-hover:text-brand-emerald group-hover:-translate-x-1 transition-all" />
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="mt-4">
+                          <h3 className={`text-base md:text-lg font-black ${dailyCompleted ? 'text-slate-500' : 'text-slate-800 group-hover:text-brand-emerald'} transition-colors`}>
+                            التحدي اليومي
+                          </h3>
+                          <p className="text-slate-400 font-bold text-xs mt-1 leading-relaxed">
+                            {dailyCompleted ? 'أحسنت! نراك غداً لمتابعة سلسلة إنجازك' : 'إكمال الآية اليومية لتثبيت حفظ الورد ومضاعفة نقاطك'}
                           </p>
                         </div>
 
                         {dailyCompleted && (
-                          <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between">
-                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap">الموعد القادم</span>
-                            <span className="text-sm font-black text-brand-emerald tabular-nums">{timeLeft}</span>
+                          <div className="mt-3 pt-2.5 border-t border-slate-200/60 flex items-center justify-between">
+                            <span className="text-[10px] font-bold text-slate-400">الموعد القادم:</span>
+                            <span className="text-xs font-black text-brand-emerald tabular-nums">{timeLeft}</span>
                           </div>
                         )}
                       </motion.button>
 
-                      {/* Skill Challenge Card */}
+                      {/* 3. Skills Challenge Card (تحدي المهارات) */}
                       <motion.button
-                        whileHover={{ y: -4 }}
+                        whileHover={{ y: -3 }}
+                        whileTap={{ scale: 0.98 }}
                         onClick={() => {
                           setIsSpeedMode(false);
                           setView('skills_menu');
                         }}
-                        className="group relative p-4 md:p-6 rounded-2xl text-right overflow-hidden transition-all duration-300 flex flex-col justify-between border border-slate-100 min-h-[140px] bg-white shadow-sm hover:shadow-md hover:border-brand-emerald/30"
+                        className="group relative p-5 md:p-6 rounded-2xl text-right overflow-hidden transition-all duration-200 flex flex-col justify-between border border-slate-150 hover:border-teal-400 bg-white shadow-xs hover:shadow-md min-h-[160px]"
                       >
                         <div className="flex items-start justify-between">
-                          <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-brand-emerald/10 text-brand-emerald flex items-center justify-center transition-all duration-300 group-hover:bg-brand-emerald group-hover:text-white shadow-sm">
-                            <Zap className="w-5 h-5 md:w-6 md:h-6" />
+                          <SkillsChallengeEmblem className="w-12 h-12 shrink-0 transition-transform duration-200 group-hover:scale-105" />
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-teal-50 text-teal-800 border border-teal-200/40">
+                              {systemSettings.hideAudioChallenge ? 'مهارتان' : '3 مهارات'}
+                            </span>
+                            <ArrowLeft className="w-5 h-5 text-slate-300 group-hover:text-teal-600 group-hover:-translate-x-1 transition-all" />
                           </div>
-                          <ArrowLeft className="w-5 h-5 text-brand-emerald opacity-0 group-hover:opacity-100 group-hover:-translate-x-1 transition-all" />
                         </div>
 
                         <div className="mt-4">
-                          <h2 className="text-sm md:text-lg font-black text-brand-emerald">تحدي المهارات</h2>
-                          <p className="text-slate-400 font-bold text-xs mt-1">صوتي، خيارات، أو اسم السورة</p>
+                          <h3 className="text-base md:text-lg font-black text-slate-800 group-hover:text-teal-700 transition-colors">
+                            تحدي المهارات
+                          </h3>
+                          <p className="text-slate-400 font-bold text-xs mt-1 leading-relaxed">
+                            {systemSettings.hideAudioChallenge
+                              ? 'إكمال المتشابهات القرآنية، وتحديد اسم السورة الكريمة'
+                              : 'تلاوة صوتية بالذكاء الاصطناعي، أو إكمال المتشابهات، أو اسم السورة'}
+                          </p>
                         </div>
                       </motion.button>
 
-                      {/* Group Challenge Card */}
+                      {/* 4. Speed Challenge Card (تحدي السرعة) */}
                       <motion.button
-                        whileHover={{ y: -4 }}
-                        onClick={() => setView('group_menu')}
-                        className="group relative p-4 md:p-6 rounded-2xl text-right overflow-hidden transition-all duration-300 flex flex-col justify-between border border-slate-100 min-h-[140px] bg-white shadow-sm hover:shadow-md hover:border-orange-300/30"
-                      >
-                        <div className="flex items-start justify-between relative z-10">
-                          <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-orange-500/10 text-orange-500 flex items-center justify-center transition-all duration-300 group-hover:bg-orange-500 group-hover:text-white shadow-sm">
-                            <Users className="w-5 h-5 md:w-6 md:h-6" />
-                          </div>
-                          <span className="text-[10px] text-orange-600 font-bold opacity-0 group-hover:opacity-100 transition-opacity">مباشر الآن</span>
-                        </div>
-
-                        <div className="mt-4 relative z-10">
-                          <div className="flex items-center justify-between">
-                            <h2 className="text-sm md:text-lg font-black text-orange-900 group-hover:text-orange-600 transition-colors">التحدي الجماعي</h2>
-                            <ArrowLeft className="w-5 h-5 text-orange-500 opacity-0 group-hover:opacity-100 group-hover:-translate-x-1 transition-all" />
-                          </div>
-                          <p className="text-slate-400 font-bold text-xs mt-1">سباق مباشر في 3 تحديات مهارية</p>
-                        </div>
-                      </motion.button>
-
-                      {/* Speed Challenge Card */}
-                      <motion.button
-                        whileHover={{ y: -4 }}
+                        whileHover={{ y: -3 }}
+                        whileTap={{ scale: 0.98 }}
                         onClick={() => {
                           setIsSpeedMode(true);
                           setView('speed_menu');
                         }}
-                        className="group relative p-4 md:p-6 rounded-2xl text-right overflow-hidden transition-all duration-300 flex flex-col justify-between border border-slate-100 min-h-[140px] bg-white shadow-sm hover:shadow-md hover:border-red-300/30"
+                        className="group relative p-5 md:p-6 rounded-2xl text-right overflow-hidden transition-all duration-200 flex flex-col justify-between border border-slate-150 hover:border-rose-400 bg-white shadow-xs hover:shadow-md min-h-[160px]"
                       >
                         <div className="flex items-start justify-between">
-                          <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-red-500/10 text-red-500 flex items-center justify-center transition-all duration-300 group-hover:bg-red-500 group-hover:text-white shadow-sm">
-                            <Zap className="w-5 h-5 md:w-6 md:h-6" />
+                          <SpeedChallengeEmblem className="w-12 h-12 shrink-0 transition-transform duration-200 group-hover:scale-105" />
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-rose-50 text-rose-800 border border-rose-200/40">
+                              30 ثانية
+                            </span>
+                            <ArrowLeft className="w-5 h-5 text-slate-300 group-hover:text-rose-600 group-hover:-translate-x-1 transition-all" />
                           </div>
-                          <span className="text-[10px] text-red-600 font-bold opacity-0 group-hover:opacity-100 transition-opacity">30 ثانية</span>
                         </div>
 
                         <div className="mt-4">
-                          <div className="flex items-center justify-between">
-                            <h2 className="text-sm md:text-lg font-black text-red-900">تحدي السرعة</h2>
-                            <ArrowLeft className="w-5 h-5 text-red-500 opacity-0 group-hover:opacity-100 group-hover:-translate-x-1 transition-all" />
-                          </div>
-                          <p className="text-slate-400 font-bold text-xs mt-1">اختبار السرعة المثير مع العداد</p>
+                          <h3 className="text-base md:text-lg font-black text-slate-800 group-hover:text-rose-700 transition-colors">
+                            تحدي السرعة
+                          </h3>
+                          <p className="text-slate-400 font-bold text-xs mt-1 leading-relaxed">
+                            اختبار سرعة البديهة واستحضار الآيات المتشابهة مع العداد
+                          </p>
                         </div>
                       </motion.button>
 
-                      {/* Islamic Quiz Card */}
+                      {/* 5. Islamic Knowledge Quiz Card (تحدي معلومات إسلامية) */}
                       <motion.button
-                        whileHover={{ y: -4 }}
+                        whileHover={{ y: -3 }}
+                        whileTap={{ scale: 0.98 }}
                         onClick={() => setView('islamic_quiz')}
-                        className="group relative p-4 md:p-6 rounded-2xl text-right overflow-hidden transition-all duration-300 flex flex-col justify-between border border-slate-100 min-h-[140px] bg-white shadow-sm hover:shadow-md hover:border-emerald-400"
+                        className="group relative p-5 md:p-6 rounded-2xl text-right overflow-hidden transition-all duration-200 flex flex-col justify-between border border-slate-150 hover:border-emerald-500 bg-white shadow-xs hover:shadow-md min-h-[160px]"
                       >
-                        <div className="flex items-center justify-between">
-                          <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-emerald-600/10 text-emerald-600 flex items-center justify-center transition-all duration-300 group-hover:bg-emerald-600 group-hover:text-white shadow-sm">
-                            <HelpCircle className="w-5 h-5 md:w-6 md:h-6" />
+                        <div className="flex items-start justify-between">
+                          <IslamicQuizEmblem className="w-12 h-12 shrink-0 transition-transform duration-200 group-hover:scale-105" />
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200/40">
+                              5,820 سؤال
+                            </span>
+                            <ArrowLeft className="w-5 h-5 text-slate-300 group-hover:text-emerald-600 group-hover:-translate-x-1 transition-all" />
                           </div>
-                          <ArrowLeft className="w-5 h-5 text-emerald-600 opacity-0 group-hover:opacity-100 group-hover:-translate-x-1 transition-all" />
                         </div>
+
                         <div className="mt-4">
-                          <h2 className="text-sm md:text-lg font-black text-slate-800 group-hover:text-emerald-600 transition-colors">مسابقة معلومات إسلامية</h2>
-                          <p className="text-slate-400 font-bold text-xs mt-1">تحدي ثقافي شامل في العلوم الإسلامية</p>
+                          <h3 className="text-base md:text-lg font-black text-slate-800 group-hover:text-emerald-700 transition-colors">
+                            تحدي معلومات إسلامية
+                          </h3>
+                          <p className="text-slate-400 font-bold text-xs mt-1 leading-relaxed">
+                            موسوعة أسئلة شاملة في العقيدة، الفقه، السيرة، التفسير، والتاريخ
+                          </p>
                         </div>
                       </motion.button>
+
                     </div>
                   </motion.div>
                 ) : view === 'library' ? (
                   <motion.div
                     key="library"
-                    initial={{ opacity: 0, y: 20 }}
+                    initial={{ opacity: 0, y: 15 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.98 }}
-                    className="flex flex-col gap-6 max-w-6xl mx-auto py-6 md:py-10 px-4 pb-28"
+                    className="flex flex-col gap-6 max-w-6xl mx-auto py-4 md:py-6 px-4 pb-28"
                   >
-                    <div className="flex items-center gap-3 px-2">
-                      <div className="w-1.5 h-7 bg-blue-500 rounded-full shadow-lg shadow-blue-500/20" />
-                      <h2 className="text-2xl md:text-3xl font-black text-slate-800 tracking-tight">المكتبة والعلوم الشرعية</h2>
+                    {/* Clean Header */}
+                    <div className="flex items-center justify-between px-1">
+                      <div className="flex items-center gap-3">
+                        <div className="w-1.5 h-8 bg-brand-gold rounded-full" />
+                        <div>
+                          <h2 className="text-2xl md:text-3xl font-black text-brand-emerald tracking-tight">
+                            المكتبة والعلوم الشرعية
+                          </h2>
+                          <p className="text-xs sm:text-sm font-bold text-slate-400 mt-0.5">
+                            المصحف الشريف، الأذكار، الأحاديث، وتفاسير القرآن الكريم
+                          </p>
+                        </div>
+                      </div>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
-                      {/* Mushaf Card */}
+                    {/* Clean & Beautiful Library Grid */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
+
+                      {/* 1. Mushaf Card */}
                       <motion.button
-                        whileHover={{ y: -4 }}
+                        whileHover={{ y: -3 }}
+                        whileTap={{ scale: 0.98 }}
                         onClick={() => { setView('mushaf'); setSelectedSurahId(null); }}
-                        className="group relative p-4 md:p-6 rounded-2xl text-right overflow-hidden transition-all duration-300 flex flex-col justify-between border border-slate-100 min-h-[140px] bg-white shadow-sm hover:shadow-md hover:border-blue-400"
+                        className="group relative p-5 md:p-6 rounded-2xl text-right overflow-hidden transition-all duration-200 flex flex-col justify-between border border-slate-150 hover:border-blue-400 bg-white shadow-xs hover:shadow-md min-h-[160px]"
                       >
-                        <div className="flex items-center justify-between">
-                          <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-blue-600/10 text-blue-600 flex items-center justify-center transition-all duration-300 group-hover:bg-blue-600 group-hover:text-white shadow-sm">
-                            <BookOpen className="w-5 h-5 md:w-6 md:h-6" />
+                        <div className="flex items-start justify-between">
+                          <MushafLibraryIcon className="w-12 h-12 shrink-0 transition-transform duration-200 group-hover:scale-105" />
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200/50">
+                              القرآن الكريم
+                            </span>
+                            <ArrowLeft className="w-5 h-5 text-slate-300 group-hover:text-blue-600 group-hover:-translate-x-1 transition-all" />
                           </div>
-                          <ChevronLeft className="w-5 h-5 text-blue-600 opacity-0 group-hover:opacity-100 group-hover:-translate-x-1 transition-all" />
                         </div>
+
                         <div className="mt-4">
-                          <h2 className="text-sm md:text-lg font-black text-blue-950 group-hover:text-blue-600 transition-colors">المصحف الشريف</h2>
-                          <p className="text-slate-400 font-bold text-xs mt-1">تصفح القرآن الكريم كاملاً بالرسم العثماني</p>
+                          <h3 className="text-base md:text-lg font-black text-slate-800 group-hover:text-blue-700 transition-colors">
+                            المصحف الشريف
+                          </h3>
+                          <p className="text-slate-400 font-bold text-xs mt-1 leading-relaxed">
+                            تصفح القرآن الكريم كاملاً بالرسم العثماني المقروء
+                          </p>
                         </div>
                       </motion.button>
 
-                      {/* Adhkar Card */}
+                      {/* 2. Adhkar Card */}
                       <motion.button
-                        whileHover={{ y: -4 }}
+                        whileHover={{ y: -3 }}
+                        whileTap={{ scale: 0.98 }}
                         onClick={() => { setView('adhkar'); setSelectedAdhkarCategoryId(null); }}
-                        className="group relative p-4 md:p-6 rounded-2xl text-right overflow-hidden transition-all duration-300 flex flex-col justify-between border border-slate-100 min-h-[140px] bg-white shadow-sm hover:shadow-md hover:border-indigo-400"
+                        className="group relative p-5 md:p-6 rounded-2xl text-right overflow-hidden transition-all duration-200 flex flex-col justify-between border border-slate-150 hover:border-indigo-400 bg-white shadow-xs hover:shadow-md min-h-[160px]"
                       >
-                        <div className="flex items-center justify-between">
-                          <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-indigo-600/10 text-indigo-600 flex items-center justify-center transition-all duration-300 group-hover:bg-indigo-600 group-hover:text-white shadow-sm">
-                            <Sun className="w-5 h-5 md:w-6 md:h-6" />
+                        <div className="flex items-start justify-between">
+                          <AdhkarLibraryIcon className="w-12 h-12 shrink-0 transition-transform duration-200 group-hover:scale-105" />
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200/50">
+                              حصن المسلم
+                            </span>
+                            <ArrowLeft className="w-5 h-5 text-slate-300 group-hover:text-indigo-600 group-hover:-translate-x-1 transition-all" />
                           </div>
-                          <ChevronLeft className="w-5 h-5 text-indigo-600 opacity-0 group-hover:opacity-100 group-hover:-translate-x-1 transition-all" />
                         </div>
+
                         <div className="mt-4">
-                          <h2 className="text-sm md:text-lg font-black text-indigo-950 group-hover:text-indigo-600 transition-colors">أذكار المسلم</h2>
-                          <p className="text-slate-400 font-bold text-xs mt-1">أذكار الصباح والمساء واليوم والليل</p>
+                          <h3 className="text-base md:text-lg font-black text-slate-800 group-hover:text-indigo-700 transition-colors">
+                            أذكار المسلم
+                          </h3>
+                          <p className="text-slate-400 font-bold text-xs mt-1 leading-relaxed">
+                            أذكار الصباح والمساء واليوم والليلة بالأدعية الصحيحة المأثورة
+                          </p>
                         </div>
                       </motion.button>
 
-                      {/* Hadith Card */}
+                      {/* 3. Hadith Card */}
                       <motion.button
-                        whileHover={{ y: -4 }}
+                        whileHover={{ y: -3 }}
+                        whileTap={{ scale: 0.98 }}
                         onClick={() => { setView('hadith'); setSelectedHadith(null); }}
-                        className="group relative p-4 md:p-6 rounded-2xl text-right overflow-hidden transition-all duration-300 flex flex-col justify-between border border-slate-100 min-h-[140px] bg-white shadow-sm hover:shadow-md hover:border-teal-400"
+                        className="group relative p-5 md:p-6 rounded-2xl text-right overflow-hidden transition-all duration-200 flex flex-col justify-between border border-slate-150 hover:border-teal-400 bg-white shadow-xs hover:shadow-md min-h-[160px]"
                       >
-                        <div className="flex items-center justify-between">
-                          <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-teal-600/10 text-teal-600 flex items-center justify-center transition-all duration-300 group-hover:bg-teal-600 group-hover:text-white shadow-sm">
-                            <Quote className="w-5 h-5 md:w-6 md:h-6" />
+                        <div className="flex items-start justify-between">
+                          <HadithLibraryIcon className="w-12 h-12 shrink-0 transition-transform duration-200 group-hover:scale-105" />
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-teal-50 text-teal-800 border border-teal-200/50">
+                              السنة النبوية
+                            </span>
+                            <ArrowLeft className="w-5 h-5 text-slate-300 group-hover:text-teal-600 group-hover:-translate-x-1 transition-all" />
                           </div>
-                          <ChevronLeft className="w-5 h-5 text-teal-600 opacity-0 group-hover:opacity-100 group-hover:-translate-x-1 transition-all" />
                         </div>
+
                         <div className="mt-4">
-                          <h2 className="text-sm md:text-lg font-black text-teal-900 group-hover:text-teal-600 transition-colors">الأربعون النووية</h2>
-                          <p className="text-slate-400 font-bold text-xs mt-1">شرح وتبسيط أحاديث الأربعون النووية</p>
+                          <h3 className="text-base md:text-lg font-black text-slate-800 group-hover:text-teal-700 transition-colors">
+                            الأربعون النووية
+                          </h3>
+                          <p className="text-slate-400 font-bold text-xs mt-1 leading-relaxed">
+                            قراءة وشرح وتبسيط أحاديث الأربعين النووية الشريفة
+                          </p>
                         </div>
                       </motion.button>
 
-                      {/* Book Card */}
+                      {/* 4. Book Card */}
                       <motion.button
-                        whileHover={{ y: -4 }}
+                        whileHover={{ y: -3 }}
+                        whileTap={{ scale: 0.98 }}
                         onClick={() => setView('book')}
-                        className="group relative p-4 md:p-6 rounded-2xl text-right overflow-hidden transition-all duration-300 flex flex-col justify-between border border-slate-100 min-h-[140px] bg-white shadow-sm hover:shadow-md hover:border-amber-400"
+                        className="group relative p-5 md:p-6 rounded-2xl text-right overflow-hidden transition-all duration-200 flex flex-col justify-between border border-slate-150 hover:border-amber-400 bg-white shadow-xs hover:shadow-md min-h-[160px]"
                       >
-                        <div className="flex items-center justify-between">
-                          <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-amber-600/10 text-amber-600 flex items-center justify-center transition-all duration-300 group-hover:bg-amber-600 group-hover:text-white shadow-sm">
-                            <BookOpen className="w-5 h-5 md:w-6 md:h-6" />
+                        <div className="flex items-start justify-between">
+                          <BookLibraryIcon className="w-12 h-12 shrink-0 transition-transform duration-200 group-hover:scale-105" />
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200/50">
+                              كتاب تعليمي
+                            </span>
+                            <ArrowLeft className="w-5 h-5 text-slate-300 group-hover:text-amber-600 group-hover:-translate-x-1 transition-all" />
                           </div>
-                          <ChevronLeft className="w-5 h-5 text-amber-600 opacity-0 group-hover:opacity-100 group-hover:-translate-x-1 transition-all" />
                         </div>
+
                         <div className="mt-4">
-                          <h2 className="text-sm md:text-lg font-black text-amber-950 group-hover:text-amber-600 transition-colors">كتاب المتشابهات</h2>
-                          <p className="text-slate-400 font-bold text-xs mt-1">كتاب اللؤلؤ والمرجان في متشابه القرآن</p>
+                          <h3 className="text-base md:text-lg font-black text-slate-800 group-hover:text-amber-700 transition-colors">
+                            كتاب المتشابهات
+                          </h3>
+                          <p className="text-slate-400 font-bold text-xs mt-1 leading-relaxed">
+                            كتاب اللؤلؤ والمرجان في ضبط متشابهات القرآن الكريم
+                          </p>
                         </div>
                       </motion.button>
 
-                      {/* Encyclopedia Card */}
+                      {/* 5. Encyclopedia Card */}
                       <motion.button
-                        whileHover={{ y: -4 }}
+                        whileHover={{ y: -3 }}
+                        whileTap={{ scale: 0.98 }}
                         onClick={() => setView('encyclopedia')}
-                        className="group relative p-4 md:p-6 rounded-2xl text-right overflow-hidden transition-all duration-300 flex flex-col justify-between border border-slate-100 min-h-[140px] bg-white shadow-sm hover:shadow-md hover:border-purple-400"
+                        className="group relative p-5 md:p-6 rounded-2xl text-right overflow-hidden transition-all duration-200 flex flex-col justify-between border border-slate-150 hover:border-purple-400 bg-white shadow-xs hover:shadow-md min-h-[160px]"
                       >
-                        <div className="flex items-center justify-between">
-                          <div className="w-10 h-10 md:w-12 md:h-12 rounded-xl bg-purple-600/10 text-purple-600 flex items-center justify-center transition-all duration-300 group-hover:bg-purple-600 group-hover:text-white shadow-sm">
-                            <Compass className="w-5 h-5 md:w-6 md:h-6" />
+                        <div className="flex items-start justify-between">
+                          <EncyclopediaLibraryIcon className="w-12 h-12 shrink-0 transition-transform duration-200 group-hover:scale-105" />
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200/50">
+                              موسوعة شاملة
+                            </span>
+                            <ArrowLeft className="w-5 h-5 text-slate-300 group-hover:text-purple-600 group-hover:-translate-x-1 transition-all" />
                           </div>
-                          <ChevronLeft className="w-5 h-5 text-purple-600 opacity-0 group-hover:opacity-100 group-hover:-translate-x-1 transition-all" />
                         </div>
+
                         <div className="mt-4">
-                          <h2 className="text-sm md:text-lg font-black text-purple-950 group-hover:text-purple-600 transition-colors">الموسوعة</h2>
-                          <p className="text-slate-400 font-bold text-xs mt-1">موسوعة العلوم الشرعية ومتشابهات القرآن</p>
+                          <h3 className="text-base md:text-lg font-black text-slate-800 group-hover:text-purple-700 transition-colors">
+                            الموسوعة
+                          </h3>
+                          <p className="text-slate-400 font-bold text-xs mt-1 leading-relaxed">
+                            موسوعة العلوم الشرعية وتوجيه متشابهات القرآن
+                          </p>
                         </div>
                       </motion.button>
+
                     </div>
                   </motion.div>
                 ) : view === 'list' ? (
@@ -5856,7 +6145,7 @@ ${versesList}
                           index={challengeMode === 'daily' ? dailyChallengeIndex : (view === 'challenge' ? currentChallengeIndex : sessionCurrentIndex)}
                           total={challengeMode === 'daily' ? 1 : (challenges.length > 50 ? 20 : Math.max(challenges.length, 1))}
                           mode={challengeMode === 'daily' ? 'complete' : skillsType}
-                          title={challengeMode === 'daily' ? 'التحدي اليومي: إكمال الآية' : undefined}
+                          title={challengeMode === 'daily' ? 'التحدي اليومي: إكمال الآية' : (room?.gameMode === 'ISLAMIC' || v1GameMode === 'islamic' ? 'تحدي معلومات إسلامية' : undefined)}
                           verseText={KEYWORD}
                           totalPoints={totalPoints}
                           onSkip={challengeMode !== 'daily' ? handleSkip : undefined}
@@ -5951,6 +6240,7 @@ ${versesList}
               </AnimatePresence>
             )}
           </main>
+        </PullToRefresh>
 
           {view === 'home' && (
             <motion.div
@@ -6249,6 +6539,17 @@ ${versesList}
             occasions={upcomingOccasions}
             hijriDate={hijriDate}
             initialSelectedId={nearestOccasion?.id}
+          />
+
+          <IslamicRoomConfigModal
+            isOpen={showIslamicConfigModal}
+            onClose={() => setShowIslamicConfigModal(false)}
+            selectedCategory={islamicRoomCategory}
+            onSelectCategory={setIslamicRoomCategory}
+            selectedLevel={islamicRoomLevel}
+            onSelectLevel={setIslamicRoomLevel}
+            selectedTopic={islamicRoomTopic}
+            onSelectTopic={setIslamicRoomTopic}
           />
 
           <AnimatePresence>

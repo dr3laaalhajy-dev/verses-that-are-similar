@@ -56,11 +56,39 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    const uniqueLeaderboard = Array.from(playerMap.values())
+    const allSorted = Array.from(playerMap.values())
       .sort((a, b) => (b.cups - a.cups) || (b.points - a.points))
-      .slice(0, 10)
 
-    return res.status(200).json({ leaderboard: uniqueLeaderboard })
+    const totalUsers = allSorted.length
+
+    // Calculate current user's rank across all users
+    const { deviceId, name, username } = req.query
+    let userRank: number | null = null
+
+    if (deviceId || name || username) {
+      const qDev = typeof deviceId === 'string' ? deviceId.trim() : ''
+      const qUser = typeof username === 'string' ? username.replace(/^@+/, '').trim().toLowerCase() : ''
+      const qName = typeof name === 'string' ? name.trim().toLowerCase() : ''
+
+      const idx = allSorted.findIndex((p: any) => {
+        if (qDev && p.deviceId && p.deviceId === qDev) return true
+        if (qUser && p.username && p.username.replace(/^@+/, '').trim().toLowerCase() === qUser) return true
+        if (qName && p.name && p.name.trim().toLowerCase() === qName) return true
+        return false
+      })
+
+      if (idx !== -1) {
+        userRank = idx + 1
+      }
+    }
+
+    const uniqueLeaderboard = allSorted.slice(0, 10)
+
+    return res.status(200).json({
+      leaderboard: uniqueLeaderboard,
+      totalUsers,
+      userRank
+    })
   } catch (error: any) {
     console.error('Leaderboard Error:', error)
     return res.status(500).json({ 

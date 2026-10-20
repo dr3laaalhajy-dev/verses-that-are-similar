@@ -216,7 +216,7 @@ const Dashboard: React.FC<DashboardProps> = ({ className = '' }) => {
       <motion.div
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full h-full bg-gradient-to-br from-emerald-50/90 via-white to-amber-50/40 border border-emerald-200/60 shadow-xl shadow-emerald-950/5 p-3 sm:p-5 rounded-2xl sm:rounded-3xl relative overflow-hidden backdrop-blur-md flex flex-col justify-between"
+        className="w-full h-full bg-white border border-slate-150 shadow-xs hover:border-emerald-300 transition-all duration-200 p-3 sm:p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between"
       >
         {/* Decorative background glow */}
         <div className="absolute top-0 right-0 w-48 sm:w-64 h-48 sm:h-64 bg-emerald-300/10 rounded-full blur-3xl pointer-events-none -mr-16 -mt-16" />

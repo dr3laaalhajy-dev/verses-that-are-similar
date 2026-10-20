@@ -39,15 +39,18 @@ async function getFullRoom(roomId: string) {
     select: { id: true, name: true, deviceId: true, activeFrame: true, seerahCompleted: true, generalCompleted: true }
   })
 
-  const challenges = await prisma.challenge.findMany({ 
-    where: { id: { in: room.challengeIds as number[] } }
-  })
-
-  // Ensure challenges are ordered exactly as chosen in challengeIds
-  const challengeMap = new Map(challenges.map(c => [c.id, c]))
-  const orderedChallenges = (room.challengeIds as number[])
-    .map(id => challengeMap.get(id))
-    .filter(Boolean)
+  let orderedChallenges: any[] = []
+  if (Array.isArray(room.challengeIds) && room.challengeIds.length > 0 && typeof room.challengeIds[0] === 'object') {
+    orderedChallenges = room.challengeIds as any[]
+  } else {
+    const challenges = await prisma.challenge.findMany({ 
+      where: { id: { in: room.challengeIds as number[] } }
+    })
+    const challengeMap = new Map(challenges.map(c => [c.id, c]))
+    orderedChallenges = (room.challengeIds as number[])
+      .map(id => challengeMap.get(id))
+      .filter(Boolean)
+  }
 
   return { 
     ...room, 
@@ -57,7 +60,7 @@ async function getFullRoom(roomId: string) {
 }
 
 async function handleCreate(req: VercelRequest, res: VercelResponse) {
-    const { player1Id, player1Name, category, level, questionCount, questionIds, maxPlayers, gameMode, timePerQuestion } = req.body
+    const { player1Id, player1Name, category, level, questionCount, questionIds, maxPlayers, gameMode, timePerQuestion, customChallenges } = req.body
     if (!player1Id) return res.status(400).json({ message: 'Missing player1Id' })
 
     const maxQuestions = Number(questionCount) || 5
@@ -85,7 +88,9 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
     }
 
     let selectedChallenges: any[] = []
-    if (Array.isArray(questionIds) && questionIds.length > 0) {
+    if (Array.isArray(customChallenges) && customChallenges.length > 0) {
+      selectedChallenges = customChallenges
+    } else if (Array.isArray(questionIds) && questionIds.length > 0) {
       if (questionIds.length !== maxQuestions) {
         return res.status(400).json({ message: `يجب اختيار ${maxQuestions} أسئلة بالضبط` })
       }
@@ -135,7 +140,9 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
       selectedChallenges = chosenIds.map(id => mapById.get(id)).filter(Boolean) as any[]
     }
 
-    const selectedIds = selectedChallenges.map(c => c.id)
+    const selectedIds = (Array.isArray(customChallenges) && customChallenges.length > 0)
+      ? customChallenges
+      : selectedChallenges.map(c => c.id)
     const finalQuestionCount = selectedChallenges.length
 
     const roomData = await prisma.room.create({

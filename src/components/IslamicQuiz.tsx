@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trophy, RotateCcw, ChevronLeft, CheckCircle2, XCircle, Loader2, Award, Sparkles, Lock, Play, ChevronRight, Flame, Eye, BookOpen } from 'lucide-react';
-import { quizQuestions, Question } from '../data/quizQuestionsData';
+import { Trophy, RotateCcw, ChevronLeft, CheckCircle2, XCircle, Award, Sparkles, Lock, Play, ChevronRight, Eye, ExternalLink, ArrowRight } from 'lucide-react';
+import { quizQuestions } from '../data/quizQuestionsData';
+import { islamicCategoriesData, islamicCategoriesList, CategoryQuestion } from '../data/islamicCategories';
 import CertificateGenerator from './CertificateGenerator';
-
 
 const getStorageKey = (category: string | null) => `quran_quiz_progress_${category || 'general'}`;
 
@@ -15,37 +15,68 @@ const IslamicQuiz: React.FC<{
 }> = ({ onBack, onWin, onShowCertificate, claimedCategories = [] }) => {
   const [gameStatus, setGameStatus] = useState<'categories' | 'difficulty' | 'levels' | 'playing' | 'result' | 'review'>('categories');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [questions, setQuestions] = useState<Question[]>([]);
+  const [selectedLevelNum, setSelectedLevelNum] = useState<1 | 2 | 3>(1);
+  const [questions, setQuestions] = useState<CategoryQuestion[]>([]);
   const [difficulty, setDifficulty] = useState<'easy' | 'hard' | null>(null);
   const [selectedGroup, setSelectedGroup] = useState<number>(1);
-  const [unlockedLevels, setUnlockedLevels] = useState({ easy: 1, hard: 1 });
+  const [unlockedLevels, setUnlockedLevels] = useState<{ easy: number; hard: number }>({ easy: 1, hard: 1 });
+  const [completedTopics, setCompletedTopics] = useState<Record<number, number[]>>({ 1: [], 2: [], 3: [] });
   const [currentIndex, setCurrentIndex] = useState(0);
   const [score, setScore] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [isAnimating, setIsAnimating] = useState(false);
   const [showCertificate, setShowCertificate] = useState(false);
 
+  // Check if selected category is one of the new Islamic categories from IslamicQuizAPI
+  const isCustomCategory = !!(selectedCategory && selectedCategory in islamicCategoriesData);
+  const customCatData = isCustomCategory ? islamicCategoriesData[selectedCategory!] : null;
+  const isSeerah = selectedCategory === 'seerah';
+  const isGeneral = selectedCategory === 'general';
+
+  // Total topics/groups for selected category
+  const totalGroups = isCustomCategory && customCatData
+    ? customCatData.topics.length
+    : (isSeerah ? 3 : 5);
+
   // Load progress when category changes
   useEffect(() => {
     if (!selectedCategory) return;
 
-    const key = getStorageKey(selectedCategory);
-    const saved = localStorage.getItem(key);
-
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.easy && parsed.hard) {
-          setUnlockedLevels(parsed);
+    if (isCustomCategory) {
+      const key = `quran_quiz_topics_${selectedCategory}`;
+      const saved = localStorage.getItem(key);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          setCompletedTopics({
+            1: Array.isArray(parsed[1]) ? parsed[1] : [],
+            2: Array.isArray(parsed[2]) ? parsed[2] : [],
+            3: Array.isArray(parsed[3]) ? parsed[3] : [],
+          });
+        } catch {
+          setCompletedTopics({ 1: [], 2: [], 3: [] });
         }
-      } catch (e) {
-        console.error('Error loading quiz progress');
-        setUnlockedLevels({ easy: 1, hard: 1 });
+      } else {
+        setCompletedTopics({ 1: [], 2: [], 3: [] });
       }
     } else {
-      setUnlockedLevels({ easy: 1, hard: 1 });
+      const key = getStorageKey(selectedCategory);
+      const saved = localStorage.getItem(key);
+
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed.easy && parsed.hard) {
+            setUnlockedLevels(parsed);
+          }
+        } catch {
+          setUnlockedLevels({ easy: 1, hard: 1 });
+        }
+      } else {
+        setUnlockedLevels({ easy: 1, hard: 1 });
+      }
     }
-  }, [selectedCategory]);
+  }, [selectedCategory, isCustomCategory]);
 
   // Sync state to storage helper
   const syncProgress = (newProgress: { easy: number, hard: number }) => {
@@ -53,22 +84,38 @@ const IslamicQuiz: React.FC<{
     localStorage.setItem(getStorageKey(selectedCategory), JSON.stringify(newProgress));
   };
 
+  const syncCustomTopics = (newTopics: Record<number, number[]>) => {
+    if (!selectedCategory) return;
+    localStorage.setItem(`quran_quiz_topics_${selectedCategory}`, JSON.stringify(newTopics));
+  };
+
+  // Level unlock conditions for custom categories:
+  // Level 1: Always unlocked
+  // Level 2: Unlocked only if ALL topics in Level 1 are completed
+  // Level 3: Unlocked only if ALL topics in Level 2 are completed
+  const isLvl1Completed = isCustomCategory && (completedTopics[1]?.length || 0) >= totalGroups;
+  const isLvl2Completed = isCustomCategory && (completedTopics[2]?.length || 0) >= totalGroups;
+  const isLvl3Completed = isCustomCategory && (completedTopics[3]?.length || 0) >= totalGroups;
+
+  const isLevelUnlocked = (lvl: 1 | 2 | 3): boolean => {
+    if (lvl === 1) return true;
+    if (lvl === 2) return isLvl1Completed;
+    if (lvl === 3) return isLvl2Completed;
+    return false;
+  };
+
   const handleDifficultySelect = (selectedLevel: 'easy' | 'hard') => {
     setDifficulty(selectedLevel);
     setGameStatus('levels');
   };
 
-  const handleStartCategoryQuiz = (category: string) => {
-    setDifficulty(null);
-    const catQuestions = quizQuestions.filter(q => q.category === category);
-    setQuestions(catQuestions);
-    setGameStatus('playing');
-    setCurrentIndex(0);
-    setScore(0);
-    setSelectedAnswer(null);
+  const handleCustomLevelSelect = (levelNum: 1 | 2 | 3) => {
+    if (!isLevelUnlocked(levelNum)) return;
+    setSelectedLevelNum(levelNum);
+    setGameStatus('levels');
   };
 
-  const getGroupQuestions = (groupNum: number): Question[] => {
+  const getGroupQuestions = (groupNum: number): CategoryQuestion[] => {
     if (selectedCategory === 'general') {
       if (!difficulty) return [];
       const allFiltered = quizQuestions.filter(q => (q.category || 'general') === 'general' && q.difficulty === difficulty);
@@ -76,18 +123,32 @@ const IslamicQuiz: React.FC<{
     } else if (selectedCategory === 'seerah') {
       const allFiltered = quizQuestions.filter(q => q.category === 'seerah');
       return allFiltered.slice((groupNum - 1) * 20, groupNum * 20);
+    } else if (isCustomCategory && customCatData) {
+      const topic = customCatData.topics[groupNum - 1];
+      if (topic && topic.levels && topic.levels[selectedLevelNum]) {
+        return topic.levels[selectedLevelNum];
+      }
     }
     return [];
   };
 
-  const handleStartGroup = (groupNum: number) => {
-    const isSeerah = selectedCategory === 'seerah';
-    const currentProgress = isSeerah ? unlockedLevels.easy : (difficulty ? unlockedLevels[difficulty] : 1);
+  const getGroupName = (groupNum: number): string => {
+    if (isCustomCategory && customCatData) {
+      const topic = customCatData.topics[groupNum - 1];
+      return topic ? topic.name : `الموضوع ${groupNum}`;
+    }
+    return `المجموعة ${groupNum}`;
+  };
 
-    // If this group was already passed, do not allow retaking; open review instead
-    if (groupNum < currentProgress) {
-      handleReviewGroup(groupNum);
-      return;
+  // For General & Seerah linear progression
+  const generalProgress = isSeerah ? unlockedLevels.easy : (difficulty ? unlockedLevels[difficulty] : 1);
+
+  const handleStartGroup = (groupNum: number) => {
+    if (!isCustomCategory) {
+      if (groupNum < generalProgress) {
+        handleReviewGroup(groupNum);
+        return;
+      }
     }
 
     const groupQuestions = getGroupQuestions(groupNum);
@@ -128,18 +189,26 @@ const IslamicQuiz: React.FC<{
         setSelectedAnswer(null);
         setIsAnimating(false);
       } else {
-        // Final score calculation for immediate unlock logic
         const finalScore = isCorrect ? score + 1 : score;
+        const isPassed = finalScore >= 12;
 
-        const isGeneral = selectedCategory === 'general';
-        const isSeerah = selectedCategory === 'seerah';
-
-        if ((isGeneral || isSeerah) && finalScore >= 12) {
-          const progressKey = (isSeerah) ? 'easy' : (difficulty as 'easy' | 'hard');
+        if (isCustomCategory && isPassed) {
+          const currentList = completedTopics[selectedLevelNum] || [];
+          if (!currentList.includes(selectedGroup)) {
+            const updatedList = [...currentList, selectedGroup];
+            const updatedTopics = {
+              ...completedTopics,
+              [selectedLevelNum]: updatedList
+            };
+            setCompletedTopics(updatedTopics);
+            syncCustomTopics(updatedTopics);
+          }
+          if (onWin) onWin();
+        } else if ((isGeneral || isSeerah) && isPassed) {
+          const progressKey = isSeerah ? 'easy' : (difficulty as 'easy' | 'hard');
           const maxGroups = isSeerah ? 3 : 5;
           const currentMaxUnlocked = unlockedLevels[progressKey] || 1;
 
-          // If they just won the last group, set progress to maxGroups + 1
           if (selectedGroup === maxGroups) {
             const updatedProgress = {
               ...unlockedLevels,
@@ -155,35 +224,19 @@ const IslamicQuiz: React.FC<{
             setUnlockedLevels(updatedProgress);
             syncProgress(updatedProgress);
           }
-
-          // Trigger streak update on win
           if (onWin) onWin();
         }
+
         setGameStatus('result');
         setIsAnimating(false);
       }
     }, 1500);
   };
 
-  const restartQuiz = () => {
-    if (selectedCategory === 'general' || selectedCategory === 'seerah') {
-      setGameStatus('levels');
-    } else if (selectedCategory) {
-      handleStartCategoryQuiz(selectedCategory);
-    }
-    setCurrentIndex(0);
-    setScore(0);
-    setSelectedAnswer(null);
-  };
-
+  // 1. Categories Selection Screen
   if (gameStatus === 'categories') {
-    const categories = [
-      { id: 'general', title: 'أسئلة عامة', icon: '/icons/general.png' },
-      { id: 'seerah', title: 'السيرة النبوية', icon: '/icons/seerah.png' },
-    ];
-
     return (
-      <div className="max-w-4xl mx-auto px-4 py-12 text-center" dir="rtl">
+      <div className="max-w-4xl mx-auto px-4 py-8 md:py-12 text-center" dir="rtl">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -196,13 +249,13 @@ const IslamicQuiz: React.FC<{
             </div>
 
             <h2 className="text-xl md:text-3xl font-black text-brand-emerald mb-1.5 tracking-tight">اختر قسم المسابقة</h2>
-            <p className="text-slate-500 font-bold text-xs md:text-sm mb-6">حدد الموضوع الذي تود البدء به</p>
+            <p className="text-slate-500 font-bold text-xs md:text-sm mb-6">حدد المجال الإسلامي الذي تود التنافس واختبار معلوماتك فيه</p>
 
-            <div className="flex flex-wrap justify-center items-center gap-4 mt-4">
-              {categories.map((cat) => (
+            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-3.5 md:gap-4 mt-4">
+              {islamicCategoriesList.map((cat) => (
                 <motion.button
                   key={cat.id}
-                  whileHover={{ scale: 1.02, y: -3 }}
+                  whileHover={{ scale: 1.03, y: -4 }}
                   whileTap={{ scale: 0.98 }}
                   onClick={() => {
                     setSelectedCategory(cat.id);
@@ -211,14 +264,19 @@ const IslamicQuiz: React.FC<{
                     } else if (cat.id === 'seerah') {
                       setGameStatus('levels');
                     } else {
-                      handleStartCategoryQuiz(cat.id);
+                      setGameStatus('difficulty');
                     }
                   }}
-                  className="group p-4 md:p-6 rounded-2xl bg-slate-50 border-2 border-slate-100 hover:border-emerald-500 hover:bg-white transition-all text-center flex flex-col items-center gap-2.5 shadow-md w-36 sm:w-44"
+                  className="group p-4 md:p-5 rounded-2xl bg-slate-50/70 border-2 border-slate-100 hover:border-emerald-500 hover:bg-white hover:shadow-lg hover:shadow-emerald-500/10 transition-all text-center flex flex-col items-center justify-between gap-2.5 shadow-sm min-h-[160px]"
                 >
-                  <img src={cat.icon} alt={cat.title} className="w-12 h-12 object-contain mb-1 drop-shadow-xs" />
-                  <div>
-                    <h3 className="text-base md:text-lg font-black text-slate-800">{cat.title}</h3>
+                  <div className="w-14 h-14 rounded-2xl bg-white border border-slate-100 flex items-center justify-center p-2.5 group-hover:bg-emerald-50 group-hover:border-emerald-200 transition-all shadow-xs">
+                    <img src={cat.icon} alt={cat.title} className="w-full h-full object-contain drop-shadow-xs group-hover:scale-110 transition-transform" />
+                  </div>
+                  <div className="w-full">
+                    <h3 className="text-sm md:text-base font-black text-slate-800 group-hover:text-emerald-700 transition-colors mb-0.5 line-clamp-1">{cat.title}</h3>
+                    <span className="text-[10px] md:text-[11px] font-bold text-emerald-600/80 bg-emerald-50 px-2 py-0.5 rounded-md inline-block mt-0.5">
+                      {cat.type === 'custom' ? `${cat.topicsCount} موضوعاً • 3 مستويات` : (cat.id === 'seerah' ? '3 مجموعات • 60 سؤالاً' : '5 مجموعات • 100 سؤال')}
+                    </span>
                   </div>
                 </motion.button>
               ))}
@@ -264,7 +322,153 @@ const IslamicQuiz: React.FC<{
     );
   }
 
+  // 2. Difficulty / Level Selection Screen
   if (gameStatus === 'difficulty') {
+    if (isCustomCategory && customCatData) {
+      const lvl1Count = completedTopics[1]?.length || 0;
+      const lvl2Count = completedTopics[2]?.length || 0;
+      const lvl3Count = completedTopics[3]?.length || 0;
+
+      const levelsInfo: Array<{
+        level: 1 | 2 | 3;
+        title: string;
+        subtitle: string;
+        icon: string;
+        isUnlocked: boolean;
+        completedCount: number;
+        lockReason?: string;
+      }> = [
+        {
+          level: 1,
+          title: 'المستوى الأول',
+          subtitle: 'جميع الموضوعات مفتوحة • ميسر لترسيخ الأساسيات',
+          icon: '🌱',
+          isUnlocked: true,
+          completedCount: lvl1Count
+        },
+        {
+          level: 2,
+          title: 'المستوى الثاني',
+          subtitle: isLvl1Completed
+            ? 'متوسط لاختبار الفهم وتوسيع الحصيلة العلمية'
+            : `مغلق 🔒 (يتطلب إتمام جميع موضوعات المستوى الأول - متبقي ${totalGroups - lvl1Count})`,
+          icon: '⚡',
+          isUnlocked: isLvl1Completed,
+          completedCount: lvl2Count,
+          lockReason: `يجب إكمال جميع موضوعات المستوى الأول (${totalGroups} موضوعاً) لفتح هذا المستوى`
+        },
+        {
+          level: 3,
+          title: 'المستوى الثالث',
+          subtitle: isLvl2Completed
+            ? 'متقدم ومتعمق للمتقنين والباحثين عن التميز'
+            : `مغلق 🔒 (يتطلب إتمام جميع موضوعات المستوى الثاني - متبقي ${totalGroups - lvl2Count})`,
+          icon: '🔥',
+          isUnlocked: isLvl2Completed,
+          completedCount: lvl3Count,
+          lockReason: `يجب إكمال جميع موضوعات المستوى الثاني (${totalGroups} موضوعاً) لفتح هذا المستوى`
+        }
+      ];
+
+      return (
+        <div className="max-w-lg mx-auto px-4 py-6 md:py-8 text-center" dir="rtl">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-white rounded-3xl p-6 md:p-8 shadow-xl border border-slate-100 islamic-watermark relative overflow-hidden"
+          >
+            <div className="relative z-10">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center mx-auto mb-3 p-2 border border-emerald-100">
+                <img src={customCatData.icon} alt={customCatData.title} className="w-8 h-8 object-contain" />
+              </div>
+              <h2 className="text-xl md:text-2xl font-black text-slate-800 mb-1 tracking-tight">{customCatData.title}</h2>
+              <p className="text-slate-500 font-bold text-xs md:text-sm mb-6">
+                اختر المستوى للبدء • يجب إتمام كل مستوى لفتح المستوى الذي يليه
+              </p>
+
+              <div className="flex flex-col gap-3.5">
+                {levelsInfo.map((lvl) => {
+                  const isDone = lvl.completedCount >= totalGroups;
+
+                  if (!lvl.isUnlocked) {
+                    return (
+                      <div
+                        key={lvl.level}
+                        className="p-4 md:p-5 rounded-2xl border-2 border-slate-200 bg-slate-50/70 text-right flex items-center justify-between gap-4 opacity-70 cursor-not-allowed select-none transition-all"
+                      >
+                        <div className="flex items-center gap-3.5 min-w-0">
+                          <span className="text-3xl grayscale shrink-0">{lvl.icon}</span>
+                          <div className="min-w-0 truncate">
+                            <div className="flex items-center gap-2">
+                              <h3 className="text-base md:text-lg font-black text-slate-500">{lvl.title}</h3>
+                              <span className="text-[10px] font-black bg-slate-200 text-slate-600 px-2 py-0.5 rounded-md flex items-center gap-1 shrink-0">
+                                <Lock className="w-3 h-3" />
+                                <span>مغلق</span>
+                              </span>
+                            </div>
+                            <p className="text-xs font-bold text-amber-700/80 mt-1 truncate">{lvl.subtitle}</p>
+                          </div>
+                        </div>
+                        <div className="text-left shrink-0">
+                          <Lock className="w-5 h-5 text-slate-400" />
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  let cardBg = "bg-emerald-50/70 hover:bg-emerald-50 border-emerald-200 hover:border-emerald-500 text-emerald-800";
+                  if (lvl.level === 2) {
+                    cardBg = "bg-amber-50/70 hover:bg-amber-50 border-amber-200 hover:border-amber-500 text-amber-800";
+                  } else if (lvl.level === 3) {
+                    cardBg = "bg-slate-900 hover:bg-slate-800 border-slate-800 hover:border-brand-gold text-white";
+                  }
+
+                  return (
+                    <motion.button
+                      key={lvl.level}
+                      whileHover={{ scale: 1.02, y: -2 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => handleCustomLevelSelect(lvl.level)}
+                      className={`group p-4 md:p-5 rounded-2xl border-2 transition-all text-right flex items-center justify-between gap-4 shadow-sm ${cardBg}`}
+                    >
+                      <div className="flex items-center gap-3.5 min-w-0">
+                        <span className="text-3xl group-hover:scale-110 transition-transform shrink-0">{lvl.icon}</span>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-base md:text-lg font-black">{lvl.title}</h3>
+                            {isDone && (
+                              <span className="text-[10px] font-black bg-emerald-200/90 text-emerald-900 px-2 py-0.5 rounded-md shrink-0">
+                                مكتمل بالكامل ✓
+                              </span>
+                            )}
+                          </div>
+                          <p className={`text-xs font-bold mt-0.5 ${lvl.level === 3 ? 'text-white/70' : 'text-slate-500'}`}>{lvl.subtitle}</p>
+                        </div>
+                      </div>
+                      <div className="text-left shrink-0">
+                        <span className={`text-[11px] font-black px-2.5 py-1 rounded-xl shadow-xs ${lvl.level === 3 ? 'bg-white/10 text-white' : 'bg-white text-slate-700 border border-slate-200'}`}>
+                          {lvl.completedCount}/{totalGroups}
+                        </span>
+                      </div>
+                    </motion.button>
+                  );
+                })}
+              </div>
+            </div>
+          </motion.div>
+
+          <button
+            onClick={() => setGameStatus('categories')}
+            className="mt-6 flex items-center gap-2 text-slate-400 font-bold hover:text-emerald-600 transition-colors mx-auto text-xs md:text-sm"
+          >
+            <RotateCcw className="w-4 h-4" />
+            <span>العودة للأقسام</span>
+          </button>
+        </div>
+      );
+    }
+
+    // General difficulty
     return (
       <div className="max-w-md mx-auto px-4 py-4 md:py-6 text-center" dir="rtl">
         <motion.div
@@ -320,22 +524,167 @@ const IslamicQuiz: React.FC<{
     );
   }
 
-
+  // 3. Topics / Levels Screen
   if (gameStatus === 'levels') {
-    const isSeerah = selectedCategory === 'seerah';
-    const isGeneral = selectedCategory === 'general';
-    const progress = (isSeerah) ? unlockedLevels.easy : (difficulty ? unlockedLevels[difficulty] : 1);
-    const totalGroups = isSeerah ? 3 : 5;
-    const isAllCompleted = progress > totalGroups;
+    if (isCustomCategory && customCatData) {
+      const currentCompletedList = completedTopics[selectedLevelNum] || [];
+      const completedCount = currentCompletedList.length;
+      const isLevelFinished = completedCount >= totalGroups;
+
+      let levelBadge = '🌱 المستوى الأول (أساسي)';
+      let levelColor = 'bg-emerald-100 text-emerald-800';
+      if (selectedLevelNum === 2) {
+        levelBadge = '⚡ المستوى الثاني (متوسط)';
+        levelColor = 'bg-amber-100 text-amber-800';
+      } else if (selectedLevelNum === 3) {
+        levelBadge = '🔥 المستوى الثالث (متقدم)';
+        levelColor = 'bg-slate-800 text-white';
+      }
+
+      const progressPercent = Math.round((completedCount / totalGroups) * 100);
+
+      return (
+        <div className="max-w-2xl mx-auto px-4 py-4 md:py-6 text-center" dir="rtl">
+          <h2 className="text-xl md:text-2xl font-black text-slate-800 mb-1">{customCatData.title}</h2>
+          <div className="flex items-center justify-center gap-2 mb-3">
+            <span className={`px-3 py-0.5 rounded-full text-xs font-black uppercase ${levelColor}`}>
+              {levelBadge}
+            </span>
+            <span className="text-slate-400 font-bold text-xs">
+              • أتممت {completedCount} من {totalGroups} موضوعاً ({progressPercent}%)
+            </span>
+          </div>
+
+          {/* Level Progress Bar */}
+          <div className="max-w-md mx-auto w-full h-2 bg-slate-100 rounded-full overflow-hidden mb-6">
+            <div
+              className="h-full bg-linear-to-r from-emerald-500 to-teal-500 transition-all duration-500"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+
+          {/* Level Finished Banner */}
+          {isLevelFinished && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-6 p-4 rounded-2xl bg-linear-to-r from-emerald-500 to-teal-600 text-white shadow-lg text-center"
+            >
+              <h3 className="text-base font-black mb-1">🎉 مبارك! أتممت جميع موضوعات هذا المستوى بالكامل</h3>
+              <p className="text-xs text-emerald-50 font-bold mb-3">
+                {selectedLevelNum < 3
+                  ? `تم فتح المستوى ${selectedLevelNum === 1 ? 'الثاني' : 'الثالث'} بنجاح! يمكنك الانتقال إليه الآن.`
+                  : 'لقد أتممت كافة مستويات هذا القسم، بارك الله في علمك وحرصك!'}
+              </p>
+              {selectedLevelNum < 3 && (
+                <button
+                  onClick={() => handleCustomLevelSelect((selectedLevelNum + 1) as 1 | 2 | 3)}
+                  className="px-5 py-2 bg-white text-emerald-700 font-black text-xs md:text-sm rounded-xl hover:bg-emerald-50 transition-all shadow-sm inline-flex items-center gap-2"
+                >
+                  <span>الانتقال للمستوى {selectedLevelNum === 1 ? 'الثاني ⚡' : 'الثالث 🔥'}</span>
+                  <ArrowRight className="w-4 h-4 rotate-180" />
+                </button>
+              )}
+            </motion.div>
+          )}
+
+          {/* Topics List: ALL open to play! */}
+          <div className="grid grid-cols-1 gap-3 max-w-lg mx-auto">
+            {customCatData.topics.map((topic, idx) => {
+              const num = idx + 1;
+              const isPassed = currentCompletedList.includes(num);
+
+              if (isPassed) {
+                return (
+                  <div
+                    key={num}
+                    className="flex items-center justify-between p-3.5 md:p-4 rounded-2xl border-2 border-emerald-200 bg-emerald-50/50 shadow-xs transition-all"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-9 h-9 rounded-xl flex items-center justify-center font-black text-base bg-emerald-100 text-emerald-700 shrink-0">
+                        <CheckCircle2 className="w-5 h-5" />
+                      </div>
+                      <div className="text-right truncate">
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-black text-sm md:text-base text-slate-800 truncate">{topic.name}</h3>
+                          <span className="text-[10px] font-black text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-md border border-emerald-200 shrink-0">
+                            تم الاجتياز ✓
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-slate-400 font-bold mt-0.5">20 سؤالاً • مكتملة بنجاح</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0 mr-2">
+                      <button
+                        onClick={() => handleReviewGroup(num)}
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white text-emerald-700 border border-emerald-200 hover:bg-emerald-600 hover:text-white transition-all text-xs font-black shadow-xs active:scale-95"
+                        title="استعراض الأسئلة والإجابات"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>عرض الأسئلة</span>
+                      </button>
+                      <button
+                        onClick={() => handleStartGroup(num)}
+                        className="p-2 rounded-xl bg-slate-100 text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 transition-all text-xs font-bold"
+                        title="إعادة التدريب"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              }
+
+              // Open topic waiting to be played
+              return (
+                <motion.button
+                  key={num}
+                  whileHover={{ scale: 1.01, x: -3 }}
+                  whileTap={{ scale: 0.99 }}
+                  onClick={() => handleStartGroup(num)}
+                  className="relative flex items-center justify-between p-3.5 md:p-4 rounded-2xl border-2 border-slate-200 hover:border-emerald-500 bg-white hover:bg-emerald-50/20 transition-all text-right shadow-xs group"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-9 h-9 rounded-xl flex items-center justify-center font-black text-sm bg-slate-100 text-slate-700 group-hover:bg-emerald-600 group-hover:text-white transition-colors shrink-0">
+                      {num}
+                    </div>
+                    <div className="text-right truncate">
+                      <h3 className="font-black text-sm md:text-base text-slate-800 truncate">{topic.name}</h3>
+                      <p className="text-[10px] text-slate-500 font-bold mt-0.5">20 سؤالاً • اضغط للبدء</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 font-black text-xs group-hover:bg-emerald-600 group-hover:text-white transition-all shrink-0 mr-2">
+                    <span>ابدأ</span>
+                    <Play className="w-3.5 h-3.5 fill-current" />
+                  </div>
+                </motion.button>
+              );
+            })}
+          </div>
+
+          <button
+            onClick={() => setGameStatus('difficulty')}
+            className="mt-6 flex items-center gap-2 text-slate-400 font-bold hover:text-emerald-600 transition-colors mx-auto text-xs md:text-sm"
+          >
+            <RotateCcw className="w-4 h-4" />
+            <span>تغيير المستوى</span>
+          </button>
+        </div>
+      );
+    }
+
+    // General and Seerah Linear System
+    const isAllCompleted = generalProgress > totalGroups;
 
     return (
-      <div className="max-w-md mx-auto px-4 py-4 md:py-6 text-center" dir="rtl">
+      <div className="max-w-2xl mx-auto px-4 py-4 md:py-6 text-center" dir="rtl">
         <h2 className="text-xl md:text-2xl font-black text-slate-800 mb-1">اختر المجموعة</h2>
         <div className="flex items-center justify-center gap-2 mb-4">
           <span className={`px-3 py-0.5 rounded-full text-xs font-black uppercase ${isSeerah ? 'bg-amber-100 text-amber-700' : (difficulty === 'easy' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-800 text-white')}`}>
             {isSeerah ? '🕌 السيرة' : (difficulty === 'easy' ? '🌱 سهل' : '🔥 صعب')}
           </span>
-          <span className="text-slate-400 font-bold text-xs">• {progress} من {totalGroups} مجموعات مفتوحة</span>
+          <span className="text-slate-400 font-bold text-xs">• {generalProgress} من {totalGroups} مجموعات مفتوحة</span>
         </div>
 
         {/* Certificate Reward Button - Only shown when all levels are unlocked */}
@@ -344,7 +693,7 @@ const IslamicQuiz: React.FC<{
             <motion.div
               initial={{ opacity: 0, y: 10, scale: 0.95 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
-              className="mb-4"
+              className="mb-4 max-w-md mx-auto"
             >
               <button
                 onClick={() => setShowCertificate(true)}
@@ -376,8 +725,8 @@ const IslamicQuiz: React.FC<{
         <div className="grid grid-cols-1 gap-3 max-w-sm sm:max-w-md mx-auto">
           {Array.from({ length: totalGroups }).map((_, i) => {
             const num = i + 1;
-            const isPassed = num < progress;
-            const isLocked = num > progress;
+            const isPassed = num < generalProgress;
+            const isLocked = num > generalProgress;
 
             if (isPassed) {
               return (
@@ -432,7 +781,7 @@ const IslamicQuiz: React.FC<{
               );
             }
 
-            // Current Active Group waiting to be played
+            // Current Active Group
             return (
               <motion.button
                 key={num}
@@ -488,30 +837,22 @@ const IslamicQuiz: React.FC<{
     );
   }
 
+  // 4. Result Screen
   if (gameStatus === 'result') {
-    const isGeneral = selectedCategory === 'general';
-    const isSeerah = selectedCategory === 'seerah';
     const percentage = (score / questions.length) * 100;
-    const isPassed = (isGeneral || isSeerah) ? score >= 12 : true;
-    const maxGroupsForCurrent = isSeerah ? 3 : 5;
-    const canUnlockNext = (isGeneral || isSeerah) && selectedGroup < maxGroupsForCurrent && score >= 12;
+    const isPassed = score >= 12;
 
-    let message = "";
-    if (isGeneral || isSeerah) {
-      message = score >= 12
-        ? "أحسنت! لقد اجتزت هذه المرحلة بنجاح وتم فتح المجموعة التالية 🔓"
-        : "للأسف، لقد أخطأت في أكثر من 8 أسئلة. يجب عليك إعادة الاختبار والحصول على 12 درجة على الأقل لفتح المرحلة التالية 🔒";
-      if (percentage === 100) message = "ما شاء الله! إجابة مثالية وتم فتح المرحلة التالية 🔓";
-    } else {
-      message = percentage >= 80 ? "أداء ممتاز! استمر في طلب العلم" : "أحسنت، واصل التعلم والمراجعة لتثبيت المعلومات";
-      if (percentage === 100) message = "ما شاء الله! إجابة مثالية، بارك الله في علمك";
-    }
+    let message = score >= 12
+      ? "أحسنت! لقد اجتزت هذا الموضوع بنجاح وتم تسجيله في إنجازاتك 🔓"
+      : "للأسف، لم تصل للحد الأدنى (12 من 20). أعد المحاولة لتثبيت المعلومات واجتياز الموضوع 🔒";
+    if (percentage === 100) message = "ما شاء الله! إجابة مثالية وتم اجتياز الموضوع بنجاح تام 🌟";
 
     return (
       <motion.div
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
         className="max-w-md mx-auto bg-white rounded-[2.5rem] p-8 shadow-2xl border border-slate-100 text-center islamic-watermark overflow-hidden relative"
+        dir="rtl"
       >
         <div className="relative z-10">
           {percentage >= 60 ? (
@@ -520,94 +861,50 @@ const IslamicQuiz: React.FC<{
             <Award className="w-20 h-20 text-emerald-500 mx-auto mb-6 drop-shadow-lg" />
           )}
 
-          <h2 className={`text-3xl font-black mb-2 text-slate-800`}>
+          <h2 className="text-3xl font-black mb-2 text-slate-800">
             {percentage >= 60 ? 'اكتمل التحدي!' : 'انتهى الاختبار'}
           </h2>
 
-          <div className="flex gap-2 justify-center mb-6">
-            <span className={`px-3 py-1 rounded-lg text-xs font-black ${isSeerah ? 'bg-amber-100 text-amber-700' : (isGeneral ? (difficulty === 'easy' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-800 text-white') : 'bg-amber-100 text-amber-700')}`}>
-              {isSeerah ? 'قسم السيرة' : (isGeneral ? (difficulty === 'easy' ? 'المستوى السهل' : 'المستوى الصعب') : 'اختبار القسم')}
+          <div className="flex flex-wrap gap-2 justify-center mb-6">
+            <span className="px-3 py-1 rounded-lg text-xs font-black bg-emerald-100 text-emerald-800">
+              {isCustomCategory && customCatData ? customCatData.title : (isSeerah ? 'السيرة النبوية' : 'الأسئلة العامة')}
             </span>
-            {(isGeneral || isSeerah) && <span className="px-3 py-1 bg-slate-100 text-slate-600 rounded-lg text-xs font-black">المجموعة {selectedGroup}</span>}
+            <span className="px-3 py-1 bg-slate-100 text-slate-700 rounded-lg text-xs font-black">
+              {getGroupName(selectedGroup)}
+            </span>
           </div>
 
           <div className={`text-6xl font-black mb-4 tabular-nums ${percentage >= 60 ? 'text-emerald-600' : 'text-amber-500'}`}>
             {score}/{questions.length}
           </div>
-          <p className="text-lg text-slate-600 font-bold mb-8 leading-relaxed">{message}</p>
+          <p className="text-base text-slate-600 font-bold mb-8 leading-relaxed">{message}</p>
 
-          {isPassed && selectedGroup === maxGroupsForCurrent && (
-            <motion.div
-              initial={{ y: 20, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              className="mt-6 p-8 rounded-[3rem] bg-linear-to-br from-emerald-500 to-teal-700 text-white shadow-2xl relative overflow-hidden"
-            >
-              <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-2xl" />
-              <div className="relative z-10">
-                < Award className="w-12 h-12 mx-auto mb-4 text-emerald-200" />
-                <h3 className="text-2xl font-black mb-2">مبارك! أتممت التحدي كاملاً</h3>
-                <p className="text-emerald-50 font-bold mb-6 text-sm">لقد حصلت على وسام {isSeerah ? 'السيرة النبوية' : 'المعلومات العامة'} المتميز!</p>
-
-                <button
-                  onClick={() => {
-                    if (onShowCertificate) onShowCertificate(selectedCategory as any);
-                  }}
-                  className="w-full py-4 bg-white text-emerald-700 rounded-2xl font-black text-lg hover:shadow-xl transition-all active:scale-95 flex items-center justify-center gap-2"
-                >
-                  <Award className="w-5 h-5" />
-                  <span>{claimedCategories.includes(selectedCategory || 'general') ? 'عرض وسام التميز' : 'إصدار شهادة الإنجاز'}</span>
-                </button>
-              </div>
-            </motion.div>
-          )}
-
-          <div className="flex flex-col gap-3 mt-8">
-            {isPassed && canUnlockNext && (
+          <div className="flex flex-col gap-3 mt-4">
+            {isPassed && (
               <button
-                onClick={() => handleStartGroup(selectedGroup + 1)}
-                className="flex items-center justify-center gap-2 py-4 bg-emerald-600 text-white rounded-2xl font-black text-lg hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-200"
+                onClick={() => handleReviewGroup(selectedGroup)}
+                className="flex items-center justify-center gap-2 py-3.5 bg-emerald-600 text-white rounded-2xl font-black text-base hover:bg-emerald-700 transition-all shadow-xl shadow-emerald-200"
               >
-                <span>المجموعة التالية</span>
-                <ChevronRight className="w-6 h-6 rotate-180" />
+                <Eye className="w-5 h-5" />
+                <span>عرض أسئلة الموضوع وإجاباتها</span>
               </button>
             )}
 
-            {(isGeneral || isSeerah) && !isPassed && (
+            {!isPassed && (
               <button
                 onClick={() => handleStartGroup(selectedGroup)}
-                className="flex items-center justify-center gap-2 py-4 bg-red-600 text-white rounded-2xl font-black text-lg hover:bg-red-700 transition-all shadow-xl shadow-red-200"
+                className="flex items-center justify-center gap-2 py-3.5 bg-red-600 text-white rounded-2xl font-black text-base hover:bg-red-700 transition-all shadow-xl shadow-red-200"
               >
                 <RotateCcw className="w-5 h-5" />
                 <span>إعادة المحاولة الآن</span>
               </button>
             )}
 
-            {isPassed ? (
-              <button
-                onClick={() => handleReviewGroup(selectedGroup)}
-                className="flex items-center justify-center gap-2 py-4 bg-white border-2 border-emerald-200 text-emerald-700 rounded-2xl font-black text-lg hover:bg-emerald-50 transition-all shadow-xs"
-              >
-                <Eye className="w-5 h-5" />
-                <span>عرض أسئلة المجموعة</span>
-              </button>
-            ) : (
-              <button
-                onClick={() => handleStartGroup(selectedGroup)}
-                className="flex items-center justify-center gap-2 py-4 bg-white border-2 border-slate-100 text-slate-600 rounded-2xl font-black text-lg hover:bg-slate-50 transition-all"
-              >
-                <RotateCcw className="w-5 h-5" />
-                <span>إعادة المحاولة</span>
-              </button>
-            )}
-
             <button
-              onClick={() => {
-                if (isGeneral || isSeerah) setGameStatus('levels');
-                else setGameStatus('categories');
-              }}
-              className="flex items-center justify-center gap-2 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black text-lg hover:bg-slate-200 transition-all"
+              onClick={() => setGameStatus('levels')}
+              className="flex items-center justify-center gap-2 py-3.5 bg-slate-100 text-slate-600 rounded-2xl font-black text-base hover:bg-slate-200 transition-all"
             >
-              <span>{(isGeneral || isSeerah) ? 'العودة للمجموعات' : 'العودة للأقسام'}</span>
+              <span>العودة لقائمة الموضوعات</span>
             </button>
           </div>
         </div>
@@ -615,9 +912,11 @@ const IslamicQuiz: React.FC<{
     );
   }
 
+  // 5. Review Screen
   if (gameStatus === 'review') {
-    const isSeerah = selectedCategory === 'seerah';
-    const categoryTitle = isSeerah ? 'السيرة النبوية' : `الأسئلة العامة (${difficulty === 'easy' ? 'المستوى السهل' : 'المستوى الصعب'})`;
+    const title = isCustomCategory && customCatData
+      ? `${customCatData.title} (المستوى ${selectedLevelNum})`
+      : (isSeerah ? 'السيرة النبوية' : `الأسئلة العامة (${difficulty === 'easy' ? 'المستوى السهل' : 'المستوى الصعب'})`);
 
     return (
       <div className="max-w-2xl mx-auto px-4 py-4 md:py-6" dir="rtl">
@@ -626,18 +925,18 @@ const IslamicQuiz: React.FC<{
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div>
               <div className="flex items-center gap-2 mb-1.5">
-                <span className={`px-2.5 py-0.5 rounded-full text-xs font-black ${isSeerah ? 'bg-amber-100 text-amber-700' : (difficulty === 'easy' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-800 text-white')}`}>
-                  {categoryTitle}
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-emerald-100 text-emerald-800">
+                  {title}
                 </span>
                 <span className="text-xs font-black text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
                   تم الاجتياز ✓
                 </span>
               </div>
               <h2 className="text-xl md:text-2xl font-black text-slate-800">
-                مراجعة أسئلة المجموعة {selectedGroup}
+                مراجعة: {getGroupName(selectedGroup)}
               </h2>
               <p className="text-xs md:text-sm text-slate-400 font-bold mt-1">
-                استعراض كامل لجميع أسئلة المجموعة ({questions.length} سؤالاً) مع الإجابات الصحيحة
+                استعراض كامل لجميع الأسئلة ({questions.length} سؤالاً) مع الإجابات المعتمدة والمصادر
               </p>
             </div>
 
@@ -646,7 +945,7 @@ const IslamicQuiz: React.FC<{
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-100 text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 font-bold text-xs md:text-sm transition-all shrink-0"
             >
               <ChevronLeft className="w-4 h-4 rotate-180" />
-              <span>العودة للمجموعات</span>
+              <span>العودة للموضوعات</span>
             </button>
           </div>
         </div>
@@ -661,22 +960,27 @@ const IslamicQuiz: React.FC<{
               transition={{ delay: Math.min(idx * 0.03, 0.4) }}
               className="bg-white rounded-2xl md:rounded-3xl p-5 md:p-6 shadow-xs border border-slate-100 hover:shadow-md transition-all relative overflow-hidden"
             >
-              {/* Question Header */}
               <div className="flex items-center justify-between gap-2 mb-3">
                 <span className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 font-black text-xs">
                   السؤال {idx + 1} من {questions.length}
                 </span>
-                <span className="text-[11px] font-bold text-slate-400">
-                  {q.difficulty === 'hard' ? 'مستوى متقدم' : 'مستوى أساسي'}
-                </span>
+                {q.link && (
+                  <a
+                    href={q.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-[11px] font-bold text-emerald-600 hover:text-emerald-800 transition-colors"
+                  >
+                    <span>المصدر: الدرر السنية</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                )}
               </div>
 
-              {/* Question Text */}
               <h3 className="text-base md:text-lg font-black text-slate-800 leading-snug mb-4">
                 {q.question}
               </h3>
 
-              {/* Options */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 {q.options.map((opt, optIdx) => {
                   const isCorrect = opt === q.answer;
@@ -704,20 +1008,20 @@ const IslamicQuiz: React.FC<{
           ))}
         </div>
 
-        {/* Bottom Back Button */}
         <div className="text-center mt-8 pb-8">
           <button
             onClick={() => setGameStatus('levels')}
             className="px-8 py-3.5 bg-emerald-600 text-white rounded-2xl font-black text-sm md:text-base hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-600/20 active:scale-95 flex items-center gap-2 mx-auto"
           >
             <ChevronLeft className="w-4 h-4 rotate-180" />
-            <span>العودة للمجموعات</span>
+            <span>العودة للموضوعات</span>
           </button>
         </div>
       </div>
     );
   }
 
+  // 6. Playing Quiz Screen
   const currentQuestion = questions[currentIndex];
   if (!currentQuestion) return null;
 
@@ -729,18 +1033,15 @@ const IslamicQuiz: React.FC<{
       <div className="mb-3 md:mb-4">
         <div className="flex justify-between items-center mb-2 md:mb-3">
           <button
-            onClick={() => {
-              if (selectedCategory === 'general' || selectedCategory === 'seerah') setGameStatus('levels');
-              else setGameStatus('categories');
-            }}
+            onClick={() => setGameStatus('levels')}
             className="flex items-center gap-1.5 text-slate-400 font-bold hover:text-emerald-600 transition-colors"
           >
             <ChevronLeft className="w-3.5 h-3.5 rotate-180" />
-            <span className="text-xs">{(selectedCategory === 'general' || selectedCategory === 'seerah') ? 'المجموعات' : 'الأقسام'}</span>
+            <span className="text-xs">الموضوعات</span>
           </button>
           <div className="flex items-center gap-2">
-            <span className={`px-3 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${difficulty === 'easy' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-800 text-white'}`}>
-              المجموعة {selectedGroup}
+            <span className="px-3 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800">
+              {getGroupName(selectedGroup)}
             </span>
           </div>
         </div>
@@ -748,7 +1049,9 @@ const IslamicQuiz: React.FC<{
         <div className="flex justify-between items-end mb-2">
           <div className="flex flex-col">
             <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider mb-0.5">التقدم</span>
-            <span className="text-base font-black text-emerald-600 tabular-nums">السؤال {currentIndex + 1} <span className="text-slate-300 text-xs">من {questions.length}</span></span>
+            <span className="text-base font-black text-emerald-600 tabular-nums">
+              السؤال {currentIndex + 1} <span className="text-slate-300 text-xs">من {questions.length}</span>
+            </span>
           </div>
           <div className="flex flex-col items-end">
             <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider mb-0.5">النقاط</span>
@@ -778,7 +1081,9 @@ const IslamicQuiz: React.FC<{
               <div className="w-6 h-6 bg-emerald-50 rounded-lg flex items-center justify-center text-emerald-600">
                 <Sparkles className="w-3.5 h-3.5" />
               </div>
-              <span className="font-bold text-slate-400 text-xs">تحدي المعلومات الإسلامية</span>
+              <span className="font-bold text-slate-400 text-xs">
+                {isCustomCategory && customCatData ? `${customCatData.title} • المستوى ${selectedLevelNum}` : 'تحدي المعلومات الإسلامية'}
+              </span>
             </div>
 
             <h3 className="text-base md:text-lg font-black text-slate-800 leading-snug mb-4">
@@ -818,14 +1123,11 @@ const IslamicQuiz: React.FC<{
 
       <div className="mt-4 md:mt-6 flex flex-col items-center gap-3">
         <button
-          onClick={() => {
-            if (selectedCategory === 'general' || selectedCategory === 'seerah') setGameStatus('levels');
-            else setGameStatus('categories');
-          }}
+          onClick={() => setGameStatus('levels')}
           className="flex items-center gap-1.5 text-slate-400 font-bold hover:text-emerald-600 transition-colors text-xs md:text-sm"
         >
           <RotateCcw className="w-4 h-4 rotate-180" />
-          <span>{(selectedCategory === 'general' || selectedCategory === 'seerah') ? 'تغيير المجموعة' : 'تغيير القسم'}</span>
+          <span>تغيير الموضوع</span>
         </button>
 
         {onBack && (
@@ -837,8 +1139,6 @@ const IslamicQuiz: React.FC<{
           </button>
         )}
       </div>
-
-      {/* Start Challenge Modal removed for direct transition */}
     </div>
   );
 };
