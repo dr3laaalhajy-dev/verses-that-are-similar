@@ -319,7 +319,7 @@ const DailyAyah: React.FC = () => {
       {/* Tafsir Modal */}
       <AnimatePresence>
         {isTafsirModalOpen && (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 md:p-6 bg-slate-900/60 backdrop-blur-xl">
+          <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 md:p-6 bg-slate-900/60 backdrop-blur-xl">
             <motion.div
               initial={{ scale: 0.9, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}

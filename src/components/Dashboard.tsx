@@ -319,7 +319,7 @@ const Dashboard: React.FC<DashboardProps> = ({ className = '' }) => {
       {/* Settings Modal - Direct Manual City & Time Customization */}
       <AnimatePresence>
         {isSettingsOpen && (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xl">
+          <div className="fixed inset-0 z-[1000] flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xl">
             <motion.div
               initial={{ scale: 0.92, opacity: 0, y: 15 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}

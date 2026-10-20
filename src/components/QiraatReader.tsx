@@ -134,13 +134,13 @@ const QiraatReader: React.FC<QiraatReaderProps> = ({ qiraatId, initialSurahId = 
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setShowSettings(false)}
-              className="fixed inset-0 bg-slate-900/10 backdrop-blur-sm z-40"
+              className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[1000]"
             />
             <motion.div
               initial={{ x: 300 }}
               animate={{ x: 0 }}
               exit={{ x: 300 }}
-              className="fixed left-0 top-0 bottom-0 w-80 bg-white shadow-2xl z-50 p-8 flex flex-col gap-10"
+              className="fixed left-0 top-0 bottom-0 w-80 bg-white shadow-2xl z-[1005] p-8 flex flex-col gap-10"
             >
               <div className="flex items-center justify-between">
                 <h3 className="text-xl font-black text-slate-800">إعدادات العرض</h3>

@@ -182,7 +182,7 @@ const CertificateGenerator: React.FC<CertificateGeneratorProps> = ({ onClose, on
   };
 
   return (
-    <div className="fixed inset-0 z-[120] flex items-center justify-center p-3 sm:p-5 bg-slate-950/85 backdrop-blur-2xl overflow-y-auto">
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center p-3 sm:p-5 bg-slate-950/85 backdrop-blur-2xl overflow-y-auto">
       <motion.div
         initial={{ scale: 0.93, opacity: 0, y: 15 }}
         animate={{ scale: 1, opacity: 1, y: 0 }}

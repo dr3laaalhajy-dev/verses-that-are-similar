@@ -43,6 +43,7 @@ import { StreakModal } from './components/StreakModal';
 import { generateCompletionChallenges } from './services/challengeGenerator';
 import SettingsView from './components/Settings/SettingsView';
 import IslamicOccasionsModal from './components/IslamicOccasionsModal';
+import { AppDownloadModal } from './components/AppDownloadModal';
 import { defaultChallenges } from './data/defaultChallenges';
 import { PullToRefresh } from './components/PullToRefresh';
 import {
@@ -669,7 +670,7 @@ const LibrarySettingsModal = ({ isOpen, onClose, settings, setSettings, showRead
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -810,6 +811,7 @@ export default function App() {
   );
 
   const [shareCopied, setShareCopied] = useState(false);
+  const [showDownloadModal, setShowDownloadModal] = useState(false);
 
   const handleShareApp = useCallback(async () => {
     const downloadUrl = 'https://github.com/dr3laaalhajy-dev/verses-that-are-similar/releases/download/v1.0.0/Mutashabihat.apk';
@@ -3134,7 +3136,7 @@ ${versesList}
       ) : (
         <>
           {/* Header */}
-          <header className="w-full sticky top-0 z-[100] glass-dark text-white shadow-xl border-b border-white/10 backdrop-blur-xl">
+          <header className="w-full sticky top-0 z-40 glass-dark text-white shadow-xl border-b border-white/10 backdrop-blur-xl">
             <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32 blur-3xl pointer-events-none" />
             <div className="w-full px-4 sm:px-8 py-2 md:py-2 flex items-center justify-between gap-2 sm:gap-4 relative z-10">
 
@@ -3285,7 +3287,7 @@ ${versesList}
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-xl overflow-y-auto"
+                className="fixed inset-0 z-[1000] flex items-center justify-center p-4 sm:p-6 bg-slate-900/60 backdrop-blur-xl overflow-y-auto"
               >
                 <motion.div
                   initial={{ scale: 0.9, y: 20 }}
@@ -4522,6 +4524,7 @@ ${versesList}
                     onStartQuizCategory={(_cat) => {
                       setView('islamic_quiz');
                     }}
+                    onOpenDownloadApp={() => setShowDownloadModal(true)}
                   />
                 ) : view === 'home' ? (
                   <motion.div
@@ -4770,15 +4773,13 @@ ${versesList}
                                 </>
                               )}
                             </button>
-                            <a
-                              href="https://github.com/dr3laaalhajy-dev/verses-that-are-similar/releases/download/v1.0.0/Mutashabihat.apk"
-                              target="_blank"
-                              rel="noopener noreferrer"
+                            <button
+                              onClick={() => setShowDownloadModal(true)}
                               className="flex-1 md:flex-initial px-5 py-2.5 sm:px-6 sm:py-3 bg-gradient-to-r from-brand-gold to-amber-500 hover:from-amber-400 hover:to-amber-500 text-slate-900 rounded-xl font-black text-xs sm:text-sm shadow-md hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer"
                             >
                               <Download className="w-4 h-4 text-slate-900" />
                               <span>تحميل التطبيق (APK)</span>
-                            </a>
+                            </button>
                           </div>
                         </motion.div>
                       </div>
@@ -6451,7 +6452,7 @@ ${versesList}
           <AnimatePresence>
             {showAboutModal && (
               <div
-                className="fixed inset-0 z-[120] flex items-center justify-center p-4 md:p-6 bg-slate-900/60 backdrop-blur-xl"
+                className="fixed inset-0 z-[1000] flex items-center justify-center p-4 md:p-6 bg-slate-900/60 backdrop-blur-xl"
                 onClick={() => setShowAboutModal(false)}
               >
                 <motion.div
@@ -6505,15 +6506,13 @@ ${versesList}
 
                     {!isNativeApp && (
                       <div className="flex flex-col sm:flex-row gap-2 mb-2.5">
-                        <a
-                          href="https://github.com/dr3laaalhajy-dev/verses-that-are-similar/releases/download/v1.0.0/Mutashabihat.apk"
-                          target="_blank"
-                          rel="noopener noreferrer"
+                        <button
+                          onClick={() => setShowDownloadModal(true)}
                           className="flex-1 py-3 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-2xl font-black text-sm shadow-md flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-95 cursor-pointer"
                         >
                           <Smartphone className="w-5 h-5 text-emerald-200" />
                           <span>تحميل التطبيق (APK)</span>
-                        </a>
+                        </button>
                         <button
                           onClick={handleShareApp}
                           className="py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl font-black text-sm border border-slate-200 flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-95 cursor-pointer"
@@ -6551,7 +6550,7 @@ ${versesList}
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-xl"
+                className="fixed inset-0 z-[1000] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-xl"
                 onClick={() => setSelectedHadith(null)}
               >
                 <motion.div
@@ -6697,6 +6696,11 @@ ${versesList}
             initialSelectedId={nearestOccasion?.id}
           />
 
+          <AppDownloadModal
+            isOpen={showDownloadModal}
+            onClose={() => setShowDownloadModal(false)}
+          />
+
           <IslamicRoomConfigModal
             isOpen={showIslamicConfigModal}
             onClose={() => setShowIslamicConfigModal(false)}
@@ -6757,7 +6761,7 @@ ${versesList}
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="fixed inset-0 z-[200] flex items-center justify-center p-4 md:p-10 bg-slate-900/60 backdrop-blur-md"
+                className="fixed inset-0 z-[1000] flex items-center justify-center p-4 md:p-10 bg-slate-900/60 backdrop-blur-md"
               >
                 <motion.div
                   initial={{ scale: 0.9, y: 20 }}
@@ -6807,7 +6811,7 @@ ${versesList}
           </AnimatePresence>
 
           {/* Fixed Bottom Navigation Bar */}
-          <nav className="fixed bottom-0 left-0 right-0 z-50 glass-dark border-t border-white/15 shadow-2xl backdrop-blur-2xl py-2 px-3 sm:px-6">
+          <nav className="fixed bottom-0 left-0 right-0 z-40 glass-dark border-t border-white/15 shadow-2xl backdrop-blur-2xl py-2 px-3 sm:px-6">
             <div className="max-w-md mx-auto flex items-center justify-around">
 
               {/* 1. الرئيسية (Home) */}
