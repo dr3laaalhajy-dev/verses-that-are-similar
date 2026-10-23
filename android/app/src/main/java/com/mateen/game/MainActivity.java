@@ -1,4 +1,4 @@
-package com.mutashabihat.quran;
+package com.mateen.game;
 
 import com.getcapacitor.BridgeActivity;
 

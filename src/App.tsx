@@ -44,6 +44,7 @@ import { generateCompletionChallenges } from './services/challengeGenerator';
 import SettingsView from './components/Settings/SettingsView';
 import IslamicOccasionsModal from './components/IslamicOccasionsModal';
 import { AppDownloadModal } from './components/AppDownloadModal';
+import { PrivacyModal } from './components/PrivacyModal';
 import { defaultChallenges } from './data/defaultChallenges';
 import { PullToRefresh } from './components/PullToRefresh';
 import {
@@ -816,8 +817,8 @@ export default function App() {
   const handleShareApp = useCallback(async () => {
     const downloadUrl = 'https://github.com/dr3laaalhajy-dev/verses-that-are-similar/releases/download/v1.0.0/Mutashabihat.apk';
     const shareData = {
-      title: 'تطبيق المتشابهات القرآنية للأندرويد',
-      text: 'حمّل تطبيق المتشابهات القرآنية للأندرويد الآن واستمتع بكافة التحديات والمتشابهات والقرآن كاملاً بدون إنترنت!\nرابط تحميل التطبيق المباشر:',
+      title: 'تطبيق متين للقرآن الكريم للأندرويد',
+      text: 'حمّل تطبيق متين للأندرويد الآن واستمتع بكافة التحديات والمتشابهات والقرآن كاملاً بدون إنترنت!\nرابط تحميل التطبيق المباشر:',
       url: downloadUrl
     };
 
@@ -1048,6 +1049,9 @@ export default function App() {
   const [passwordInput, setPasswordInput] = useState('');
   const [isRegistering, setIsRegistering] = useState(false);
   const [registrationError, setRegistrationError] = useState<string | null>(null);
+  const [hasAgreedToPrivacy, setHasAgreedToPrivacy] = useState(false);
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
+  const [privacyModalInitialTab, setPrivacyModalInitialTab] = useState<'privacy' | 'terms'>('privacy');
 
   // 1v1 State
   const roomRef = useRef<any>(null);
@@ -1248,6 +1252,10 @@ export default function App() {
 
   const handlePlayerAuth = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!hasAgreedToPrivacy) {
+      setRegistrationError('يرجى الموافقة على سياسة الخصوصية وشروط الاستخدام للمتابعة');
+      return;
+    }
     setIsRegistering(true);
     setRegistrationError(null);
     try {
@@ -3144,17 +3152,27 @@ ${versesList}
               <motion.div
                 initial={{ x: 20, opacity: 0 }}
                 animate={{ x: 0, opacity: 1 }}
-                className="flex items-center gap-2 sm:gap-3 shrink-0"
+                onClick={() => {
+                  setView('home');
+                  setShowScores(false);
+                  setShowSettings(false);
+                }}
+                className="flex items-center gap-2 sm:gap-3 shrink-0 cursor-pointer group"
+                title="تطبيق متين"
               >
-                <div className="bg-white/10 p-1 sm:p-1.5 rounded-xl md:rounded-2xl backdrop-blur-md border border-white/15 shadow-md flex items-center justify-center shrink-0">
-                  <img src="/logo.png" className="w-8 h-8 sm:w-10 sm:h-10 md:w-11 md:h-11 object-contain drop-shadow-md" alt="Logo" />
+                <div className="bg-white p-1 sm:p-1.5 rounded-xl md:rounded-2xl shadow-lg border border-white/60 flex items-center justify-center shrink-0 transition-transform group-hover:scale-105">
+                  <img src="/logo.png" className="w-8 h-8 sm:w-10 sm:h-10 md:w-11 md:h-11 object-contain" alt="شعار متين" />
                 </div>
-                <div className="flex flex-col whitespace-nowrap">
-                  <h1 className="text-sm sm:text-base md:text-lg font-black tracking-tight text-white leading-tight whitespace-nowrap drop-shadow-sm">
-                    تحدي المتشابهات
-                  </h1>
-                  <p className="text-[8px] sm:text-[10px] md:text-[11px] uppercase font-bold tracking-[0.15em] text-brand-gold/80 leading-none mt-0.5 whitespace-nowrap">
-                    القرآن الكريم
+                <div className="flex flex-col justify-center select-none">
+                  <div className="flex items-center">
+                    <img
+                      src="/matin-title-light.png"
+                      className="h-6 sm:h-7 md:h-8 w-auto object-contain drop-shadow-md"
+                      alt="متين"
+                    />
+                  </div>
+                  <p className="text-[8px] sm:text-[9px] md:text-[10px] font-bold tracking-[0.2em] text-brand-gold/90 leading-none mt-1 whitespace-nowrap">
+                    لعلوم القرآن الكريم
                   </p>
                 </div>
               </motion.div>
@@ -3303,7 +3321,7 @@ ${versesList}
                   </div>
 
                   <h2 className="text-xl md:text-3xl font-black text-brand-emerald mb-2">
-                    {playerAuthMode === 'register' ? 'أهلاً بك في تحدي المتشابهات' : 'تسجيل الدخول'}
+                    {playerAuthMode === 'register' ? 'أهلاً بك في تطبيق متين' : 'تسجيل الدخول'}
                   </h2>
                   <p className="text-slate-500 font-bold text-xs md:text-sm mb-6">
                     {playerAuthMode === 'register'
@@ -3387,6 +3405,49 @@ ${versesList}
                           * كلمة المرور الافتراضية للحسابات السابقة: 1234
                         </p>
                       )}
+                    </div>
+
+                    {/* الموافقة على سياسة الخصوصية وشروط الاستخدام */}
+                    <div className="pt-1 pb-1">
+                      <label className="flex items-start gap-2.5 cursor-pointer select-none text-right group">
+                        <input
+                          type="checkbox"
+                          checked={hasAgreedToPrivacy}
+                          onChange={(e) => {
+                            setHasAgreedToPrivacy(e.target.checked);
+                            if (registrationError && e.target.checked) {
+                              setRegistrationError(null);
+                            }
+                          }}
+                          className="mt-0.5 w-4 h-4 rounded border-slate-300 text-brand-emerald focus:ring-brand-emerald/30 cursor-pointer accent-emerald-600 shrink-0"
+                        />
+                        <span className="text-[11px] sm:text-xs text-slate-600 font-bold leading-relaxed">
+                          أوافق على{' '}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPrivacyModalInitialTab('privacy');
+                              setShowPrivacyModal(true);
+                            }}
+                            className="text-brand-emerald hover:text-emerald-700 underline font-black inline cursor-pointer"
+                          >
+                            سياسة الخصوصية
+                          </button>
+                          {' '}و{' '}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPrivacyModalInitialTab('terms');
+                              setShowPrivacyModal(true);
+                            }}
+                            className="text-brand-emerald hover:text-emerald-700 underline font-black inline cursor-pointer"
+                          >
+                            شروط الاستخدام
+                          </button>
+                        </span>
+                      </label>
                     </div>
 
                     <button
@@ -4525,6 +4586,10 @@ ${versesList}
                       setView('islamic_quiz');
                     }}
                     onOpenDownloadApp={() => setShowDownloadModal(true)}
+                    onOpenPrivacyPolicy={(tab) => {
+                      setPrivacyModalInitialTab(tab || 'privacy');
+                      setShowPrivacyModal(true);
+                    }}
                   />
                 ) : view === 'home' ? (
                   <motion.div
@@ -6470,12 +6535,15 @@ ${versesList}
                     <X className="w-5 h-5 md:w-6 md:h-6" />
                   </button>
 
-                  <div className="w-14 h-14 md:w-16 md:h-16 bg-emerald-50 text-brand-emerald rounded-2xl flex items-center justify-center mx-auto mb-4 md:mb-6 shadow-inner border border-emerald-100">
-                    <Info className="w-7 h-7 md:w-8 md:h-8 text-brand-emerald" />
+                  <div className="w-20 h-20 bg-gradient-to-br from-emerald-50 to-teal-50 rounded-3xl flex items-center justify-center mx-auto mb-3 shadow-md border border-brand-gold/30 p-2">
+                    <img src="/logo.png" className="w-full h-full object-contain drop-shadow-sm" alt="شعار متين" />
                   </div>
 
-                  <h3 className="text-xl md:text-2xl font-black text-brand-emerald mb-4">
-                    عن تطبيق المتشابهات القرآنية
+                  <div className="flex items-center justify-center mb-1">
+                    <img src="/matin-title.png" className="h-9 md:h-10 object-contain drop-shadow-xs" alt="متين" />
+                  </div>
+                  <h3 className="text-xs md:text-sm font-bold text-slate-500 mb-4">
+                    عن تطبيق متين لعلوم ومتشابهات القرآن الكريم
                   </h3>
 
                   <div className="space-y-3.5 my-6 text-right">
@@ -6699,6 +6767,12 @@ ${versesList}
           <AppDownloadModal
             isOpen={showDownloadModal}
             onClose={() => setShowDownloadModal(false)}
+          />
+
+          <PrivacyModal
+            isOpen={showPrivacyModal}
+            onClose={() => setShowPrivacyModal(false)}
+            initialTab={privacyModalInitialTab}
           />
 
           <IslamicRoomConfigModal

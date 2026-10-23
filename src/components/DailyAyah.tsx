@@ -164,7 +164,7 @@ const DailyAyah: React.FC = () => {
   const handleCopy = () => {
     if (!currentAyah) return;
     const surahTitle = cleanSurahTitle(currentAyah.surah, currentAyah.surahNumber);
-    const shareText = `"${currentAyah.text}"\n${surahTitle} - آية ${currentAyah.number}\n\nتطبيق المتشابهات القرآنية`;
+    const shareText = `"${currentAyah.text}"\n${surahTitle} - آية ${currentAyah.number}\n\nتطبيق متين`;
     navigator.clipboard.writeText(shareText);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);

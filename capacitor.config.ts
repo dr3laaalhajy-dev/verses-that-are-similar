@@ -1,8 +1,8 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.mutashabihat.quran',
-  appName: 'لعبة المتشابهات',
+  appId: 'com.mateen.game',
+  appName: 'متين',
   webDir: 'dist',
   plugins: {
     CapacitorHttp: {

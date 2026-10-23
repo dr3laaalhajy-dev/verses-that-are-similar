@@ -32,7 +32,7 @@ export default function IslamicOccasionsModal({
 
   const handleShare = () => {
     if (!currentOccasion) return;
-    const text = `🌙 مواسم الطاعات | ${currentOccasion.title}\n📅 الموعد: ${currentOccasion.timingBadge} (${currentOccasion.hijriDateText})\n\n قال رسول الله ﷺ:\n${currentOccasion.hadith}\n[${currentOccasion.hadithSource}]\n\n✨ فضلها: ${currentOccasion.virtue}\n\nتطبيق المتشابهات القرآنية`;
+    const text = `🌙 مواسم الطاعات | ${currentOccasion.title}\n📅 الموعد: ${currentOccasion.timingBadge} (${currentOccasion.hijriDateText})\n\n قال رسول الله ﷺ:\n${currentOccasion.hadith}\n[${currentOccasion.hadithSource}]\n\n✨ فضلها: ${currentOccasion.virtue}\n\nتطبيق متين`;
     
     if (navigator.clipboard) {
       navigator.clipboard.writeText(text);

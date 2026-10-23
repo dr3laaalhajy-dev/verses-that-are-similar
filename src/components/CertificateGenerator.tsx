@@ -170,7 +170,7 @@ const CertificateGenerator: React.FC<CertificateGeneratorProps> = ({ onClose, on
           await navigator.share({
             files: [file],
             title: 'وسام الشرف والإنجاز',
-            text: `الحمد لله أتممت بنجاح ${categoryTitle} في تطبيق المتشابهات القرآنية! 🏆 شاركني التحدي: https://quran-quiz-challenge.vercel.app`,
+            text: `الحمد لله أتممت بنجاح ${categoryTitle} في تطبيق متين للقرآن الكريم! 🏆 شاركني التحدي: https://quran-quiz-challenge.vercel.app`,
           });
         } else {
           downloadImage();

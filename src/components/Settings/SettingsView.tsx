@@ -21,7 +21,8 @@ import {
   Check,
   X,
   Smartphone,
-  Download
+  Download,
+  FileText
 } from 'lucide-react';
 
 interface SettingsViewProps {
@@ -42,6 +43,7 @@ interface SettingsViewProps {
   onUpdatePlayer: (name: string, username: string) => void;
   onStartQuizCategory?: (category: 'seerah' | 'general') => void;
   onOpenDownloadApp?: () => void;
+  onOpenPrivacyPolicy?: (tab?: 'privacy' | 'terms') => void;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
@@ -61,7 +63,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onBackToHome,
   onUpdatePlayer,
   onStartQuizCategory,
-  onOpenDownloadApp
+  onOpenDownloadApp,
+  onOpenPrivacyPolicy
 }) => {
   // 1. Profile State
   const [nameInput, setNameInput] = useState(playerName || '');
@@ -1165,7 +1168,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 className="w-full sm:w-auto px-5 py-2.5 sm:px-6 sm:py-3 bg-gradient-to-r from-brand-gold to-amber-500 hover:from-amber-400 hover:to-amber-500 text-slate-900 rounded-xl font-black text-xs sm:text-sm shadow-md hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0"
               >
                 <Download className="w-4 h-4 text-slate-900" />
-                <span>تحميل المتشابهات.apk</span>
+                <span>تحميل تطبيق متين.apk</span>
               </button>
             ) : (
               <a
@@ -1175,11 +1178,45 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 className="w-full sm:w-auto px-5 py-2.5 sm:px-6 sm:py-3 bg-gradient-to-r from-brand-gold to-amber-500 hover:from-amber-400 hover:to-amber-500 text-slate-900 rounded-xl font-black text-xs sm:text-sm shadow-md hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0"
               >
                 <Download className="w-4 h-4 text-slate-900" />
-                <span>تحميل المتشابهات.apk</span>
+                <span>تحميل تطبيق متين.apk</span>
               </a>
             )}
           </div>
         )}
+
+        {/* ================================================= */}
+        {/* PRIVACY POLICY & TERMS OF USE                     */}
+        {/* ================================================= */}
+        <div className="bg-slate-50 border border-slate-200/80 rounded-2xl sm:rounded-3xl p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5 text-right w-full sm:w-auto">
+            <div className="w-11 h-11 rounded-2xl bg-emerald-100/70 border border-emerald-200 flex items-center justify-center text-brand-emerald shrink-0">
+              <ShieldCheck className="w-6 h-6" />
+            </div>
+            <div>
+              <h4 className="font-black text-sm sm:text-base text-slate-850">سياسة الخصوصية وشروط الاستخدام</h4>
+              <p className="text-xs text-slate-500 font-medium">حماية بياناتك، حقوقك، وسياسات Google Play الرسمية</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <button
+              type="button"
+              onClick={() => onOpenPrivacyPolicy?.('privacy')}
+              className="flex-1 sm:flex-none px-4 py-2.5 bg-white hover:bg-slate-100 text-brand-emerald border border-emerald-200/90 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs active:scale-95"
+            >
+              <ShieldCheck className="w-4 h-4" />
+              <span>سياسة الخصوصية</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onOpenPrivacyPolicy?.('terms')}
+              className="flex-1 sm:flex-none px-4 py-2.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs active:scale-95"
+            >
+              <FileText className="w-4 h-4 text-slate-400" />
+              <span>شروط الاستخدام</span>
+            </button>
+          </div>
+        </div>
 
         {/* ================================================= */}
         {/* SECTION 5: ACCOUNT LOGOUT                         */}

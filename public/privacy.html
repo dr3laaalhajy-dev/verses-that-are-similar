@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>سياسة الخصوصية وشروط الاستخدام | تطبيق متين للقرآن الكريم</title>
+  <meta name="description" content="سياسة الخصوصية وشروط الاستخدام الرسمية لتطبيق متين - رفيقك في ضبط المتشابهات وعلوم القرآن الكريم">
+  <link rel="icon" type="image/png" href="/logo.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary: #064e3b;
+      --primary-light: #059669;
+      --primary-accent: #10b981;
+      --gold: #d97706;
+      --gold-light: #f59e0b;
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --text-main: #0f172a;
+      --text-muted: #475569;
+      --border: #e2e8f0;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Tajawal', system-ui, -apple-system, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text-main);
+      line-height: 1.8;
+      padding: 0;
+    }
+
+    .header {
+      background: linear-gradient(135deg, #064e3b 0%, #065f46 50%, #047857 100%);
+      color: white;
+      padding: 48px 20px;
+      text-align: center;
+      position: relative;
+      box-shadow: 0 10px 25px -5px rgba(6, 78, 59, 0.2);
+    }
+
+    .header-content {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    .logo-img {
+      width: 90px;
+      height: 90px;
+      border-radius: 24px;
+      background: white;
+      padding: 8px;
+      box-shadow: 0 10px 20px rgba(0,0,0,0.15);
+      margin-bottom: 16px;
+      display: inline-block;
+    }
+
+    .header h1 {
+      font-size: 32px;
+      font-weight: 900;
+      margin-bottom: 8px;
+      letter-spacing: -0.5px;
+    }
+
+    .header p {
+      font-size: 16px;
+      color: #a7f3d0;
+      font-weight: 500;
+    }
+
+    .badge {
+      display: inline-block;
+      background: rgba(255, 255, 255, 0.15);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      padding: 6px 16px;
+      border-radius: 50px;
+      font-size: 13px;
+      font-weight: 700;
+      color: #fef3c7;
+      margin-top: 14px;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: -24px auto 60px;
+      padding: 0 16px;
+    }
+
+    .nav-tabs {
+      display: flex;
+      gap: 8px;
+      background: #e2e8f0;
+      padding: 6px;
+      border-radius: 16px;
+      margin-bottom: 24px;
+      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+    }
+
+    .nav-btn {
+      flex: 1;
+      padding: 12px 16px;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 15px;
+      font-weight: 800;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      text-align: center;
+    }
+
+    .nav-btn.active {
+      background: white;
+      color: var(--primary);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+
+    .card {
+      background: var(--card-bg);
+      border-radius: 24px;
+      border: 1px solid var(--border);
+      padding: 32px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.04);
+      margin-bottom: 24px;
+    }
+
+    .section-title {
+      font-size: 20px;
+      font-weight: 800;
+      color: var(--primary);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+      border-bottom: 2px solid #ecfdf5;
+      padding-bottom: 8px;
+    }
+
+    .section-title svg {
+      width: 24px;
+      height: 24px;
+      color: var(--primary-light);
+    }
+
+    p, li {
+      font-size: 15px;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+
+    ul {
+      padding-right: 24px;
+      margin-bottom: 16px;
+    }
+
+    li {
+      margin-bottom: 8px;
+    }
+
+    .highlight-box {
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      border-radius: 16px;
+      padding: 16px 20px;
+      margin: 16px 0;
+    }
+
+    .highlight-box.warning {
+      background: #fffbeb;
+      border-color: #fde68a;
+    }
+
+    .highlight-box strong {
+      color: var(--primary);
+      display: block;
+      margin-bottom: 6px;
+      font-size: 16px;
+    }
+
+    .highlight-box.warning strong {
+      color: #b45309;
+    }
+
+    .contact-card {
+      background: linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%);
+      border: 1px solid #a7f3d0;
+      border-radius: 20px;
+      padding: 24px;
+      text-align: center;
+      margin-top: 24px;
+    }
+
+    .contact-card h3 {
+      font-size: 18px;
+      font-weight: 800;
+      color: var(--primary);
+      margin-bottom: 8px;
+    }
+
+    .contact-link {
+      display: inline-block;
+      direction: ltr;
+      color: var(--primary-light);
+      font-weight: 800;
+      text-decoration: none;
+      font-size: 16px;
+      padding: 8px 18px;
+      background: white;
+      border-radius: 12px;
+      border: 1px solid #a7f3d0;
+      margin-top: 8px;
+      transition: all 0.2s ease;
+    }
+
+    .contact-link:hover {
+      background: var(--primary);
+      color: white;
+    }
+
+    .footer {
+      text-align: center;
+      padding: 30px 20px;
+      color: var(--text-muted);
+      font-size: 14px;
+      border-top: 1px solid var(--border);
+    }
+
+    .en-section {
+      direction: ltr;
+      text-align: left;
+    }
+    .en-section .section-title {
+      border-bottom: 2px solid #ecfdf5;
+    }
+    .en-section ul {
+      padding-left: 24px;
+      padding-right: 0;
+    }
+
+    .hidden {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+  <header class="header">
+    <div class="header-content">
+      <img src="/logo.png" alt="شعار تطبيق متين" class="logo-img">
+      <h1>تطبيق متين للقرآن الكريم</h1>
+      <p>سياسة الخصوصية وشروط الاستخدام الرسمية | Privacy Policy & Terms of Service</p>
+      <div class="badge">تطبيق آمن 100% وخالٍ تماماً من الإعلانات | معتمد لجميع الأعمار</div>
+    </div>
+  </header>
+
+  <div class="container">
+    <!-- Tabs Navigation -->
+    <div class="nav-tabs">
+      <button class="nav-btn active" onclick="switchTab('ar-privacy')">سياسة الخصوصية</button>
+      <button class="nav-btn" onclick="switchTab('ar-terms')">شروط الاستخدام</button>
+      <button class="nav-btn" onclick="switchTab('deletion')">حذف الحساب والبيانات</button>
+      <button class="nav-btn" onclick="switchTab('en-policy')">English (Google Play)</button>
+    </div>
+
+    <!-- Tab 1: Arabic Privacy Policy -->
+    <div id="tab-ar-privacy" class="tab-pane">
+      <div class="card">
+        <h2 class="section-title">
+          <span>١. مقدمة ونبذة عن التطبيق</span>
+        </h2>
+        <p>
+          أهلاً بكم في <strong>تطبيق متين (Mateen)</strong> المخصص لضبط وإتقان المتشابهات القرآنية وتلاوة القرآن الكريم واختبارات السيرة النبوية والعلوم الإسلامية. نحن نحترم خصوصيتكم التامة ونلتزم بأعلى معايير حماية البيانات الشخصية.
+        </p>
+        <p>
+          تم تطوير هذا التطبيق كعمل دعوي وتعليمي هادف بواسطة <strong>د. علاء الدين الحجي (Dr. Alaa Alhajy)</strong>، وهو مجاني بالكامل وبدون أي إعلانات تجارية.
+        </p>
+      </div>
+
+      <div class="card">
+        <h2 class="section-title">
+          <span>٢. المعلومات والبيانات التي نجمعها</span>
+        </h2>
+        <p>نحن نحرص على جمع الحد الأدنى الضروري فقط من البيانات لتقديم وظائف التطبيق وحفظ تقدم اللاعب، وتشمل:</p>
+        <ul>
+          <li><strong>الاسم واسم المستخدم (Display Name & Username):</strong> يُدخلها المستخدم عند إنشاء الحساب لتسجيل النقاط والتنافس الشريف في لوحة المتصدرين.</li>
+          <li><strong>كلمة المرور (Password):</strong> لحماية حسابك وتمكينك من تسجيل الدخول إلى تقدمك وإنجازاتك من أي جهاز.</li>
+          <li><strong>معرف الجهاز التقني (Anonymous Device ID):</strong> يُستخدم بشكل مشفر لربط نقاطك وأوسمتك بجهازك ومزامنة التقدم.</li>
+          <li><strong>بيانات التحديات والإنجازات:</strong> عدد النقاط، الكؤوس المكتسبة، الاختبارات المكتملة، وشهادات الإنجاز الصادرة باسمك.</li>
+        </ul>
+        <div class="highlight-box">
+          <strong>ما لا نطلبه ولا نصل إليه أبداً:</strong>
+          نحن <strong>لا نطلب ولا نصل</strong> إلى موقعك الجغرافي (GPS)، ولا جهات الاتصال الخاصة بك، ولا الصور الشخصية، ولا الرسائل، ولا المايكروفون أو الكاميرا، ولا أي معلومات مالية أو بنكية.
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 class="section-title">
+          <span>٣. كيف نستخدم المعلومات؟</span>
+        </h2>
+        <ul>
+          <li>تمكين المستخدم من متابعة تقدمه ومستويات حفظه ومصحفه الإلكتروني.</li>
+          <li>مزامنة النتائج وعرض قائمة المتصدرين في التحديات الفردية والجماعية.</li>
+          <li>إصدار شهادات الإنجاز في مسابقات السيرة والقرآن الكريم.</li>
+          <li>تحسين أداء واستقرار التطبيق التقني وحل أي أعطال.</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h2 class="section-title">
+          <span>٤. مشاركة البيانات مع أطراف ثالثة</span>
+        </h2>
+        <p>
+          <strong>نحن لا نبيع أو نؤجر أو نشارك بيانات المستخدمين مع أي شركات إعلانية أو جهات تسويقية على الإطلاق.</strong>
+        </p>
+        <p>
+          تتم معالجة البيانات فقط عبر بنية تحتية سحابية مشفرة وموثوقة عالمياً:
+        </p>
+        <ul>
+          <li><strong>Vercel Cloud:</strong> لاستضافة الخوادم وواجهات البرمجة بواجهات آمنة (HTTPS/SSL).</li>
+          <li><strong>Neon PostgreSQL:</strong> لقاعدة البيانات المشفرة والآمنة وفقاً لمعايير الأمان العالمية.</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h2 class="section-title">
+          <span>٥. أمان وحماية البيانات (Data Security)</span>
+        </h2>
+        <p>
+          نطبق أحدث تقنيات التشفير لضمان سرية البيانات أثناء النقل عبر بروتوكول <code>HTTPS / TLS</code> وأثناء التخزين بقاعدة بيانات آمنة. ونبذل قصارى جهدنا لمنع أي وصول غير مصرح به.
+        </p>
+      </div>
+
+      <div class="card">
+        <h2 class="section-title">
+          <span>٦. خصوصية الأطفال وسياسة العائلة</span>
+        </h2>
+        <p>
+          تطبيق "متين" هو تطبيق قرآني موجه لجميع أفراد الأسرة ولجميع الفئات العمرية. لا يحتوي التطبيق على أي محتوى غير لائق أو إعلانات، ويتوافق تماماً مع إرشادات عائلات Google Play وقانون حماية خصوصية الأطفال على الإنترنت (COPPA).
+        </p>
+      </div>
+
+      <div class="card">
+        <h2 class="section-title">
+          <span>٧. التواصل مع المطور</span>
+        </h2>
+        <div class="contact-card">
+          <h3>لأي استفسارات أو ملاحظات حول الخصوصية</h3>
+          <p>يمكنكم التواصل المباشر مع مطور التطبيق:</p>
+          <a href="mailto:dr3laaalhajy@gmail.com" class="contact-link">dr3laaalhajy@gmail.com</a>
+          <p style="margin-top: 10px; font-size: 13px;">د. علاء الدين الحجي | Dr. Alaa Alhajy</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 2: Arabic Terms of Use -->
+    <div id="tab-ar-terms" class="tab-pane hidden">
+      <div class="card">
+        <h2 class="section-title">
+          <span>شروط وأحكام استخدام تطبيق متين</span>
+        </h2>
+        <p>
+          باستخدامك لتطبيق "متين"، فإنك توافق على الالتزام بالشروط والأحكام التالية:
+        </p>
+        <ul>
+          <li><strong>قدسية المحتوى:</strong> يهدف التطبيق إلى خدمة كتاب الله تعالى وسنة نبيه ﷺ، لذا يُرجى استخدامه بنية صالحة وبما يليق بقدسية الآيات القرآنية الكريمة.</li>
+          <li><strong>الاسم المعروض واسم المستخدم:</strong> يلتزم المستخدم باختيار اسم محترم ولائق، ويُحظر تماماً استخدام أسماء غير لائقة أو خادشة للحياء أو مسيئة. يحق للإدارة حظر أي حساب يخالف ذلك فوراً.</li>
+          <li><strong>اللعب النزيه (Fair Play):</strong> يلتزم اللاعب بالمنافسة الشريفة في غرف التحدي وعدم استغلال أي ثغرات أو أدوات آلية للتأثير على لوحة المتصدرين.</li>
+          <li><strong>حقوق الملكية الفكرية:</strong> جميع النصوص والتحديات والبرمجيات الخاصة بتطبيق متين محفوظة للمطور وفريق العمل، وتُقدَم مجاناً كصدقة جارية ونفع للمسلمين.</li>
+          <li><strong>تحديث الشروط:</strong> نحتفظ بحق تعديل أو تحديث هذه الشروط عند الضرورة، وسيتم إشعار المستخدمين بأي تغييرات جوهرية داخل التطبيق.</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Tab 3: Account & Data Deletion -->
+    <div id="tab-deletion" class="tab-pane hidden">
+      <div class="card">
+        <h2 class="section-title">
+          <span>آلية حذف الحساب والبيانات (Data Deletion Policy)</span>
+        </h2>
+        <p>
+          وفقاً لسياسات Google Play وحق المستخدم الكامل في التحكم ببياناته، يمكنك طلب حذف حسابك وكافة البيانات المرتبطة بك في أي وقت باتباع إحدى الطرق التالية:
+        </p>
+
+        <div class="highlight-box">
+          <strong>الطريقة الأولى: من داخل التطبيق</strong>
+          يمكنك الانتقال إلى شاشة "الإعدادات" ثم النقر على "تسجيل الخروج / تبديل الحساب" ومسح البيانات المحفوظة محلياً على جهازك.
+        </div>
+
+        <div class="highlight-box warning">
+          <strong>الطريقة الثانية: طلب حذف نهائي من خوادم التطبيق</strong>
+          لحذف حسابك، اسم المستخدم، النقاط، الإنجازات، وكافة سجلاتك نهائياً من قاعدة البيانات السحابية، يرجى إرسال رسالة إلى البريد الإلكتروني:
+          <div style="text-align: center; margin-top: 10px;">
+            <a href="mailto:dr3laaalhajy@gmail.com?subject=طلب%20حذف%20حساب%20تطبيق%20متين" class="contact-link">
+              dr3laaalhajy@gmail.com
+            </a>
+          </div>
+          <p style="margin-top: 10px; font-size: 13px;">
+            * يرجى كتابة اسم المستخدم الخاص بك في نص الرسالة. سيتم معالجة الطلب وحذف كافة البيانات المرتبطة بك نهائياً خلال مدة أقصاها <strong>48 ساعة</strong> من تاريخ استلام الطلب.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 4: English Policy (Google Play Console Compliance) -->
+    <div id="tab-en-policy" class="tab-pane en-section hidden">
+      <div class="card">
+        <h2 class="section-title">Mateen App - Privacy Policy (Google Play Policy Compliant)</h2>
+        <p><strong>Last Updated:</strong> October 2026</p>
+        <p>
+          This Privacy Policy applies to the <strong>"Mateen" (متين)</strong> mobile and web application (Package ID: <code>com.mateen.game</code>), created and maintained by developer <strong>Dr. Alaa Alhajy</strong>.
+        </p>
+        
+        <h3 style="margin: 18px 0 8px; color: var(--primary);">1. Information We Collect</h3>
+        <p>We only collect the minimal information necessary to deliver core features and leaderboard competition:</p>
+        <ul>
+          <li><strong>Display Name & Username:</strong> Provided by the user during registration to track quiz progress and leaderboard rankings.</li>
+          <li><strong>Password:</strong> Securely stored to allow users to sign in and protect their progress across devices.</li>
+          <li><strong>Anonymous Device Identifier:</strong> Used solely to associate local scores and achievements with the player account.</li>
+          <li><strong>Gameplay Statistics:</strong> Points earned, cups, completed quizzes, and certificates awarded.</li>
+        </ul>
+
+        <h3 style="margin: 18px 0 8px; color: var(--primary);">2. Information We DO NOT Collect</h3>
+        <p>We respect your privacy. Mateen does NOT access, collect, or share:</p>
+        <ul>
+          <li>Precise GPS location data.</li>
+          <li>Contacts, SMS, or address books.</li>
+          <li>Camera, Microphone, or Media files.</li>
+          <li>Payment, credit card, or banking details.</li>
+        </ul>
+
+        <h3 style="margin: 18px 0 8px; color: var(--primary);">3. How We Use Information</h3>
+        <ul>
+          <li>Save learning and Quranic similarity quiz progress.</li>
+          <li>Display competitive leaderboards and multiplayer rooms.</li>
+          <li>Generate achievement certificates in Islamic Studies and Seerah.</li>
+        </ul>
+
+        <h3 style="margin: 18px 0 8px; color: var(--primary);">4. Third-Party Sharing</h3>
+        <p>
+          We do not sell, rent, or trade your personal data with third-party advertisers or data brokers. Data is processed exclusively via secure cloud infrastructure:
+        </p>
+        <ul>
+          <li><strong>Vercel Cloud:</strong> Hosting API endpoints via secure HTTPS.</li>
+          <li><strong>Neon PostgreSQL:</strong> Encrypted relational database for secure storage.</li>
+        </ul>
+
+        <h3 style="margin: 18px 0 8px; color: var(--primary);">5. Children and Families Policy</h3>
+        <p>
+          Mateen is an educational Quranic app suitable for users of all ages, including children and families. We comply strictly with the Google Play Families Policy and COPPA. No ads or inappropriate content are present.
+        </p>
+
+        <h3 style="margin: 18px 0 8px; color: var(--primary);">6. Account and Data Deletion</h3>
+        <p>
+          Users may request full deletion of their account and all associated data at any time by emailing us at <a href="mailto:dr3laaalhajy@gmail.com" style="color: var(--primary-light); font-weight: bold;">dr3laaalhajy@gmail.com</a> with their username. All records will be permanently expunged within 48 hours.
+        </p>
+
+        <h3 style="margin: 18px 0 8px; color: var(--primary);">7. Developer Contact</h3>
+        <p>
+          <strong>Developer:</strong> Dr. Alaa Alhajy<br>
+          <strong>Email:</strong> dr3laaalhajy@gmail.com<br>
+          <strong>App Package:</strong> com.mateen.game
+        </p>
+      </div>
+    </div>
+
+  </div>
+
+  <footer class="footer">
+    <p>جميع الحقوق محفوظة © تطبيق متين للقرآن الكريم | Mateen Quran App</p>
+    <p style="margin-top: 6px; font-size: 13px;">صدقة جارية - إعداد وبرمجة د. علاء الدين الحجي | فكرة: عمر سمير طبش</p>
+  </footer>
+
+  <script>
+    function switchTab(tabId) {
+      document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+      document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.add('hidden'));
+
+      if (tabId === 'ar-privacy') {
+        document.querySelectorAll('.nav-btn')[0].classList.add('active');
+        document.getElementById('tab-ar-privacy').classList.remove('hidden');
+      } else if (tabId === 'ar-terms') {
+        document.querySelectorAll('.nav-btn')[1].classList.add('active');
+        document.getElementById('tab-ar-terms').classList.remove('hidden');
+      } else if (tabId === 'deletion') {
+        document.querySelectorAll('.nav-btn')[2].classList.add('active');
+        document.getElementById('tab-deletion').classList.remove('hidden');
+      } else if (tabId === 'en-policy') {
+        document.querySelectorAll('.nav-btn')[3].classList.add('active');
+        document.getElementById('tab-en-policy').classList.remove('hidden');
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // Handle hash on load (e.g., #terms or #deletion)
+    if (window.location.hash === '#terms') {
+      switchTab('ar-terms');
+    } else if (window.location.hash === '#deletion') {
+      switchTab('deletion');
+    } else if (window.location.hash === '#en') {
+      switchTab('en-policy');
+    }
+  </script>
+</body>
+</html>

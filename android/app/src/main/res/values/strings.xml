@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">لعبة المتشابهات</string>
-    <string name="title_activity_main">لعبة المتشابهات</string>
-    <string name="package_name">com.mutashabihat.quran</string>
-    <string name="custom_url_scheme">com.mutashabihat.quran</string>
+    <string name="app_name">متين</string>
+    <string name="title_activity_main">متين</string>
+    <string name="package_name">com.mateen.game</string>
+    <string name="custom_url_scheme">com.mateen.game</string>
 </resources>

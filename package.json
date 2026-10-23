@@ -12,7 +12,9 @@
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
     "android:sync": "npm run build && npx cap sync && rm -f android/app/src/main/assets/public/*.apk",
-    "android:open": "npx cap open android"
+    "android:open": "npx cap open android",
+    "android:bundle:release": "npm run android:sync && cd android && ./gradlew bundleRelease",
+    "android:bundle:debug": "npm run android:sync && cd android && ./gradlew bundleDebug"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.3",

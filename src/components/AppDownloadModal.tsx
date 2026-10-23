@@ -166,8 +166,8 @@ export const AppDownloadModal: React.FC<AppDownloadModalProps> = ({
               <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-emerald-50 to-teal-50 border-2 border-brand-gold/30 p-1.5 shadow-md mx-auto mb-3 flex items-center justify-center relative">
                 <img
                   src="/logo.png"
-                  alt="شعار المتشابهات"
-                  className="w-full h-full object-contain rounded-2xl"
+                  alt="شعار تطبيق متين"
+                  className="w-full h-full object-contain rounded-2xl drop-shadow-sm"
                 />
                 <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-brand-emerald text-white border-2 border-white flex items-center justify-center shadow-xs">
                   <Smartphone className="w-3.5 h-3.5" />
@@ -175,11 +175,11 @@ export const AppDownloadModal: React.FC<AppDownloadModalProps> = ({
               </div>
 
               {/* App Title & Subtitle */}
-              <h3 className="text-xl sm:text-2xl font-black text-brand-emerald tracking-tight mb-1">
-                تطبيق المتشابهات القرآنية
-              </h3>
+              <div className="flex items-center justify-center mb-1">
+                <img src="/matin-title.png" className="h-9 sm:h-10 w-auto object-contain drop-shadow-xs" alt="تطبيق متين" />
+              </div>
               <p className="text-xs text-slate-500 font-bold mb-4">
-                الإصدار v1.0.0 • للأندرويد (APK) • أوفلاين بالكامل
+                تطبيق متين • الإصدار v1.0.0 للأندرويد (APK) • أوفلاين بالكامل
               </p>
 
               {/* Badges */}
@@ -349,7 +349,7 @@ export const AppDownloadModal: React.FC<AppDownloadModalProps> = ({
                       <Sparkles className="w-4 h-4 text-brand-gold shrink-0 mt-0.5" />
                       <div>
                         <strong className="block font-black text-emerald-950 mb-0.5">
-                          تطبيق المتشابهات آمن 100% وخالٍ تماماً من الإعلانات
+                          تطبيق متين آمن 100% وخالٍ تماماً من الإعلانات
                         </strong>
                         يظهر هذا التحذير الروتيني من نظام أندرويد لحماية المستخدم عند تثبيت أي تطبيق بصيغة APK من خارج متجر Google Play الرسمي.
                       </div>
