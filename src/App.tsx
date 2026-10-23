@@ -1462,6 +1462,70 @@ export default function App() {
   }, [selectedSurahId]);
 
   const [isPageModeActive, setIsPageModeActive] = useState(false);
+  const [isMushafFullscreen, setIsMushafFullscreen] = useState(false);
+
+  const enterMushafFullscreen = useCallback(() => {
+    setIsPageModeActive(true);
+    setIsMushafFullscreen(true);
+    try {
+      if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const exitMushafFullscreen = useCallback(() => {
+    setIsMushafFullscreen(false);
+    try {
+      if (document.fullscreenElement && document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {});
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      if (!document.fullscreenElement) {
+        setIsMushafFullscreen(false);
+      }
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isMushafFullscreen) return;
+    document.body.style.overflow = 'hidden';
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        exitMushafFullscreen();
+      } else if (e.key === 'ArrowLeft') {
+        if (currentPage < 604) {
+          setPageTurnDirection('next');
+          setCurrentPage(prev => Math.min(604, prev + 1));
+        }
+      } else if (e.key === 'ArrowRight') {
+        if (currentPage > 1) {
+          setPageTurnDirection('prev');
+          setCurrentPage(prev => Math.max(1, prev - 1));
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = '';
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isMushafFullscreen, currentPage, exitMushafFullscreen]);
+
   const [challengeMode, setChallengeMode] = useState<'daily' | 'normal'>('normal');
   const [currentChallengeIndex, setCurrentChallengeIndex] = useState(0);
   const [dailyCompleted, setDailyCompleted] = useState(false);
@@ -3129,7 +3193,8 @@ ${versesList}
       ) : (
         <>
           {/* Header */}
-          <header className="w-full sticky top-0 z-40 glass-dark text-white shadow-xl border-b border-white/10 backdrop-blur-xl">
+          {!isMushafFullscreen && (
+            <header className="w-full sticky top-0 z-40 glass-dark text-white shadow-xl border-b border-white/10 backdrop-blur-xl">
             <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32 blur-3xl pointer-events-none" />
             <div className="w-full px-4 sm:px-8 py-2 md:py-2 flex items-center justify-between gap-2 sm:gap-4 relative z-10">
 
@@ -3243,10 +3308,11 @@ ${versesList}
               </div>
             </div>
           </header>
+          )}
 
-          {/* Floating Back Button Directly Below Top Header Bar - ONLY visible when viewing Holy Quran (view === 'mushaf') */}
-          {view === 'mushaf' && (
-            <div className="w-full max-w-6xl mx-auto px-4 sm:px-8 pt-3 pb-1 flex justify-start items-center animate-in fade-in slide-in-from-top-2 duration-300">
+          {/* Floating Back Button & Fullscreen Button Directly Below Top Header Bar - ONLY visible when viewing Holy Quran (view === 'mushaf') */}
+          {view === 'mushaf' && !isMushafFullscreen && (
+            <div className="w-full max-w-6xl mx-auto px-4 sm:px-8 pt-3 pb-1 flex justify-between items-center gap-3 animate-in fade-in slide-in-from-top-2 duration-300">
               <button
                 onClick={() => {
                   setView('library');
@@ -3263,6 +3329,15 @@ ${versesList}
               >
                 <ArrowRight className="w-4 h-4 text-brand-gold group-hover:-translate-x-1 transition-transform" />
                 <span>الرجوع للمكتبة</span>
+              </button>
+
+              <button
+                onClick={enterMushafFullscreen}
+                className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-brand-emerald text-white hover:bg-emerald-700 border border-brand-emerald/80 shadow-md transition-all text-xs sm:text-sm font-black active:scale-95 group cursor-pointer"
+                title="ملء الشاشة"
+              >
+                <Maximize2 className="w-4 h-4 text-brand-gold group-hover:scale-110 transition-transform" />
+                <span>ملء الشاشة</span>
               </button>
             </div>
           )}
@@ -5410,6 +5485,18 @@ ${versesList}
                               <Settings className="w-4 h-4 text-brand-emerald" />
                               <span className="hidden sm:inline">الإعدادات</span>
                             </button>
+
+                            {/* Fullscreen button in header row */}
+                            <button
+                              type="button"
+                              onClick={enterMushafFullscreen}
+                              className={`px-3.5 md:px-4 py-2.5 md:py-3.5 rounded-2xl border transition-all shadow-sm flex items-center justify-center gap-1.5 font-bold text-xs md:text-sm whitespace-nowrap shrink-0 cursor-pointer ${librarySettings.darkMode ? 'bg-slate-800 border-slate-700 text-slate-200 hover:text-emerald-400' : 'bg-white border-slate-200 text-slate-600 hover:text-brand-emerald'
+                                }`}
+                              title="ملء الشاشة"
+                            >
+                              <Maximize2 className="w-4 h-4 text-brand-gold" />
+                              <span className="hidden sm:inline">ملء الشاشة</span>
+                            </button>
                           </div>
 
                           {/* Row 2: Surah & Juz Buttons directly Underneath Search & Settings */}
@@ -5529,6 +5616,17 @@ ${versesList}
                                   : 'radial-gradient(circle at center, rgba(217, 119, 6, 0.05) 0%, transparent 75%)',
                               }}
                             >
+                              {/* Floating Fullscreen button in corner of Quran Page */}
+                              <button
+                                type="button"
+                                onClick={enterMushafFullscreen}
+                                className="absolute top-2 left-2 sm:top-3 sm:left-3 z-30 p-2 sm:p-2.5 rounded-xl bg-black/60 hover:bg-black/80 text-white backdrop-blur-md border border-white/20 shadow-lg transition-all active:scale-95 flex items-center gap-1.5 group cursor-pointer"
+                                title="ملء الشاشة"
+                              >
+                                <Maximize2 className="w-4 h-4 text-brand-gold group-hover:scale-110 transition-transform" />
+                                <span className="text-xs font-black hidden sm:inline">ملء الشاشة</span>
+                              </button>
+
                               {/* Decorative Inner Gold Border Line for Desktop */}
                               <div className="hidden md:block absolute inset-2 rounded-[2rem] border border-brand-gold/20 pointer-events-none" />
 
@@ -5695,6 +5793,21 @@ ${versesList}
                                     <ZoomOut className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                                   </button>
                                 </div>
+
+                                {/* Separator Divider */}
+                                <div className={`w-px h-6 shrink-0 ${librarySettings.darkMode ? 'bg-slate-700' : 'bg-slate-300/80'}`} />
+
+                                {/* Fullscreen Mode Button */}
+                                <button
+                                  type="button"
+                                  onClick={enterMushafFullscreen}
+                                  className={`p-1.5 sm:p-2 rounded-xl text-white transition-all shadow-xs shrink-0 active:scale-95 flex items-center gap-1.5 cursor-pointer ${librarySettings.darkMode ? 'bg-slate-800 hover:bg-emerald-600 border border-slate-700' : 'bg-slate-800 hover:bg-brand-emerald border border-slate-700/50'
+                                    }`}
+                                  title="عرض ملء الشاشة"
+                                >
+                                  <Maximize2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-brand-gold" />
+                                  <span className="text-[10px] sm:text-xs font-bold hidden md:inline">ملء الشاشة</span>
+                                </button>
                               </div>
 
                               {/* Row 2: Index Return Button */}
@@ -6867,75 +6980,235 @@ ${versesList}
           </AnimatePresence>
 
           {/* Fixed Bottom Navigation Bar */}
-          <nav className="fixed bottom-0 left-0 right-0 z-40 glass-dark border-t border-white/15 shadow-2xl backdrop-blur-2xl py-2 px-3 sm:px-6">
-            <div className="max-w-md mx-auto flex items-center justify-around">
+          {!isMushafFullscreen && (
+            <nav className="fixed bottom-0 left-0 right-0 z-40 glass-dark border-t border-white/15 shadow-2xl backdrop-blur-2xl py-2 px-3 sm:px-6">
+              <div className="max-w-md mx-auto flex items-center justify-around">
 
-              {/* 1. الرئيسية (Home) */}
-              <button
-                onClick={() => {
-                  setView('home');
-                  setShowScores(false);
+                {/* 1. الرئيسية (Home) */}
+                <button
+                  onClick={() => {
+                    setView('home');
+                    setShowScores(false);
+                  }}
+                  className={`flex flex-col items-center gap-1 py-1.5 px-3 rounded-2xl transition-all duration-300 ${view === 'home' && !showScores
+                      ? 'text-brand-gold bg-white/15 scale-105 shadow-inner'
+                      : 'text-white/70 hover:text-white hover:bg-white/5'
+                    }`}
+                  title="الرئيسية"
+                >
+                  <Home className="w-5 h-5 sm:w-6 sm:h-6" />
+                  <span className="text-[10px] sm:text-xs font-bold whitespace-nowrap">الرئيسية</span>
+                </button>
+
+                {/* 2. التحديات (Challenges) */}
+                <button
+                  onClick={() => {
+                    setView('challenges');
+                    setShowScores(false);
+                  }}
+                  className={`flex flex-col items-center gap-1 py-1.5 px-3 rounded-2xl transition-all duration-300 ${view === 'challenges'
+                      ? 'text-brand-gold bg-white/15 scale-105 shadow-inner'
+                      : 'text-white/70 hover:text-white hover:bg-white/5'
+                    }`}
+                  title="التحديات"
+                >
+                  <Zap className="w-5 h-5 sm:w-6 sm:h-6" />
+                  <span className="text-[10px] sm:text-xs font-bold whitespace-nowrap">التحديات</span>
+                </button>
+
+                {/* 3. المكتبة والعلوم الشرعية (Library) */}
+                <button
+                  onClick={() => {
+                    setView('library');
+                    setShowScores(false);
+                  }}
+                  className={`flex flex-col items-center gap-1 py-1.5 px-3 rounded-2xl transition-all duration-300 ${view === 'library' || view === 'mushaf' || view === 'adhkar' || view === 'hadith' || view === 'book' || view === 'encyclopedia'
+                      ? 'text-brand-gold bg-white/15 scale-105 shadow-inner'
+                      : 'text-white/70 hover:text-white hover:bg-white/5'
+                    }`}
+                  title="المكتبة والعلوم الشرعية"
+                >
+                  <BookOpen className="w-5 h-5 sm:w-6 sm:h-6" />
+                  <span className="text-[10px] sm:text-xs font-bold whitespace-nowrap">المكتبة</span>
+                </button>
+
+                {/* 4. الإعدادات (Settings) */}
+                <button
+                  onClick={() => {
+                    setView('settings');
+                    setShowScores(false);
+                  }}
+                  className={`flex flex-col items-center gap-1 py-1.5 px-3 rounded-2xl transition-all duration-300 ${view === 'settings'
+                      ? 'text-brand-gold bg-white/15 scale-105 shadow-inner'
+                      : 'text-white/70 hover:text-white hover:bg-white/5'
+                    }`}
+                  title="الإعدادات"
+                >
+                  <Settings className="w-5 h-5 sm:w-6 sm:h-6" />
+                  <span className="text-[10px] sm:text-xs font-bold whitespace-nowrap">الإعدادات</span>
+                </button>
+
+              </div>
+            </nav>
+          )}
+
+          {/* Fullscreen Mushaf Mode Overlay */}
+          <AnimatePresence>
+            {isMushafFullscreen && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="fixed inset-0 z-[100] w-screen h-screen flex flex-col justify-between overflow-hidden select-none"
+                style={{
+                  backgroundColor: librarySettings.darkMode ? '#0B132B' : '#fcfaf5',
+                  color: librarySettings.darkMode ? '#e2e8f0' : '#1e293b',
+                  backgroundImage: librarySettings.darkMode
+                    ? 'radial-gradient(circle at center, rgba(16, 185, 129, 0.08) 0%, rgba(11, 19, 43, 0.98) 85%)'
+                    : 'radial-gradient(circle at center, rgba(217, 119, 6, 0.05) 0%, #fcfaf5 85%)',
                 }}
-                className={`flex flex-col items-center gap-1 py-1.5 px-3 rounded-2xl transition-all duration-300 ${view === 'home' && !showScores
-                    ? 'text-brand-gold bg-white/15 scale-105 shadow-inner'
-                    : 'text-white/70 hover:text-white hover:bg-white/5'
-                  }`}
-                title="الرئيسية"
               >
-                <Home className="w-5 h-5 sm:w-6 sm:h-6" />
-                <span className="text-[10px] sm:text-xs font-bold whitespace-nowrap">الرئيسية</span>
-              </button>
+                {/* Floating Top Controls: Exit 'X' Button on Corner */}
+                <div className="absolute top-3 left-3 sm:top-5 sm:left-5 z-50">
+                  <button
+                    onClick={exitMushafFullscreen}
+                    className="p-2.5 sm:p-3 rounded-2xl bg-black/60 hover:bg-black/80 text-white backdrop-blur-xl border border-white/20 shadow-2xl transition-all active:scale-95 flex items-center gap-2 group cursor-pointer"
+                    title="خروج من ملء الشاشة (Esc)"
+                    aria-label="خروج من ملء الشاشة"
+                  >
+                    <X className="w-5 h-5 sm:w-6 sm:h-6 text-white group-hover:rotate-90 transition-transform duration-200" />
+                    <span className="text-xs sm:text-sm font-black hidden sm:inline text-white/90">خروج</span>
+                  </button>
+                </div>
 
-              {/* 2. التحديات (Challenges) */}
-              <button
-                onClick={() => {
-                  setView('challenges');
-                  setShowScores(false);
-                }}
-                className={`flex flex-col items-center gap-1 py-1.5 px-3 rounded-2xl transition-all duration-300 ${view === 'challenges'
-                    ? 'text-brand-gold bg-white/15 scale-105 shadow-inner'
-                    : 'text-white/70 hover:text-white hover:bg-white/5'
-                  }`}
-                title="التحديات"
-              >
-                <Zap className="w-5 h-5 sm:w-6 sm:h-6" />
-                <span className="text-[10px] sm:text-xs font-bold whitespace-nowrap">التحديات</span>
-              </button>
+                <div className="absolute top-3 right-3 sm:top-5 sm:right-5 z-50">
+                  <div className="px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-2xl bg-black/60 text-white backdrop-blur-xl border border-white/20 shadow-2xl text-xs sm:text-sm font-black flex items-center gap-2">
+                    <BookOpen className="w-4 h-4 text-brand-gold" />
+                    <span>المصحف الشريف</span>
+                    <span className="text-white/40">•</span>
+                    <span className="text-brand-gold">صفحة {currentPage}</span>
+                  </div>
+                </div>
 
-              {/* 3. المكتبة والعلوم الشرعية (Library) */}
-              <button
-                onClick={() => {
-                  setView('library');
-                  setShowScores(false);
-                }}
-                className={`flex flex-col items-center gap-1 py-1.5 px-3 rounded-2xl transition-all duration-300 ${view === 'library' || view === 'mushaf' || view === 'adhkar' || view === 'hadith' || view === 'book' || view === 'encyclopedia'
-                    ? 'text-brand-gold bg-white/15 scale-105 shadow-inner'
-                    : 'text-white/70 hover:text-white hover:bg-white/5'
-                  }`}
-                title="المكتبة والعلوم الشرعية"
-              >
-                <BookOpen className="w-5 h-5 sm:w-6 sm:h-6" />
-                <span className="text-[10px] sm:text-xs font-bold whitespace-nowrap">المكتبة</span>
-              </button>
+                {/* Main Fullscreen Quran Page View with Swipe / Drag & 3D Flip */}
+                <div className="relative flex-1 w-full h-full flex items-center justify-center overflow-hidden p-0 sm:p-2 [perspective:1200px]">
+                  <AnimatePresence mode="wait" initial={false}>
+                    <motion.div
+                      key={currentPage}
+                      drag="x"
+                      dragConstraints={{ left: 0, right: 0 }}
+                      dragElastic={0.25}
+                      onDragEnd={(_, info) => {
+                        const swipeThreshold = 40;
+                        if (info.offset.x > swipeThreshold) {
+                          // Swipe Left -> Right: Next Page in Arabic RTL
+                          if (currentPage < 604) {
+                            setPageTurnDirection('next');
+                            setCurrentPage(prev => prev + 1);
+                          }
+                        } else if (info.offset.x < -swipeThreshold) {
+                          // Swipe Right -> Left: Previous Page in Arabic RTL
+                          if (currentPage > 1) {
+                            setPageTurnDirection('prev');
+                            setCurrentPage(prev => prev - 1);
+                          }
+                        }
+                      }}
+                      initial={{
+                        opacity: 0,
+                        rotateY: pageTurnDirection === 'next' ? -25 : 25,
+                        scale: 0.96,
+                        transformOrigin: pageTurnDirection === 'next' ? 'left center' : 'right center'
+                      }}
+                      animate={{
+                        opacity: 1,
+                        rotateY: 0,
+                        scale: 1,
+                        transformOrigin: 'center center'
+                      }}
+                      exit={{
+                        opacity: 0,
+                        rotateY: pageTurnDirection === 'next' ? 25 : -25,
+                        scale: 0.96,
+                        transformOrigin: pageTurnDirection === 'next' ? 'right center' : 'left center'
+                      }}
+                      transition={{ duration: 0.35, ease: [0.25, 1, 0.5, 1] }}
+                      className="w-full h-full flex items-center justify-center cursor-grab active:cursor-grabbing touch-pan-y"
+                    >
+                      <img
+                        src={`/quran-pages/${currentPage.toString().padStart(3, '0')}.png`}
+                        alt={`صفحة ${currentPage}`}
+                        className="w-auto h-auto max-h-[100dvh] max-w-full object-contain pointer-events-none select-none transition-all duration-300 drop-shadow-2xl"
+                        style={{
+                          filter: librarySettings.darkMode
+                            ? 'invert(0.92) hue-rotate(180deg) brightness(0.88) contrast(1.12)'
+                            : 'none'
+                        }}
+                      />
+                    </motion.div>
+                  </AnimatePresence>
+                </div>
 
-              {/* 4. الإعدادات (Settings) */}
-              <button
-                onClick={() => {
-                  setView('settings');
-                  setShowScores(false);
-                }}
-                className={`flex flex-col items-center gap-1 py-1.5 px-3 rounded-2xl transition-all duration-300 ${view === 'settings'
-                    ? 'text-brand-gold bg-white/15 scale-105 shadow-inner'
-                    : 'text-white/70 hover:text-white hover:bg-white/5'
-                  }`}
-                title="الإعدادات"
-              >
-                <Settings className="w-5 h-5 sm:w-6 sm:h-6" />
-                <span className="text-[10px] sm:text-xs font-bold whitespace-nowrap">الإعدادات</span>
-              </button>
+                {/* Bottom Floating Navigation Arrows & Page Jump */}
+                <div className="absolute bottom-4 sm:bottom-6 inset-x-0 flex justify-center items-center pointer-events-none z-50 px-4">
+                  <div className="pointer-events-auto flex items-center gap-2 sm:gap-3 px-4 sm:px-5 py-2 sm:py-2.5 rounded-full bg-black/65 hover:bg-black/85 backdrop-blur-2xl border border-white/20 shadow-2xl transition-all">
+                    {/* Previous Page Button (In Arabic RTL: right arrow = previous page) */}
+                    <button
+                      onClick={() => {
+                        if (currentPage > 1) {
+                          setPageTurnDirection('prev');
+                          setCurrentPage(prev => Math.max(1, prev - 1));
+                        }
+                      }}
+                      disabled={currentPage === 1}
+                      className="p-2 sm:p-2.5 rounded-full text-white hover:text-brand-gold disabled:opacity-30 disabled:hover:text-white transition-all active:scale-90"
+                      title="الصفحة السابقة"
+                      aria-label="الصفحة السابقة"
+                    >
+                      <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6" />
+                    </button>
 
-            </div>
-          </nav>
+                    {/* Page indicator & direct input */}
+                    <div className="flex items-center gap-1.5 px-2 text-white font-black text-xs sm:text-sm select-none">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={currentPage}
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/[^0-9]/g, '');
+                          if (val === '') return;
+                          const num = parseInt(val);
+                          if (num >= 1 && num <= 604) {
+                            setCurrentPage(num);
+                          }
+                        }}
+                        className="w-10 sm:w-12 bg-white/10 border border-white/20 rounded-lg text-center text-xs sm:text-sm font-black text-brand-gold focus:outline-none focus:ring-1 focus:ring-brand-gold py-0.5"
+                      />
+                      <span className="text-white/40">/</span>
+                      <span className="text-white/70">604</span>
+                    </div>
+
+                    {/* Next Page Button (In Arabic RTL: left arrow = next page) */}
+                    <button
+                      onClick={() => {
+                        if (currentPage < 604) {
+                          setPageTurnDirection('next');
+                          setCurrentPage(prev => Math.min(604, prev + 1));
+                        }
+                      }}
+                      disabled={currentPage === 604}
+                      className="p-2 sm:p-2.5 rounded-full text-white hover:text-brand-gold disabled:opacity-30 disabled:hover:text-white transition-all active:scale-90"
+                      title="الصفحة التالية"
+                      aria-label="الصفحة التالية"
+                    >
+                      <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6" />
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </>
       )}
     </div >

@@ -225,7 +225,67 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // ==========================================
-    // 4. REGISTER MODE (إنشاء حساب جديد للاعب)
+    // 4. DELETE ACCOUNT MODE (حذف الحساب والبيانات)
+    // ==========================================
+    if (action === 'delete-account') {
+      const rawIdentifier = (username || name || currentUsername || '').trim();
+      const cleanIdentifier = rawIdentifier.replace(/^@+/, '');
+      const inputPass = (password || currentPassword || '').trim();
+
+      if (!rawIdentifier) {
+        return res.status(400).json({ error: 'يرجى إدخال اسم المستخدم أو الاسم' });
+      }
+
+      if (!inputPass) {
+        return res.status(400).json({ error: 'يرجى إدخال كلمة المرور لتأكيد الحذف' });
+      }
+
+      // Find player
+      const player = await prisma.player.findFirst({
+        where: {
+          OR: [
+            { username: cleanIdentifier },
+            { username: '@' + cleanIdentifier },
+            { username: rawIdentifier },
+            { name: { equals: rawIdentifier, mode: 'insensitive' } }
+          ]
+        }
+      });
+
+      if (!player) {
+        return res.status(404).json({ error: 'لم يتم العثور على حساب بهذا الاسم أو اسم المستخدم' });
+      }
+
+      // Verify password
+      const effectivePassword = player.password || '1234';
+      if (effectivePassword !== inputPass) {
+        return res.status(401).json({ error: 'كلمة المرور غير صحيحة' });
+      }
+
+      // Delete associated rooms first to satisfy foreign key constraints
+      await prisma.room.deleteMany({
+        where: {
+          OR: [
+            { player1Id: player.id },
+            { player2Id: player.id },
+            { winnerId: player.id }
+          ]
+        }
+      });
+
+      // Delete the player
+      await prisma.player.delete({
+        where: { id: player.id }
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: 'تم حذف حسابك وكافة البيانات المرتبطة به نهائياً وبنجاح'
+      });
+    }
+
+    // ==========================================
+    // 5. REGISTER MODE (إنشاء حساب جديد للاعب)
     // ==========================================
     const trimmedName = (name || '').trim();
     const cleanUsername = (username || '').trim().replace(/^@+/, '');

@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>حذف الحساب والبيانات | تطبيق متين للقرآن الكريم</title>
+  <meta name="description" content="صفحة حذف الحساب والبيانات المرتبطة به لتطبيق متين للقرآن الكريم وفقاً لسياسات متجر Google Play">
+  <link rel="icon" type="image/png" href="/logo.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary: #064e3b;
+      --primary-light: #059669;
+      --primary-accent: #10b981;
+      --gold: #d97706;
+      --gold-light: #f59e0b;
+      --danger: #dc2626;
+      --danger-hover: #b91c1c;
+      --danger-bg: #fef2f2;
+      --danger-border: #fecaca;
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --text-main: #0f172a;
+      --text-muted: #475569;
+      --border: #e2e8f0;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Tajawal', system-ui, -apple-system, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text-main);
+      line-height: 1.8;
+      padding-bottom: 60px;
+    }
+
+    .header {
+      background: linear-gradient(135deg, #064e3b 0%, #065f46 50%, #047857 100%);
+      color: white;
+      padding: 48px 20px;
+      text-align: center;
+      position: relative;
+      box-shadow: 0 10px 25px -5px rgba(6, 78, 59, 0.2);
+    }
+
+    .header-content {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    .app-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255, 255, 255, 0.15);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      padding: 6px 16px;
+      border-radius: 9999px;
+      font-size: 13px;
+      font-weight: 700;
+      margin-bottom: 16px;
+      backdrop-filter: blur(8px);
+    }
+
+    .header h1 {
+      font-size: 28px;
+      font-weight: 900;
+      margin-bottom: 8px;
+    }
+
+    .header p {
+      font-size: 15px;
+      opacity: 0.9;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: -25px auto 0;
+      padding: 0 20px;
+      position: relative;
+      z-index: 10;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border-radius: 24px;
+      padding: 32px;
+      margin-bottom: 24px;
+      box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.05);
+      border: 1px solid var(--border);
+    }
+
+    .card.danger-card {
+      border: 2px solid var(--danger-border);
+      background: #ffffff;
+    }
+
+    .section-title {
+      font-size: 20px;
+      font-weight: 800;
+      color: var(--primary);
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .section-title.danger-title {
+      color: var(--danger);
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+      text-align: right;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 13px;
+      font-weight: 800;
+      color: var(--text-main);
+      margin-bottom: 6px;
+    }
+
+    .form-input {
+      width: 100%;
+      padding: 12px 16px;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      background: #f8fafc;
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text-main);
+      outline: none;
+      transition: all 0.2s;
+    }
+
+    .form-input:focus {
+      border-color: var(--danger);
+      background: #ffffff;
+      box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.15);
+    }
+
+    .checkbox-container {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      margin: 18px 0;
+      background: var(--danger-bg);
+      padding: 12px 16px;
+      border-radius: 12px;
+      border: 1px solid var(--danger-border);
+      font-size: 13px;
+      font-weight: 700;
+      color: #991b1b;
+      cursor: pointer;
+    }
+
+    .checkbox-container input {
+      margin-top: 4px;
+      cursor: pointer;
+      accent-color: var(--danger);
+      width: 18px;
+      height: 18px;
+    }
+
+    .btn-delete {
+      width: 100%;
+      padding: 14px 20px;
+      background: var(--danger);
+      color: white;
+      border: none;
+      border-radius: 16px;
+      font-size: 16px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: all 0.2s;
+      box-shadow: 0 4px 15px rgba(220, 38, 38, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .btn-delete:hover:not(:disabled) {
+      background: var(--danger-hover);
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(220, 38, 38, 0.4);
+    }
+
+    .btn-delete:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .alert {
+      padding: 14px 16px;
+      border-radius: 14px;
+      font-size: 14px;
+      font-weight: 700;
+      margin-bottom: 16px;
+      display: none;
+    }
+
+    .alert-success {
+      background: #ecfdf5;
+      color: #065f46;
+      border: 1px solid #a7f3d0;
+    }
+
+    .alert-error {
+      background: #fef2f2;
+      color: #991b1b;
+      border: 1px solid #fecaca;
+    }
+
+    .step-box {
+      background: #f1f5f9;
+      border-right: 4px solid var(--primary-light);
+      padding: 18px 20px;
+      border-radius: 12px;
+      margin-bottom: 16px;
+    }
+
+    .step-number {
+      display: inline-block;
+      width: 26px;
+      height: 26px;
+      line-height: 26px;
+      text-align: center;
+      background: var(--primary);
+      color: white;
+      border-radius: 50%;
+      font-size: 13px;
+      font-weight: 800;
+      margin-left: 8px;
+    }
+
+    .contact-email-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      background: linear-gradient(135deg, #059669 0%, #047857 100%);
+      color: white;
+      text-decoration: none;
+      padding: 12px 24px;
+      border-radius: 14px;
+      font-weight: 800;
+      font-size: 15px;
+      box-shadow: 0 4px 15px rgba(5, 150, 105, 0.25);
+      transition: all 0.2s ease;
+      margin: 10px 0;
+    }
+
+    .contact-email-btn:hover {
+      transform: translateY(-2px);
+    }
+
+    ul {
+      margin-right: 24px;
+      margin-bottom: 16px;
+    }
+
+    li {
+      margin-bottom: 8px;
+    }
+
+    .info-badge {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 700;
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
+    .en-card {
+      direction: ltr;
+      text-align: left;
+    }
+
+    .en-card .section-title {
+      direction: ltr;
+    }
+
+    .en-card .step-number {
+      margin-left: 0;
+      margin-right: 8px;
+    }
+
+    .en-card .step-box {
+      border-right: none;
+      border-left: 4px solid var(--primary-light);
+    }
+
+    .en-card ul {
+      margin-right: 0;
+      margin-left: 24px;
+    }
+
+    .footer {
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 13px;
+      margin-top: 30px;
+    }
+
+    .footer a {
+      color: var(--primary-light);
+      text-decoration: none;
+      font-weight: 700;
+      margin: 0 8px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="header-content">
+      <div class="app-badge">
+        <span>تطبيق متين للقرآن الكريم (com.mateen.game)</span>
+      </div>
+      <h1>حذف الحساب والبيانات المرتبطة</h1>
+      <p>Account & Data Deletion Portal</p>
+    </div>
+  </header>
+
+  <!-- Container -->
+  <div class="container">
+
+    <!-- Interactive Self-Service Deletion Form Card -->
+    <div class="card danger-card">
+      <h2 class="section-title danger-title">
+        <span>⚠️ حذف حسابك بنفسك مباشرة (Self-Service Deletion)</span>
+      </h2>
+      <p style="font-size: 14px; color: var(--text-muted); margin-bottom: 18px;">
+        يمكنك حذف حسابك فوراً وبشكل ذاتي بإدخال اسم المستخدم وكلمة المرور المسجلين في التطبيق. سيتم حذف جميع بياناتك ونقاطك وإنجازاتك نهائياً من قاعدة البيانات.
+      </p>
+
+      <!-- Alert Messages -->
+      <div id="alertSuccess" class="alert alert-success"></div>
+      <div id="alertError" class="alert alert-error"></div>
+
+      <form id="deletionForm" onsubmit="handleAccountDeletion(event)">
+        <div class="form-group">
+          <label class="form-label" for="username">اسم المستخدم (Username):</label>
+          <input
+            type="text"
+            id="username"
+            name="username"
+            class="form-input"
+            placeholder="مثال: @username أو username"
+            required
+            autocomplete="username"
+          />
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="password">كلمة المرور (Password):</label>
+          <input
+            type="password"
+            id="password"
+            name="password"
+            class="form-input"
+            placeholder="أدخل كلمة مرور حسابك لتأكيد الحذف"
+            required
+            autocomplete="current-password"
+          />
+        </div>
+
+        <label class="checkbox-container">
+          <input type="checkbox" id="confirmCheckbox" required />
+          <span>أقر وأؤكد رغبتي في حذف حسابي وكافة النقاط والشهادات وسجلات التحديات المرتبطة بي نهائياً من خوادم التطبيق وبشكل لا يمكن استرجاعه.</span>
+        </label>
+
+        <button type="submit" id="submitBtn" class="btn-delete">
+          <span>🗑️ تأكيد وحذف الحساب نهائياً</span>
+        </button>
+      </form>
+    </div>
+
+    <!-- Details Card -->
+    <div class="card">
+      <h2 class="section-title">
+        <span>ما البيانات التي يتم حذفها نهائياً؟</span>
+      </h2>
+      <p style="margin-bottom: 12px; font-size: 14px;">
+        بمجرد تأكيد الحذف، تتم إزالة السجلات التالية فوراً وبشكل لا رجعة فيه:
+      </p>
+      <ul style="font-size: 14px;">
+        <li><span class="info-badge">حذف فوري</span> <strong>ملف الحساب:</strong> اسم المستخدم، الاسم المعروض، وكلمة المرور المشفرة.</li>
+        <li><span class="info-badge">حذف فوري</span> <strong>النقاط والكؤوس:</strong> كافة النقاط ورصيد الكؤوس المكتسبة.</li>
+        <li><span class="info-badge">حذف فوري</span> <strong>لوحة المتصدرين:</strong> إزالة اسمك وترتيبك فوراً من قائمة المتصدرين العامة.</li>
+        <li><span class="info-badge">حذف فوري</span> <strong>الإنجازات والشهادات:</strong> كافة الشهادات والإطارات المحفوظة.</li>
+      </ul>
+
+      <div class="step-box" style="margin-top: 20px;">
+        <span class="step-number">ℹ️</span>
+        <strong>طريقة بديلة: طلب الحذف عبر البريد الإلكتروني</strong>
+        <p style="margin-top: 6px; font-size: 13px;">
+          إذا نسيت كلمة المرور، يمكنك مراسلة المطور مباشرة من بريدك الإلكتروني وسيتم حذف الحساب يدوياً خلال 24 إلى 48 ساعة:
+        </p>
+        <div style="text-align: center; margin-top: 8px;">
+          <a href="mailto:dr3laaalhajy@gmail.com?subject=طلب%20حذف%20حساب%20تطبيق%20متين" class="contact-email-btn">
+            ✉️ إرسال إيميل للمطور (dr3laaalhajy@gmail.com)
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- English Section for Google Play Reviewers -->
+    <div class="card en-card">
+      <h2 class="section-title">
+        <span>Google Play Account & Data Deletion Compliance</span>
+      </h2>
+      <p style="margin-bottom: 14px; font-size: 14px;">
+        This page provides a self-service account deletion mechanism for the <strong>Mateen</strong> app (<code>com.mateen.game</code>), in full compliance with Google Play User Data policies.
+      </p>
+      <div class="step-box">
+        <span class="step-number">1</span>
+        <strong>Instant Web Deletion:</strong>
+        <p style="margin-top: 4px; font-size: 13px;">
+          Users can delete their account directly using the web form above by entering their registered username and password.
+        </p>
+      </div>
+      <div class="step-box">
+        <span class="step-number">2</span>
+        <strong>Data Wiped:</strong>
+        <p style="margin-top: 4px; font-size: 13px;">
+          All user profile data, gaming progress, leaderboard rankings, and awarded certificates are permanently deleted from database servers.
+        </p>
+      </div>
+      <div class="step-box">
+        <span class="step-number">3</span>
+        <strong>Alternative Support Contact:</strong>
+        <p style="margin-top: 4px; font-size: 13px;">
+          Users may also contact developer support directly at <code>dr3laaalhajy@gmail.com</code> for manual deletion assistance.
+        </p>
+      </div>
+    </div>
+
+    <!-- Footer Links -->
+    <div class="footer">
+      <p>
+        <a href="/privacy">سياسة الخصوصية (Privacy Policy)</a> •
+        <a href="/terms">شروط الاستخدام (Terms of Service)</a> •
+        <span>تطبيق متين للقرآن الكريم © 2026</span>
+      </p>
+    </div>
+
+  </div>
+
+  <script>
+    async function handleAccountDeletion(event) {
+      event.preventDefault();
+
+      const usernameInput = document.getElementById('username').value.trim();
+      const passwordInput = document.getElementById('password').value.trim();
+      const confirmChecked = document.getElementById('confirmCheckbox').checked;
+      const submitBtn = document.getElementById('submitBtn');
+      const alertSuccess = document.getElementById('alertSuccess');
+      const alertError = document.getElementById('alertError');
+
+      alertSuccess.style.display = 'none';
+      alertError.style.display = 'none';
+
+      if (!usernameInput || !passwordInput) {
+        alertError.textContent = 'يرجى إدخال اسم المستخدم وكلمة المرور.';
+        alertError.style.display = 'block';
+        return;
+      }
+
+      if (!confirmChecked) {
+        alertError.textContent = 'يرجى تحديد مربع تأكيد الحذف للمتابعة.';
+        alertError.style.display = 'block';
+        return;
+      }
+
+      if (!confirm('هل أنت متأكد تماماً من رغبتك في حذف حسابك؟ لا يمكن التراجع عن هذا الإجراء وسيتم مسح كافة نقاطك وإنجازاتك.')) {
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<span>جاري التحقق وحذف الحساب... ⏳</span>';
+
+      try {
+        const response = await fetch('/api/player-register', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            action: 'delete-account',
+            username: usernameInput,
+            password: passwordInput
+          })
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.success) {
+          alertSuccess.innerHTML = '✅ <strong>تم حذف الحساب بنجاح!</strong> تم حذف حسابك وكافة السجلات والنقاط المرتبطة به نهائياً من خوادم التطبيق.';
+          alertSuccess.style.display = 'block';
+          document.getElementById('deletionForm').reset();
+          document.getElementById('deletionForm').style.display = 'none';
+        } else {
+          alertError.textContent = data.error || 'حدث خطأ أثناء محاولة حذف الحساب. يرجى التحقق من صحة اسم المستخدم وكلمة المرور.';
+          alertError.style.display = 'block';
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = '<span>🗑️ تأكيد وحذف الحساب نهائياً</span>';
+        }
+      } catch (err) {
+        console.error('Deletion error:', err);
+        alertError.textContent = 'تعذر الاتصال بالخادم. يرجى التحقق من اتصالك بالإنترنت والمحاولة مرة أخرى أو مراسلتنا عبر البريد.';
+        alertError.style.display = 'block';
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<span>🗑️ تأكيد وحذف الحساب نهائياً</span>';
+      }
+    }
+  </script>
+</body>
+</html>
