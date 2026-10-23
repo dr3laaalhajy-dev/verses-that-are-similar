@@ -109,11 +109,12 @@ export const PrivacyModal: React.FC<PrivacyModalProps> = ({
                 <div className="space-y-2">
                   <h4 className="font-black text-slate-900 text-sm sm:text-base flex items-center gap-2 text-brand-emerald">
                     <span className="w-2 h-2 rounded-full bg-brand-emerald"></span>
-                    <span>ما لا نطلبه أبداً:</span>
+                    <span>أذونات الجهاز والميكروفون:</span>
                   </h4>
-                  <p className="font-medium text-slate-600 pr-2">
-                    التطبيق <strong>لا يطلب ولا يصل</strong> إلى موقعك الجغرافي (GPS)، ولا جهات اتصالك، ولا كاميرا أو ميكروفون، ولا أي معلومات بنكية أو بطاقات دفع.
-                  </p>
+                  <ul className="list-disc list-inside space-y-1.5 pr-2 font-medium">
+                    <li><strong>الميكروفون (Microphone):</strong> يُطلب إذن الميكروفون فقط عند اختيارك خوض <strong>"التحدي الصوتي"</strong> للاستماع إلى تلاوتك وتحويل الصوت إلى نص لمطابقة الآيات الكريمة. الصوت تتم معالجته لحظياً ولا يتم تسجيله أو تخزينه أو إرساله إلى أي خادم خارجي.</li>
+                    <li><strong>ما لا نطلبه ولا نصل إليه أبداً:</strong> التطبيق <strong>لا يطلب ولا يصل</strong> إلى موقعك الجغرافي (GPS)، ولا الكاميرا، ولا جهات اتصالك أو صورك، ولا أي معلومات مالية أو بنكية.</li>
+                  </ul>
                 </div>
 
                 <div className="space-y-2">

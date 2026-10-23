@@ -105,6 +105,14 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       hmr: process.env.DISABLE_HMR !== 'true',
+      headers: {
+        'Permissions-Policy': 'camera=(), geolocation=(), microphone=(self)',
+      },
+    },
+    preview: {
+      headers: {
+        'Permissions-Policy': 'camera=(), geolocation=(), microphone=(self)',
+      },
     },
   };
 });
