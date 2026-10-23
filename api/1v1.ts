@@ -25,6 +25,24 @@ const mapChallenges = (challenges: any[]) =>
     text: c.verseText || c.keyword || c.text || '' 
   }));
 
+async function findPlayer(idOrUsernameOrName: any, nameFallback?: string) {
+  if (!idOrUsernameOrName && !nameFallback) return null;
+  const str = String(idOrUsernameOrName || '').trim();
+  const cleanU = str.replace(/^@+/, '');
+  const numId = Number(idOrUsernameOrName);
+
+  return await prisma.player.findFirst({
+    where: {
+      OR: [
+        ...(cleanU ? [{ username: cleanU }, { username: '@' + cleanU }] : []),
+        ...(str ? [{ name: { equals: str, mode: 'insensitive' as const } }] : []),
+        ...(nameFallback ? [{ name: { equals: nameFallback.trim(), mode: 'insensitive' as const } }] : []),
+        ...(Number.isInteger(numId) && numId > 0 ? [{ id: numId }] : [])
+      ] as any
+    }
+  });
+}
+
 async function getFullRoom(roomId: string) {
   const room = await prisma.room.findUnique({
     where: { id: roomId },
@@ -36,7 +54,7 @@ async function getFullRoom(roomId: string) {
   const playerIds = Object.keys(progress).map(id => parseInt(id)).filter(id => !isNaN(id))
   const players = await prisma.player.findMany({
     where: { id: { in: playerIds } },
-    select: { id: true, name: true, deviceId: true, activeFrame: true, seerahCompleted: true, generalCompleted: true }
+    select: { id: true, name: true, username: true, activeFrame: true, seerahCompleted: true, generalCompleted: true }
   })
 
   let orderedChallenges: any[] = []
@@ -61,17 +79,17 @@ async function getFullRoom(roomId: string) {
 
 async function handleCreate(req: VercelRequest, res: VercelResponse) {
     const { player1Id, player1Name, category, level, questionCount, questionIds, maxPlayers, gameMode, timePerQuestion, customChallenges } = req.body
-    if (!player1Id) return res.status(400).json({ message: 'Missing player1Id' })
+    if (!player1Id && !player1Name) return res.status(400).json({ message: 'Missing player1Id' })
 
     const maxQuestions = Number(questionCount) || 5
 
     try {
-      let player1 = await prisma.player.findUnique({ where: { deviceId: player1Id } })
+      let player1 = await findPlayer(player1Id, player1Name)
       
       // Auto-register if not found
       if (!player1 && player1Name) {
         player1 = await prisma.player.create({
-          data: { deviceId: player1Id, name: player1Name }
+          data: { name: player1Name }
         })
       }
 
@@ -188,14 +206,13 @@ async function handleJoin(req: VercelRequest, res: VercelResponse) {
     // Status can be WAITING or PLAYING (allow late join if within maxPlayers)
     if (room.status === 'FINISHED') return res.status(400).json({ message: 'هذا التحدي انتهى بالفعل' })
 
-    let player = await prisma.player.findUnique({ where: { deviceId: player2Id } })
+    let player = await findPlayer(player2Id, playerName)
     
     // Auto-register player if not in database yet
     if (!player) {
       const defaultName = (playerName && String(playerName).trim()) || 'متسابق جديد'
       player = await prisma.player.create({
         data: {
-          deviceId: player2Id,
           name: defaultName
         }
       })
@@ -267,7 +284,7 @@ async function handleSubmitProgress(req: VercelRequest, res: VercelResponse) {
     const room = await prisma.room.findUnique({ where: { id: roomId as string } })
     if (!room || room.status === 'FINISHED') return res.status(404).json({ message: 'Room not found or finished' })
 
-    const player = await prisma.player.findUnique({ where: { deviceId: playerId } })
+    const player = await findPlayer(playerId)
     if (!player) return res.status(404).json({ message: 'Player not found' })
 
     let playersProgress = room.playersProgress as any || {}
@@ -344,7 +361,7 @@ async function handleCheckActive(req: VercelRequest, res: VercelResponse) {
   if (!playerId) return res.status(400).json({ error: 'Player ID required' })
 
   try {
-    const player = await prisma.player.findUnique({ where: { deviceId: String(playerId) } })
+    const player = await findPlayer(playerId)
     if (!player) return res.status(404).json({ error: 'Player not found' })
 
     const room = await prisma.room.findFirst({
@@ -376,7 +393,7 @@ async function handleResign(req: VercelRequest, res: VercelResponse) {
   if (!roomId || !playerId) return res.status(400).json({ error: 'Room ID and Player ID required' })
 
   try {
-    const player = await prisma.player.findUnique({ where: { deviceId: String(playerId) } })
+    const player = await findPlayer(playerId)
     if (!player) return res.status(404).json({ error: 'Player not found' })
 
     const room = await prisma.room.findUnique({

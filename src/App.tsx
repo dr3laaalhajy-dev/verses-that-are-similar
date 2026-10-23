@@ -913,14 +913,6 @@ export default function App() {
 
   const [playerName, setPlayerName] = useState<string | null>(localStorage.getItem('quran_player_name'));
   const [playerUsername, setPlayerUsername] = useState<string | null>(localStorage.getItem('quran_player_username'));
-  const [deviceId] = useState<string>(() => {
-    let id = localStorage.getItem('quran_device_id');
-    if (!id) {
-      id = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : 'device-' + Date.now();
-      localStorage.setItem('quran_device_id', id);
-    }
-    return id;
-  });
   const [totalPoints, setTotalPoints] = useState<number>(() => Number(localStorage.getItem('quran_total_points')) || 0);
   const [cups, setCups] = useState(() => parseInt(localStorage.getItem('quran_total_cups') || localStorage.getItem('quran_cups') || '0'));
 
@@ -1285,7 +1277,6 @@ export default function App() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             action: 'register',
-            deviceId,
             name: cleanName,
             username: cleanUsername,
             password: cleanPassword
@@ -1324,7 +1315,6 @@ export default function App() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             action: 'login',
-            deviceId,
             username: cleanIdentifier,
             password: cleanPassword
           })
@@ -1690,8 +1680,8 @@ export default function App() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        deviceId,
-        playerId: deviceId,
+        username: playerUsername,
+        name: playerName,
         score: newTotalPoints,
         totalPoints: newTotalPoints,
         seerahCompleted: hasSeerah,
@@ -1752,7 +1742,7 @@ export default function App() {
       const res = await fetch('/api/1v1', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'join', code, player2Id: deviceId })
+        body: JSON.stringify({ action: 'join', code, player2Id: playerUsername || playerName })
       });
       const data = await res.json();
       if (res.ok) {
@@ -1798,7 +1788,7 @@ export default function App() {
 
       const requestBody = {
         action: 'create',
-        player1Id: deviceId,
+        player1Id: playerUsername || playerName,
         player1Name: playerName,
         gameMode: isIslamicMode ? 'ISLAMIC' : (v1GameMode === 'audio' ? 'STANDARD' : v1GameMode === 'complete' ? 'COMPLETION' : 'SURAH'),
         category: isIslamicMode ? islamicRoomCategory : v1Category,
@@ -1933,7 +1923,7 @@ export default function App() {
         body: JSON.stringify({
           action: 'submit-progress',
           roomId: room.id,
-          playerId: deviceId,
+          playerId: playerUsername || playerName,
           progress,
           score: forcedScore !== undefined ? forcedScore : sessionCorrect,
           isFinished
@@ -1947,7 +1937,7 @@ export default function App() {
   };
 
   const handleResignGroupChallenge = async () => {
-    if (!room?.id || !deviceId) return;
+    if (!room?.id || (!playerUsername && !playerName)) return;
     try {
       const res = await fetch('/api/1v1', {
         method: 'POST',
@@ -1955,7 +1945,7 @@ export default function App() {
         body: JSON.stringify({
           action: 'resign',
           roomId: room.id,
-          playerId: deviceId
+          playerId: playerUsername || playerName
         })
       });
       const data = await res.json();
@@ -2466,7 +2456,7 @@ export default function App() {
     setIsSyncing(true);
     try {
       // 1. Proactive sync of achievement flags before fetching rankings
-      if (deviceId && playerName) {
+      if (playerUsername || playerName) {
         const hasSeerah = userCertificates.some(c => c.category === 'seerah') || 
                           (Boolean(localStorage.getItem('quran_quiz_progress_seerah')) && (() => {
                             try {
@@ -2491,8 +2481,6 @@ export default function App() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              deviceId,
-              playerId: deviceId,
               name: playerName,
               username: playerUsername,
               score: totalPoints,
@@ -2529,7 +2517,6 @@ export default function App() {
       }
 
       const params = new URLSearchParams({ t: Date.now().toString() });
-      if (deviceId) params.append('deviceId', deviceId);
       if (playerName) params.append('name', playerName);
       if (playerUsername) params.append('username', playerUsername);
 
@@ -2566,7 +2553,6 @@ export default function App() {
           localStorage.setItem('quran_user_leaderboard_rank', data.userRank.toString());
         } else if (data.userRank === null) {
           const localIdx = unique.findIndex((p: any) => {
-            if (deviceId && p.deviceId && p.deviceId === deviceId) return true;
             if (playerUsername && p.username && p.username.replace(/^@+/, '').toLowerCase() === playerUsername.replace(/^@+/, '').toLowerCase()) return true;
             if (playerName && p.name && p.name.trim().toLowerCase() === playerName.trim().toLowerCase()) return true;
             return false;
@@ -2579,7 +2565,6 @@ export default function App() {
 
         // Synchronize cups and points from leaderboard for current player
         const myEntry = unique.find((p: any) => {
-          if (deviceId && p.deviceId && p.deviceId === deviceId) return true;
           if (playerUsername && p.username && p.username.replace(/^@+/, '').toLowerCase() === playerUsername.replace(/^@+/, '').toLowerCase()) return true;
           if (playerName && p.name && p.name.trim().toLowerCase() === playerName.trim().toLowerCase()) return true;
           return false;
@@ -2608,7 +2593,7 @@ export default function App() {
     } finally {
       setIsSyncing(false);
     }
-  }, [deviceId, playerName, playerUsername, cups, totalPoints, completedChallengeIds, activeFrame, userCertificates]);
+  }, [playerName, playerUsername, cups, totalPoints, completedChallengeIds, activeFrame, userCertificates]);
 
   useEffect(() => {
     localStorage.setItem('quran_total_points', totalPoints.toString());
@@ -2680,16 +2665,16 @@ export default function App() {
       localStorage.setItem('quran_total_cups', newCupsCount.toString());
       localStorage.setItem('quran_cups', newCupsCount.toString());
 
-      // Sync with backend using deviceId
+      // Sync with backend using player username / name
       fetch('/api/player-score', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          deviceId,
+          username: playerUsername,
+          name: playerName,
           points: score,
           challengeId: currentChallenge?.id,
           roomId: room?.id,
-          playerId: deviceId,
           score: newPoints,
           seerahCompleted: (getActiveAchievement() === 'seerah'),
           generalCompleted: (getActiveAchievement() === 'general'),
@@ -2760,18 +2745,18 @@ export default function App() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            deviceId,
+            username: playerUsername,
+            name: playerName,
             points: newPoints,
             cups: calculatedCups,
             roomId: room?.id,
-            playerId: deviceId,
             score: newPoints
           })
         })
           .catch(err => console.error('Failed to sync retroactive cups:', err));
       }
     }
-  }, [challenges, bestScores, cups, deviceId, totalPoints]);
+  }, [challenges, bestScores, cups, totalPoints, playerUsername, playerName]);
 
 
   const handleDifficultyChange = (newDiff: Difficulty) => {
@@ -4039,13 +4024,13 @@ ${versesList}
                                 {i + 1}
                               </div>
                               <span className="font-bold text-slate-700 text-sm">{p?.name || 'لاعب'}</span>
-                              {p?.deviceId === room?.player1?.deviceId && <span className="mr-auto px-2.5 py-0.5 bg-orange-500 text-white text-[9px] font-black rounded-md uppercase">المنشئ</span>}
+                              {p?.id === room?.player1Id && <span className="mr-auto px-2.5 py-0.5 bg-orange-500 text-white text-[9px] font-black rounded-md uppercase">المنشئ</span>}
                             </motion.div>
                           ))}
                         </div>
                       </div>
 
-                      {room?.player1?.deviceId === deviceId && (
+                      {(room?.player1?.name === playerName || (room?.player1?.username && room?.player1?.username === playerUsername)) && (
                         <button
                           onClick={handleStartRoomV1}
                           disabled={v1IsStartingRoom || (room?.participants?.length || 0) < 2}
@@ -4142,7 +4127,7 @@ ${versesList}
                                     <div className="flex-1">
                                       <div className="font-black text-slate-800 flex justify-between items-center text-sm">
                                         <div className="flex flex-col items-start">
-                                          <span>{p.name} {p.deviceId === deviceId && '(أنت)'}</span>
+                                          <span>{p.name} {(p.name === playerName || (p.username && p.username === playerUsername)) && '(أنت)'}</span>
                                           {!p.isFinished && <span className="text-[10px] text-slate-400 font-bold">جاري الحل...</span>}
                                         </div>
                                         <span className="text-xs text-brand-gold font-bold">النقاط: {p.score}</span>
@@ -4177,12 +4162,14 @@ ${versesList}
                                 hasFinished: !!room?.playersProgress?.[p.id]?.finishTime
                               }))
                               .sort((a: any, b: any) => b.score - a.score)
-                              .map((player: any, index: number) => (
-                                <div key={player.id} className={`flex items-center justify-between p-3.5 border-b border-slate-50 last:border-0 ${player.id === deviceId ? 'bg-emerald-50/50' : ''}`}>
+                              .map((player: any, index: number) => {
+                                const isMe = (player.name === playerName || (player.username && player.username === playerUsername));
+                                return (
+                                <div key={player.id} className={`flex items-center justify-between p-3.5 border-b border-slate-50 last:border-0 ${isMe ? 'bg-emerald-50/50' : ''}`}>
 
                                   <div className="flex items-center gap-3">
                                     <span className="font-black text-slate-300 w-5 text-sm">{index + 1}</span>
-                                    <span className={`font-black text-sm ${player.id === deviceId ? 'text-brand-emerald' : 'text-slate-700'}`}>{player.name} {player.id === deviceId && '(أنت)'}</span>
+                                    <span className={`font-black text-sm ${isMe ? 'text-brand-emerald' : 'text-slate-700'}`}>{player.name} {isMe && '(أنت)'}</span>
                                   </div>
 
                                   <div className="flex items-center gap-4">
@@ -4198,7 +4185,8 @@ ${versesList}
                                     )}
                                   </div>
                                 </div>
-                              ))}
+                                );
+                              })}
                           </div>
 
                           <p className="mt-8 text-slate-400 font-bold text-xs md:text-sm">سيتم عرض النتائج النهائية فور انتهاء الجميع</p>
@@ -4484,7 +4472,6 @@ ${versesList}
                   <SettingsView
                     playerName={playerName}
                     playerUsername={playerUsername}
-                    deviceId={deviceId}
                     totalPoints={totalPoints}
                     cups={cups}
                     activeFrame={activeFrame}
@@ -4519,13 +4506,11 @@ ${versesList}
                       localStorage.setItem('quran_show_decoration', 'true');
 
                       // Immediately sync active frame and achievement to database
-                      if (deviceId || playerName) {
+                      if (playerUsername || playerName) {
                         fetch('/api/player-score', {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({
-                            deviceId,
-                            playerId: deviceId,
                             name: playerName,
                             username: playerUsername,
                             seerahCompleted: cat === 'seerah' || userCertificates.some(c => c.category === 'seerah'),
@@ -4554,13 +4539,11 @@ ${versesList}
                         localStorage.removeItem('quran_show_decoration');
                       }
 
-                      if (deviceId || playerName) {
+                      if (playerUsername || playerName) {
                         fetch('/api/player-score', {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({
-                            deviceId,
-                            playerId: deviceId,
                             name: playerName,
                             username: playerUsername,
                             activeFrame: frame || 'none'
@@ -4573,6 +4556,7 @@ ${versesList}
                       setPlayerUsername(null);
                       localStorage.removeItem('quran_player_name');
                       localStorage.removeItem('quran_player_username');
+                      localStorage.removeItem('quran_device_id');
                       setView('home');
                     }}
                     onBackToHome={() => setView('home')}
@@ -6809,13 +6793,11 @@ ${versesList}
                   localStorage.setItem('quran_name_decorated', 'true');
 
                   // Immediately sync to server so others see the frame in the leaderboard
-                  if (deviceId || playerName) {
+                  if (playerUsername || playerName) {
                     fetch('/api/player-score', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({
-                        deviceId,
-                        playerId: deviceId,
                         name: playerName,
                         username: playerUsername,
                         seerahCompleted: category === 'seerah' || userCertificates.some(c => c.category === 'seerah'),

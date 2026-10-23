@@ -48,7 +48,7 @@ model Challenge {
 
 model Player {
   id                    Int      @id @default(autoincrement())
-  deviceId              String   @unique
+  deviceId              String?  @unique
   name                  String
   username              String?  @unique
   password              String?  @default("1234")

@@ -11,9 +11,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const {
     action,
-    deviceId,
     name,
     username,
+    currentUsername,
+    currentName,
     password,
     currentPassword,
     newPassword
@@ -58,7 +59,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       }
 
-      // Check password (default password for existing users without password is '1234')
+      // Check password (default password for legacy users without password is '1234')
       const effectivePassword = player.password || '1234';
       if (effectivePassword !== inputPass) {
         return res.status(401).json({
@@ -66,27 +67,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       }
 
-      // If logging in from this device, bind deviceId to current player
-      let targetPlayer = player;
-      if (deviceId && player.deviceId !== deviceId) {
-        // Handle deviceId uniqueness constraint: displace conflicting record if any
-        const conflict = await prisma.player.findUnique({ where: { deviceId } });
-        if (conflict && conflict.id !== player.id) {
-          await prisma.player.update({
-            where: { id: conflict.id },
-            data: { deviceId: `dev_${conflict.id}_${Date.now()}` }
-          });
-        }
-
-        targetPlayer = await prisma.player.update({
-          where: { id: player.id },
-          data: { deviceId }
-        });
-      }
-
       return res.status(200).json({
         success: true,
-        player: targetPlayer
+        player
       });
     }
 
@@ -94,8 +77,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // 2. CHANGE PASSWORD MODE (تغيير كلمة المرور)
     // ==========================================
     if (action === 'change-password') {
-      if (!deviceId) {
-        return res.status(400).json({ error: 'معرف الجهاز مطلوب' });
+      const targetUser = (username || name || currentUsername || '').trim();
+      const cleanUser = targetUser.replace(/^@+/, '');
+
+      if (!cleanUser) {
+        return res.status(400).json({ error: 'اسم المستخدم مطلوب لتغيير كلمة المرور' });
       }
 
       const curPass = (currentPassword || '').trim();
@@ -108,7 +94,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({ error: 'كلمة المرور الجديدة يجب أن تتكون من 4 خانات على الأقل' });
       }
 
-      const player = await prisma.player.findUnique({ where: { deviceId } });
+      const player = await prisma.player.findFirst({
+        where: {
+          OR: [
+            { username: cleanUser },
+            { username: '@' + cleanUser },
+            { name: { equals: targetUser, mode: 'insensitive' } }
+          ]
+        }
+      });
+
       if (!player) {
         return res.status(404).json({ error: 'لم يتم العثور على حساب اللاعب' });
       }
@@ -134,11 +129,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // 3. UPDATE PROFILE MODE (تغيير الاسم واسم المستخدم)
     // ==========================================
     if (action === 'update-profile') {
-      if (!deviceId) {
-        return res.status(400).json({ error: 'معرف الجهاز مطلوب' });
+      const targetUser = (currentUsername || username || currentName || name || '').trim();
+      const cleanTarget = targetUser.replace(/^@+/, '');
+
+      if (!cleanTarget) {
+        return res.status(400).json({ error: 'بيانات الحساب الحالي مطلوبة' });
       }
 
-      const player = await prisma.player.findUnique({ where: { deviceId } });
+      const player = await prisma.player.findFirst({
+        where: {
+          OR: [
+            { username: cleanTarget },
+            { username: '@' + cleanTarget },
+            { name: { equals: targetUser, mode: 'insensitive' } }
+          ]
+        }
+      });
+
       if (!player) {
         return res.status(404).json({ error: 'لم يتم العثور على حساب اللاعب' });
       }
@@ -224,7 +231,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const cleanUsername = (username || '').trim().replace(/^@+/, '');
     const userPass = (password || '').trim() || '1234';
 
-    if (!deviceId || !trimmedName) {
+    if (!trimmedName) {
       return res.status(400).json({
         error: 'يرجى إدخال الاسم'
       });
@@ -242,14 +249,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    // Check if the username is already taken by a DIFFERENT player
+    // Check if the username is already taken
     const existingPlayerWithUsername = await prisma.player.findFirst({
       where: {
         OR: [
           { username: cleanUsername },
           { username: '@' + cleanUsername }
-        ],
-        NOT: { deviceId }
+        ]
       }
     });
 
@@ -260,11 +266,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    // Check if the display name is already taken by a DIFFERENT device
+    // Check if the display name is already taken
     const existingPlayerWithName = await prisma.player.findFirst({
       where: {
-        name: { equals: trimmedName, mode: 'insensitive' },
-        NOT: { deviceId }
+        name: { equals: trimmedName, mode: 'insensitive' }
       }
     });
 
@@ -275,15 +280,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    const player = await prisma.player.upsert({
-      where: { deviceId },
-      update: {
-        name: trimmedName,
-        username: cleanUsername,
-        password: userPass
-      },
-      create: {
-        deviceId,
+    const player = await prisma.player.create({
+      data: {
         name: trimmedName,
         username: cleanUsername,
         password: userPass

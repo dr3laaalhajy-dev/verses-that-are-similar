@@ -17,7 +17,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         { points: 'desc' }
       ],
       select: {
-        deviceId: true,
         name: true,
         username: true,
         points: true,
@@ -44,9 +43,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         existing.points = Math.max(existing.points || 0, player.points || 0)
         existing.seerahCompleted = existing.seerahCompleted || player.seerahCompleted
         existing.generalCompleted = existing.generalCompleted || player.generalCompleted
-        if (player.deviceId && !existing.deviceId) {
-          existing.deviceId = player.deviceId
-        }
         if (player.activeFrame) {
           existing.activeFrame = player.activeFrame
         }
@@ -62,16 +58,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const totalUsers = allSorted.length
 
     // Calculate current user's rank across all users
-    const { deviceId, name, username } = req.query
+    const { name, username } = req.query
     let userRank: number | null = null
 
-    if (deviceId || name || username) {
-      const qDev = typeof deviceId === 'string' ? deviceId.trim() : ''
+    if (name || username) {
       const qUser = typeof username === 'string' ? username.replace(/^@+/, '').trim().toLowerCase() : ''
       const qName = typeof name === 'string' ? name.trim().toLowerCase() : ''
 
       const idx = allSorted.findIndex((p: any) => {
-        if (qDev && p.deviceId && p.deviceId === qDev) return true
         if (qUser && p.username && p.username.replace(/^@+/, '').trim().toLowerCase() === qUser) return true
         if (qName && p.name && p.name.trim().toLowerCase() === qName) return true
         return false

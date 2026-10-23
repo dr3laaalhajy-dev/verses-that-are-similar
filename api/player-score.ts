@@ -6,26 +6,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // Handle GET request to retrieve player stats
   if (req.method === 'GET') {
-    const { deviceId, playerId, username, name } = req.query;
-    const targetId = (deviceId || playerId) as string | undefined;
+    const { playerId, username, name } = req.query;
+    const cleanU = String(username || '').trim().replace(/^@+/, '');
+    const cleanN = String(name || '').trim();
+    const numId = Number(playerId);
 
     try {
-      let player = targetId ? await prisma.player.findUnique({
-        where: { deviceId: targetId }
-      }) : null;
-
-      if (!player && (username || name)) {
-        const cleanU = String(username || '').trim().replace(/^@+/, '');
-        const cleanN = String(name || '').trim();
-        player = await prisma.player.findFirst({
-          where: {
-            OR: [
-              ...(cleanU ? [{ username: cleanU }, { username: '@' + cleanU }] : []),
-              ...(cleanN ? [{ name: { equals: cleanN, mode: 'insensitive' as const } }] : [])
-            ] as any
-          }
-        });
-      }
+      let player = await prisma.player.findFirst({
+        where: {
+          OR: [
+            ...(cleanU ? [{ username: cleanU }, { username: '@' + cleanU }] : []),
+            ...(cleanN ? [{ name: { equals: cleanN, mode: 'insensitive' as const } }] : []),
+            ...(Number.isInteger(numId) && numId > 0 ? [{ id: numId }] : [])
+          ] as any
+        }
+      });
 
       if (!player) {
         return res.status(404).json({ message: 'Player not found' });
@@ -42,7 +37,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ message: 'Method not allowed' });
   }
 
-  const { roomId, playerId, score, deviceId, points, challengeId, seerahCompleted, generalCompleted, quranCompleted, activeFrame, name, username } = req.body
+  const { roomId, playerId, score, points, challengeId, seerahCompleted, generalCompleted, quranCompleted, activeFrame, name, username } = req.body
 
   // 1. Handle Room-based Score Update
   if (roomId) {
@@ -54,7 +49,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const room = await prisma.room.findUnique({ where: { id: roomId } });
       if (!room) return res.status(404).json({ error: 'Room not found' });
 
-      const player = await prisma.player.findUnique({ where: { deviceId: playerId } });
+      const cleanP = String(playerId).trim().replace(/^@+/, '');
+      const numId = Number(playerId);
+
+      const player = await prisma.player.findFirst({
+        where: {
+          OR: [
+            { username: cleanP },
+            { username: '@' + cleanP },
+            { name: { equals: String(playerId), mode: 'insensitive' as const } },
+            ...(Number.isInteger(numId) && numId > 0 ? [{ id: numId }] : [])
+          ] as any
+        }
+      });
+
       if (!player) return res.status(404).json({ error: 'Player not found' });
 
       let playersProgress = room.playersProgress as any || {};
@@ -81,35 +89,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
-  // 2. Fallback to existing Single-player Score Update (using deviceId)
-  const targetId = deviceId || playerId;
-  if (!targetId && !username && !name) {
-    return res.status(400).json({ message: 'Missing deviceId, username, or name' })
+  // 2. Single-player Score Update
+  const cleanU = (username || '').trim().replace(/^@+/, '');
+  const cleanN = (name || '').trim();
+  const numId = Number(playerId);
+
+  if (!cleanU && !cleanN && (!numId || isNaN(numId))) {
+    return res.status(400).json({ message: 'Missing username or name' })
   }
 
   try {
-    let player = targetId ? await prisma.player.findUnique({
-      where: { deviceId: targetId }
-    }) : null;
-
-    if (!player && (username || name)) {
-      const cleanU = (username || '').trim().replace(/^@+/, '');
-      const cleanN = (name || '').trim();
-      player = await prisma.player.findFirst({
-        where: {
-          OR: [
-            ...(cleanU ? [{ username: cleanU }, { username: '@' + cleanU }] : []),
-            ...(cleanN ? [{ name: { equals: cleanN, mode: 'insensitive' as const } }] : [])
-          ] as any
-        }
-      });
-      if (player && targetId) {
-        await prisma.player.update({
-          where: { id: player.id },
-          data: { deviceId: targetId }
-        });
+    let player = await prisma.player.findFirst({
+      where: {
+        OR: [
+          ...(cleanU ? [{ username: cleanU }, { username: '@' + cleanU }] : []),
+          ...(cleanN ? [{ name: { equals: cleanN, mode: 'insensitive' as const } }] : []),
+          ...(Number.isInteger(numId) && numId > 0 ? [{ id: numId }] : [])
+        ] as any
       }
-    }
+    });
 
     if (!player) {
       return res.status(404).json({ message: 'Player not found' })

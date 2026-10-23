@@ -28,7 +28,6 @@ import {
 interface SettingsViewProps {
   playerName: string | null;
   playerUsername: string | null;
-  deviceId: string;
   totalPoints: number;
   cups: number;
   activeFrame: string | null;
@@ -49,7 +48,6 @@ interface SettingsViewProps {
 export const SettingsView: React.FC<SettingsViewProps> = ({
   playerName,
   playerUsername,
-  deviceId,
   totalPoints,
   cups,
   activeFrame,
@@ -194,7 +192,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'update-profile',
-          deviceId,
+          currentUsername: playerUsername,
+          currentName: playerName,
           name: nameInput.trim(),
           username: cleanNew
         })
@@ -248,7 +247,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'change-password',
-          deviceId,
+          username: playerUsername,
+          name: playerName,
           currentPassword: currentPassword.trim(),
           newPassword: newPassword.trim()
         })
@@ -1232,7 +1232,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </button>
 
           <div className="text-center sm:text-right text-xs text-slate-400 font-bold">
-            معرف الجهاز: <span className="font-mono text-slate-500">{deviceId.slice(0, 16)}...</span>
+            الحساب: <span className="font-semibold text-emerald-600">@{playerUsername || playerName}</span>
           </div>
         </div>
       </div>
