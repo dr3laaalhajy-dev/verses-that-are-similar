@@ -167,7 +167,7 @@ export default function AdminDashboard({
     }
   }, [canManageTestersTab, token, fetchTesters]);
 
-  const handleTesterAction = async (subAction: 'approve' | 'reject' | 'delete' | 'reset-status' | 'approve-all', testerId?: number) => {
+  const handleTesterAction = async (subAction: 'approve' | 'reject' | 'delete' | 'reset-status' | 'approve-all' | 'mark-copied' | 'clear-approved' | 'delete-approved' | 'reset-to-approved', testerId?: number) => {
     if (!token) return;
     setTesterActionLoading(testerId ?? subAction);
     try {
@@ -220,12 +220,21 @@ export default function AdminDashboard({
     }
   };
 
+  const [showExportedTesters, setShowExportedTesters] = useState(false);
+  const [isClearingApproved, setIsClearingApproved] = useState(false);
+
   const pendingTestersList = useMemo(() => {
     return testersList.filter(t => t.status === 'PENDING' || !t.status);
   }, [testersList]);
 
+  // Newly approved testers waiting to be copied into Google Play Console
   const approvedTestersList = useMemo(() => {
     return testersList.filter(t => t.status === 'APPROVED');
+  }, [testersList]);
+
+  // Already copied / added to Google Play Console previously
+  const exportedTestersList = useMemo(() => {
+    return testersList.filter(t => t.status === 'EXPORTED' || t.status === 'ADDED');
   }, [testersList]);
 
   const approvedEmailsCsv = useMemo(() => {
@@ -233,11 +242,23 @@ export default function AdminDashboard({
     return emails.join(', ');
   }, [testersList]);
 
-  const copyApprovedEmails = () => {
+  const copyApprovedEmails = async () => {
     if (!approvedEmailsCsv) return;
-    navigator.clipboard.writeText(approvedEmailsCsv);
+    try {
+      await navigator.clipboard.writeText(approvedEmailsCsv);
+    } catch {
+      // Fallback
+    }
     setCopiedEmailsSuccess(true);
-    setTimeout(() => setCopiedEmailsSuccess(false), 3000);
+    setTimeout(() => setCopiedEmailsSuccess(false), 3500);
+
+    // Automatically remove them from the active list below so Google Play Console won't reject duplicate emails!
+    setIsClearingApproved(true);
+    try {
+      await handleTesterAction('mark-copied');
+    } finally {
+      setIsClearingApproved(false);
+    }
   };
 
   const filteredPendingTesters = useMemo(() => {
@@ -246,6 +267,10 @@ export default function AdminDashboard({
 
   const filteredApprovedTesters = useMemo(() => {
     return testersList.filter(t => t.status === 'APPROVED' && (!testersSearch || t.email.toLowerCase().includes(testersSearch.toLowerCase())));
+  }, [testersList, testersSearch]);
+
+  const filteredExportedTesters = useMemo(() => {
+    return testersList.filter(t => (t.status === 'EXPORTED' || t.status === 'ADDED') && (!testersSearch || t.email.toLowerCase().includes(testersSearch.toLowerCase())));
   }, [testersList, testersSearch]);
 
   // Global settings state
@@ -2156,38 +2181,48 @@ export default function AdminDashboard({
                 <div className="p-5 md:p-6 bg-gradient-to-r from-emerald-950 via-slate-900 to-teal-950 text-white">
                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <h4 className="font-black text-sm md:text-base text-white">
                           قائمة البريد المباشرة لـ Google Play Console (مفصولة بفواصل)
                         </h4>
-                        <span className="text-[10px] px-2 py-0.5 rounded-full font-black bg-brand-gold text-slate-950">
-                          {approvedTestersList.length} مختبر معتمد
+                        <span className="text-[10px] px-2.5 py-0.5 rounded-full font-black bg-brand-gold text-slate-950">
+                          {approvedTestersList.length} مختبر معتمد جديد
                         </span>
+                        {exportedTestersList.length > 0 && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full font-black bg-white/10 text-emerald-200 border border-white/10">
+                            {exportedTestersList.length} أُضيفوا سابقاً
+                          </span>
+                        )}
                       </div>
                       <p className="text-xs text-emerald-100/80 font-medium mt-1">
-                        انسخ هذه القائمة والصقها مباشرة في «قائمة البريد الإلكتروني» (Email List) داخل Google Play Console لتفعيل وصول المختبرين
+                        💡 انسخ هذه القائمة والصقها في Google Play Console. سيتم نسخ الإيميلات وحذفها تلقائياً من القائمة أدناه حتى لا تظهر مجدداً أو تتكرر في Console وتسبب خطأ.
                       </p>
                     </div>
 
                     <button
                       type="button"
                       onClick={copyApprovedEmails}
-                      disabled={!approvedEmailsCsv}
+                      disabled={!approvedEmailsCsv || isClearingApproved}
                       className={`px-5 py-3 rounded-xl font-black text-xs md:text-sm transition-all flex items-center justify-center gap-2 shrink-0 cursor-pointer ${
                         copiedEmailsSuccess
                           ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
                           : 'bg-gradient-to-r from-brand-gold to-amber-500 hover:from-amber-400 hover:to-amber-500 text-slate-900 shadow-md active:scale-95 disabled:opacity-50'
                       }`}
                     >
-                      {copiedEmailsSuccess ? (
+                      {isClearingApproved ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>جاري النسخ والحذف...</span>
+                        </>
+                      ) : copiedEmailsSuccess ? (
                         <>
                           <Check className="w-4 h-4" />
-                          <span>تم النسخ بنجاح!</span>
+                          <span>تم النسخ وحذفها من القائمة!</span>
                         </>
                       ) : (
                         <>
                           <Copy className="w-4 h-4" />
-                          <span>نسخ جميع الإيميلات المقبولة</span>
+                          <span>نسخ جميع الإيميلات وحذفها من القائمة</span>
                         </>
                       )}
                     </button>
@@ -2197,7 +2232,7 @@ export default function AdminDashboard({
                   <div className="mt-4 bg-slate-950/70 border border-emerald-500/30 rounded-xl p-3.5">
                     <textarea
                       readOnly
-                      value={approvedEmailsCsv || 'لا توجد إيميلات مقبولة حالياً. عند الضغط على «قبول» لأي طلب، سيظهر بريده هنا فوراً مفصولاً بفاصلة.'}
+                      value={approvedEmailsCsv || 'لا توجد إيميلات مقبولة جديدة بانتظار الإضافة. عند الضغط على «قبول» لأي طلب، سيظهر بريده هنا فوراً، وفور نسخه سيُحذف تلقائياً من القائمة.'}
                       className="w-full bg-transparent text-xs text-emerald-200/90 font-mono resize-none focus:outline-none select-all"
                       rows={3}
                       dir="ltr"
@@ -2207,18 +2242,24 @@ export default function AdminDashboard({
 
                 {/* Approved Testers List */}
                 <div className="p-5 md:p-6 border-b border-slate-100 flex items-center justify-between">
-                  <h5 className="font-black text-xs md:text-sm text-slate-700">
-                    تفاصيل المختبرين المقبولين ({filteredApprovedTesters.length})
-                  </h5>
-                  <span className="text-xs text-slate-400 font-bold">
-                    يمكن للمستخدمين المقبولين الآن فتح صفحة التثبيت مباشرة
+                  <div>
+                    <h5 className="font-black text-xs md:text-sm text-slate-700">
+                      المختبرون المقبولون الجدد بانتظار النسخ ({filteredApprovedTesters.length})
+                    </h5>
+                    <p className="text-[11px] text-slate-400 font-medium mt-0.5">
+                      تُحذف الإيميلات تلقائياً من هنا فور نسخها لتفادي إرسالها لـ Google Play أكثر من مرة
+                    </p>
+                  </div>
+                  <span className="text-xs text-emerald-600 font-bold bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-100 hidden sm:inline-block">
+                    وصول التطبيق مفعل لديهم
                   </span>
                 </div>
 
                 {filteredApprovedTesters.length === 0 ? (
                   <div className="py-12 text-center text-slate-400">
-                    <Mail className="w-10 h-10 text-slate-300 mx-auto mb-2 opacity-60" />
-                    <p className="font-bold text-xs">لا يوجد مختبرين مقبولين يطابقون البحث</p>
+                    <CheckCircle className="w-10 h-10 text-emerald-300 mx-auto mb-2 opacity-70" />
+                    <p className="font-bold text-xs text-slate-600">لا توجد إيميلات مقبولة جديدة بحاجة للنسخ</p>
+                    <p className="text-[11px] text-slate-400 mt-1">كافة الإيميلات المقبولة تم نسخها وحذفها من القائمة السابقة بنجاح</p>
                   </div>
                 ) : (
                   <div className="divide-y divide-slate-100 max-h-96 overflow-y-auto">
@@ -2234,7 +2275,7 @@ export default function AdminDashboard({
                                 {tester.email}
                               </span>
                               <span className="text-[10px] px-2 py-0.5 rounded-full font-black bg-emerald-100 text-emerald-800 border border-emerald-200">
-                                مقبول ومفعل
+                                جديد بانتظار الإضافة
                               </span>
                             </div>
                             <p className="text-[11px] text-slate-400 font-medium mt-0.5">
@@ -2261,13 +2302,76 @@ export default function AdminDashboard({
                             onClick={() => handleTesterAction('delete', tester.id)}
                             disabled={testerActionLoading === tester.id}
                             className="p-1.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                            title="حذف من القائمة"
+                            title="حذف من القائمة نهائياً"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
                       </div>
                     ))}
+                  </div>
+                )}
+
+                {/* Collapsible Archive: Exported / Already Added Testers */}
+                {exportedTestersList.length > 0 && (
+                  <div className="border-t border-slate-200 bg-slate-50/60 p-4 sm:p-5">
+                    <div className="flex items-center justify-between gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setShowExportedTesters(!showExportedTesters)}
+                        className="flex items-center gap-2 text-xs md:text-sm font-black text-slate-700 hover:text-brand-emerald cursor-pointer"
+                      >
+                        <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${showExportedTesters ? 'rotate-180' : ''}`} />
+                        <span>سجل المختبرين المضافين مسبقاً لـ Google Play ({exportedTestersList.length})</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (confirm('هل أنت متأكد من رغبتك في حذف جميع المختبرين المضافين مسبقاً نهائياً من قاعدة البيانات؟')) {
+                            handleTesterAction('delete-approved');
+                          }
+                        }}
+                        disabled={testerActionLoading === 'delete-approved'}
+                        className="text-[11px] text-rose-600 hover:text-rose-700 font-bold hover:underline cursor-pointer"
+                      >
+                        حذف السجل نهائياً
+                      </button>
+                    </div>
+
+                    {showExportedTesters && (
+                      <div className="mt-3 divide-y divide-slate-200/70 bg-white rounded-xl border border-slate-200 overflow-hidden max-h-72 overflow-y-auto">
+                        {filteredExportedTesters.map((tester) => (
+                          <div key={tester.id} className="p-3 sm:p-3.5 flex items-center justify-between gap-3 text-xs">
+                            <div className="flex items-center gap-2.5">
+                              <span className="w-2 h-2 rounded-full bg-slate-400 shrink-0" />
+                              <span className="font-mono text-slate-700 select-all" dir="ltr">{tester.email}</span>
+                              <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                                مضاف لـ Google Play
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => handleTesterAction('reset-to-approved', tester.id)}
+                                className="text-[11px] text-emerald-700 hover:underline font-bold cursor-pointer"
+                                title="إعادة إلى قائمة النسخ إذا أردت نسخه مجدداً"
+                              >
+                                إعادة للنسخ
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleTesterAction('delete', tester.id)}
+                                className="p-1 text-slate-300 hover:text-rose-500 cursor-pointer"
+                                title="حذف نهائي"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

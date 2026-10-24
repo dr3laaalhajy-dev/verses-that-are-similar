@@ -23,11 +23,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             status: 'NOT_FOUND'
           });
         }
+        const isApproved = tester.status === 'APPROVED' || tester.status === 'EXPORTED' || tester.status === 'ADDED';
         return res.status(200).json({
           success: true,
           registered: true,
-          status: tester.status || 'PENDING',
-          internalTestUrl: tester.status === 'APPROVED' ? INTERNAL_TEST_URL : null,
+          status: isApproved ? 'APPROVED' : (tester.status || 'PENDING'),
+          internalTestUrl: isApproved ? INTERNAL_TEST_URL : null,
           createdAt: tester.createdAt,
           approvedAt: tester.approvedAt
         });
@@ -61,7 +62,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
 
       if (existing) {
-        if (existing.status === 'APPROVED') {
+        const isApproved = existing.status === 'APPROVED' || existing.status === 'EXPORTED' || existing.status === 'ADDED';
+        if (isApproved) {
           return res.status(200).json({
             success: true,
             status: 'APPROVED',

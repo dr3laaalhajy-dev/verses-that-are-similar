@@ -583,6 +583,47 @@ async function handleTesters(req: VercelRequest, res: VercelResponse, currentAdm
         return res.status(200).json({ success: true, message: 'تم قبول جميع الطلبات المعلقة بنجاح' });
       }
 
+      if (subAction === 'clear-approved' || subAction === 'mark-copied') {
+        // Marks all currently APPROVED testers as EXPORTED so they are cleared from the copy queue and won't be copied twice into Google Play Console
+        const result = await (prisma as any).appTester.updateMany({
+          where: { status: 'APPROVED' },
+          data: { status: 'EXPORTED' }
+        });
+        return res.status(200).json({
+          success: true,
+          message: `تم نسخ وإزالة ${result.count} إيميل من قائمة المقبولين بنجاح حتى لا تتكرر في Google Play`,
+          count: result.count
+        });
+      }
+
+      if (subAction === 'delete-approved') {
+        // Permanently deletes all approved/exported testers from the database
+        const result = await (prisma as any).appTester.deleteMany({
+          where: {
+            OR: [
+              { status: 'APPROVED' },
+              { status: 'EXPORTED' },
+              { status: 'ADDED' }
+            ]
+          }
+        });
+        return res.status(200).json({
+          success: true,
+          message: `تم حذف ${result.count} مختبر نهائياً من قاعدة البيانات`,
+          count: result.count
+        });
+      }
+
+      if (subAction === 'reset-to-approved') {
+        const id = Number(testerId);
+        if (!id) return res.status(400).json({ message: 'معرّف الطلب غير صالح' });
+        const updated = await (prisma as any).appTester.update({
+          where: { id },
+          data: { status: 'APPROVED' }
+        });
+        return res.status(200).json({ success: true, message: 'تمت إعادة الطلب إلى قائمة المقبولين للنسخ', tester: updated });
+      }
+
       if (subAction === 'add-manual') {
         const clean = (email || '').trim().toLowerCase();
         if (!clean || !clean.includes('@') || !clean.includes('.')) {
