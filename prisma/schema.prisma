@@ -103,3 +103,9 @@ model SystemSetting {
   updatedAt               DateTime @updatedAt
 }
 
+model AppTester {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  createdAt DateTime @default(now())
+}
+
