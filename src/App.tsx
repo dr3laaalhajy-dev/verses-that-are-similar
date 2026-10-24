@@ -45,6 +45,7 @@ import { generateCompletionChallenges } from './services/challengeGenerator';
 import SettingsView from './components/Settings/SettingsView';
 import IslamicOccasionsModal from './components/IslamicOccasionsModal';
 import { AppDownloadModal } from './components/AppDownloadModal';
+import { GooglePlayTesterModal, GooglePlayButton, GooglePlayLogo } from './components/GooglePlayTesterModal';
 import { PrivacyModal } from './components/PrivacyModal';
 import { defaultChallenges } from './data/defaultChallenges';
 import { PullToRefresh } from './components/PullToRefresh';
@@ -841,6 +842,8 @@ export default function App() {
     } catch {}
   }, []);
 
+  // Google Play Testers state & automatic real-time sync
+  const [showGooglePlayModal, setShowGooglePlayModal] = useState(false);
   const [testerEmail, setTesterEmail] = useState(() => {
     try {
       return localStorage.getItem('mateen_tester_email') || '';
@@ -870,7 +873,7 @@ export default function App() {
           setTesterMessage('طلبك قيد المراجعة أو تم رفضه. يمكنك إرسال طلب جديد.');
         } else {
           setTesterStatus('pending');
-          setTesterMessage('طلبك قيد المراجعة حالياً من قبل الإدارة. سيتم تفعيله وإظهار رابط التثبيت هنا فور الموافقة عليه.');
+          setTesterMessage('طلبك قيد المراجعة حالياً من قبل الإدارة. سيتم تفعيل حسابك وإظهار رابط التثبيت تلقائياً فور الموافقة عليه.');
         }
       } else {
         if (!isSilent) {
@@ -884,12 +887,38 @@ export default function App() {
     }
   }, []);
 
+  // Automatic real-time status polling:
+  // When an email exists and is not yet approved, poll in background every 5 seconds
+  // and when window gains focus, so status updates automatically without user intervention!
   useEffect(() => {
-    const saved = localStorage.getItem('mateen_tester_email');
-    if (saved) {
-      checkTesterStatus(saved, true);
-    }
-  }, [checkTesterStatus]);
+    const saved = localStorage.getItem('mateen_tester_email') || testerEmail;
+    if (!saved) return;
+
+    // Immediate check
+    checkTesterStatus(saved, true);
+
+    if (testerStatus === 'approved') return;
+
+    const timer = setInterval(() => {
+      const currentSaved = localStorage.getItem('mateen_tester_email') || testerEmail;
+      if (currentSaved) {
+        checkTesterStatus(currentSaved, true);
+      }
+    }, 5000);
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        const currentSaved = localStorage.getItem('mateen_tester_email') || testerEmail;
+        if (currentSaved) checkTesterStatus(currentSaved, true);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [testerEmail, testerStatus, checkTesterStatus]);
 
   const handleRegisterTester = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -4955,166 +4984,13 @@ ${versesList}
                       )}
                     </div>
 
-                    {/* Google Play Beta Testing Banner (Web Version Only) */}
+                    {/* Google Play Tester Button at the bottom (Web Version Only) */}
                     {!isNativeApp && (
-                      <div className="px-1 mt-2">
-                        <motion.div
-                          initial={{ opacity: 0, y: 12 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          className="bg-gradient-to-br from-emerald-950 via-slate-900 to-teal-950 rounded-2xl md:rounded-3xl p-5 sm:p-6 text-white shadow-2xl border border-emerald-500/30 relative overflow-hidden"
-                        >
-                          {/* Ambient background glow */}
-                          <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
-                          <div className="absolute bottom-0 left-0 w-48 h-48 bg-brand-gold/10 rounded-full blur-2xl pointer-events-none" />
-
-                          <div className="relative z-10 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
-                            {/* Header & Description */}
-                            <div className="flex items-start gap-4 text-right flex-1">
-                              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-gradient-to-tr from-brand-emerald to-emerald-600/60 border border-emerald-400/30 flex items-center justify-center shrink-0 shadow-lg shadow-emerald-950/40">
-                                <Smartphone className="w-6 h-6 sm:w-7 sm:h-7 text-brand-gold animate-pulse" />
-                              </div>
-                              <div>
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <h4 className="font-black text-base sm:text-lg md:text-xl text-white">
-                                    جرّب تطبيق «متين» الآن على Google Play
-                                  </h4>
-                                  <span className="bg-brand-gold/20 text-brand-gold text-[10px] sm:text-xs font-black px-2.5 py-0.5 rounded-full border border-brand-gold/40">
-                                    نسخة تجريبية 1.0.1
-                                  </span>
-                                </div>
-                                <p className="text-xs sm:text-sm text-emerald-100/80 font-medium mt-1 leading-relaxed max-w-2xl">
-                                  يسعدنا انضمامك لقائمة المختبرين! أدخل بريدك الإلكتروني (Gmail) لتقديم طلب انضمام للتجربة، وسيتم تفعيل حسابك واعتماده من قبل الإدارة.
-                                </p>
-                              </div>
-                            </div>
-
-                            {/* Interaction area */}
-                            <div className="w-full lg:w-auto shrink-0 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                              {testerStatus === 'approved' ? (
-                                <div className="flex flex-col sm:flex-row items-center gap-2.5 w-full">
-                                  <a
-                                    href={internalTestLink}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="w-full sm:w-auto px-5 py-3 bg-gradient-to-r from-brand-gold to-amber-500 hover:from-amber-400 hover:to-amber-500 text-slate-900 rounded-xl font-black text-xs sm:text-sm shadow-lg hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-2"
-                                  >
-                                    <span>افتح الرابط (Google Play)</span>
-                                    <ExternalLink className="w-4 h-4" />
-                                  </a>
-                                  <button
-                                    onClick={handleResetTesterForm}
-                                    className="text-xs text-emerald-200/80 hover:text-white underline px-2 py-1"
-                                  >
-                                    تسجيل بريد آخر
-                                  </button>
-                                </div>
-                              ) : testerStatus === 'pending' ? (
-                                <div className="flex flex-col sm:flex-row items-center gap-2.5 w-full">
-                                  <button
-                                    type="button"
-                                    onClick={() => checkTesterStatus(testerEmail)}
-                                    disabled={isCheckingSavedStatus}
-                                    className="w-full sm:w-auto px-5 py-2.5 sm:py-3 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/50 text-amber-300 rounded-xl font-black text-xs sm:text-sm transition-all flex items-center justify-center gap-2"
-                                  >
-                                    <RefreshCw className={`w-4 h-4 ${isCheckingSavedStatus ? 'animate-spin' : ''}`} />
-                                    <span>تحديث حالة الطلب</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={handleResetTesterForm}
-                                    className="text-xs text-emerald-200/80 hover:text-white underline px-2 py-1"
-                                  >
-                                    تغيير البريد
-                                  </button>
-                                </div>
-                              ) : (
-                                <form onSubmit={handleRegisterTester} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full">
-                                  <div className="relative flex-1 sm:w-72">
-                                    <Mail className="w-4 h-4 text-emerald-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-                                    <input
-                                      type="email"
-                                      value={testerEmail}
-                                      onChange={(e) => setTesterEmail(e.target.value)}
-                                      placeholder="أدخل بريدك الإلكتروني (Gmail)..."
-                                      className="w-full bg-slate-900/80 border border-emerald-500/40 focus:border-brand-gold rounded-xl py-2.5 pr-10 pl-3 text-xs sm:text-sm text-white placeholder-slate-400 focus:outline-none transition-all"
-                                      dir="ltr"
-                                    />
-                                  </div>
-                                  <button
-                                    type="submit"
-                                    disabled={testerStatus === 'loading'}
-                                    className="px-5 py-2.5 sm:py-3 bg-gradient-to-r from-brand-gold to-amber-500 hover:from-amber-400 hover:to-amber-500 disabled:opacity-50 text-slate-900 rounded-xl font-black text-xs sm:text-sm shadow-md hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-2 shrink-0 cursor-pointer"
-                                  >
-                                    {testerStatus === 'loading' ? (
-                                      <>
-                                        <Loader2 className="w-4 h-4 animate-spin text-slate-900" />
-                                        <span>جاري إرسال الطلب...</span>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <Send className="w-4 h-4 text-slate-900" />
-                                        <span>طلب انضمام للتجربة</span>
-                                      </>
-                                    )}
-                                  </button>
-                                </form>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Status messages / Feedback */}
-                          {(testerMessage || testerStatus === 'pending' || testerStatus === 'approved') && (
-                            <div className={`mt-3 pt-3 border-t border-white/10 flex items-center gap-2 text-xs font-bold ${
-                              testerStatus === 'approved' ? 'text-emerald-300' : testerStatus === 'pending' ? 'text-amber-300' : 'text-rose-300'
-                            }`}>
-                              {testerStatus === 'approved' ? (
-                                <CheckCircle className="w-4 h-4 shrink-0 text-emerald-400" />
-                              ) : testerStatus === 'pending' ? (
-                                <Clock className="w-4 h-4 shrink-0 text-amber-400" />
-                              ) : (
-                                <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
-                              )}
-                              <span>
-                                {testerStatus === 'approved'
-                                  ? (testerMessage || 'تم قبولك! افتح الرابط لتثبيت تطبيق متين على Google Play.')
-                                  : testerStatus === 'pending'
-                                  ? (testerMessage || 'طلبك قيد المراجعة حالياً من قبل الإدارة. سيظهر لك رابط التثبيت فور قبول طلبك.')
-                                  : testerMessage}
-                              </span>
-                            </div>
-                          )}
-
-                          {/* Quick Secondary Links: Direct APK download & Share */}
-                          <div className="mt-4 pt-3 border-t border-white/10 flex flex-wrap items-center justify-between gap-3 text-xs text-emerald-200/80">
-                            <div className="flex items-center gap-2">
-                              <span>أو يمكنك أيضاً:</span>
-                              <button
-                                onClick={() => setShowDownloadModal(true)}
-                                className="text-brand-gold hover:underline font-bold flex items-center gap-1 cursor-pointer"
-                              >
-                                <Download className="w-3.5 h-3.5" />
-                                <span>تحميل ملف APK المباشر</span>
-                              </button>
-                            </div>
-                            <button
-                              onClick={handleShareApp}
-                              className="hover:text-white flex items-center gap-1.5 transition-colors cursor-pointer"
-                              title="مشاركة رابط التطبيق"
-                            >
-                              {shareCopied ? (
-                                <>
-                                  <Check className="w-3.5 h-3.5 text-emerald-300" />
-                                  <span className="text-emerald-300 font-bold">تم نسخ رابط التطبيق</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Share2 className="w-3.5 h-3.5" />
-                                  <span>مشاركة الرابط مع الأصدقاء</span>
-                                </>
-                              )}
-                            </button>
-                          </div>
-                        </motion.div>
+                      <div className="px-1 mt-4 flex items-center justify-center">
+                        <GooglePlayButton
+                          status={testerStatus}
+                          onClick={() => setShowGooglePlayModal(true)}
+                        />
                       </div>
                     )}
                   </motion.div>
@@ -6879,31 +6755,56 @@ ${versesList}
                   </div>
 
                     {!isNativeApp && (
-                      <div className="flex flex-col sm:flex-row gap-2 mb-2.5">
+                      <div className="flex flex-col gap-2 mb-2.5">
                         <button
-                          onClick={() => setShowDownloadModal(true)}
-                          className="flex-1 py-3 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-2xl font-black text-sm shadow-md flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-95 cursor-pointer"
+                          type="button"
+                          onClick={() => {
+                            setShowAboutModal(false);
+                            setShowGooglePlayModal(true);
+                          }}
+                          className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-black text-sm shadow-md flex items-center justify-center gap-2.5 border border-slate-700/80 transition-all hover:scale-[1.02] active:scale-95 cursor-pointer"
                         >
-                          <Smartphone className="w-5 h-5 text-emerald-200" />
-                          <span>تحميل التطبيق (APK)</span>
-                        </button>
-                        <button
-                          onClick={handleShareApp}
-                          className="py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl font-black text-sm border border-slate-200 flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-95 cursor-pointer"
-                          title="مشاركة رابط تحميل تطبيق الأندرويد"
-                        >
-                          {shareCopied ? (
-                            <>
-                              <Check className="w-4 h-4 text-emerald-600" />
-                              <span>تم النسخ</span>
-                            </>
-                          ) : (
-                            <>
-                              <Share2 className="w-4 h-4 text-slate-600" />
-                              <span>مشاركة</span>
-                            </>
+                          <GooglePlayLogo className="w-5 h-5" />
+                          <span>تطبيق متين على Google Play</span>
+                          {testerStatus === 'approved' && (
+                            <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-500/40">
+                              تم القبول ✓
+                            </span>
+                          )}
+                          {testerStatus === 'pending' && (
+                            <span className="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full border border-amber-500/40">
+                              قيد المراجعة ⏳
+                            </span>
                           )}
                         </button>
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setShowDownloadModal(true)}
+                            className="flex-1 py-3 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-2xl font-black text-sm shadow-md flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-95 cursor-pointer"
+                          >
+                            <Smartphone className="w-5 h-5 text-emerald-200" />
+                            <span>تحميل التطبيق (APK)</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleShareApp}
+                            className="py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl font-black text-sm border border-slate-200 flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-95 cursor-pointer"
+                            title="مشاركة رابط تحميل تطبيق الأندرويد"
+                          >
+                            {shareCopied ? (
+                              <>
+                                <Check className="w-4 h-4 text-emerald-600" />
+                                <span>تم النسخ</span>
+                              </>
+                            ) : (
+                              <>
+                                <Share2 className="w-4 h-4 text-slate-600" />
+                                <span>مشاركة</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
                       </div>
                     )}
 
@@ -7073,6 +6974,22 @@ ${versesList}
           <AppDownloadModal
             isOpen={showDownloadModal}
             onClose={() => setShowDownloadModal(false)}
+          />
+
+          <GooglePlayTesterModal
+            isOpen={showGooglePlayModal}
+            onClose={() => setShowGooglePlayModal(false)}
+            testerEmail={testerEmail}
+            setTesterEmail={setTesterEmail}
+            testerStatus={testerStatus}
+            testerMessage={testerMessage}
+            internalTestLink={internalTestLink}
+            onRegister={handleRegisterTester}
+            onReset={handleResetTesterForm}
+            onOpenDirectApk={() => setShowDownloadModal(true)}
+            onShareApp={handleShareApp}
+            shareCopied={shareCopied}
+            isCheckingSavedStatus={isCheckingSavedStatus}
           />
 
           <PrivacyModal
