@@ -7,26 +7,43 @@ const INTERNAL_TEST_URL = 'https://play.google.com/apps/internaltest/47006471131
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (handleCors(req, res)) return;
 
-  // GET: Fetch list of registered tester emails
+  // GET: Check status of an email (e.g. ?email=user@gmail.com)
   if (req.method === 'GET') {
     try {
-      const testers = await (prisma as any).appTester.findMany({
-        orderBy: { createdAt: 'desc' },
-        take: 200
-      });
+      const email = req.query.email as string;
+      if (email) {
+        const cleanEmail = email.trim().toLowerCase();
+        const tester = await (prisma as any).appTester.findUnique({
+          where: { email: cleanEmail }
+        });
+        if (!tester) {
+          return res.status(200).json({
+            success: true,
+            registered: false,
+            status: 'NOT_FOUND'
+          });
+        }
+        return res.status(200).json({
+          success: true,
+          registered: true,
+          status: tester.status || 'PENDING',
+          internalTestUrl: tester.status === 'APPROVED' ? INTERNAL_TEST_URL : null,
+          createdAt: tester.createdAt,
+          approvedAt: tester.approvedAt
+        });
+      }
+
       return res.status(200).json({
         success: true,
-        count: testers.length,
-        testers: testers.map((t: any) => t.email),
-        internalTestUrl: INTERNAL_TEST_URL
+        message: 'Google Play Testing Registration Endpoint'
       });
     } catch (error: any) {
-      console.error('Fetch testers error:', error);
-      return res.status(500).json({ error: 'Failed to fetch testers' });
+      console.error('Fetch tester status error:', error);
+      return res.status(500).json({ error: 'Failed to fetch tester status' });
     }
   }
 
-  // POST: Register a new tester email
+  // POST: Submit request to join beta test
   if (req.method === 'POST') {
     try {
       const { email } = req.body || {};
@@ -38,22 +55,55 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       }
 
-      // Upsert tester email so if already registered, it doesn't fail
-      await (prisma as any).appTester.upsert({
-        where: { email: cleanEmail },
-        update: {},
-        create: { email: cleanEmail }
+      // Check if already registered
+      const existing = await (prisma as any).appTester.findUnique({
+        where: { email: cleanEmail }
+      });
+
+      if (existing) {
+        if (existing.status === 'APPROVED') {
+          return res.status(200).json({
+            success: true,
+            status: 'APPROVED',
+            message: 'تهانينا! بريدك الإلكتروني معتمد ومقبول بالفعل في قائمة المختبرين.',
+            internalTestUrl: INTERNAL_TEST_URL
+          });
+        }
+        if (existing.status === 'REJECTED') {
+          await (prisma as any).appTester.update({
+            where: { id: existing.id },
+            data: { status: 'PENDING' }
+          });
+          return res.status(200).json({
+            success: true,
+            status: 'PENDING',
+            message: 'تم إعادة إرسال طلب انضمامك للتجربة بنجاح! طلبك قيد المراجعة حالياً من قبل الإدارة.'
+          });
+        }
+        return res.status(200).json({
+          success: true,
+          status: 'PENDING',
+          message: 'طلبك مسجل مسبقاً وهو قيد المراجعة حالياً من قبل الإدارة. سيتم تفعيله قريباً.'
+        });
+      }
+
+      // Create new pending tester request
+      await (prisma as any).appTester.create({
+        data: {
+          email: cleanEmail,
+          status: 'PENDING'
+        }
       });
 
       return res.status(200).json({
         success: true,
-        message: 'تم إضافة بريدك بنجاح إلى قائمة المختبرين!',
-        internalTestUrl: INTERNAL_TEST_URL
+        status: 'PENDING',
+        message: 'تم إرسال طلب انضمامك للتجربة بنجاح! سيتم مراجعة الطلب والموافقة عليه من قبل الإدارة قريباً.'
       });
     } catch (error: any) {
-      console.error('Register tester error:', error);
+      console.error('Register tester request error:', error);
       return res.status(500).json({
-        error: error.message || 'حدث خطأ أثناء حفظ البريد الإلكتروني'
+        error: error.message || 'حدث خطأ أثناء حفظ طلب الانضمام'
       });
     }
   }

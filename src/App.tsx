@@ -4,7 +4,8 @@ import {
   ChevronRight, ChevronLeft, LayoutGrid, Heart, History, Compass, Home, Plane, Award, Star,
   ListFilter, Sun, Moon, Calendar, Settings, Copy, Check, Lightbulb, ChevronDown, User, Users, Quote,
   ArrowRight, ArrowLeft, Zap, Lock, AlertCircle, Hash, XCircle, Eye, List, Loader2, Flame, ZoomIn, ZoomOut, Maximize2, LogOut,
-  Info, HelpCircle, AtSign, Key, LogIn, UserPlus, Smartphone, Download, Share2, Mail, ExternalLink, Send
+  Info, HelpCircle, AtSign, Key, LogIn, UserPlus, Smartphone, Download, Share2, Mail, ExternalLink, Send,
+  Clock, RefreshCw
 } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import CertificateGenerator from './components/CertificateGenerator';
@@ -840,17 +841,62 @@ export default function App() {
     } catch {}
   }, []);
 
-  const [testerEmail, setTesterEmail] = useState('');
-  const [testerStatus, setTesterStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [testerEmail, setTesterEmail] = useState(() => {
+    try {
+      return localStorage.getItem('mateen_tester_email') || '';
+    } catch {
+      return '';
+    }
+  });
+  const [testerStatus, setTesterStatus] = useState<'idle' | 'loading' | 'pending' | 'approved' | 'rejected' | 'error'>('idle');
   const [testerMessage, setTesterMessage] = useState('');
   const [internalTestLink, setInternalTestLink] = useState('https://play.google.com/apps/internaltest/4700647113151529861');
+  const [isCheckingSavedStatus, setIsCheckingSavedStatus] = useState(false);
+
+  const checkTesterStatus = useCallback(async (emailToCheck: string, isSilent = false) => {
+    const clean = emailToCheck.trim().toLowerCase();
+    if (!clean || !clean.includes('@')) return;
+    if (!isSilent) setIsCheckingSavedStatus(true);
+    try {
+      const res = await fetch(`/api/testers?email=${encodeURIComponent(clean)}`);
+      const data = await res.json();
+      if (res.ok && data.success && data.registered) {
+        if (data.status === 'APPROVED') {
+          setTesterStatus('approved');
+          setTesterMessage('تهانينا! تمت الموافقة على طلبك بنجاح. يمكنك الآن فتح الرابط وتثبيت التطبيق.');
+          if (data.internalTestUrl) setInternalTestLink(data.internalTestUrl);
+        } else if (data.status === 'REJECTED') {
+          setTesterStatus('rejected');
+          setTesterMessage('طلبك قيد المراجعة أو تم رفضه. يمكنك إرسال طلب جديد.');
+        } else {
+          setTesterStatus('pending');
+          setTesterMessage('طلبك قيد المراجعة حالياً من قبل الإدارة. سيتم تفعيله وإظهار رابط التثبيت هنا فور الموافقة عليه.');
+        }
+      } else {
+        if (!isSilent) {
+          setTesterStatus('idle');
+        }
+      }
+    } catch (err) {
+      console.error('Error checking tester status:', err);
+    } finally {
+      if (!isSilent) setIsCheckingSavedStatus(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('mateen_tester_email');
+    if (saved) {
+      checkTesterStatus(saved, true);
+    }
+  }, [checkTesterStatus]);
 
   const handleRegisterTester = async (e: React.FormEvent) => {
     e.preventDefault();
     const clean = testerEmail.trim().toLowerCase();
     if (!clean || !clean.includes('@') || !clean.includes('.')) {
       setTesterStatus('error');
-      setTesterMessage('يرجى إدخال بريد إلكتروني صحيح (يفضل Gmail للوصول الفوري لمتجر Google Play)');
+      setTesterMessage('يرجى إدخال بريد إلكتروني صحيح (Gmail)');
       return;
     }
     setTesterStatus('loading');
@@ -863,17 +909,32 @@ export default function App() {
       });
       const data = await res.json();
       if (!res.ok || data.error) {
-        throw new Error(data.error || 'حدث خطأ أثناء حفظ البريد');
+        throw new Error(data.error || 'حدث خطأ أثناء إرسال الطلب');
       }
-      setTesterStatus('success');
-      setTesterMessage(data.message || 'تم تسجيل بريدك بنجاح! يمكنك الآن تجربة التطبيق.');
-      if (data.internalTestUrl) {
-        setInternalTestLink(data.internalTestUrl);
+      try {
+        localStorage.setItem('mateen_tester_email', clean);
+      } catch {}
+      if (data.status === 'APPROVED') {
+        setTesterStatus('approved');
+        setTesterMessage(data.message || 'تهانينا! تم قبول طلبك بنجاح.');
+        if (data.internalTestUrl) setInternalTestLink(data.internalTestUrl);
+      } else {
+        setTesterStatus('pending');
+        setTesterMessage(data.message || 'تم إرسال طلب انضمامك للتجربة بنجاح! بانتظار موافقة الإدارة.');
       }
     } catch (err: any) {
       setTesterStatus('error');
-      setTesterMessage(err.message || 'تعذر تسجيل البريد، يرجى المحاولة لاحقاً');
+      setTesterMessage(err.message || 'تعذر إرسال الطلب، يرجى المحاولة لاحقاً');
     }
+  };
+
+  const handleResetTesterForm = () => {
+    try {
+      localStorage.removeItem('mateen_tester_email');
+    } catch {}
+    setTesterEmail('');
+    setTesterStatus('idle');
+    setTesterMessage('');
   };
 
   const [systemSettings, setSystemSettings] = useState<{
@@ -4922,14 +4983,14 @@ ${versesList}
                                   </span>
                                 </div>
                                 <p className="text-xs sm:text-sm text-emerald-100/80 font-medium mt-1 leading-relaxed max-w-2xl">
-                                  يسعدنا انضمامك لقائمة المختبرين! أدخل بريدك الإلكتروني (Gmail) للحصول على رابط التثبيت المباشر وتجربة التطبيق كاملاً من متجر Google Play.
+                                  يسعدنا انضمامك لقائمة المختبرين! أدخل بريدك الإلكتروني (Gmail) لتقديم طلب انضمام للتجربة، وسيتم تفعيل حسابك واعتماده من قبل الإدارة.
                                 </p>
                               </div>
                             </div>
 
                             {/* Interaction area */}
                             <div className="w-full lg:w-auto shrink-0 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                              {testerStatus === 'success' ? (
+                              {testerStatus === 'approved' ? (
                                 <div className="flex flex-col sm:flex-row items-center gap-2.5 w-full">
                                   <a
                                     href={internalTestLink}
@@ -4937,17 +4998,33 @@ ${versesList}
                                     rel="noopener noreferrer"
                                     className="w-full sm:w-auto px-5 py-3 bg-gradient-to-r from-brand-gold to-amber-500 hover:from-amber-400 hover:to-amber-500 text-slate-900 rounded-xl font-black text-xs sm:text-sm shadow-lg hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-2"
                                   >
-                                    <span>فتح صفحة التثبيت على Google Play</span>
+                                    <span>افتح الرابط (Google Play)</span>
                                     <ExternalLink className="w-4 h-4" />
                                   </a>
                                   <button
-                                    onClick={() => {
-                                      setTesterStatus('idle');
-                                      setTesterMessage('');
-                                    }}
+                                    onClick={handleResetTesterForm}
                                     className="text-xs text-emerald-200/80 hover:text-white underline px-2 py-1"
                                   >
                                     تسجيل بريد آخر
+                                  </button>
+                                </div>
+                              ) : testerStatus === 'pending' ? (
+                                <div className="flex flex-col sm:flex-row items-center gap-2.5 w-full">
+                                  <button
+                                    type="button"
+                                    onClick={() => checkTesterStatus(testerEmail)}
+                                    disabled={isCheckingSavedStatus}
+                                    className="w-full sm:w-auto px-5 py-2.5 sm:py-3 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/50 text-amber-300 rounded-xl font-black text-xs sm:text-sm transition-all flex items-center justify-center gap-2"
+                                  >
+                                    <RefreshCw className={`w-4 h-4 ${isCheckingSavedStatus ? 'animate-spin' : ''}`} />
+                                    <span>تحديث حالة الطلب</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={handleResetTesterForm}
+                                    className="text-xs text-emerald-200/80 hover:text-white underline px-2 py-1"
+                                  >
+                                    تغيير البريد
                                   </button>
                                 </div>
                               ) : (
@@ -4971,12 +5048,12 @@ ${versesList}
                                     {testerStatus === 'loading' ? (
                                       <>
                                         <Loader2 className="w-4 h-4 animate-spin text-slate-900" />
-                                        <span>جاري التسجيل...</span>
+                                        <span>جاري إرسال الطلب...</span>
                                       </>
                                     ) : (
                                       <>
                                         <Send className="w-4 h-4 text-slate-900" />
-                                        <span>انضمام للتجربة</span>
+                                        <span>طلب انضمام للتجربة</span>
                                       </>
                                     )}
                                   </button>
@@ -4986,16 +5063,24 @@ ${versesList}
                           </div>
 
                           {/* Status messages / Feedback */}
-                          {testerMessage && (
+                          {(testerMessage || testerStatus === 'pending' || testerStatus === 'approved') && (
                             <div className={`mt-3 pt-3 border-t border-white/10 flex items-center gap-2 text-xs font-bold ${
-                              testerStatus === 'success' ? 'text-emerald-300' : 'text-rose-300'
+                              testerStatus === 'approved' ? 'text-emerald-300' : testerStatus === 'pending' ? 'text-amber-300' : 'text-rose-300'
                             }`}>
-                              {testerStatus === 'success' ? (
+                              {testerStatus === 'approved' ? (
                                 <CheckCircle className="w-4 h-4 shrink-0 text-emerald-400" />
+                              ) : testerStatus === 'pending' ? (
+                                <Clock className="w-4 h-4 shrink-0 text-amber-400" />
                               ) : (
                                 <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
                               )}
-                              <span>{testerMessage}</span>
+                              <span>
+                                {testerStatus === 'approved'
+                                  ? (testerMessage || 'تم قبولك! افتح الرابط لتثبيت تطبيق متين على Google Play.')
+                                  : testerStatus === 'pending'
+                                  ? (testerMessage || 'طلبك قيد المراجعة حالياً من قبل الإدارة. سيظهر لك رابط التثبيت فور قبول طلبك.')
+                                  : testerMessage}
+                              </span>
                             </div>
                           )}
 

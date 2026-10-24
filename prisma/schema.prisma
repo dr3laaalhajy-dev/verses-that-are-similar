@@ -104,8 +104,12 @@ model SystemSetting {
 }
 
 model AppTester {
-  id        Int      @id @default(autoincrement())
-  email     String   @unique
-  createdAt DateTime @default(now())
+  id         Int       @id @default(autoincrement())
+  email      String    @unique
+  status     String    @default("PENDING") // PENDING, APPROVED, REJECTED
+  approvedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime? @updatedAt
 }
+
 

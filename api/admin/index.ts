@@ -47,9 +47,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     })
   }
 
-  // General permission check: only FOUNDER or CO_FOUNDER can manage/invite
+  // General permission check: only FOUNDER or CO_FOUNDER can manage/invite/manage testers
   const isPrivileged = currentAdmin.role === 'FOUNDER' || currentAdmin.role === 'CO_FOUNDER'
-  if ((action === 'invite' || action === 'manage' || action === 'change-password') && !isPrivileged) {
+  if ((action === 'invite' || action === 'manage' || action === 'change-password' || action === 'testers') && !isPrivileged) {
     return res.status(403).json({ message: 'هذا الإجراء مسموح للمؤسس ومساعدي المؤسس فقط' })
   }
 
@@ -84,6 +84,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return handleUsers(req, res, currentAdmin)
     case 'toggle-user-permission':
       return handleToggleUserPermission(req, res, currentAdmin)
+    case 'testers':
+      return handleTesters(req, res, currentAdmin)
     default:
       return res.status(400).json({ message: 'Invalid action' })
   }
@@ -496,3 +498,111 @@ async function handleToggleUserPermission(req: VercelRequest, res: VercelRespons
     admin: updated
   });
 }
+
+async function handleTesters(req: VercelRequest, res: VercelResponse, currentAdmin: any) {
+  if (req.method === 'GET') {
+    try {
+      const testers = await (prisma as any).appTester.findMany({
+        orderBy: { createdAt: 'desc' }
+      });
+      const approvedTesters = testers.filter((t: any) => t.status === 'APPROVED');
+      const pendingTesters = testers.filter((t: any) => t.status === 'PENDING' || !t.status);
+      const rejectedTesters = testers.filter((t: any) => t.status === 'REJECTED');
+      const approvedEmails = approvedTesters.map((t: any) => t.email);
+
+      return res.status(200).json({
+        success: true,
+        testers,
+        stats: {
+          total: testers.length,
+          pending: pendingTesters.length,
+          approved: approvedTesters.length,
+          rejected: rejectedTesters.length
+        },
+        approvedCommaSeparated: approvedEmails.join(', ')
+      });
+    } catch (err: any) {
+      console.error('Fetch testers error:', err);
+      return res.status(500).json({ message: 'فشل في جلب طلبات المختبرين' });
+    }
+  }
+
+  if (req.method === 'POST') {
+    try {
+      const { subAction, testerId, email } = req.body || {};
+
+      if (subAction === 'approve') {
+        const id = Number(testerId);
+        if (!id) return res.status(400).json({ message: 'معرّف الطلب غير صالح' });
+        const updated = await (prisma as any).appTester.update({
+          where: { id },
+          data: { status: 'APPROVED', approvedAt: new Date() }
+        });
+        return res.status(200).json({ success: true, message: 'تم قبول طلب المختبر بنجاح', tester: updated });
+      }
+
+      if (subAction === 'reject') {
+        const id = Number(testerId);
+        if (!id) return res.status(400).json({ message: 'معرّف الطلب غير صالح' });
+        const updated = await (prisma as any).appTester.update({
+          where: { id },
+          data: { status: 'REJECTED' }
+        });
+        return res.status(200).json({ success: true, message: 'تم رفض الطلب', tester: updated });
+      }
+
+      if (subAction === 'reset-status') {
+        const id = Number(testerId);
+        if (!id) return res.status(400).json({ message: 'معرّف الطلب غير صالح' });
+        const updated = await (prisma as any).appTester.update({
+          where: { id },
+          data: { status: 'PENDING' }
+        });
+        return res.status(200).json({ success: true, message: 'تم إعادة حالة الطلب إلى قيد الانتظار', tester: updated });
+      }
+
+      if (subAction === 'delete') {
+        const id = Number(testerId);
+        if (!id) return res.status(400).json({ message: 'معرّف الطلب غير صالح' });
+        await (prisma as any).appTester.delete({
+          where: { id }
+        });
+        return res.status(200).json({ success: true, message: 'تم حذف الطلب بنجاح' });
+      }
+
+      if (subAction === 'approve-all') {
+        await (prisma as any).appTester.updateMany({
+          where: {
+            OR: [
+              { status: 'PENDING' },
+              { status: null as any }
+            ]
+          },
+          data: { status: 'APPROVED', approvedAt: new Date() }
+        });
+        return res.status(200).json({ success: true, message: 'تم قبول جميع الطلبات المعلقة بنجاح' });
+      }
+
+      if (subAction === 'add-manual') {
+        const clean = (email || '').trim().toLowerCase();
+        if (!clean || !clean.includes('@') || !clean.includes('.')) {
+          return res.status(400).json({ message: 'يرجى إدخال بريد إلكتروني صحيح' });
+        }
+        const tester = await (prisma as any).appTester.upsert({
+          where: { email: clean },
+          update: { status: 'APPROVED', approvedAt: new Date() },
+          create: { email: clean, status: 'APPROVED', approvedAt: new Date() }
+        });
+        return res.status(200).json({ success: true, message: 'تمت إضافة البريد واعتماده بنجاح', tester });
+      }
+
+      return res.status(400).json({ message: 'إجراء غير معروف' });
+    } catch (err: any) {
+      console.error('Testers action error:', err);
+      return res.status(500).json({ message: err.message || 'حدث خطأ أثناء معالجة الطلب' });
+    }
+  }
+
+  return res.status(405).json({ message: 'Method not allowed' });
+}
+

@@ -5,7 +5,8 @@ import {
   LayoutDashboard, Search, Sparkles, AlertCircle, ArrowRight,
   Hash, List, ChevronDown, ChevronUp, Users, Shield, UserPlus, Key, Loader2, Home,
   Crown, Lock, KeyRound, Copy, Check, User, Menu, LogOut, UserX, UserCheck,
-  Trophy, Star, RefreshCw, Eye, EyeOff, ShieldCheck, CheckCircle2, XCircle
+  Trophy, Star, RefreshCw, Eye, EyeOff, ShieldCheck, CheckCircle2, XCircle,
+  Smartphone, Mail, ExternalLink, Clock, CheckCircle
 } from 'lucide-react';
 import { searchGroupedAyahsByStart, GroupedAyah } from '../../services/QuranRepository';
 import ConfirmModal from '../ConfirmModal';
@@ -89,7 +90,7 @@ export default function AdminDashboard({
   const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [admins, setAdmins] = useState<Admin[]>([]);
   const [inviteCodes, setInviteCodes] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<'STANDARD' | 'COMPLETION' | 'SURAH' | 'admins' | 'users'>('STANDARD');
+  const [activeTab, setActiveTab] = useState<'STANDARD' | 'COMPLETION' | 'SURAH' | 'admins' | 'users' | 'testers'>('STANDARD');
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -119,10 +120,133 @@ export default function AdminDashboard({
   const isRegularAdmin = adminRole === 'ADMIN' || (!isCurrentUserFounder && !isCurrentUserCoFounder);
   const canSeeAdminsTab = !isRegularAdmin && (isCurrentUserFounder || isCurrentUserCoFounder);
   const canManageUsersTab = isCurrentUserFounder || (isCurrentUserCoFounder && !!activeCanManageUsers);
+  const canManageTestersTab = isCurrentUserFounder || isCurrentUserCoFounder;
 
   // Strict check for Founder Alaa (ID: 5)
   const isFounderAlaa = currentAdminId === 5 || 
     (isCurrentUserFounder && (currentUsername?.toLowerCase() === 'alaa' || currentUsername === 'علاء'));
+
+  // Google Play Testers state
+  const [testersList, setTestersList] = useState<{
+    id: number;
+    email: string;
+    status: 'PENDING' | 'APPROVED' | 'REJECTED';
+    approvedAt?: string | null;
+    createdAt: string;
+  }[]>([]);
+  const [testersLoading, setTestersLoading] = useState(false);
+  const [testersSearch, setTestersSearch] = useState('');
+  const [testerActionLoading, setTesterActionLoading] = useState<number | string | null>(null);
+  const [approvedCommaSeparated, setApprovedCommaSeparated] = useState('');
+  const [copiedEmailsSuccess, setCopiedEmailsSuccess] = useState(false);
+  const [manualTesterEmail, setManualTesterEmail] = useState('');
+  const [isAddingManualTester, setIsAddingManualTester] = useState(false);
+
+  const fetchTesters = useCallback(async () => {
+    if (!token) return;
+    setTestersLoading(true);
+    try {
+      const res = await fetch('/api/admin?action=testers', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setTestersList(data.testers || []);
+        setApprovedCommaSeparated(data.approvedCommaSeparated || '');
+      }
+    } catch (err) {
+      console.error('Fetch testers error:', err);
+    } finally {
+      setTestersLoading(false);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    if (canManageTestersTab && token) {
+      fetchTesters();
+    }
+  }, [canManageTestersTab, token, fetchTesters]);
+
+  const handleTesterAction = async (subAction: 'approve' | 'reject' | 'delete' | 'reset-status' | 'approve-all', testerId?: number) => {
+    if (!token) return;
+    setTesterActionLoading(testerId ?? subAction);
+    try {
+      const res = await fetch('/api/admin?action=testers', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ subAction, testerId })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        await fetchTesters();
+      } else {
+        alert(data.message || 'حدث خطأ أثناء تنفيذ الإجراء');
+      }
+    } catch (err: any) {
+      alert(err.message || 'حدث خطأ في الاتصال');
+    } finally {
+      setTesterActionLoading(null);
+    }
+  };
+
+  const handleAddManualTester = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const clean = manualTesterEmail.trim().toLowerCase();
+    if (!token || !clean) return;
+    setIsAddingManualTester(true);
+    try {
+      const res = await fetch('/api/admin?action=testers', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ subAction: 'add-manual', email: clean })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setManualTesterEmail('');
+        await fetchTesters();
+      } else {
+        alert(data.message || 'حدث خطأ أثناء إضافة البريد');
+      }
+    } catch (err: any) {
+      alert(err.message || 'حدث خطأ في الاتصال');
+    } finally {
+      setIsAddingManualTester(false);
+    }
+  };
+
+  const pendingTestersList = useMemo(() => {
+    return testersList.filter(t => t.status === 'PENDING' || !t.status);
+  }, [testersList]);
+
+  const approvedTestersList = useMemo(() => {
+    return testersList.filter(t => t.status === 'APPROVED');
+  }, [testersList]);
+
+  const approvedEmailsCsv = useMemo(() => {
+    const emails = testersList.filter(t => t.status === 'APPROVED').map(t => t.email);
+    return emails.join(', ');
+  }, [testersList]);
+
+  const copyApprovedEmails = () => {
+    if (!approvedEmailsCsv) return;
+    navigator.clipboard.writeText(approvedEmailsCsv);
+    setCopiedEmailsSuccess(true);
+    setTimeout(() => setCopiedEmailsSuccess(false), 3000);
+  };
+
+  const filteredPendingTesters = useMemo(() => {
+    return testersList.filter(t => (t.status === 'PENDING' || !t.status) && (!testersSearch || t.email.toLowerCase().includes(testersSearch.toLowerCase())));
+  }, [testersList, testersSearch]);
+
+  const filteredApprovedTesters = useMemo(() => {
+    return testersList.filter(t => t.status === 'APPROVED' && (!testersSearch || t.email.toLowerCase().includes(testersSearch.toLowerCase())));
+  }, [testersList, testersSearch]);
 
   // Global settings state
   const [localSettings, setLocalSettings] = useState({
@@ -170,11 +294,14 @@ export default function AdminDashboard({
     if (activeTab === 'users' && !canManageUsersTab) {
       setActiveTab('STANDARD');
     }
-  }, [activeTab, canSeeAdminsTab, canManageUsersTab]);
+    if (activeTab === 'testers' && !canManageTestersTab) {
+      setActiveTab('STANDARD');
+    }
+  }, [activeTab, canSeeAdminsTab, canManageUsersTab, canManageTestersTab]);
 
   // Synchronize activeTab if current tab is hidden and user is not viewing it intentionally
   useEffect(() => {
-    if (!isFounderAlaa && activeTab !== 'admins' && activeTab !== 'users') {
+    if (!isFounderAlaa && activeTab !== 'admins' && activeTab !== 'users' && activeTab !== 'testers') {
       const isCurrentHidden = 
         (activeTab === 'STANDARD' && localSettings.hideAudioChallenge) ||
         (activeTab === 'COMPLETION' && localSettings.hideCompletionChallenge) ||
@@ -184,11 +311,12 @@ export default function AdminDashboard({
         if (!localSettings.hideAudioChallenge) setActiveTab('STANDARD');
         else if (!localSettings.hideCompletionChallenge) setActiveTab('COMPLETION');
         else if (!localSettings.hideSurahChallenge) setActiveTab('SURAH');
+        else if (canManageTestersTab) setActiveTab('testers');
         else if (canManageUsersTab) setActiveTab('users');
         else if (canSeeAdminsTab) setActiveTab('admins');
       }
     }
-  }, [localSettings, isFounderAlaa, activeTab, canSeeAdminsTab, canManageUsersTab]);
+  }, [localSettings, isFounderAlaa, activeTab, canSeeAdminsTab, canManageUsersTab, canManageTestersTab]);
 
   const handleToggleSetting = async (key: 'hideAudioChallenge' | 'hideCompletionChallenge' | 'hideSurahChallenge', nextVal: boolean) => {
     setIsUpdatingSettings(true);
@@ -922,7 +1050,7 @@ export default function AdminDashboard({
     setLevel('');
     setVerses([]);
     setSuggestions([]);
-    setType(activeTab === 'admins' || activeTab === 'users' ? 'STANDARD' : activeTab);
+    setType(activeTab === 'admins' || activeTab === 'users' || activeTab === 'testers' ? 'STANDARD' : activeTab);
     setAudioUrl('');
     setOptions(['', '', '', '']);
     setCorrectIndex(null);
@@ -1005,7 +1133,7 @@ export default function AdminDashboard({
             <div>
               <h1 className="text-xs font-black text-slate-800 leading-tight">لوحة التحكم</h1>
               <span className="text-[10px] text-brand-emerald font-bold">
-                {activeTab === 'STANDARD' ? 'المتشابهات' : activeTab === 'COMPLETION' ? 'تكملة الآية' : activeTab === 'SURAH' ? 'اسم السورة' : activeTab === 'users' ? 'إدارة المستخدمين' : 'المشرفين'}
+                {activeTab === 'STANDARD' ? 'المتشابهات' : activeTab === 'COMPLETION' ? 'تكملة الآية' : activeTab === 'SURAH' ? 'اسم السورة' : activeTab === 'users' ? 'إدارة المستخدمين' : activeTab === 'testers' ? 'طلبات Google Play' : 'المشرفين'}
               </span>
             </div>
           </div>
@@ -1251,6 +1379,40 @@ export default function AdminDashboard({
                     )}
                   </button>
                 )}
+
+                {/* طلبات تجربة Google Play */}
+                {canManageTestersTab && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      resetForm();
+                      setActiveTab('testers');
+                      setIsMobileSidebarOpen(false);
+                      fetchTesters();
+                    }}
+                    className={`w-full flex items-center justify-between p-3 rounded-2xl text-xs md:text-sm font-black transition-all ${
+                      activeTab === 'testers'
+                        ? 'bg-brand-emerald text-white shadow-lg shadow-brand-emerald/20'
+                        : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Smartphone className="w-4 h-4 text-emerald-500" />
+                      <span>طلبات Google Play</span>
+                    </div>
+                    {pendingTestersList.length > 0 ? (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full font-black bg-amber-500 text-slate-950 animate-pulse">
+                        {pendingTestersList.length} معلّق
+                      </span>
+                    ) : testersList.length > 0 ? (
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
+                        activeTab === 'testers' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'
+                      }`}>
+                        {testersList.length}
+                      </span>
+                    ) : null}
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -1280,7 +1442,7 @@ export default function AdminDashboard({
       {/* Main Content Area */}
       <div className="flex-1 min-w-0 min-h-screen p-4 md:p-8 overflow-x-hidden">
         {/* Top Action Bar in Main Area (when viewing Questions tabs) */}
-        {activeTab !== 'admins' && activeTab !== 'users' && (
+        {activeTab !== 'admins' && activeTab !== 'users' && activeTab !== 'testers' && (
           <div className="mb-6 flex flex-col sm:flex-row items-center justify-between gap-4 bg-white p-4 md:p-5 rounded-2xl md:rounded-[2rem] border border-slate-200/80 shadow-xs">
             <div>
               <h2 className="text-base md:text-lg font-black text-slate-800">
@@ -1780,6 +1942,341 @@ export default function AdminDashboard({
               <Shield className="w-12 h-12 text-slate-300 mx-auto mb-3" />
               <p className="text-slate-600 font-black text-base">ليس لديك صلاحية للوصول إلى قسم إدارة المستخدمين</p>
               <p className="text-slate-400 font-bold text-xs mt-1">يتطلب هذا القسم تفويضاً خاصاً من المؤسس (علاء)</p>
+            </div>
+          )
+        ) : activeTab === 'testers' ? (
+          canManageTestersTab ? (
+            <div className="space-y-6">
+              {/* Top Banner / Header */}
+              <div className="bg-white p-6 md:p-8 rounded-[2.5rem] border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-5">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-brand-emerald to-emerald-600 text-white flex items-center justify-center shadow-md shadow-brand-emerald/20 shrink-0">
+                    <Smartphone className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="text-lg md:text-xl font-black text-slate-800">قبول طلبات تجربة التطبيق على Google Play</h3>
+                      <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-black border border-emerald-200">
+                        خاص بالمؤسس ومساعد المؤسس
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-400 font-bold mt-0.5">
+                      مراجعة طلبات الانضمام للاختبار الداخلي (Internal Testing) واعتماد حسابات المختبرين وتجهيزها لـ Google Play Console
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 self-end md:self-auto flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => fetchTesters()}
+                    disabled={testersLoading}
+                    className="flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-black text-xs transition-all active:scale-95 shrink-0"
+                    title="تحديث القائمة"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${testersLoading ? 'animate-spin' : ''}`} />
+                    <span>تحديث</span>
+                  </button>
+
+                  {filteredPendingTesters.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => handleTesterAction('approve-all')}
+                      disabled={testerActionLoading !== null}
+                      className="flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-xs transition-all shadow-md shadow-emerald-600/20 active:scale-95 shrink-0"
+                    >
+                      {testerActionLoading === 'approve-all' ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <CheckCircle2 className="w-4 h-4" />
+                      )}
+                      <span>قبول جميع المعلقين ({filteredPendingTesters.length})</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Stats Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="bg-gradient-to-br from-amber-500/10 to-amber-500/5 border border-amber-300/40 p-5 rounded-2xl flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-black text-amber-700">طلبات قيد المراجعة</p>
+                    <p className="text-2xl font-black text-amber-900 mt-1">{pendingTestersList.length}</p>
+                  </div>
+                  <div className="w-12 h-12 rounded-xl bg-amber-500 text-white flex items-center justify-center shadow-md shadow-amber-500/20">
+                    <Clock className="w-6 h-6" />
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 border border-emerald-300/40 p-5 rounded-2xl flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-black text-emerald-700">المختبرون المقبولون</p>
+                    <p className="text-2xl font-black text-emerald-900 mt-1">{approvedTestersList.length}</p>
+                  </div>
+                  <div className="w-12 h-12 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-md shadow-emerald-600/20">
+                    <CheckCircle className="w-6 h-6" />
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-br from-slate-100 to-slate-50 border border-slate-200 p-5 rounded-2xl flex items-center justify-between">
+                  <div>
+                    <p className="text-xs font-black text-slate-600">إجمالي الطلبات</p>
+                    <p className="text-2xl font-black text-slate-800 mt-1">{testersList.length}</p>
+                  </div>
+                  <div className="w-12 h-12 rounded-xl bg-slate-700 text-white flex items-center justify-center shadow-md shadow-slate-700/20">
+                    <Users className="w-6 h-6" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Search Bar & Manual Add Form */}
+              <div className="bg-white p-4 md:p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+                <div className="relative flex-1">
+                  <Search className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={testersSearch}
+                    onChange={(e) => setTestersSearch(e.target.value)}
+                    placeholder="البحث بالبريد الإلكتروني..."
+                    className="w-full pr-10 pl-4 py-2.5 text-xs md:text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-brand-emerald focus:bg-white transition-all font-medium"
+                    dir="ltr"
+                  />
+                </div>
+
+                <form onSubmit={handleAddManualTester} className="flex items-center gap-2 shrink-0">
+                  <input
+                    type="email"
+                    value={manualTesterEmail}
+                    onChange={(e) => setManualTesterEmail(e.target.value)}
+                    placeholder="إضافة بريد مختبر واعتماده يدوياً..."
+                    className="px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-brand-emerald focus:bg-white transition-all w-52 sm:w-64"
+                    dir="ltr"
+                  />
+                  <button
+                    type="submit"
+                    disabled={isAddingManualTester || !manualTesterEmail.trim()}
+                    className="px-4 py-2 bg-brand-emerald hover:bg-emerald-800 disabled:opacity-50 text-white rounded-xl font-black text-xs transition-all flex items-center gap-1.5 shrink-0 cursor-pointer"
+                  >
+                    {isAddingManualTester ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                    <span>إضافة وقبول</span>
+                  </button>
+                </form>
+              </div>
+
+              {/* SECTION 1: Pending Requests (طلبات الانضمام قيد الانتظار) */}
+              <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
+                <div className="p-5 md:p-6 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-600 flex items-center justify-center">
+                      <Clock className="w-4 h-4" />
+                    </div>
+                    <h4 className="font-black text-sm md:text-base text-slate-800">
+                      طلبات الانضمام بانتظار الموافقة ({filteredPendingTesters.length})
+                    </h4>
+                  </div>
+                  {filteredPendingTesters.length > 0 && (
+                    <span className="text-xs text-amber-600 font-bold bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200">
+                      اضغط «قبول» للموافقة ونقل البريد لقائمة Google Play
+                    </span>
+                  )}
+                </div>
+
+                {filteredPendingTesters.length === 0 ? (
+                  <div className="py-12 text-center text-slate-400">
+                    <CheckCircle2 className="w-12 h-12 text-emerald-400 mx-auto mb-2 opacity-80" />
+                    <p className="font-black text-sm text-slate-700">لا توجد طلبات معلقة حالياً</p>
+                    <p className="text-xs text-slate-400 mt-1">كافة طلبات الانضمام تمت مراجعتها واعتمادها</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-slate-100">
+                    {filteredPendingTesters.map((tester) => (
+                      <div key={tester.id} className="p-4 md:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50 transition-colors">
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                            <Mail className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-black text-xs md:text-sm text-slate-800 select-all" dir="ltr">
+                                {tester.email}
+                              </span>
+                              <span className="text-[10px] px-2 py-0.5 rounded-full font-black bg-amber-100 text-amber-800 border border-amber-200">
+                                طلب جديد
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-400 font-medium mt-0.5">
+                              تاريخ الطلب: {new Date(tester.createdAt).toLocaleDateString('ar-EG', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 self-end sm:self-auto">
+                          <button
+                            type="button"
+                            onClick={() => handleTesterAction('approve', tester.id)}
+                            disabled={testerActionLoading === tester.id}
+                            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-black text-xs transition-all shadow-sm flex items-center gap-1.5 active:scale-95 cursor-pointer"
+                          >
+                            {testerActionLoading === tester.id ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <CheckCircle className="w-3.5 h-3.5" />
+                            )}
+                            <span>قبول</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleTesterAction('reject', tester.id)}
+                            disabled={testerActionLoading === tester.id}
+                            className="px-3 py-2 bg-slate-100 hover:bg-amber-100 text-slate-600 hover:text-amber-700 rounded-xl font-black text-xs transition-all cursor-pointer"
+                            title="رفض الطلب"
+                          >
+                            <XCircle className="w-3.5 h-3.5" />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleTesterAction('delete', tester.id)}
+                            disabled={testerActionLoading === tester.id}
+                            className="px-3 py-2 bg-slate-100 hover:bg-rose-100 text-slate-400 hover:text-rose-600 rounded-xl font-black text-xs transition-all cursor-pointer"
+                            title="حذف نهائي"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* SECTION 2: Approved Testers & Google Play Console Email List (Comma-Separated) */}
+              <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
+                <div className="p-5 md:p-6 bg-gradient-to-r from-emerald-950 via-slate-900 to-teal-950 text-white">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-black text-sm md:text-base text-white">
+                          قائمة البريد المباشرة لـ Google Play Console (مفصولة بفواصل)
+                        </h4>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full font-black bg-brand-gold text-slate-950">
+                          {approvedTestersList.length} مختبر معتمد
+                        </span>
+                      </div>
+                      <p className="text-xs text-emerald-100/80 font-medium mt-1">
+                        انسخ هذه القائمة والصقها مباشرة في «قائمة البريد الإلكتروني» (Email List) داخل Google Play Console لتفعيل وصول المختبرين
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={copyApprovedEmails}
+                      disabled={!approvedEmailsCsv}
+                      className={`px-5 py-3 rounded-xl font-black text-xs md:text-sm transition-all flex items-center justify-center gap-2 shrink-0 cursor-pointer ${
+                        copiedEmailsSuccess
+                          ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
+                          : 'bg-gradient-to-r from-brand-gold to-amber-500 hover:from-amber-400 hover:to-amber-500 text-slate-900 shadow-md active:scale-95 disabled:opacity-50'
+                      }`}
+                    >
+                      {copiedEmailsSuccess ? (
+                        <>
+                          <Check className="w-4 h-4" />
+                          <span>تم النسخ بنجاح!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-4 h-4" />
+                          <span>نسخ جميع الإيميلات المقبولة</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Comma-separated preview box */}
+                  <div className="mt-4 bg-slate-950/70 border border-emerald-500/30 rounded-xl p-3.5">
+                    <textarea
+                      readOnly
+                      value={approvedEmailsCsv || 'لا توجد إيميلات مقبولة حالياً. عند الضغط على «قبول» لأي طلب، سيظهر بريده هنا فوراً مفصولاً بفاصلة.'}
+                      className="w-full bg-transparent text-xs text-emerald-200/90 font-mono resize-none focus:outline-none select-all"
+                      rows={3}
+                      dir="ltr"
+                    />
+                  </div>
+                </div>
+
+                {/* Approved Testers List */}
+                <div className="p-5 md:p-6 border-b border-slate-100 flex items-center justify-between">
+                  <h5 className="font-black text-xs md:text-sm text-slate-700">
+                    تفاصيل المختبرين المقبولين ({filteredApprovedTesters.length})
+                  </h5>
+                  <span className="text-xs text-slate-400 font-bold">
+                    يمكن للمستخدمين المقبولين الآن فتح صفحة التثبيت مباشرة
+                  </span>
+                </div>
+
+                {filteredApprovedTesters.length === 0 ? (
+                  <div className="py-12 text-center text-slate-400">
+                    <Mail className="w-10 h-10 text-slate-300 mx-auto mb-2 opacity-60" />
+                    <p className="font-bold text-xs">لا يوجد مختبرين مقبولين يطابقون البحث</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-slate-100 max-h-96 overflow-y-auto">
+                    {filteredApprovedTesters.map((tester) => (
+                      <div key={tester.id} className="p-4 md:p-5 flex items-center justify-between gap-4 hover:bg-slate-50 transition-colors">
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                            <CheckCircle className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-black text-xs md:text-sm text-slate-800 select-all" dir="ltr">
+                                {tester.email}
+                              </span>
+                              <span className="text-[10px] px-2 py-0.5 rounded-full font-black bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                مقبول ومفعل
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-400 font-medium mt-0.5">
+                              {tester.approvedAt
+                                ? `تاريخ القبول: ${new Date(tester.approvedAt).toLocaleDateString('ar-EG', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`
+                                : `تاريخ التسجيل: ${new Date(tester.createdAt).toLocaleDateString('ar-EG', { year: 'numeric', month: 'short', day: 'numeric' })}`}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => handleTesterAction('reset-status', tester.id)}
+                            disabled={testerActionLoading === tester.id}
+                            className="px-3 py-1.5 text-xs text-amber-700 hover:bg-amber-50 rounded-lg font-bold border border-amber-200 transition-colors cursor-pointer"
+                            title="إعادة حالة الطلب للانتظار"
+                          >
+                            إلغاء القبول
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleTesterAction('delete', tester.id)}
+                            disabled={testerActionLoading === tester.id}
+                            className="p-1.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                            title="حذف من القائمة"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="py-20 text-center bg-white rounded-3xl border border-dashed border-slate-200 p-8 shadow-xs">
+              <Shield className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+              <p className="text-slate-600 font-black text-base">ليس لديك صلاحية للوصول إلى قسم تجربة Google Play</p>
+              <p className="text-slate-400 font-bold text-xs mt-1">هذا القسم متاح للمؤسس ومساعد المؤسس فقط</p>
             </div>
           )
         ) : activeTab !== 'admins' ? (
