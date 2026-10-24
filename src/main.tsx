@@ -13,7 +13,7 @@ window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
                      window.location.protocol === 'file:' ||
                      (window.location.hostname === 'localhost' && !window.location.port);
     if (isNative) {
-      const fullUrl = `https://quranicsimilarities.vercel.app${url}`;
+      const fullUrl = `https://mateen-quran.vercel.app${url}`;
       return originalFetch(fullUrl, init);
     }
   }
