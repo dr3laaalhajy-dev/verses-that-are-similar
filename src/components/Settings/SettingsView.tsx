@@ -22,7 +22,8 @@ import {
   X,
   Smartphone,
   Download,
-  FileText
+  FileText,
+  Trash2
 } from 'lucide-react';
 
 interface SettingsViewProps {
@@ -151,6 +152,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [isChangingPass, setIsChangingPass] = useState(false);
   const [passwordMsg, setPasswordMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  // Delete Account State
+  const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false);
+  const [deletePasswordInput, setDeletePasswordInput] = useState('');
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [deleteAccountError, setDeleteAccountError] = useState<string | null>(null);
+  const [showDeletePass, setShowDeletePass] = useState(false);
+
   // Handle Profile Update Submission
   const handleSaveProfileClick = (e: React.FormEvent) => {
     e.preventDefault();
@@ -270,6 +278,54 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       setPasswordMsg({ type: 'error', text: 'حدث خطأ أثناء تغيير كلمة المرور، يرجى المحاولة ثانية.' });
     } finally {
       setIsChangingPass(false);
+    }
+  };
+
+  // Handle Delete Account Submission
+  const handleDeleteAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setDeleteAccountError(null);
+
+    const identifier = (playerUsername || playerName || '').trim();
+    if (!identifier) {
+      setDeleteAccountError('تعذر تحديد الحساب الحالي.');
+      return;
+    }
+
+    if (!deletePasswordInput.trim()) {
+      setDeleteAccountError('يرجى إدخال كلمة المرور لتأكيد حذف الحساب.');
+      return;
+    }
+
+    setIsDeletingAccount(true);
+    try {
+      const res = await fetch('/api/player-register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'delete-account',
+          username: identifier,
+          password: deletePasswordInput.trim()
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setDeleteAccountError(data.error || 'فشل حذف الحساب. يرجى التحقق من كلمة المرور.');
+        setIsDeletingAccount(false);
+        return;
+      }
+
+      setShowDeleteAccountModal(false);
+      localStorage.removeItem('quran_player_name');
+      localStorage.removeItem('quran_player_username');
+      localStorage.removeItem('quran_device_id');
+      localStorage.removeItem('quran_username_changed_at');
+      onLogout();
+    } catch {
+      setDeleteAccountError('حدث خطأ في الاتصال بالخادم. يرجى التحقق من اتصالك بالإنترنت.');
+    } finally {
+      setIsDeletingAccount(false);
     }
   };
 
@@ -1149,42 +1205,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 </div>
 
         {/* ================================================= */}
-        {/* SECTION: ANDROID APP DOWNLOAD (WEB ONLY)          */}
-        {/* ================================================= */}
-        {typeof window !== 'undefined' && !((window as any).Capacitor?.isNativePlatform?.() || window.location.protocol === 'capacitor:') && (
-          <div className="bg-gradient-to-r from-emerald-900 via-emerald-800 to-teal-900 rounded-2xl sm:rounded-3xl p-4 sm:p-6 text-white border border-emerald-500/30 shadow-lg flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-3.5 text-right w-full sm:w-auto">
-              <div className="w-12 h-12 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center shrink-0">
-                <Smartphone className="w-6 h-6 text-brand-gold animate-bounce" />
-              </div>
-              <div>
-                <h4 className="font-black text-sm sm:text-base text-white">تطبيق أندرويد (يعمل أوفلاين)</h4>
-                <p className="text-xs sm:text-sm text-emerald-100/90 font-medium">حمّل التطبيق بصيغة APK والعب بدون الحاجة للإنترنت</p>
-              </div>
-            </div>
-            {onOpenDownloadApp ? (
-              <button
-                onClick={onOpenDownloadApp}
-                className="w-full sm:w-auto px-5 py-2.5 sm:px-6 sm:py-3 bg-gradient-to-r from-brand-gold to-amber-500 hover:from-amber-400 hover:to-amber-500 text-slate-900 rounded-xl font-black text-xs sm:text-sm shadow-md hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0"
-              >
-                <Download className="w-4 h-4 text-slate-900" />
-                <span>تحميل تطبيق متين.apk</span>
-              </button>
-            ) : (
-              <a
-                href="https://github.com/dr3laaalhajy-dev/verses-that-are-similar/releases/download/v1.0.0/Mutashabihat.apk"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full sm:w-auto px-5 py-2.5 sm:px-6 sm:py-3 bg-gradient-to-r from-brand-gold to-amber-500 hover:from-amber-400 hover:to-amber-500 text-slate-900 rounded-xl font-black text-xs sm:text-sm shadow-md hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0"
-              >
-                <Download className="w-4 h-4 text-slate-900" />
-                <span>تحميل تطبيق متين.apk</span>
-              </a>
-            )}
-          </div>
-        )}
-
-        {/* ================================================= */}
         {/* PRIVACY POLICY & TERMS OF USE                     */}
         {/* ================================================= */}
         <div className="bg-slate-50 border border-slate-200/80 rounded-2xl sm:rounded-3xl p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -1219,17 +1239,32 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
 
         {/* ================================================= */}
-        {/* SECTION 5: ACCOUNT LOGOUT                         */}
+        {/* SECTION 5: ACCOUNT ACTIONS (LOGOUT & DELETE)      */}
         {/* ================================================= */}
         <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <button
-            type="button"
-            onClick={onLogout}
-            className="flex items-center gap-2 px-6 py-3 rounded-2xl bg-red-50 text-red-600 hover:bg-red-100 font-black text-xs sm:text-sm transition-all active:scale-95 w-full sm:w-auto justify-center cursor-pointer border border-red-200/50"
-          >
-            <LogOut className="w-4 h-4" />
-            <span>تسجيل الخروج / تبديل الحساب</span>
-          </button>
+          <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
+            <button
+              type="button"
+              onClick={onLogout}
+              className="flex-1 sm:flex-none flex items-center gap-2 px-5 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-xs sm:text-sm transition-all active:scale-95 justify-center cursor-pointer border border-slate-200"
+            >
+              <LogOut className="w-4 h-4 text-slate-500" />
+              <span>تسجيل الخروج</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setDeletePasswordInput('');
+                setDeleteAccountError(null);
+                setShowDeleteAccountModal(true);
+              }}
+              className="flex-1 sm:flex-none flex items-center gap-2 px-5 py-3 rounded-2xl bg-red-50 hover:bg-red-100 text-red-600 font-black text-xs sm:text-sm transition-all active:scale-95 justify-center cursor-pointer border border-red-200/60"
+            >
+              <Trash2 className="w-4 h-4 text-red-600" />
+              <span>حذف الحساب نهائياً</span>
+            </button>
+          </div>
 
           <div className="text-center sm:text-right text-xs text-slate-400 font-bold">
             الحساب: <span className="font-semibold text-emerald-600">@{playerUsername || playerName}</span>
@@ -1286,6 +1321,85 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   إلغاء وتراجع
                 </button>
               </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ================================================= */}
+      {/* DELETE ACCOUNT CONFIRMATION MODAL                 */}
+      {/* ================================================= */}
+      <AnimatePresence>
+        {showDeleteAccountModal && (
+          <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 15 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 15 }}
+              className="bg-white rounded-3xl p-6 sm:p-7 max-w-md w-full shadow-2xl border border-red-200 text-center relative overflow-hidden"
+            >
+              <div className="w-14 h-14 bg-red-50 rounded-2xl flex items-center justify-center mx-auto mb-4 text-red-600 border border-red-200">
+                <Trash2 className="w-7 h-7" />
+              </div>
+
+              <h3 className="text-lg sm:text-xl font-black text-red-600 mb-2">
+                حذف الحساب والبيانات نهائياً
+              </h3>
+
+              <div className="p-4 bg-red-50/70 border border-red-200/80 rounded-2xl mb-4 text-right">
+                <p className="text-xs sm:text-sm font-bold text-red-950 leading-relaxed">
+                  تحذير: سيتم حذف حسابك <span className="font-mono text-red-700" dir="ltr">@{playerUsername || playerName}</span> وكافة النقاط والكؤوس ومراحل التحديات وسجلاتك نهائياً من قاعدة البيانات ولا يمكن استرجاعها مطلقاً.
+                </p>
+              </div>
+
+              {deleteAccountError && (
+                <div className="mb-4 p-3 bg-red-100 text-red-700 text-xs font-bold rounded-xl border border-red-200 text-right">
+                  {deleteAccountError}
+                </div>
+              )}
+
+              <form onSubmit={handleDeleteAccount} className="space-y-4 text-right">
+                <div>
+                  <label className="block text-xs font-black text-slate-700 mb-1.5">
+                    أدخل كلمة المرور لتأكيد الحذف:
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showDeletePass ? 'text' : 'password'}
+                      value={deletePasswordInput}
+                      onChange={(e) => setDeletePasswordInput(e.target.value)}
+                      placeholder="كلمة مرور حسابك"
+                      required
+                      className="w-full px-4 py-3 pl-11 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 font-bold text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowDeletePass(!showDeletePass)}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                    >
+                      {showDeletePass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 pt-2">
+                  <button
+                    type="submit"
+                    disabled={isDeletingAccount}
+                    className="py-3 px-4 bg-red-600 hover:bg-red-700 active:scale-95 text-white rounded-xl font-black text-xs sm:text-sm transition-all shadow-md shadow-red-700/20 cursor-pointer disabled:opacity-50"
+                  >
+                    {isDeletingAccount ? 'جاري الحذف...' : 'نعم، حذف نهائي'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowDeleteAccountModal(false)}
+                    disabled={isDeletingAccount}
+                    className="py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs sm:text-sm transition-all cursor-pointer"
+                  >
+                    إلغاء وتراجع
+                  </button>
+                </div>
+              </form>
             </motion.div>
           </div>
         )}
