@@ -1409,7 +1409,13 @@ export default function App() {
           })
         });
 
-        const data = await res.json();
+        let data: any = {};
+        try {
+          data = await res.json();
+        } catch {
+          data = {};
+        }
+
         if (!res.ok) {
           setRegistrationError(data.error || data.message || 'فشلت عملية إنشاء الحساب');
           return;
@@ -1446,7 +1452,13 @@ export default function App() {
           })
         });
 
-        const data = await res.json();
+        let data: any = {};
+        try {
+          data = await res.json();
+        } catch {
+          data = {};
+        }
+
         if (!res.ok) {
           setRegistrationError(data.error || data.message || 'بيانات الدخول غير صحيحة');
           return;
