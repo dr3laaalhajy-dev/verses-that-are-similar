@@ -34,6 +34,7 @@ import SkillsMenu from './components/SkillsMenu';
 import BookReader from './components/BookReader';
 import Encyclopedia from './components/Encyclopedia';
 import IslamicQuiz from './components/IslamicQuiz';
+import { IslamicVideos } from './components/IslamicVideos';
 import IslamicRoomConfigModal from './components/IslamicRoomConfigModal';
 import { getRandomIslamicRoomQuestions } from './utils/islamicChallengeHelper';
 import { islamicCategoriesList } from './data/islamicCategories';
@@ -59,7 +60,8 @@ import {
   AdhkarLibraryIcon,
   HadithLibraryIcon,
   BookLibraryIcon,
-  EncyclopediaLibraryIcon
+  EncyclopediaLibraryIcon,
+  VideoLibraryIcon
 } from './components/IslamicChallengeEmblems';
 import {
   getHijriDate,
@@ -91,13 +93,13 @@ function useWindowSize() {
   return windowSize;
 }
 
-type View = 'home' | 'difficulty' | 'challenge' | 'mushaf' | 'adhkar' | 'hadith' | 'admin' | 'list' | 'group_menu' | 'group_waiting' | 'group_game' | 'speed_challenge' | 'skills_menu' | 'speed_menu' | 'group_create' | 'group_join' | 'book' | 'encyclopedia' | 'skills_count_selection' | 'skills_results' | 'islamic_quiz' | 'settings' | 'library' | 'challenges';
+type View = 'home' | 'difficulty' | 'challenge' | 'mushaf' | 'adhkar' | 'hadith' | 'admin' | 'list' | 'group_menu' | 'group_waiting' | 'group_game' | 'speed_challenge' | 'skills_menu' | 'speed_menu' | 'group_create' | 'group_join' | 'book' | 'encyclopedia' | 'skills_count_selection' | 'skills_results' | 'islamic_quiz' | 'settings' | 'library' | 'challenges' | 'islamic_videos';
 const VALID_VIEWS: View[] = [
   'home', 'difficulty', 'challenge', 'mushaf', 'adhkar', 'hadith', 'admin',
   'list', 'group_menu', 'group_waiting', 'group_game', 'speed_challenge',
   'skills_menu', 'speed_menu', 'group_create', 'group_join', 'book',
   'encyclopedia', 'skills_count_selection', 'skills_results', 'islamic_quiz',
-  'settings', 'library', 'challenges'
+  'settings', 'library', 'challenges', 'islamic_videos'
 ];
 type Difficulty = 'easy' | 'medium' | 'hard';
 
@@ -4996,6 +4998,49 @@ ${versesList}
                       )}
                     </div>
 
+                    {/* Islamic Videos Quick Entry on Home */}
+                    <div className="px-1 mt-1">
+                      <motion.div
+                        whileHover={{ y: -2 }}
+                        whileTap={{ scale: 0.99 }}
+                        onClick={() => setView('islamic_videos')}
+                        className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-[#0D6E52] via-[#0A5640] to-[#043325] text-white shadow-md hover:shadow-xl transition-all cursor-pointer relative overflow-hidden flex flex-col sm:flex-row items-center justify-between gap-4 border border-[#D4AF37]/30"
+                      >
+                        {/* Geometric Pattern Overlay */}
+                        <div
+                          className="absolute inset-0 pointer-events-none opacity-5 mix-blend-overlay"
+                          style={{
+                            backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M30 0l30 30-30 30L0 30zM30 6.863L53.137 30 30 53.137 6.863 30zM30 15l15 15-15 15-15-15z' fill='%23ffffff' fill-opacity='1' fill-rule='evenodd'/%3E%3C/svg%3E")`,
+                            backgroundSize: '40px 40px'
+                          }}
+                        />
+
+                        <div className="flex items-center gap-3.5 relative z-10 w-full sm:w-auto">
+                          <VideoLibraryIcon className="w-12 h-12 shrink-0 drop-shadow-md" />
+                          <div className="text-right">
+                            <div className="flex items-center gap-2 mb-0.5">
+                              <h4 className="font-black text-white text-base">
+                                المكتبة المرئية الإسلامية
+                              </h4>
+                              <span className="text-[10px] bg-[#D4AF37] text-[#0A5640] font-black px-2 py-0.5 rounded-full shadow-xs">
+                                جديد
+                              </span>
+                            </div>
+                            <p className="text-xs text-emerald-100/90 font-semibold leading-relaxed">
+                              روائع المقاطع الدعوية، شروحات الحديث، الفقه، والتفسير لكبار العلماء
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 relative z-10 self-end sm:self-center shrink-0">
+                          <span className="px-4 py-2 bg-white/15 hover:bg-white/25 text-[#FCEEB5] border border-white/20 rounded-xl font-black text-xs transition-all flex items-center gap-1.5 backdrop-blur-md">
+                            <span>استعراض المرئيات</span>
+                            <ArrowLeft className="w-3.5 h-3.5 text-[#D4AF37]" />
+                          </span>
+                        </div>
+                      </motion.div>
+                    </div>
+
                     {/* Google Play Tester Button at the bottom (Web Version Only) */}
                     {!isNativeApp && (
                       <div className="px-1 mt-4 flex items-center justify-center">
@@ -5382,6 +5427,33 @@ ${versesList}
                           </h3>
                           <p className="text-slate-400 font-bold text-xs mt-1 leading-relaxed">
                             موسوعة العلوم الشرعية وتوجيه متشابهات القرآن
+                          </p>
+                        </div>
+                      </motion.button>
+
+                      {/* 6. Islamic Videos Card (المكتبة المرئية) */}
+                      <motion.button
+                        whileHover={{ y: -3 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => setView('islamic_videos')}
+                        className="group relative p-5 md:p-6 rounded-2xl text-right overflow-hidden transition-all duration-200 flex flex-col justify-between border border-slate-150 hover:border-[#0D6E52] bg-white shadow-xs hover:shadow-md min-h-[160px]"
+                      >
+                        <div className="flex items-start justify-between">
+                          <VideoLibraryIcon className="w-12 h-12 shrink-0 transition-transform duration-200 group-hover:scale-105" />
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200/50">
+                              مرئيات دعوية
+                            </span>
+                            <ArrowLeft className="w-5 h-5 text-slate-300 group-hover:text-[#0D6E52] group-hover:-translate-x-1 transition-all" />
+                          </div>
+                        </div>
+
+                        <div className="mt-4">
+                          <h3 className="text-base md:text-lg font-black text-slate-800 group-hover:text-[#0D6E52] transition-colors">
+                            المكتبة المرئية
+                          </h3>
+                          <p className="text-slate-400 font-bold text-xs mt-1 leading-relaxed">
+                            دروس وشروحات ومواعظ مرئية مبوبة لكبار العلماء والدعاة
                           </p>
                         </div>
                       </motion.button>
@@ -6469,6 +6541,16 @@ ${versesList}
                   >
                     <Encyclopedia onBack={() => setView('home')} />
                   </motion.div>
+                ) : view === 'islamic_videos' ? (
+                  <motion.div
+                    key="islamic_videos"
+                    initial={{ opacity: 0, scale: 0.98 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.98 }}
+                    className="w-full"
+                  >
+                    <IslamicVideos onBack={() => setView('library')} />
+                  </motion.div>
                 ) : view === 'islamic_quiz' ? (
                   <motion.div
                     key="islamic_quiz"
@@ -7160,7 +7242,7 @@ ${versesList}
                     setView('library');
                     setShowScores(false);
                   }}
-                  className={`flex flex-col items-center gap-1 py-1.5 px-3 rounded-2xl transition-all duration-300 ${view === 'library' || view === 'mushaf' || view === 'adhkar' || view === 'hadith' || view === 'book' || view === 'encyclopedia'
+                  className={`flex flex-col items-center gap-1 py-1.5 px-3 rounded-2xl transition-all duration-300 ${view === 'library' || view === 'mushaf' || view === 'adhkar' || view === 'hadith' || view === 'book' || view === 'encyclopedia' || view === 'islamic_videos'
                       ? 'text-brand-gold bg-white/15 scale-105 shadow-inner'
                       : 'text-white/70 hover:text-white hover:bg-white/5'
                     }`}

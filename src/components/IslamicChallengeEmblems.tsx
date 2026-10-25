@@ -143,3 +143,43 @@ export const EncyclopediaLibraryIcon: React.FC<{ className?: string }> = ({ clas
     draggable={false}
   />
 );
+
+// Videos (المكتبة المرئية الإسلامية) - أيقونة إسلامية فاخرة
+export const VideoLibraryIcon: React.FC<{ className?: string }> = ({ className = 'w-10 h-10' }) => (
+  <svg
+    viewBox="0 0 48 48"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    className={`${className} shrink-0 drop-shadow-xs`}
+  >
+    <rect width="48" height="48" rx="14" fill="url(#video-bg-grad)" />
+    <rect x="1" y="1" width="46" height="46" rx="13" stroke="url(#video-stroke-grad)" strokeWidth="1.5" />
+    {/* Inner Screen */}
+    <rect x="8" y="10" width="32" height="24" rx="6" fill="#0A5640" stroke="#D4AF37" strokeWidth="1.2" />
+    {/* Screen Notch / Top Accent */}
+    <circle cx="24" cy="13" r="1" fill="#D4AF37" />
+    {/* Golden Play Triangle in center */}
+    <path
+      d="M21 17L30 22L21 27V17Z"
+      fill="#D4AF37"
+      stroke="#FCEEB5"
+      strokeWidth="0.8"
+      strokeLinejoin="round"
+    />
+    {/* Stand / Base */}
+    <path d="M20 37H28" stroke="#D4AF37" strokeWidth="2" strokeLinecap="round" />
+    <path d="M24 34V37" stroke="#D4AF37" strokeWidth="2" strokeLinecap="round" />
+    <defs>
+      <linearGradient id="video-bg-grad" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">
+        <stop stopColor="#0D6E52" />
+        <stop offset="1" stopColor="#064E3B" />
+      </linearGradient>
+      <linearGradient id="video-stroke-grad" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">
+        <stop stopColor="#FCEEB5" />
+        <stop offset="0.5" stopColor="#D4AF37" />
+        <stop offset="1" stopColor="#B38F24" />
+      </linearGradient>
+    </defs>
+  </svg>
+);
+
