@@ -106,8 +106,8 @@ const VALID_VIEWS: View[] = [
 type Difficulty = 'easy' | 'medium' | 'hard';
 
 const toast = {
-  success: (msg: string) => console.log(`SUCCESS: ${msg}`),
-  error: (msg: string) => console.log(`ERROR: ${msg}`)
+  success: (msg: string, ..._args: any[]) => console.log(`SUCCESS: ${msg}`),
+  error: (msg: string, ..._args: any[]) => console.log(`ERROR: ${msg}`)
 };
 
 // Helper function to find the best subsequence match of targetWords in transcriptWords
@@ -2764,7 +2764,7 @@ export default function App() {
           // If room was cancelled by host or server
           if (data.status === 'CANCELLED') {
             setRoom(null);
-            toast.error('تم إلغاء الغرفة من قبل المضيف', { icon: '⚠️' });
+            toast.error('تم إلغاء الغرفة من قبل المضيف');
             setView('group_join');
             return;
           }
@@ -2772,7 +2772,7 @@ export default function App() {
           // If room expired due to 10-minute TTL
           if (data.status === 'EXPIRED') {
             setRoom(null);
-            toast.error('انتهت صلاحية الغرفة (مرور أكثر من 10 دقائق دون بدء التحدي)', { icon: '⏱️' });
+            toast.error('انتهت صلاحية الغرفة (مرور أكثر من 10 دقائق دون بدء التحدي)');
             setView('group_join');
             return;
           }
@@ -5692,13 +5692,9 @@ ${versesList}
                       </div>
 
                       {(
-                        room?.player1Id === player?.id ||
-                        String(room?.player1Id) === String(player?.id) ||
-                        room?.player1?.id === player?.id ||
-                        String(room?.player1?.id) === String(player?.id) ||
                         room?.player1?.name === playerName ||
                         (room?.player1?.username && playerUsername && room.player1.username.toLowerCase() === playerUsername.toLowerCase()) ||
-                        (room?.hostName && room.hostName === playerName) ||
+                        (room?.hostName && playerName && room.hostName === playerName) ||
                         (room?.hostUsername && playerUsername && room.hostUsername.toLowerCase() === playerUsername.toLowerCase())
                       ) ? (
                         <div className="space-y-3">
@@ -5862,7 +5858,6 @@ ${versesList}
                         <div className="grid grid-cols-1 gap-3">
                           {availableRooms.map((r: any) => {
                             const isMyRoom = Boolean(
-                              (player && r.hostId && (r.hostId === player.id || String(r.hostId) === String(player.id))) ||
                               (r.hostUsername && playerUsername && r.hostUsername.toLowerCase() === playerUsername.toLowerCase()) ||
                               (r.hostName && playerName && r.hostName === playerName)
                             );
