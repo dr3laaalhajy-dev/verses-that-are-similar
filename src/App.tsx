@@ -2630,10 +2630,14 @@ export default function App() {
         setRoom(data);
         setView('group_waiting');
       } else {
-        setV1Error(data.message || 'فشل إنشاء الغرفة');
+        const errorMsg = data.message || 'فشل إنشاء الغرفة';
+        setV1Error(errorMsg);
+        toast.error(errorMsg);
       }
-    } catch (err) {
-      setV1Error('حدث خطأ في الاتصال');
+    } catch (err: any) {
+      const errorMsg = err?.message || 'حدث خطأ في الاتصال';
+      setV1Error(errorMsg);
+      toast.error(errorMsg);
     } finally {
       setIsCreatingRoom(false);
     }
