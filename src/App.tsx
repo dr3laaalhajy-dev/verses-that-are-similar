@@ -5,7 +5,7 @@ import {
   ListFilter, Sun, Moon, Calendar, Settings, Copy, Check, Lightbulb, ChevronDown, User, Users, Quote,
   ArrowRight, ArrowLeft, Zap, Lock, AlertCircle, Hash, XCircle, Eye, EyeOff, List, Loader2, Flame, ZoomIn, ZoomOut, Maximize2, LogOut,
   Info, HelpCircle, AtSign, Key, LogIn, UserPlus, Smartphone, Download, Share2, Mail, ExternalLink, Send,
-  Clock, RefreshCw, Globe
+  Clock, RefreshCw, Globe, Plus
 } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import CertificateGenerator from './components/CertificateGenerator';
