@@ -10,6 +10,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     case 'list-rooms': return handleListRooms(req, res)
     case 'poll': return handlePoll(req, res)
     case 'start': return handleStart(req, res)
+    case 'submit-answer': return handleSubmitAnswer(req, res)
+    case 'advance-question': return handleAdvanceQuestion(req, res)
     case 'submit-progress': return handleSubmitProgress(req, res)
     case 'list-challenges': return handleListChallenges(req, res)
     case 'check-active': return handleCheckActive(req, res)
@@ -71,8 +73,17 @@ async function getFullRoom(roomId: string) {
       .filter(Boolean)
   }
 
+  const answers: Record<string, any> = (room.currentAnswers as any) || {}
+  const participantsCount = players.length || 1
+  const answeredCount = Object.keys(answers).length
+
   return { 
     ...room, 
+    currentQuestionIndex: room.currentQuestionIndex || 0,
+    questionStartTime: Number(room.questionStartTime) || 0,
+    answeredCount,
+    totalParticipants: participantsCount,
+    currentAnswers: answers,
     participants: players, 
     challenges: mapChallenges(orderedChallenges) 
   }
@@ -332,11 +343,103 @@ async function handleListRooms(req: VercelRequest, res: VercelResponse) {
   }
 }
 
+function evaluateQuestionScores(
+  playersProgress: Record<string, any>,
+  currentAnswers: Record<string, { playerId: number; name: string; isCorrect: boolean; timestamp: number }>
+) {
+  // 1. Filter only correct answers and sort by timestamp ascending (fastest first)
+  const correctSubmissions = Object.values(currentAnswers)
+    .filter(ans => ans.isCorrect === true)
+    .sort((a, b) => (Number(a.timestamp) || 0) - (Number(b.timestamp) || 0))
+
+  // 2. Top 3 fastest correct answers receive the speed bonus point!
+  const top3PlayerIds = new Set(correctSubmissions.slice(0, 3).map(s => s.playerId))
+
+  const updatedProgress: Record<string, any> = { ...playersProgress }
+
+  for (const [pIdStr, pData] of Object.entries(updatedProgress)) {
+    const numId = parseInt(pIdStr)
+    const ans = currentAnswers[pIdStr]
+
+    if (typeof pData.score !== 'number') pData.score = 0
+    if (typeof pData.correctCount !== 'number') pData.correctCount = 0
+    if (typeof pData.speedBonusCount !== 'number') pData.speedBonusCount = 0
+    if (!Array.isArray(pData.roundHistory)) pData.roundHistory = []
+
+    let roundPoints = 0
+    let earnedSpeedBonus = false
+
+    if (ans && ans.isCorrect) {
+      roundPoints += 1 // Basic question point
+      pData.correctCount += 1
+
+      if (top3PlayerIds.has(numId)) {
+        roundPoints += 1 // Speed bonus point!
+        earnedSpeedBonus = true
+        pData.speedBonusCount += 1
+      }
+    }
+
+    pData.score += roundPoints
+    pData.lastRoundPoints = roundPoints
+    pData.lastRoundBonus = earnedSpeedBonus
+    pData.roundHistory.push({
+      roundPoints,
+      earnedSpeedBonus,
+      isCorrect: ans ? Boolean(ans.isCorrect) : false,
+      timestamp: ans ? ans.timestamp : null
+    })
+  }
+
+  return updatedProgress
+}
+
+async function advanceRoomToNextQuestion(room: any, currentAnswers: Record<string, any>) {
+  const playersProgress = (room.playersProgress as any) || {}
+  const updatedProgress = evaluateQuestionScores(playersProgress, currentAnswers)
+
+  const nextIndex = (room.currentQuestionIndex || 0) + 1
+  const isFinished = nextIndex >= room.questionCount
+
+  let winnerId = room.winnerId
+  if (isFinished) {
+    const sorted = Object.entries(updatedProgress)
+      .map(([id, p]: [string, any]) => ({ id: parseInt(id), score: p.score || 0 }))
+      .sort((a, b) => b.score - a.score)
+    if (sorted.length > 0) winnerId = sorted[0].id
+  }
+
+  const updatedRoom = await prisma.room.update({
+    where: { id: room.id },
+    data: {
+      currentQuestionIndex: nextIndex,
+      questionStartTime: Date.now(),
+      currentAnswers: {}, // Clear answers for new question
+      playersProgress: updatedProgress,
+      status: isFinished ? 'FINISHED' : 'PLAYING',
+      winnerId
+    }
+  })
+
+  return await getFullRoom(updatedRoom.id)
+}
+
 async function handlePoll(req: VercelRequest, res: VercelResponse) {
   const { roomId } = req.query
   try {
+    const room = await prisma.room.findUnique({ where: { id: roomId as string } })
+    if (!room) return res.status(404).json({ error: 'Room not found' })
+
+    // Auto-advance if timer expired on server side
+    if (room.status === 'PLAYING' && room.timePerQuestion > 0 && room.questionStartTime) {
+      const elapsed = (Date.now() - Number(room.questionStartTime)) / 1000
+      if (elapsed >= (room.timePerQuestion + 1.5)) {
+        const advancedRoom = await advanceRoomToNextQuestion(room, (room.currentAnswers as any) || {})
+        return res.status(200).json(advancedRoom)
+      }
+    }
+
     const fullRoom = await getFullRoom(roomId as string)
-    if (!fullRoom) return res.status(404).json({ error: 'Room not found' })
     return res.status(200).json(fullRoom)
   } catch (err: any) {
     return res.status(500).json({ error: err.message })
@@ -348,12 +451,102 @@ async function handleStart(req: VercelRequest, res: VercelResponse) {
   try {
     await prisma.room.update({
       where: { id: roomId as string },
-      data: { status: 'PLAYING' }
+      data: { 
+        status: 'PLAYING',
+        currentQuestionIndex: 0,
+        questionStartTime: Date.now(),
+        currentAnswers: {}
+      }
     })
     const fullRoom = await getFullRoom(roomId as string)
     return res.status(200).json(fullRoom)
   } catch (err: any) {
     return res.status(500).json({ error: err.message })
+  }
+}
+
+async function handleSubmitAnswer(req: VercelRequest, res: VercelResponse) {
+  const { roomId, playerId, questionIndex, isCorrect, timestamp } = req.body
+  if (!roomId || !playerId || questionIndex === undefined) {
+    return res.status(400).json({ message: 'Missing fields' })
+  }
+
+  try {
+    const room = await prisma.room.findUnique({ where: { id: roomId as string } })
+    if (!room || room.status !== 'PLAYING') {
+      return res.status(400).json({ message: 'Room not in play or finished' })
+    }
+
+    // Only accept answers for the active question
+    if (Number(questionIndex) !== room.currentQuestionIndex) {
+      const fullRoom = await getFullRoom(room.id)
+      return res.status(200).json(fullRoom)
+    }
+
+    const player = await findPlayer(playerId)
+    if (!player) return res.status(404).json({ message: 'Player not found' })
+
+    const currentAnswers: Record<string, any> = (room.currentAnswers as any) || {}
+    const pIdStr = String(player.id)
+
+    // Record answer if not yet registered
+    if (!currentAnswers[pIdStr]) {
+      currentAnswers[pIdStr] = {
+        playerId: player.id,
+        name: player.name,
+        isCorrect: Boolean(isCorrect),
+        timestamp: Number(timestamp) || Date.now()
+      }
+    }
+
+    const playersProgress = (room.playersProgress as any) || {}
+    const totalParticipants = Object.keys(playersProgress).length || 1
+    const answeredCount = Object.keys(currentAnswers).length
+
+    // Condition A: All players in the room answered!
+    if (answeredCount >= totalParticipants) {
+      const advancedRoom = await advanceRoomToNextQuestion(room, currentAnswers)
+      return res.status(200).json(advancedRoom)
+    }
+
+    // Otherwise save answer and return state with updated answeredCount
+    await prisma.room.update({
+      where: { id: room.id },
+      data: { currentAnswers }
+    })
+
+    const fullRoom = await getFullRoom(room.id)
+    return res.status(200).json(fullRoom)
+  } catch (error: any) {
+    console.error('Error in handleSubmitAnswer:', error)
+    return res.status(500).json({ message: 'Failed to submit answer', error: error.message })
+  }
+}
+
+async function handleAdvanceQuestion(req: VercelRequest, res: VercelResponse) {
+  const { roomId, questionIndex } = req.body
+  if (!roomId || questionIndex === undefined) {
+    return res.status(400).json({ message: 'Missing fields' })
+  }
+
+  try {
+    const room = await prisma.room.findUnique({ where: { id: roomId as string } })
+    if (!room || room.status !== 'PLAYING') {
+      return res.status(400).json({ message: 'Room not in play' })
+    }
+
+    // Guard against multiple clients double-advancing
+    if (Number(questionIndex) === room.currentQuestionIndex) {
+      const currentAnswers = (room.currentAnswers as any) || {}
+      const advancedRoom = await advanceRoomToNextQuestion(room, currentAnswers)
+      return res.status(200).json(advancedRoom)
+    }
+
+    const fullRoom = await getFullRoom(room.id)
+    return res.status(200).json(fullRoom)
+  } catch (error: any) {
+    console.error('Error in handleAdvanceQuestion:', error)
+    return res.status(500).json({ message: 'Failed to advance question', error: error.message })
   }
 }
 

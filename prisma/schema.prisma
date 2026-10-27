@@ -89,6 +89,9 @@ model Room {
   maxPlayers      Int      @default(2)    // Phase 1: Multiplayer Group Rooms
   gameMode        String   @default("STANDARD") // STANDARD, COMPLETION, SURAH
   timePerQuestion Int      @default(20)   // Time in seconds
+  currentQuestionIndex Int   @default(0)
+  questionStartTime Float?   @default(0)
+  currentAnswers   Json?     @default("{}")
   playersProgress Json     @default("{}") // Store progress as { playerId: progress }
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt

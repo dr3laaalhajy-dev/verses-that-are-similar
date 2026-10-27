@@ -1370,6 +1370,7 @@ export default function App() {
   const [skillsCorrectAnswer, setSkillsCorrectAnswer] = useState<string>('');
   const [isSpeedMode, setIsSpeedMode] = useState(false);
   const [skillsFeedback, setSkillsFeedback] = useState(false);
+  const [hasAnsweredCurrentQuestion, setHasAnsweredCurrentQuestion] = useState(false);
 
   // Speed Challenge State
   const [speedTimeLeft, setSpeedTimeLeft] = useState(30);
@@ -2509,22 +2510,65 @@ export default function App() {
     }
   };
 
+  const handleRoomTimeout = async () => {
+    if (!room?.id) return;
+    try {
+      const res = await fetch('/api/1v1', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'advance-question',
+          roomId: room.id,
+          questionIndex: room.currentQuestionIndex ?? currentChallengeIndex
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data) {
+        setRoom(data);
+        if (data.status === 'FINISHED') {
+          setView('group_game');
+        } else if (data.currentQuestionIndex > currentChallengeIndex) {
+          setCurrentChallengeIndex(data.currentQuestionIndex);
+          setHasAnsweredCurrentQuestion(false);
+          setSkillsFeedback(false);
+          setSelectedOption(null);
+          setMatchedIds(new Set());
+          setSurahFeedbackData(null);
+          setSpeedTimeLeft((data.timePerQuestion && data.timePerQuestion > 0) ? data.timePerQuestion : 0);
+          const nextQ = challenges[data.currentQuestionIndex] || data.challenges?.[data.currentQuestionIndex];
+          if (nextQ) {
+            const mode = nextQ.type === 'SURAH' ? 'surah' : (nextQ.type === 'STANDARD' || nextQ.type === 'AUDIO') ? 'audio' : 'complete';
+            setSkillsType(mode);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error in handleRoomTimeout:', err);
+    }
+  };
+
   // Poll room status
   useEffect(() => {
-    if (!room?.id || (view !== 'group_waiting' && view !== 'group_game')) return;
-    if (room.status === 'FINISHED') return;
+    if (!room?.id || (view !== 'group_waiting' && view !== 'group_game' && view !== 'challenge')) return;
+    if (room.status === 'FINISHED' && view === 'group_game') return;
 
     const poll = async () => {
       try {
         const res = await fetch(`/api/1v1?action=poll&roomId=${room.id}`);
         const data = await res.json();
         if (res.ok) {
-          const prevCount = prevParticipantsCount.current;
-          const newCount = data.participants?.length || 0;
-          if (newCount > prevCount && prevCount > 0) {
-          }
-          prevParticipantsCount.current = newCount;
+          prevParticipantsCount.current = data.participants?.length || 0;
 
+          // If room finished, switch to group_game results
+          if (data.status === 'FINISHED') {
+            setRoom(data);
+            if (view !== 'group_game') {
+              setView('group_game');
+            }
+            return;
+          }
+
+          // Initial start from waiting room
           if (view === 'group_waiting' && data.status === 'PLAYING') {
             const mapped = (data.challenges || []).map((q: any) => ({ ...q, verseText: q.verseText || q.keyword || q.text }));
             const firstQ = mapped[0];
@@ -2532,11 +2576,12 @@ export default function App() {
             setSkillsType(roomMode);
             setChallenges(mapped);
             setChallengesLoading(false);
-            setCurrentChallengeIndex(0);
+            setCurrentChallengeIndex(data.currentQuestionIndex || 0);
             setSessionCorrect(0);
             setSessionWrong(0);
             setSessionMistakes([]);
             setSkillsFeedback(false);
+            setHasAnsweredCurrentQuestion(false);
             setSelectedOption(null);
             setMatchedIds(new Set());
 
@@ -2546,6 +2591,31 @@ export default function App() {
             }
 
             setView('challenge');
+          } else if (view === 'challenge' && data.status === 'PLAYING') {
+            // Check if server advanced to next question
+            if (data.currentQuestionIndex !== undefined && data.currentQuestionIndex > currentChallengeIndex) {
+              setCurrentChallengeIndex(data.currentQuestionIndex);
+              setHasAnsweredCurrentQuestion(false);
+              setSkillsFeedback(false);
+              setSelectedOption(null);
+              setMatchedIds(new Set());
+              setSurahFeedbackData(null);
+              const roomTime = (data.timePerQuestion && data.timePerQuestion > 0) ? data.timePerQuestion : 0;
+              setSpeedTimeLeft(roomTime);
+
+              const nextQ = challenges[data.currentQuestionIndex] || data.challenges?.[data.currentQuestionIndex];
+              if (nextQ) {
+                const mode = nextQ.type === 'SURAH' ? 'surah' : (nextQ.type === 'STANDARD' || nextQ.type === 'AUDIO') ? 'audio' : 'complete';
+                setSkillsType(mode);
+              }
+            } else {
+              // Check if user's answer is recorded
+              const myPId = String(data.participants?.find((p: any) => p.name === playerName || p.username === playerUsername)?.id);
+              if (data.currentAnswers && myPId && data.currentAnswers[myPId] && !hasAnsweredCurrentQuestion) {
+                setHasAnsweredCurrentQuestion(true);
+                setSkillsFeedback(true);
+              }
+            }
           }
           setRoom(data);
         } else {
@@ -2556,9 +2626,9 @@ export default function App() {
       }
     };
 
-    const interval = setInterval(poll, 1000); // Poll every 1 second for better responsiveness
+    const interval = setInterval(poll, 1000); // Poll every 1 second for real-time multiplayer sync
     return () => clearInterval(interval);
-  }, [room?.id, view, room?.status]);
+  }, [room?.id, view, room?.status, currentChallengeIndex, playerName, playerUsername, hasAnsweredCurrentQuestion, challenges]);
 
   const syncGroupProgress = async (isFinished = false, forcedScore?: number) => {
     if (!room?.id) return;
@@ -2608,13 +2678,17 @@ export default function App() {
   useEffect(() => {
     let interval: any;
     const hasRoomTimer = !!(room && (room.timePerQuestion || 0) > 0);
-    const isActive = (view === 'speed_challenge' || (view === 'challenge' && (isSpeedMode || hasRoomTimer)) || (view === 'group_game' && hasRoomTimer)) && !isSpeedGameOver && !isComplete && !skillsFeedback;
+    const isActive = room 
+      ? (view === 'challenge' && hasRoomTimer && !isComplete && room.status === 'PLAYING')
+      : ((view === 'speed_challenge' || (view === 'challenge' && isSpeedMode)) && !isSpeedGameOver && !isComplete && !skillsFeedback);
 
     if (isActive) {
       interval = setInterval(() => {
         setSpeedTimeLeft((prev) => {
           if (prev <= 1) {
-            if (view === 'speed_challenge') {
+            if (room) {
+              handleRoomTimeout();
+            } else if (view === 'speed_challenge') {
               setIsSpeedGameOver(true);
             } else {
               handleSpeedTimeout();
@@ -2627,7 +2701,7 @@ export default function App() {
       }, 1000);
     }
     return () => clearInterval(interval);
-  }, [view, isSpeedGameOver, isComplete, isSpeedMode, stopListening, skillsFeedback, room?.timePerQuestion, room?.id]);
+  }, [view, isSpeedGameOver, isComplete, isSpeedMode, stopListening, skillsFeedback, room?.timePerQuestion, room?.id, room?.status, currentChallengeIndex]);
 
   // Reset Speed timer on each match
   useEffect(() => {
@@ -2833,6 +2907,10 @@ export default function App() {
   }, [currentChallenge?.id || currentChallenge?.keyword]);
 
   const handleSpeedTimeout = () => {
+    if (room?.id) {
+      handleRoomTimeout();
+      return;
+    }
     if (skillsFeedback || isComplete) return;
 
     const isSurah = skillsType === 'surah' || (room && roomGameMode === 'surah');
@@ -3031,6 +3109,43 @@ export default function App() {
         }
       }
 
+      if (room?.id) {
+        setHasAnsweredCurrentQuestion(true);
+        fetch('/api/1v1', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'submit-answer',
+            roomId: room.id,
+            playerId: playerUsername || playerName,
+            questionIndex: room.currentQuestionIndex ?? currentChallengeIndex,
+            isCorrect,
+            timestamp: Date.now()
+          })
+        }).then(res => res.json()).then(data => {
+          if (data && data.status) {
+            setRoom(data);
+            if (data.status === 'FINISHED') {
+              setView('group_game');
+            } else if (data.currentQuestionIndex !== undefined && data.currentQuestionIndex > currentChallengeIndex) {
+              setCurrentChallengeIndex(data.currentQuestionIndex);
+              setHasAnsweredCurrentQuestion(false);
+              setSkillsFeedback(false);
+              setSelectedOption(null);
+              setMatchedIds(new Set());
+              setSurahFeedbackData(null);
+              setSpeedTimeLeft((data.timePerQuestion && data.timePerQuestion > 0) ? data.timePerQuestion : 0);
+              const nextQ = challenges[data.currentQuestionIndex] || data.challenges?.[data.currentQuestionIndex];
+              if (nextQ) {
+                const mode = nextQ.type === 'SURAH' ? 'surah' : (nextQ.type === 'STANDARD' || nextQ.type === 'AUDIO') ? 'audio' : 'complete';
+                setSkillsType(mode);
+              }
+            }
+          }
+        }).catch(err => console.error('Error submitting room answer:', err));
+        return;
+      }
+
       const advanceDelay = isCorrect ? 1000 : 2500;
       setTimeout(() => {
         moveToNextQuestion();
@@ -3136,7 +3251,44 @@ export default function App() {
       isFullyCorrect
     }]);
 
-    // 4. Auto-advance (giving enough time to read the correct surahs on mistake)
+    // 4. Auto-advance in single-player, or submit in multiplayer
+    if (room?.id) {
+      setHasAnsweredCurrentQuestion(true);
+      fetch('/api/1v1', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'submit-answer',
+          roomId: room.id,
+          playerId: playerUsername || playerName,
+          questionIndex: room.currentQuestionIndex ?? currentChallengeIndex,
+          isCorrect: isFullyCorrect,
+          timestamp: Date.now()
+        })
+      }).then(res => res.json()).then(data => {
+        if (data && data.status) {
+          setRoom(data);
+          if (data.status === 'FINISHED') {
+            setView('group_game');
+          } else if (data.currentQuestionIndex !== undefined && data.currentQuestionIndex > currentChallengeIndex) {
+            setCurrentChallengeIndex(data.currentQuestionIndex);
+            setHasAnsweredCurrentQuestion(false);
+            setSkillsFeedback(false);
+            setSelectedOption(null);
+            setMatchedIds(new Set());
+            setSurahFeedbackData(null);
+            setSpeedTimeLeft((data.timePerQuestion && data.timePerQuestion > 0) ? data.timePerQuestion : 0);
+            const nextQ = challenges[data.currentQuestionIndex] || data.challenges?.[data.currentQuestionIndex];
+            if (nextQ) {
+              const mode = nextQ.type === 'SURAH' ? 'surah' : (nextQ.type === 'STANDARD' || nextQ.type === 'AUDIO') ? 'audio' : 'complete';
+              setSkillsType(mode);
+            }
+          }
+        }
+      }).catch(err => console.error('Error submitting room surah answer:', err));
+      return;
+    }
+
     const advanceDelay = isFullyCorrect ? 1000 : 2500;
     setTimeout(() => {
       moveToNextQuestion();
@@ -5204,6 +5356,8 @@ ${versesList}
                                   ...p,
                                   finishTime: room?.playersProgress?.[p.id]?.finishTime,
                                   score: room?.playersProgress?.[p.id]?.score || 0,
+                                  speedBonusCount: room?.playersProgress?.[p.id]?.speedBonusCount || 0,
+                                  correctCount: room?.playersProgress?.[p.id]?.correctCount || 0,
                                   isFinished: !!room?.playersProgress?.[p.id]?.finishTime
                                 }))
                                 .sort((a: any, b: any) => {
@@ -5216,7 +5370,7 @@ ${versesList}
                                     initial={{ opacity: 0, x: -20 }}
                                     animate={{ opacity: 1, x: 0 }}
                                     transition={{ delay: idx * 0.1 }}
-                                    className={`flex items-center gap-3 p-3 md:p-3.5 rounded-xl border ${idx === 0 ? 'bg-brand-gold/10 border-brand-gold' : 'bg-white border-slate-100 shadow-xs'}`}
+                                    className={`flex items-center gap-3 p-3 md:p-3.5 rounded-xl border ${idx === 0 ? 'bg-brand-gold/10 border-brand-gold shadow-md' : 'bg-white border-slate-100 shadow-xs'}`}
                                   >
                                     <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-sm ${idx === 0 ? 'bg-brand-gold text-brand-emerald' : 'bg-slate-100 text-slate-400'}`}>
                                       {idx + 1}
@@ -5224,10 +5378,18 @@ ${versesList}
                                     <div className="flex-1">
                                       <div className="font-black text-slate-800 flex justify-between items-center text-sm">
                                         <div className="flex flex-col items-start">
-                                          <span>{p.name} {(p.name === playerName || (p.username && p.username === playerUsername)) && '(أنت)'}</span>
+                                          <span className="font-black">{p.name} {(p.name === playerName || (p.username && p.username === playerUsername)) && '(أنت)'}</span>
                                           {!p.isFinished && <span className="text-[10px] text-slate-400 font-bold">جاري الحل...</span>}
                                         </div>
-                                        <span className="text-xs text-brand-gold font-bold">النقاط: {p.score}</span>
+                                        <div className="flex items-center gap-2">
+                                          {p.speedBonusCount > 0 && (
+                                            <span className="text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-black flex items-center gap-0.5">
+                                              <Zap className="w-3 h-3 text-amber-500 fill-amber-500" />
+                                              <span>+{p.speedBonusCount} سرعة</span>
+                                            </span>
+                                          )}
+                                          <span className="text-xs text-brand-gold font-black bg-brand-gold/10 px-2 py-0.5 rounded-lg">النقاط: {p.score}</span>
+                                        </div>
                                       </div>
                                     </div>
                                   </motion.div>
@@ -5368,6 +5530,30 @@ ${versesList}
                       </motion.div>
                     ) : (
                       <div className="max-w-2xl md:max-w-3xl lg:max-w-4xl mx-auto w-full px-2 md:px-4 pt-2 md:pt-4">
+                        {/* Multiplayer Real-time Question Counter & Speed Bonus Indicator */}
+                        {room && (
+                          <motion.div
+                            initial={{ opacity: 0, y: -5 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="flex flex-col sm:flex-row items-center justify-between gap-2.5 p-3 md:p-3.5 bg-linear-to-r from-slate-900/90 to-slate-800/90 text-white rounded-2xl border border-white/10 shadow-lg mb-4 text-xs font-bold"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="relative flex h-2.5 w-2.5">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                              </span>
+                              <span className="text-white font-black text-xs md:text-sm">
+                                أجاب {room.answeredCount ?? 0} من {room.totalParticipants ?? room.participants?.length ?? 1} لاعبين
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 bg-amber-500/20 text-amber-300 px-3 py-1 rounded-xl border border-amber-400/30 text-[11px] font-black">
+                              <Zap className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+                              <span>أول 3 إجابات صحيحة تنال بونص سرعة (+1) ⚡</span>
+                            </div>
+                          </motion.div>
+                        )}
+
                         <SkillsChallengeHeader
                           mode={skillsType}
                           verseText={KEYWORD}
@@ -5409,6 +5595,31 @@ ${versesList}
                             correctText={skillsCorrectAnswer || currentChallenge?.correctText}
                             currentChallenge={currentChallenge}
                           />
+                        )}
+
+                        {/* Multiplayer Waiting State after answering */}
+                        {room && hasAnsweredCurrentQuestion && (
+                          <motion.div
+                            initial={{ opacity: 0, scale: 0.96, y: 10 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            className="mt-6 p-4 md:p-6 rounded-3xl bg-amber-50/95 border-2 border-amber-300 shadow-xl text-center space-y-3"
+                          >
+                            <div className="w-10 h-10 bg-amber-100 text-amber-700 rounded-2xl flex items-center justify-center mx-auto shadow-xs">
+                              <Loader2 className="w-5 h-5 animate-spin text-amber-600" />
+                            </div>
+                            <div>
+                              <h4 className="text-base font-black text-amber-900 mb-0.5">
+                                تم تسجيل إجابتك بنجاح!
+                              </h4>
+                              <p className="text-xs text-amber-700 font-bold max-w-md mx-auto">
+                                ننتظر باقي المتسابقين... سينتقل الجميع سوياً إلى السؤال التالي فور اكتمال الإجابات أو انتهاء المؤقت.
+                              </p>
+                            </div>
+                            <div className="inline-flex items-center gap-2 bg-white px-3.5 py-1.5 rounded-full border border-amber-200 text-xs font-black text-amber-800 shadow-xs">
+                              <Users className="w-3.5 h-3.5 text-amber-600" />
+                              <span>أجاب ({room.answeredCount ?? 0} من {room.totalParticipants ?? room.participants?.length ?? 1})</span>
+                            </div>
+                          </motion.div>
                         )}
                       </div>
                     )}
@@ -8144,6 +8355,30 @@ ${versesList}
                           </div>
                         )}
 
+                        {/* Multiplayer Real-time Question Counter & Speed Bonus Indicator */}
+                        {room && (
+                          <motion.div
+                            initial={{ opacity: 0, y: -5 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="flex flex-col sm:flex-row items-center justify-between gap-2.5 p-3 md:p-3.5 bg-linear-to-r from-slate-900/90 to-slate-800/90 text-white rounded-2xl border border-white/10 shadow-lg mb-4 text-xs font-bold"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="relative flex h-2.5 w-2.5">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                              </span>
+                              <span className="text-white font-black text-xs md:text-sm">
+                                أجاب {room.answeredCount ?? 0} من {room.totalParticipants ?? room.participants?.length ?? 1} لاعبين
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 bg-amber-500/20 text-amber-300 px-3 py-1 rounded-xl border border-amber-400/30 text-[11px] font-black">
+                              <Zap className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+                              <span>أول 3 إجابات صحيحة تنال بونص سرعة (+1) ⚡</span>
+                            </div>
+                          </motion.div>
+                        )}
+
                         <SkillsChallengeHeader
                           index={challengeMode === 'daily' ? dailyChallengeIndex : (view === 'challenge' ? currentChallengeIndex : sessionCurrentIndex)}
                           total={challengeMode === 'daily' ? 1 : (challenges.length > 50 ? 20 : Math.max(challenges.length, 1))}
@@ -8224,6 +8459,31 @@ ${versesList}
                               setView('home');
                             }}
                           />
+                        )}
+
+                        {/* Multiplayer Waiting State after answering */}
+                        {room && hasAnsweredCurrentQuestion && (
+                          <motion.div
+                            initial={{ opacity: 0, scale: 0.96, y: 10 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            className="mt-6 p-4 md:p-6 rounded-3xl bg-amber-50/95 border-2 border-amber-300 shadow-xl text-center space-y-3"
+                          >
+                            <div className="w-10 h-10 bg-amber-100 text-amber-700 rounded-2xl flex items-center justify-center mx-auto shadow-xs">
+                              <Loader2 className="w-5 h-5 animate-spin text-amber-600" />
+                            </div>
+                            <div>
+                              <h4 className="text-base font-black text-amber-900 mb-0.5">
+                                تم تسجيل إجابتك بنجاح!
+                              </h4>
+                              <p className="text-xs text-amber-700 font-bold max-w-md mx-auto">
+                                ننتظر باقي المتسابقين... سينتقل الجميع سوياً إلى السؤال التالي فور اكتمال الإجابات أو انتهاء المؤقت.
+                              </p>
+                            </div>
+                            <div className="inline-flex items-center gap-2 bg-white px-3.5 py-1.5 rounded-full border border-amber-200 text-xs font-black text-amber-800 shadow-xs">
+                              <Users className="w-3.5 h-3.5 text-amber-600" />
+                              <span>أجاب ({room.answeredCount ?? 0} من {room.totalParticipants ?? room.participants?.length ?? 1})</span>
+                            </div>
+                          </motion.div>
                         )}
 
                         {/* Transcript Debug */}
