@@ -1,17 +1,35 @@
 import quranDataRaw from 'quran-json/dist/quran.json';
+import { juzBoundaries } from './JuzRepository';
 const quranData = quranDataRaw as any[];
+
+const getJuzForVerse = (surahId: number, verseNum: number): number => {
+  for (const b of juzBoundaries) {
+    if (
+      (surahId > b.startSurah || (surahId === b.startSurah && verseNum >= b.startVerse)) &&
+      (surahId < b.endSurah || (surahId === b.endSurah && verseNum <= b.endVerse))
+    ) {
+      return b.juz;
+    }
+  }
+  return 1;
+};
 
 interface GeneratedChallenge {
   prompt: string;
   options: string[];
   correctIndex: number;
   verseSource: string;
+  surah?: string;
+  juz?: number;
 }
 
 /**
- * يولد تحديات "تكملة الآية" آلياً.
+ * يولد تحديات "تكملة الآية" آلياً مع إمكانية التحديد بالأجزاء أو بسور معينة.
  */
-export function generateCompletionChallenges(count: number = 20): GeneratedChallenge[] {
+export function generateCompletionChallenges(
+  count: number = 20,
+  filter?: { juzs?: number[]; surahs?: string[] }
+): GeneratedChallenge[] {
   const commonStarts = [
     "يا أيها الذين آمنوا",
     "إن الذين آمنوا",
@@ -24,15 +42,39 @@ export function generateCompletionChallenges(count: number = 20): GeneratedChall
 
   const allVerses: any[] = [];
   quranData.forEach(surah => {
+    // If specific surahs are specified
+    if (filter?.surahs && filter.surahs.length > 0) {
+      const match = filter.surahs.some(s => {
+        const cleanS = s.replace(/^سورة\s+/, '').trim();
+        return surah.name === cleanS || surah.name.replace(/[أإآ]/g, 'ا') === cleanS.replace(/[أإآ]/g, 'ا');
+      });
+      if (!match) return;
+    }
+
     surah.verses.forEach((v: any) => {
-      allVerses.push({ ...v, surahName: surah.name });
+      const juzNum = getJuzForVerse(surah.id, v.id);
+      if (filter?.juzs && filter.juzs.length > 0 && filter.juzs.length < 30) {
+        if (!filter.juzs.includes(juzNum)) return;
+      }
+      allVerses.push({ ...v, surahName: surah.name, surahId: surah.id, juzNum });
     });
   });
 
   const challenges: GeneratedChallenge[] = [];
-  const selectedVerses = allVerses.filter(v => 
+  let selectedVerses = allVerses.filter(v => 
     commonStarts.some(start => v.text.startsWith(start)) && v.text.split(' ').length > 8
-  ).sort(() => 0.5 - Math.random()).slice(0, count);
+  );
+
+  // If specific surahs or juzs are chosen and we have fewer matches, allow verses of length >= 6
+  if ((filter?.surahs?.length || (filter?.juzs && filter.juzs.length < 30)) && selectedVerses.length < count) {
+    const additional = allVerses.filter(v => 
+      !selectedVerses.some(sv => sv.id === v.id && sv.surahId === v.surahId) && 
+      v.text.split(' ').length >= 6
+    );
+    selectedVerses = [...selectedVerses, ...additional];
+  }
+
+  selectedVerses = selectedVerses.sort(() => 0.5 - Math.random()).slice(0, count);
 
   selectedVerses.forEach(v => {
     const words = v.text.split(' ');
@@ -85,7 +127,9 @@ export function generateCompletionChallenges(count: number = 20): GeneratedChall
       prompt,
       options: shuffled,
       correctIndex,
-      verseSource: `سورة ${v.surahName} آية ${v.id}`
+      verseSource: `سورة ${v.surahName} - الجزء ${v.juzNum || 1} (آية ${v.id})`,
+      surah: v.surahName,
+      juz: v.juzNum || 1
     });
   });
 

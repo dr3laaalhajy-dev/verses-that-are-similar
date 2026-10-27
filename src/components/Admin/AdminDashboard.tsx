@@ -6,9 +6,11 @@ import {
   Hash, List, ChevronDown, ChevronUp, Users, Shield, UserPlus, Key, Loader2, Home,
   Crown, Lock, KeyRound, Copy, Check, User, Menu, LogOut, UserX, UserCheck,
   Trophy, Star, RefreshCw, Eye, EyeOff, ShieldCheck, CheckCircle2, XCircle,
-  Smartphone, Mail, ExternalLink, Clock, CheckCircle
+  Smartphone, Mail, ExternalLink, Clock, CheckCircle, Video, Play
 } from 'lucide-react';
 import { searchGroupedAyahsByStart, GroupedAyah } from '../../services/QuranRepository';
+import { ALL_QURAN_SURAHS, getJuzsForSurah, formatJuzsDescription, JUZ_NAMES_AR } from '../../services/JuzRepository';
+import { INITIAL_ISLAMIC_VIDEOS, VIDEO_CATEGORIES, IslamicVideo } from '../../data/islamicVideosData';
 import ConfirmModal from '../ConfirmModal';
 
 interface Verse {
@@ -16,6 +18,7 @@ interface Verse {
   text: string;
   surah: string;
   number: string | number;
+  juz?: number;
 }
 
 interface Challenge {
@@ -67,11 +70,542 @@ interface AdminDashboardProps {
     hideAudioChallenge: boolean;
     hideCompletionChallenge: boolean;
     hideSurahChallenge: boolean;
+    hideIslamicVideos?: boolean;
   };
   onSettingsUpdated?: () => void;
   onLogout: () => void;
   onBackHome: () => void;
 }
+
+const SurahPickerDropdown: React.FC<{
+  value: string;
+  onChange: (surahName: string) => void;
+  index: number;
+}> = ({ value, onChange, index }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const dropdownRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOpen]);
+
+  const filteredSurahs = useMemo(() => {
+    if (!search.trim()) return ALL_QURAN_SURAHS;
+    const cleanSearch = search.trim().replace(/^سورة\s+/, '');
+    const normSearch = cleanSearch.replace(/[أإآ]/g, 'ا');
+    return ALL_QURAN_SURAHS.filter(s => {
+      const sName = s.name.replace(/^سورة\s+/, '');
+      const sNorm = sName.replace(/[أإآ]/g, 'ا');
+      return sName.includes(cleanSearch) || sNorm.includes(normSearch) || String(s.id).includes(cleanSearch);
+    });
+  }, [search]);
+
+  const juzs = useMemo(() => {
+    return value ? getJuzsForSurah(value) : [];
+  }, [value]);
+
+  const selectedSurahMeta = useMemo(() => {
+    if (!value) return null;
+    const clean = value.replace(/^سورة\s+/, '').trim();
+    return ALL_QURAN_SURAHS.find(s => s.name === clean || s.name === value);
+  }, [value]);
+
+  return (
+    <div className="space-y-2 relative" ref={dropdownRef}>
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() => setIsOpen(!isOpen)}
+          className={`w-full px-5 py-4 rounded-2xl bg-white border-2 text-right font-bold text-base flex items-center justify-between transition-all ${
+            isOpen 
+              ? 'border-brand-emerald shadow-md ring-2 ring-brand-emerald/10' 
+              : value 
+                ? 'border-brand-emerald/50 bg-brand-emerald/5 text-slate-800' 
+                : 'border-slate-200 text-slate-400 hover:border-slate-300'
+          }`}
+        >
+          <div className="flex items-center gap-3 min-w-0">
+            <span className="w-8 h-8 rounded-xl bg-brand-emerald/10 text-brand-emerald flex items-center justify-center text-xs font-black shrink-0">
+              {selectedSurahMeta ? selectedSurahMeta.id : index + 1}
+            </span>
+            <span className={`truncate ${value ? 'text-slate-900 font-black text-base md:text-lg' : 'text-slate-400 font-bold'}`}>
+              {value ? `سورة ${value.replace(/^سورة\s+/, '')}` : 'اضغط لاختيار اسم السورة...'}
+            </span>
+          </div>
+          <ChevronDown className={`w-5 h-5 text-slate-400 shrink-0 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        </button>
+
+        {isOpen && (
+          <div className="absolute z-50 top-full mt-2 left-0 right-0 bg-white rounded-3xl border border-slate-200 shadow-2xl overflow-hidden p-3 animate-in fade-in slide-in-from-top-2 duration-150">
+            {/* Search Input */}
+            <div className="relative mb-2">
+              <Search className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                autoFocus
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="ابحث باسم السورة أو رقمها (مثال: البقرة، 2، الكهف)..."
+                className="w-full pr-10 pl-14 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs sm:text-sm font-bold outline-none focus:border-brand-emerald focus:bg-white transition-all text-right"
+              />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch('')}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold"
+                >
+                  مسح
+                </button>
+              )}
+            </div>
+
+            {/* List */}
+            <div className="max-h-60 overflow-y-auto space-y-1 custom-scrollbar pr-1">
+              {filteredSurahs.map((surah) => {
+                const isSelected = selectedSurahMeta?.id === surah.id;
+                const sJuzs = getJuzsForSurah(surah.id);
+                return (
+                  <button
+                    key={surah.id}
+                    type="button"
+                    onClick={() => {
+                      onChange(surah.name);
+                      setIsOpen(false);
+                      setSearch('');
+                    }}
+                    className={`w-full px-3.5 py-2.5 rounded-xl text-right flex items-center justify-between text-xs sm:text-sm transition-all ${
+                      isSelected
+                        ? 'bg-brand-emerald text-white font-black shadow-xs'
+                        : 'hover:bg-brand-emerald/10 text-slate-700 hover:text-brand-emerald font-bold'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span className={`w-6 h-6 rounded-lg text-xs flex items-center justify-center font-black shrink-0 ${
+                        isSelected ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'
+                      }`}>
+                        {surah.id}
+                      </span>
+                      <span className="truncate">سورة {surah.name}</span>
+                    </div>
+
+                    <span className={`text-[10px] sm:text-[11px] font-bold shrink-0 mr-2 ${
+                      isSelected ? 'text-white/90' : 'text-slate-400'
+                    }`}>
+                      {formatJuzsDescription(sJuzs)}
+                    </span>
+                  </button>
+                );
+              })}
+
+              {filteredSurahs.length === 0 && (
+                <div className="py-6 text-center text-slate-400 text-xs font-bold">
+                  لم يتم العثور على سورة بهذا الاسم
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Auto-detected Juz(s) Badges Display */}
+      {juzs.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: -4 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="p-3 bg-linear-to-r from-emerald-50 via-teal-50 to-emerald-50 border border-emerald-200/80 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2"
+        >
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-xs font-black text-emerald-900 flex items-center gap-1.5">
+              <BookOpen className="w-4 h-4 text-brand-gold shrink-0" />
+              يقع تلقائياً في:
+            </span>
+            {juzs.map((j) => (
+              <span
+                key={j}
+                className="px-2.5 py-0.5 bg-white text-emerald-800 font-black text-xs rounded-xl border border-emerald-300/80 shadow-2xs flex items-center gap-1"
+              >
+                <span>الجزء {JUZ_NAMES_AR[j] || j}</span>
+                <span className="text-[10px] text-emerald-600 font-bold">({j})</span>
+              </span>
+            ))}
+          </div>
+
+          <div className="text-[11px] font-black text-emerald-700 bg-white/70 px-2.5 py-1 rounded-xl border border-emerald-200/60 mr-auto sm:mr-0">
+            {formatJuzsDescription(juzs)}
+          </div>
+        </motion.div>
+      )}
+    </div>
+  );
+};
+
+const CompletionSurahJuzPicker: React.FC<{
+  value: string;
+  onChange: (category: string) => void;
+}> = ({ value, onChange }) => {
+  const [isSurahOpen, setIsSurahOpen] = useState(false);
+  const [isJuzOpen, setIsJuzOpen] = useState(false);
+  const [surahSearch, setSurahSearch] = useState('');
+  const [showManualEdit, setShowManualEdit] = useState(false);
+
+  const surahDropdownRef = React.useRef<HTMLDivElement>(null);
+  const juzDropdownRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (surahDropdownRef.current && !surahDropdownRef.current.contains(e.target as Node)) {
+        setIsSurahOpen(false);
+      }
+      if (juzDropdownRef.current && !juzDropdownRef.current.contains(e.target as Node)) {
+        setIsJuzOpen(false);
+      }
+    };
+    if (isSurahOpen || isJuzOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isSurahOpen, isJuzOpen]);
+
+  // Parse current value to extract surah and juz
+  const parsed = useMemo(() => {
+    if (!value || !value.trim()) return { surah: null, juz: null };
+
+    // Surah extraction
+    let foundSurah: typeof ALL_QURAN_SURAHS[0] | null = null;
+    for (const s of ALL_QURAN_SURAHS) {
+      if (value.includes(`سورة ${s.name}`) || value.includes(s.name)) {
+        if (!foundSurah || s.name.length > foundSurah.name.length) {
+          foundSurah = s;
+        }
+      }
+    }
+
+    // Juz extraction
+    let foundJuz: number | null = null;
+    const matchNum = value.match(/جزء\s*(\d+)/i) || value.match(/الجزء\s*(\d+)/i);
+    if (matchNum && matchNum[1]) {
+      const num = parseInt(matchNum[1], 10);
+      if (num >= 1 && num <= 30) foundJuz = num;
+    }
+    if (!foundJuz) {
+      for (const [jNumStr, jName] of Object.entries(JUZ_NAMES_AR)) {
+        if (value.includes(jName)) {
+          foundJuz = parseInt(jNumStr, 10);
+          break;
+        }
+      }
+    }
+
+    return { surah: foundSurah, juz: foundJuz };
+  }, [value]);
+
+  const selectedSurah = parsed.surah;
+  const selectedJuz = parsed.juz;
+
+  const filteredSurahs = useMemo(() => {
+    if (!surahSearch.trim()) return ALL_QURAN_SURAHS;
+    const cleanSearch = surahSearch.trim().replace(/^سورة\s+/, '');
+    const normSearch = cleanSearch.replace(/[أإآ]/g, 'ا');
+    return ALL_QURAN_SURAHS.filter(s => {
+      const sName = s.name.replace(/^سورة\s+/, '');
+      const sNorm = sName.replace(/[أإآ]/g, 'ا');
+      return sName.includes(cleanSearch) || sNorm.includes(normSearch) || String(s.id).includes(cleanSearch);
+    });
+  }, [surahSearch]);
+
+  const surahJuzs = useMemo(() => {
+    return selectedSurah ? getJuzsForSurah(selectedSurah.id) : [];
+  }, [selectedSurah]);
+
+  const handleSelectSurah = (surah: typeof ALL_QURAN_SURAHS[0]) => {
+    setIsSurahOpen(false);
+    setSurahSearch('');
+
+    const potentialJuzs = getJuzsForSurah(surah.id);
+    let newJuz = selectedJuz;
+    if (!newJuz || !potentialJuzs.includes(newJuz)) {
+      newJuz = potentialJuzs[0] || null;
+    }
+
+    let result = `سورة ${surah.name}`;
+    if (newJuz) {
+      result += ` - الجزء ${JUZ_NAMES_AR[newJuz] || newJuz}`;
+    }
+    onChange(result);
+  };
+
+  const handleSelectJuz = (juzNum: number) => {
+    setIsJuzOpen(false);
+    let result = '';
+    if (selectedSurah) {
+      result = `سورة ${selectedSurah.name} - الجزء ${JUZ_NAMES_AR[juzNum] || juzNum}`;
+    } else {
+      result = `الجزء ${JUZ_NAMES_AR[juzNum] || juzNum}`;
+    }
+    onChange(result);
+  };
+
+  const handleClear = () => {
+    onChange('');
+    setIsSurahOpen(false);
+    setIsJuzOpen(false);
+  };
+
+  return (
+    <div className="bg-white p-5 md:p-6 rounded-3xl border-2 border-slate-100 shadow-xs space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <label className="text-xs md:text-sm font-black text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+            <BookOpen className="w-4 h-4 text-brand-emerald" />
+            <span>بأي سورة وبأي جزء</span>
+          </label>
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-slate-100 text-slate-500 border border-slate-200">
+            اختياري
+          </span>
+        </div>
+
+        {value && (
+          <button
+            type="button"
+            onClick={handleClear}
+            className="text-xs font-black text-rose-500 hover:text-rose-600 hover:bg-rose-50 px-2.5 py-1 rounded-xl transition-all flex items-center gap-1"
+          >
+            <X className="w-3.5 h-3.5" />
+            <span>مسح التحديد</span>
+          </button>
+        )}
+      </div>
+
+      {/* Two action buttons: Choose Surah & Choose Juz */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {/* 1. Button Choose Surah */}
+        <div className="relative" ref={surahDropdownRef}>
+          <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 mr-1">
+            اختيار السورة
+          </label>
+          <button
+            type="button"
+            onClick={() => {
+              setIsSurahOpen(!isSurahOpen);
+              setIsJuzOpen(false);
+            }}
+            className={`w-full px-4 py-3.5 rounded-2xl border-2 text-right font-bold text-sm flex items-center justify-between transition-all ${
+              isSurahOpen
+                ? 'border-brand-emerald shadow-md ring-2 ring-brand-emerald/10 bg-white'
+                : selectedSurah
+                  ? 'border-brand-emerald/40 bg-brand-emerald/5 text-slate-900'
+                  : 'border-slate-200 bg-slate-50/50 text-slate-400 hover:border-slate-300 hover:bg-white'
+            }`}
+          >
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className={`w-7 h-7 rounded-lg text-xs font-black flex items-center justify-center shrink-0 ${
+                selectedSurah ? 'bg-brand-emerald text-white shadow-xs' : 'bg-slate-200 text-slate-500'
+              }`}>
+                {selectedSurah ? selectedSurah.id : <BookOpen className="w-3.5 h-3.5" />}
+              </span>
+              <span className={`truncate ${selectedSurah ? 'text-slate-800 font-black' : 'text-slate-500 font-bold'}`}>
+                {selectedSurah ? `سورة ${selectedSurah.name}` : 'اضغط لاختيار السورة'}
+              </span>
+            </div>
+            <ChevronDown className={`w-4 h-4 text-slate-400 shrink-0 transition-transform ${isSurahOpen ? 'rotate-180' : ''}`} />
+          </button>
+
+          {isSurahOpen && (
+            <div className="absolute z-50 top-full mt-2 left-0 right-0 bg-white rounded-3xl border border-slate-200 shadow-2xl overflow-hidden p-3 animate-in fade-in slide-in-from-top-2 duration-150 min-w-[280px]">
+              {/* Search */}
+              <div className="relative mb-2">
+                <Search className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <input
+                  type="text"
+                  autoFocus
+                  value={surahSearch}
+                  onChange={(e) => setSurahSearch(e.target.value)}
+                  placeholder="ابحث عن سورة (مثال: الفاتحة، الكهف، 18)..."
+                  className="w-full pr-10 pl-14 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-bold outline-none focus:border-brand-emerald focus:bg-white transition-all text-right"
+                />
+                {surahSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setSurahSearch('')}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold"
+                  >
+                    مسح
+                  </button>
+                )}
+              </div>
+
+              {/* Surah List */}
+              <div className="max-h-56 overflow-y-auto space-y-1 custom-scrollbar pr-1">
+                {filteredSurahs.map((surah) => {
+                  const isSelected = selectedSurah?.id === surah.id;
+                  const sJuzs = getJuzsForSurah(surah.id);
+                  return (
+                    <button
+                      key={surah.id}
+                      type="button"
+                      onClick={() => handleSelectSurah(surah)}
+                      className={`w-full px-3 py-2 rounded-xl text-right flex items-center justify-between text-xs transition-all ${
+                        isSelected
+                          ? 'bg-brand-emerald text-white font-black shadow-xs'
+                          : 'hover:bg-brand-emerald/10 text-slate-700 hover:text-brand-emerald font-bold'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className={`w-5 h-5 rounded-md text-[10px] flex items-center justify-center font-black shrink-0 ${
+                          isSelected ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'
+                        }`}>
+                          {surah.id}
+                        </span>
+                        <span className="truncate">سورة {surah.name}</span>
+                      </div>
+                      <span className={`text-[10px] font-bold shrink-0 ${isSelected ? 'text-white/90' : 'text-slate-400'}`}>
+                        {formatJuzsDescription(sJuzs)}
+                      </span>
+                    </button>
+                  );
+                })}
+                {filteredSurahs.length === 0 && (
+                  <div className="py-4 text-center text-slate-400 text-xs font-bold">لا توجد نتائج</div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* 2. Button Choose Juz */}
+        <div className="relative" ref={juzDropdownRef}>
+          <label className="block text-[10px] font-black text-slate-400 uppercase mb-1.5 mr-1">
+            اختيار الجزء
+          </label>
+          <button
+            type="button"
+            onClick={() => {
+              setIsJuzOpen(!isJuzOpen);
+              setIsSurahOpen(false);
+            }}
+            className={`w-full px-4 py-3.5 rounded-2xl border-2 text-right font-bold text-sm flex items-center justify-between transition-all ${
+              isJuzOpen
+                ? 'border-brand-emerald shadow-md ring-2 ring-brand-emerald/10 bg-white'
+                : selectedJuz
+                  ? 'border-brand-emerald/40 bg-brand-emerald/5 text-slate-900'
+                  : 'border-slate-200 bg-slate-50/50 text-slate-400 hover:border-slate-300 hover:bg-white'
+            }`}
+          >
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className={`w-7 h-7 rounded-lg text-xs font-black flex items-center justify-center shrink-0 ${
+                selectedJuz ? 'bg-teal-600 text-white shadow-xs' : 'bg-slate-200 text-slate-500'
+              }`}>
+                {selectedJuz ? selectedJuz : <Hash className="w-3.5 h-3.5" />}
+              </span>
+              <span className={`truncate ${selectedJuz ? 'text-slate-800 font-black' : 'text-slate-500 font-bold'}`}>
+                {selectedJuz ? `الجزء ${JUZ_NAMES_AR[selectedJuz] || selectedJuz}` : 'اضغط لاختيار الجزء'}
+              </span>
+            </div>
+            <ChevronDown className={`w-4 h-4 text-slate-400 shrink-0 transition-transform ${isJuzOpen ? 'rotate-180' : ''}`} />
+          </button>
+
+          {isJuzOpen && (
+            <div className="absolute z-50 top-full mt-2 left-0 right-0 sm:left-auto sm:right-0 sm:w-80 bg-white rounded-3xl border border-slate-200 shadow-2xl p-4 animate-in fade-in slide-in-from-top-2 duration-150">
+              <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-100">
+                <span className="text-xs font-black text-slate-700">اختر رقم الجزء (1 - 30)</span>
+                {surahJuzs.length > 0 && (
+                  <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-100">
+                    أجزاء {selectedSurah?.name}: {surahJuzs.join(', ')}
+                  </span>
+                )}
+              </div>
+
+              <div className="grid grid-cols-5 gap-1.5 max-h-56 overflow-y-auto custom-scrollbar p-0.5">
+                {Array.from({ length: 30 }, (_, i) => i + 1).map((juzNum) => {
+                  const isSelected = selectedJuz === juzNum;
+                  const isSurahMatch = surahJuzs.includes(juzNum);
+                  return (
+                    <button
+                      key={juzNum}
+                      type="button"
+                      onClick={() => handleSelectJuz(juzNum)}
+                      className={`p-2 rounded-xl text-center flex flex-col items-center justify-center transition-all ${
+                        isSelected
+                          ? 'bg-brand-emerald text-white font-black shadow-md scale-105'
+                          : isSurahMatch
+                            ? 'bg-emerald-50 text-emerald-800 font-black border border-emerald-200 hover:bg-emerald-100'
+                            : 'bg-slate-50 text-slate-700 font-bold border border-slate-100 hover:bg-slate-100'
+                      }`}
+                      title={`الجزء ${JUZ_NAMES_AR[juzNum] || juzNum}`}
+                    >
+                      <span className="text-xs font-black">{juzNum}</span>
+                      <span className="text-[8px] opacity-75 truncate max-w-full">
+                        {JUZ_NAMES_AR[juzNum]?.split(' ')[0] || ''}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Selected Result Badge */}
+      {value ? (
+        <div className="p-3 bg-linear-to-r from-emerald-50 via-teal-50 to-emerald-50 border border-emerald-200 rounded-2xl flex items-center justify-between text-xs">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span className="text-slate-500 font-bold">الموضع المحدد:</span>
+            <span className="text-emerald-900 font-black quran-text text-sm">
+              {value}
+            </span>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowManualEdit(!showManualEdit)}
+            className="text-[11px] font-bold text-slate-500 hover:text-slate-700 underline mr-2"
+          >
+            {showManualEdit ? 'إخفاء التعديل' : 'تعديل يدوياً'}
+          </button>
+        </div>
+      ) : (
+        <p className="text-[11px] text-slate-400 font-medium mr-1">
+          💡 يمكنك ترك هذا الحقل فارغاً أو تحديد السورة ورقم الجزء ليظهرا للاعبين عند حل السؤال.
+        </p>
+      )}
+
+      {/* Optional Manual override input */}
+      {showManualEdit && (
+        <motion.div
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          className="pt-2 border-t border-slate-100 space-y-1.5"
+        >
+          <label className="block text-[10px] font-bold text-slate-400">
+            النص النهائي الذي سيُحفظ في الحقل:
+          </label>
+          <input
+            type="text"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder="مثال: سورة البقرة - الجزء الأول"
+            className="w-full px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 focus:border-brand-emerald focus:bg-white outline-none font-bold text-xs transition-all text-right"
+          />
+        </motion.div>
+      )}
+    </div>
+  );
+};
 
 export default function AdminDashboard({ 
   token, 
@@ -90,7 +624,7 @@ export default function AdminDashboard({
   const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [admins, setAdmins] = useState<Admin[]>([]);
   const [inviteCodes, setInviteCodes] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<'STANDARD' | 'COMPLETION' | 'SURAH' | 'admins' | 'users' | 'testers'>('STANDARD');
+  const [activeTab, setActiveTab] = useState<'STANDARD' | 'COMPLETION' | 'SURAH' | 'videos' | 'admins' | 'users' | 'testers'>('STANDARD');
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -130,7 +664,7 @@ export default function AdminDashboard({
   const [testersList, setTestersList] = useState<{
     id: number;
     email: string;
-    status: 'PENDING' | 'APPROVED' | 'REJECTED';
+    status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'EXPORTED' | 'ADDED';
     approvedAt?: string | null;
     createdAt: string;
   }[]>([]);
@@ -278,6 +812,7 @@ export default function AdminDashboard({
     hideAudioChallenge: systemSettings?.hideAudioChallenge ?? false,
     hideCompletionChallenge: systemSettings?.hideCompletionChallenge ?? false,
     hideSurahChallenge: systemSettings?.hideSurahChallenge ?? false,
+    hideIslamicVideos: systemSettings?.hideIslamicVideos ?? false,
   });
   const [isUpdatingSettings, setIsUpdatingSettings] = useState(false);
   const [isSettingsDropdownOpen, setIsSettingsDropdownOpen] = useState(false);
@@ -287,6 +822,20 @@ export default function AdminDashboard({
   const [usersLoading, setUsersLoading] = useState(false);
   const [usersSearch, setUsersSearch] = useState('');
   const [usersFilter, setUsersFilter] = useState<'all' | 'active' | 'blocked'>('all');
+
+  // Video Management State
+  const [videoAdminSearch, setVideoAdminSearch] = useState('');
+  const [videoAdminCategory, setVideoAdminCategory] = useState('all');
+
+  const filteredAdminVideos = useMemo(() => {
+    return INITIAL_ISLAMIC_VIDEOS.filter((v: IslamicVideo) => {
+      const matchCat = videoAdminCategory === 'all' || v.category === videoAdminCategory;
+      const matchQuery = !videoAdminSearch.trim() ||
+        v.title.toLowerCase().includes(videoAdminSearch.toLowerCase()) ||
+        v.sheikh.toLowerCase().includes(videoAdminSearch.toLowerCase());
+      return matchCat && matchQuery;
+    });
+  }, [videoAdminSearch, videoAdminCategory]);
 
   // Modals for Users
   const [editingUser, setEditingUser] = useState<PlayerUser | null>(null);
@@ -307,7 +856,12 @@ export default function AdminDashboard({
 
   useEffect(() => {
     if (systemSettings) {
-      setLocalSettings(systemSettings);
+      setLocalSettings({
+        hideAudioChallenge: !!systemSettings.hideAudioChallenge,
+        hideCompletionChallenge: !!systemSettings.hideCompletionChallenge,
+        hideSurahChallenge: !!systemSettings.hideSurahChallenge,
+        hideIslamicVideos: !!systemSettings.hideIslamicVideos,
+      });
     }
   }, [systemSettings]);
 
@@ -343,7 +897,7 @@ export default function AdminDashboard({
     }
   }, [localSettings, isFounderAlaa, activeTab, canSeeAdminsTab, canManageUsersTab, canManageTestersTab]);
 
-  const handleToggleSetting = async (key: 'hideAudioChallenge' | 'hideCompletionChallenge' | 'hideSurahChallenge', nextVal: boolean) => {
+  const handleToggleSetting = async (key: 'hideAudioChallenge' | 'hideCompletionChallenge' | 'hideSurahChallenge' | 'hideIslamicVideos', nextVal: boolean) => {
     setIsUpdatingSettings(true);
     const updated = { ...localSettings, [key]: nextVal };
     setLocalSettings(updated);
@@ -361,6 +915,11 @@ export default function AdminDashboard({
       } else if (key === 'hideSurahChallenge' && activeTab === 'SURAH') {
         if (!updated.hideAudioChallenge) setActiveTab('STANDARD');
         else if (!updated.hideCompletionChallenge) setActiveTab('COMPLETION');
+        else if (canSeeAdminsTab) setActiveTab('admins');
+      } else if (key === 'hideIslamicVideos' && activeTab === 'videos') {
+        if (!updated.hideAudioChallenge) setActiveTab('STANDARD');
+        else if (!updated.hideCompletionChallenge) setActiveTab('COMPLETION');
+        else if (!updated.hideSurahChallenge) setActiveTab('SURAH');
         else if (canSeeAdminsTab) setActiveTab('admins');
       }
     }
@@ -443,6 +1002,18 @@ export default function AdminDashboard({
   const [suggestions, setSuggestions] = useState<GroupedAyah[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Automatically calculate and sync Juzs (category) when in SURAH mode
+  useEffect(() => {
+    if (type === 'SURAH') {
+      const allJuzs = Array.from(new Set(
+        correctSurahs.filter(s => s && s.trim()).flatMap(s => getJuzsForSurah(s))
+      )).sort((a, b) => a - b);
+      if (allJuzs.length > 0) {
+        setCategory(formatJuzsDescription(allJuzs));
+      }
+    }
+  }, [correctSurahs, type]);
 
   const checkMyPermissions = useCallback(async () => {
     if (!token) return;
@@ -705,12 +1276,11 @@ export default function AdminDashboard({
       }
     }
     if (type === 'SURAH' && correctSurahs.filter(s => s.trim()).length === 0) {
-      showAlert('تنبيه', 'يرجى إدخال اسم سورة صحيح واحد على الأقل');
+      showAlert('تنبيه', 'يرجى اختيار اسم سورة صحيح واحد على الأقل');
       return;
     }
 
     const payloadVerses = type === 'STANDARD' ? verses : [];
-
 
     const method = editingId ? 'PUT' : 'POST';
     const url = editingId ? `/api/challenges/${editingId}` : '/api/challenges';
@@ -726,11 +1296,22 @@ export default function AdminDashboard({
         }))
       : options;
 
+    let finalCategory = category;
+    if (type === 'SURAH') {
+      const allJuzs = Array.from(new Set(
+        correctSurahs.filter(s => s.trim()).flatMap(s => getJuzsForSurah(s))
+      )).sort((a, b) => a - b);
+      if (allJuzs.length > 0) {
+        finalCategory = formatJuzsDescription(allJuzs);
+      }
+    }
+    const finalLevel = level || 'medium';
+
     const payload = { 
       keyword, 
       verses: payloadVerses, 
-      category, 
-      level, 
+      category: finalCategory, 
+      level: finalLevel, 
       type, 
       audioUrl, 
       options: finalOptions, 
@@ -1075,7 +1656,7 @@ export default function AdminDashboard({
     setLevel('');
     setVerses([]);
     setSuggestions([]);
-    setType(activeTab === 'admins' || activeTab === 'users' || activeTab === 'testers' ? 'STANDARD' : activeTab);
+    setType(activeTab === 'admins' || activeTab === 'users' || activeTab === 'testers' || activeTab === 'videos' ? 'STANDARD' : activeTab);
     setAudioUrl('');
     setOptions(['', '', '', '']);
     setCorrectIndex(null);
@@ -1088,9 +1669,16 @@ export default function AdminDashboard({
   const startEdit = (c: any) => {
     setEditingId(c.id);
     setKeyword(c.keyword);
-    setCategory(c.category || '');
-    setLevel(c.level || '');
     const cType = (c.type === 'AUDIO' || !c.type) ? 'STANDARD' : c.type;
+    let initialCat = c.category || '';
+    if (!initialCat && cType === 'COMPLETION' && Array.isArray(c.verses) && c.verses[0]?.surah) {
+      const v = c.verses[0];
+      const sName = String(v.surah).replace(/^سورة\s+/, '').trim();
+      const jNum = v.juz;
+      initialCat = jNum ? `سورة ${sName} - الجزء ${JUZ_NAMES_AR[jNum] || jNum}` : `سورة ${sName}`;
+    }
+    setCategory(initialCat);
+    setLevel(c.level || '');
     setActiveTab(cType);
     setType(cType as 'STANDARD' | 'COMPLETION' | 'SURAH');
     setAudioUrl(c.audioUrl || '');
@@ -1158,7 +1746,7 @@ export default function AdminDashboard({
             <div>
               <h1 className="text-xs font-black text-slate-800 leading-tight">لوحة التحكم</h1>
               <span className="text-[10px] text-brand-emerald font-bold">
-                {activeTab === 'STANDARD' ? 'المتشابهات' : activeTab === 'COMPLETION' ? 'تكملة الآية' : activeTab === 'SURAH' ? 'اسم السورة' : activeTab === 'users' ? 'إدارة المستخدمين' : activeTab === 'testers' ? 'طلبات Google Play' : 'المشرفين'}
+                {activeTab === 'STANDARD' ? 'المتشابهات' : activeTab === 'COMPLETION' ? 'تكملة الآية' : activeTab === 'SURAH' ? 'اسم السورة' : activeTab === 'videos' ? 'المكتبة المرئية' : activeTab === 'users' ? 'إدارة المستخدمين' : activeTab === 'testers' ? 'طلبات Google Play' : 'المشرفين'}
               </span>
             </div>
           </div>
@@ -1198,33 +1786,33 @@ export default function AdminDashboard({
       {/* Sidebar (Right-hand in RTL) */}
       <aside className={`
         fixed md:sticky top-0 right-0 z-50 md:z-30 h-screen
-        w-72 md:w-80 bg-white/95 md:bg-white/90 backdrop-blur-xl border-l border-slate-200/80
+        w-72 md:w-80 bg-white/95 md:bg-white/90 dark:bg-slate-900/95 md:dark:bg-slate-900/90 backdrop-blur-xl border-l border-slate-200/80 dark:border-slate-800
         flex flex-col justify-between transition-transform duration-300 ease-in-out shadow-2xl md:shadow-none
         ${isMobileSidebarOpen ? 'translate-x-0' : 'translate-x-full md:translate-x-0'}
       `}>
         {/* Top Header of Sidebar */}
-        <div className="p-5 md:p-6 border-b border-slate-100">
+        <div className="p-5 md:p-6 border-b border-slate-100 dark:border-slate-800">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
               <div className="bg-brand-emerald p-2.5 rounded-2xl shadow-lg shadow-brand-emerald/20 text-white flex-shrink-0">
                 <LayoutDashboard className="w-5 h-5" />
               </div>
               <div>
-                <h2 className="text-base font-black text-slate-800 leading-tight">إدارة المتشابهات</h2>
+                <h2 className="text-base font-black text-slate-800 dark:text-slate-100 leading-tight">إدارة المتشابهات</h2>
                 <p className="text-[10px] font-black text-slate-400 tracking-wider uppercase">لوحة التحكم المركزية</p>
               </div>
             </div>
             <button
               type="button"
               onClick={() => setIsMobileSidebarOpen(false)}
-              className="md:hidden p-2 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition-colors"
+              className="md:hidden p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
 
           {/* Current Logged In Admin Profile Card */}
-          <div className="flex items-center gap-3 p-3 rounded-2xl bg-slate-50/90 border border-slate-200/70 shadow-xs">
+          <div className="flex items-center gap-3 p-3 rounded-2xl bg-slate-50/90 dark:bg-slate-800/80 border border-slate-200/70 dark:border-slate-700 shadow-xs">
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-xs shrink-0 ${
               isCurrentUserFounder ? 'bg-amber-500 shadow-amber-500/20' : isCurrentUserCoFounder ? 'bg-indigo-600 shadow-indigo-600/20' : 'bg-brand-emerald shadow-emerald-500/20'
             }`}>
@@ -1232,7 +1820,7 @@ export default function AdminDashboard({
             </div>
             <div className="flex flex-col text-right leading-tight min-w-0">
               <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-xs md:text-sm font-black text-slate-800 truncate">
+                <span className="text-xs md:text-sm font-black text-slate-800 dark:text-slate-100 truncate">
                   {currentName || (currentUsername ? (currentUsername.startsWith('@') ? currentUsername : `@${currentUsername}`) : 'المشرف')}
                 </span>
                 <span className={`text-[9px] px-2 py-0.5 rounded-full font-black shrink-0 ${
@@ -1274,7 +1862,7 @@ export default function AdminDashboard({
                   className={`w-full flex items-center justify-between p-3 rounded-2xl text-xs md:text-sm font-black transition-all ${
                     activeTab === 'STANDARD'
                       ? 'bg-brand-emerald text-white shadow-lg shadow-brand-emerald/20'
-                      : 'text-slate-600 hover:bg-slate-100'
+                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                   }`}
                 >
                   <div className="flex items-center gap-3">
@@ -1299,7 +1887,7 @@ export default function AdminDashboard({
                   className={`w-full flex items-center justify-between p-3 rounded-2xl text-xs md:text-sm font-black transition-all ${
                     activeTab === 'COMPLETION'
                       ? 'bg-brand-emerald text-white shadow-lg shadow-brand-emerald/20'
-                      : 'text-slate-600 hover:bg-slate-100'
+                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                   }`}
                 >
                   <div className="flex items-center gap-3">
@@ -1324,7 +1912,7 @@ export default function AdminDashboard({
                   className={`w-full flex items-center justify-between p-3 rounded-2xl text-xs md:text-sm font-black transition-all ${
                     activeTab === 'SURAH'
                       ? 'bg-brand-emerald text-white shadow-lg shadow-brand-emerald/20'
-                      : 'text-slate-600 hover:bg-slate-100'
+                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                   }`}
                 >
                   <div className="flex items-center gap-3">
@@ -1332,6 +1920,31 @@ export default function AdminDashboard({
                     <span>اسم السورة</span>
                   </div>
                   {localSettings.hideSurahChallenge && isFounderAlaa && (
+                    <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-900 font-black">مخفي 🔒</span>
+                  )}
+                </button>
+              )}
+
+              {/* المكتبة المرئية الإسلامية */}
+              {(!localSettings.hideIslamicVideos || (isFounderAlaa && activeTab === 'videos')) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    resetForm();
+                    setActiveTab('videos');
+                    setIsMobileSidebarOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between p-3 rounded-2xl text-xs md:text-sm font-black transition-all ${
+                    activeTab === 'videos'
+                      ? 'bg-brand-emerald text-white shadow-lg shadow-brand-emerald/20'
+                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <Video className="w-4 h-4" />
+                    <span>المكتبة المرئية</span>
+                  </div>
+                  {localSettings.hideIslamicVideos && isFounderAlaa && (
                     <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-900 font-black">مخفي 🔒</span>
                   )}
                 </button>
@@ -1359,7 +1972,7 @@ export default function AdminDashboard({
                     className={`w-full flex items-center justify-between p-3 rounded-2xl text-xs md:text-sm font-black transition-all ${
                       activeTab === 'users'
                         ? 'bg-brand-emerald text-white shadow-lg shadow-brand-emerald/20'
-                        : 'text-slate-600 hover:bg-slate-100'
+                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                     }`}
                   >
                     <div className="flex items-center gap-3">
@@ -1368,7 +1981,7 @@ export default function AdminDashboard({
                     </div>
                     {usersList.length > 0 && (
                       <span className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
-                        activeTab === 'users' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'
+                        activeTab === 'users' ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
                       }`}>
                         {usersList.length}
                       </span>
@@ -1388,7 +2001,7 @@ export default function AdminDashboard({
                     className={`w-full flex items-center justify-between p-3 rounded-2xl text-xs md:text-sm font-black transition-all ${
                       activeTab === 'admins'
                         ? 'bg-brand-emerald text-white shadow-lg shadow-brand-emerald/20'
-                        : 'text-slate-600 hover:bg-slate-100'
+                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                     }`}
                   >
                     <div className="flex items-center gap-3">
@@ -1397,7 +2010,7 @@ export default function AdminDashboard({
                     </div>
                     {admins.length > 0 && (
                       <span className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
-                        activeTab === 'admins' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'
+                        activeTab === 'admins' ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
                       }`}>
                         {admins.length}
                       </span>
@@ -1418,7 +2031,7 @@ export default function AdminDashboard({
                     className={`w-full flex items-center justify-between p-3 rounded-2xl text-xs md:text-sm font-black transition-all ${
                       activeTab === 'testers'
                         ? 'bg-brand-emerald text-white shadow-lg shadow-brand-emerald/20'
-                        : 'text-slate-600 hover:bg-slate-100'
+                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                     }`}
                   >
                     <div className="flex items-center gap-3">
@@ -1431,7 +2044,7 @@ export default function AdminDashboard({
                       </span>
                     ) : testersList.length > 0 ? (
                       <span className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
-                        activeTab === 'testers' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'
+                        activeTab === 'testers' ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400'
                       }`}>
                         {testersList.length}
                       </span>
@@ -1444,11 +2057,11 @@ export default function AdminDashboard({
         </div>
 
         {/* Sidebar Footer */}
-        <div className="p-4 md:p-5 border-t border-slate-100 space-y-2">
+        <div className="p-4 md:p-5 border-t border-slate-100 dark:border-slate-800 space-y-2">
           <button
             type="button"
             onClick={onBackHome}
-            className="w-full flex items-center justify-center gap-2 p-3 bg-brand-gold/15 text-brand-emerald rounded-2xl font-black text-xs md:text-sm hover:bg-brand-gold/25 transition-all active:scale-98"
+            className="w-full flex items-center justify-center gap-2 p-3 bg-brand-gold/15 text-brand-emerald dark:text-amber-400 rounded-2xl font-black text-xs md:text-sm hover:bg-brand-gold/25 transition-all active:scale-98"
           >
             <Home className="w-4 h-4" />
             <span>العودة للرئيسية</span>
@@ -1456,7 +2069,7 @@ export default function AdminDashboard({
           <button
             type="button"
             onClick={onLogout}
-            className="w-full flex items-center justify-center gap-2 p-3 bg-slate-100 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-2xl font-black text-xs md:text-sm transition-all active:scale-98"
+            className="w-full flex items-center justify-center gap-2 p-3 bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-2xl font-black text-xs md:text-sm transition-all active:scale-98"
           >
             <LogOut className="w-4 h-4" />
             <span>تسجيل الخروج</span>
@@ -1467,10 +2080,10 @@ export default function AdminDashboard({
       {/* Main Content Area */}
       <div className="flex-1 min-w-0 min-h-screen p-4 md:p-8 overflow-x-hidden">
         {/* Top Action Bar in Main Area (when viewing Questions tabs) */}
-        {activeTab !== 'admins' && activeTab !== 'users' && activeTab !== 'testers' && (
-          <div className="mb-6 flex flex-col sm:flex-row items-center justify-between gap-4 bg-white p-4 md:p-5 rounded-2xl md:rounded-[2rem] border border-slate-200/80 shadow-xs">
+        {activeTab !== 'admins' && activeTab !== 'users' && activeTab !== 'testers' && activeTab !== 'videos' && (
+          <div className="mb-6 flex flex-col sm:flex-row items-center justify-between gap-4 bg-white dark:bg-slate-900 p-4 md:p-5 rounded-2xl md:rounded-[2rem] border border-slate-200/80 dark:border-slate-800 shadow-xs">
             <div>
-              <h2 className="text-base md:text-lg font-black text-slate-800">
+              <h2 className="text-base md:text-lg font-black text-slate-800 dark:text-slate-100">
                 {activeTab === 'STANDARD' ? 'تحدي المتشابهات القرآنية' : activeTab === 'COMPLETION' ? 'تحدي تكملة الآية' : 'تحدي معرفة اسم السورة'}
               </h2>
               <p className="text-xs text-slate-400 font-bold">
@@ -2238,6 +2851,25 @@ export default function AdminDashboard({
                       dir="ltr"
                     />
                   </div>
+
+                  {/* Public Testing Opt-in Link Banner for Admin */}
+                  <div className="mt-3.5 pt-3 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+                    <div className="flex items-center gap-2 text-emerald-200 flex-wrap">
+                      <span className="font-bold">رابط قبول الاختبار المباشر (Opt-in Link):</span>
+                      <code className="bg-slate-900/90 text-amber-300 px-2.5 py-1 rounded-lg border border-white/10 font-mono text-[11px] select-all" dir="ltr">
+                        https://play.google.com/apps/testing/com.mateen.game
+                      </code>
+                    </div>
+                    <a
+                      href="https://play.google.com/apps/testing/com.mateen.game"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-amber-300 hover:text-amber-200 underline font-bold flex items-center gap-1 shrink-0"
+                    >
+                      <span>فتح الرابط</span>
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  </div>
                 </div>
 
                 {/* Approved Testers List */}
@@ -2423,6 +3055,9 @@ export default function AdminDashboard({
                       <span className={`px-2 py-0.5 rounded-lg border ${localSettings.hideSurahChallenge ? 'bg-red-50 text-red-700 border-red-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
                         السورة: {localSettings.hideSurahChallenge ? 'مخفي' : 'ظاهر'}
                       </span>
+                      <span className={`px-2 py-0.5 rounded-lg border ${localSettings.hideIslamicVideos ? 'bg-red-50 text-red-700 border-red-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
+                        المكتبة المرئية: {localSettings.hideIslamicVideos ? 'مخفية' : 'ظاهرة'}
+                      </span>
                     </div>
 
                     <div className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-100/80 hover:bg-amber-100 text-amber-900 text-xs font-black border border-amber-200 shadow-sm transition-all">
@@ -2461,7 +3096,7 @@ export default function AdminDashboard({
                       </div>
 
                       {/* Toggles Grid */}
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                         {/* Audio / Similar Challenge Toggle */}
                         <div className={`p-4 rounded-2xl border transition-all flex flex-col justify-between ${
                           localSettings.hideAudioChallenge 
@@ -2608,6 +3243,55 @@ export default function AdminDashboard({
                             <span>إدارة وإضافة الأسئلة</span>
                           </button>
                         </div>
+
+                        {/* Islamic Videos Toggle */}
+                        <div className={`p-4 rounded-2xl border transition-all flex flex-col justify-between ${
+                          localSettings.hideIslamicVideos 
+                            ? 'bg-red-50/70 border-red-200 text-red-900' 
+                            : 'bg-white border-slate-200 text-slate-800 shadow-sm'
+                        }`}>
+                          <div>
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-sm font-black flex items-center gap-2">
+                                🎬 المكتبة المرئية الإسلامية
+                              </span>
+                              <button
+                                type="button"
+                                disabled={isUpdatingSettings}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleToggleSetting('hideIslamicVideos', !localSettings.hideIslamicVideos);
+                                }}
+                                className={`w-12 h-6 rounded-full p-1 transition-colors ${
+                                  localSettings.hideIslamicVideos ? 'bg-red-500' : 'bg-brand-emerald'
+                                }`}
+                              >
+                                <div className={`w-4 h-4 rounded-full bg-white transition-transform ${
+                                  localSettings.hideIslamicVideos ? '-translate-x-6' : 'translate-x-0'
+                                }`} />
+                              </button>
+                            </div>
+                            <div className="text-[11px] font-bold mb-3">
+                              {localSettings.hideIslamicVideos ? (
+                                <span className="text-red-600">❌ مخفية من الصفحة الرئيسية والمكتبة</span>
+                              ) : (
+                                <span className="text-brand-emerald">✅ متاحة وظاهرة للجميع</span>
+                              )}
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              resetForm();
+                              setActiveTab('videos');
+                            }}
+                            className="mt-2 w-full py-1.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-black transition-all flex items-center justify-center gap-1.5"
+                          >
+                            <Video className="w-3.5 h-3.5" />
+                            <span>إدارة الفيديوهات المرئية</span>
+                          </button>
+                        </div>
                       </div>
 
                       {/* Collapse Button */}
@@ -2627,6 +3311,152 @@ export default function AdminDashboard({
               </div>
             )}
 
+            {activeTab === 'videos' ? (
+              <div className="space-y-6">
+                {/* Videos Header Card */}
+                <div className="bg-white p-6 md:p-8 rounded-[2.5rem] border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-5">
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#0D6E52] to-[#043325] text-white flex items-center justify-center shadow-lg shadow-emerald-900/20 shrink-0">
+                      <Video className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h3 className="text-lg md:text-xl font-black text-slate-800">إدارة المكتبة المرئية الإسلامية</h3>
+                        <span className={`text-[10px] px-2.5 py-0.5 rounded-full font-black border ${
+                          localSettings.hideIslamicVideos 
+                            ? 'bg-red-50 text-red-700 border-red-200' 
+                            : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        }`}>
+                          {localSettings.hideIslamicVideos ? '🔒 مخفية حالياً عن المستخدمين' : '✅ معروضة ونشطة للمستخدمين'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400 font-bold mt-0.5">
+                        استعراض وتصنيف وإدارة المقاطع الدعوية والشروحات الفقهية والحديثية
+                      </p>
+                    </div>
+                  </div>
+
+                  {isFounderAlaa && (
+                    <button
+                      type="button"
+                      disabled={isUpdatingSettings}
+                      onClick={() => handleToggleSetting('hideIslamicVideos', !localSettings.hideIslamicVideos)}
+                      className={`px-5 py-3 rounded-2xl font-black text-xs md:text-sm transition-all flex items-center gap-2 shadow-sm cursor-pointer ${
+                        localSettings.hideIslamicVideos
+                          ? 'bg-brand-emerald text-white hover:bg-brand-emerald/90'
+                          : 'bg-red-50 text-red-700 hover:bg-red-100 border border-red-200'
+                      }`}
+                    >
+                      {localSettings.hideIslamicVideos ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                      <span>{localSettings.hideIslamicVideos ? 'إظهار المكتبة للمستخدمين' : 'إخفاء المكتبة عن المستخدمين'}</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Categories & Search */}
+                <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
+                  <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
+                    <div className="relative w-full sm:w-80">
+                      <Search className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <input
+                        type="text"
+                        value={videoAdminSearch}
+                        onChange={(e) => setVideoAdminSearch(e.target.value)}
+                        placeholder="ابحث بالعنوان أو اسم الشيخ..."
+                        className="w-full pr-10 pl-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-bold outline-none focus:border-brand-emerald focus:bg-white transition-all"
+                      />
+                    </div>
+                    <span className="text-xs font-bold text-slate-400">
+                      المقاطع المعروضة: {filteredAdminVideos.length} من أصل {INITIAL_ISLAMIC_VIDEOS.length} مقطع
+                    </span>
+                  </div>
+
+                  {/* Category Pills */}
+                  <div className="flex items-center gap-2 overflow-x-auto pb-1 custom-scrollbar">
+                    {VIDEO_CATEGORIES.map((cat) => (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => setVideoAdminCategory(cat.id)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all whitespace-nowrap border cursor-pointer ${
+                          videoAdminCategory === cat.id
+                            ? 'bg-brand-emerald text-white border-brand-emerald shadow-xs'
+                            : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        {cat.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Videos List Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {filteredAdminVideos.map((video) => (
+                    <div
+                      key={video.id}
+                      className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs hover:shadow-md transition-all flex flex-col justify-between"
+                    >
+                      <div className="relative aspect-video bg-slate-900 group">
+                        <img
+                          src={`https://img.youtube.com/vi/${video.youtubeId}/hqdefault.jpg`}
+                          alt={video.title}
+                          className="w-full h-full object-cover"
+                          loading="lazy"
+                        />
+                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                          <a
+                            href={`https://www.youtube.com/watch?v=${video.youtubeId}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-10 h-10 rounded-full bg-red-600 text-white flex items-center justify-center shadow-lg hover:scale-110 transition-transform"
+                            title="مشاهدة على يوتيوب"
+                          >
+                            <Play className="w-5 h-5 fill-current ml-0.5" />
+                          </a>
+                        </div>
+                        <span className="absolute bottom-2 left-2 bg-black/80 text-white text-[10px] font-bold px-2 py-0.5 rounded">
+                          {video.duration}
+                        </span>
+                        <span className="absolute top-2 right-2 bg-brand-emerald text-white text-[10px] font-black px-2 py-0.5 rounded-md shadow-xs">
+                          {video.categoryLabel}
+                        </span>
+                      </div>
+
+                      <div className="p-4 flex-1 flex flex-col justify-between">
+                        <div>
+                          <h4 className="font-black text-sm text-slate-800 line-clamp-2 mb-1.5 leading-snug">
+                            {video.title}
+                          </h4>
+                          <p className="text-xs text-brand-emerald font-bold mb-2">
+                            الشيخ: {video.sheikh}
+                          </p>
+                          {video.description && (
+                            <p className="text-[11px] text-slate-400 font-medium line-clamp-2 leading-relaxed">
+                              {video.description}
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-slate-500">
+                          <span className="text-[10px] text-slate-400">معتمد في بنك الفيديوهات</span>
+                          <a
+                            href={`https://www.youtube.com/watch?v=${video.youtubeId}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-brand-emerald hover:underline flex items-center gap-1 text-[11px]"
+                          >
+                            <span>فتح الرابط</span>
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <>
             <AnimatePresence>
               {isAdding && (
                 <motion.div
@@ -2851,6 +3681,43 @@ export default function AdminDashboard({
                           />
                         </div>
 
+                        {/* Difficulty Level Selector */}
+                        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-2.5">
+                          <label className="block text-xs font-black text-slate-700 uppercase tracking-wider">
+                            مستوى الصعوبة
+                          </label>
+                          <div className="grid grid-cols-3 gap-3">
+                            {[
+                              { id: 'easy', label: 'سهل 🌱', desc: 'آيات مشهورة وسهلة', activeClass: 'border-emerald-500 bg-emerald-50 text-emerald-800 shadow-xs ring-2 ring-emerald-500/10' },
+                              { id: 'medium', label: 'متوسط ⚡', desc: 'متوسطة الصعوبة', activeClass: 'border-amber-500 bg-amber-50 text-amber-800 shadow-xs ring-2 ring-amber-500/10' },
+                              { id: 'hard', label: 'صعب 🔥', desc: 'متشابهات دقيقة', activeClass: 'border-rose-500 bg-rose-50 text-rose-800 shadow-xs ring-2 ring-rose-500/10' }
+                            ].map((diff) => {
+                              const isSelected = level === diff.id || (!level && diff.id === 'medium');
+                              return (
+                                <button
+                                  key={diff.id}
+                                  type="button"
+                                  onClick={() => setLevel(diff.id)}
+                                  className={`p-3 rounded-xl border-2 transition-all flex flex-col items-center justify-center text-center gap-0.5 ${
+                                    isSelected
+                                      ? `${diff.activeClass} scale-[1.01]`
+                                      : 'border-slate-100 bg-slate-50/50 text-slate-500 hover:bg-slate-100 hover:text-slate-700'
+                                  }`}
+                                >
+                                  <span className="font-black text-sm">{diff.label}</span>
+                                  <span className="text-[10px] font-bold opacity-75">{diff.desc}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Category / Juz + Surah Picker (Optional) */}
+                        <CompletionSurahJuzPicker
+                          value={category}
+                          onChange={(newCat) => setCategory(newCat)}
+                        />
+
                         <div className="space-y-4">
                           <label className="block text-[10px] font-black text-slate-500 uppercase mr-2 tracking-widest">خيارات التكملة (حدد الإجابة الصحيحة)</label>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -2908,51 +3775,109 @@ export default function AdminDashboard({
                     {/* SURAH FORM */}
                     {type === 'SURAH' && (
                       <div className="bg-brand-emerald/5 border border-brand-emerald/10 p-6 rounded-3xl space-y-6">
-                        <h4 className="text-sm font-black text-brand-emerald uppercase tracking-widest mb-4">نموذج التعرّف على السورة</h4>
-                        
-                        <div className="space-y-4">
-                          <label className="block text-[10px] font-black text-slate-500 uppercase mr-2 tracking-widest">نص الآية</label>
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-sm font-black text-brand-emerald uppercase tracking-widest flex items-center gap-2">
+                            <BookOpen className="w-4 h-4" />
+                            <span>نموذج إضافة تحدي اسم السورة</span>
+                          </h4>
+                          {category && (
+                            <span className="text-xs font-black px-3 py-1 bg-emerald-100 text-emerald-800 rounded-full border border-emerald-200">
+                              {category}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Difficulty Level Selector - ONLY Difficulty at the top */}
+                        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-2.5">
+                          <label className="block text-xs font-black text-slate-700 uppercase tracking-wider">
+                            مستوى الصعوبة
+                          </label>
+                          <div className="grid grid-cols-3 gap-3">
+                            {[
+                              { id: 'easy', label: 'سهل 🌱', desc: 'آيات مشهورة وواضحة', activeClass: 'border-emerald-500 bg-emerald-50 text-emerald-800 shadow-xs ring-2 ring-emerald-500/10' },
+                              { id: 'medium', label: 'متوسط ⚡', desc: 'متوسطة التعرف', activeClass: 'border-amber-500 bg-amber-50 text-amber-800 shadow-xs ring-2 ring-amber-500/10' },
+                              { id: 'hard', label: 'صعب 🔥', desc: 'متشابهات متقاربة ودقيقة', activeClass: 'border-rose-500 bg-rose-50 text-rose-800 shadow-xs ring-2 ring-rose-500/10' }
+                            ].map((diff) => {
+                              const isSelected = level === diff.id || (!level && diff.id === 'medium') || (level === diff.label);
+                              return (
+                                <button
+                                  key={diff.id}
+                                  type="button"
+                                  onClick={() => setLevel(diff.id)}
+                                  className={`p-3 rounded-xl border-2 transition-all flex flex-col items-center justify-center text-center gap-0.5 ${
+                                    isSelected
+                                      ? `${diff.activeClass} scale-[1.01]`
+                                      : 'border-slate-100 bg-slate-50/50 text-slate-500 hover:bg-slate-100 hover:text-slate-700'
+                                  }`}
+                                >
+                                  <span className="font-black text-sm">{diff.label}</span>
+                                  <span className="text-[10px] font-bold opacity-75">{diff.desc}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Verse Text Area */}
+                        <div className="space-y-2">
+                          <label className="block text-[10px] font-black text-slate-500 uppercase mr-2 tracking-widest">
+                            نص الآية الكريمة
+                          </label>
                           <textarea
                             value={keyword}
                             onChange={(e) => setKeyword(e.target.value)}
-                            placeholder="نص الآية كاملة..."
-                            className="w-full px-6 py-4 h-24 rounded-2xl bg-white border-2 border-slate-200 focus:border-brand-emerald outline-none font-bold text-lg quran-text"
+                            placeholder="اكتب نص الآية الكريمة هنا كاملة..."
+                            className="w-full px-6 py-4 h-28 rounded-2xl bg-white border-2 border-slate-200 focus:border-brand-emerald outline-none font-bold text-lg quran-text transition-all leading-loose"
                           />
                         </div>
 
-                        <div className="space-y-4">
+                        {/* Surah Selection (Dropdown instead of text input) */}
+                        <div className="space-y-4 pt-2">
                           <div className="flex items-center justify-between">
-                            <label className="block text-[10px] font-black text-slate-500 uppercase mr-2 tracking-widest">أسماء السور الصحيحة</label>
+                            <label className="block text-[10px] font-black text-slate-500 uppercase mr-2 tracking-widest">
+                              أسماء السور الصحيحة (اختر من القائمة)
+                            </label>
                             <button
+                              type="button"
                               onClick={() => setCorrectSurahs([...correctSurahs, ''])}
-                              className="flex items-center gap-2 text-xs font-black text-brand-emerald hover:bg-brand-emerald/10 px-3 py-1 rounded-lg transition-all"
+                              className="flex items-center gap-2 text-xs font-black text-brand-emerald hover:bg-brand-emerald/10 px-3 py-1.5 rounded-xl border border-brand-emerald/20 transition-all shadow-2xs"
                             >
-                              <Plus className="w-3 h-3" />
-                              إضافة سورة أخرى
+                              <Plus className="w-3.5 h-3.5" />
+                              <span>إضافة سورة أخرى</span>
                             </button>
                           </div>
-                          <div className="space-y-3">
+
+                          <div className="space-y-4">
                             {correctSurahs.map((surah, index) => (
-                              <div key={index} className="relative flex items-center gap-2">
-                                <input
-                                  type="text"
+                              <div key={index} className="bg-white p-4 rounded-3xl border border-slate-200/80 shadow-xs space-y-3">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs font-black text-slate-500 flex items-center gap-1.5">
+                                    <span className="w-5 h-5 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center text-[10px] font-black">
+                                      {index + 1}
+                                    </span>
+                                    <span>اسم السورة الصحيحة {index + 1}:</span>
+                                  </span>
+                                  {correctSurahs.length > 1 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setCorrectSurahs(correctSurahs.filter((_, i) => i !== index))}
+                                      className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                                      title="حذف هذا الخيار"
+                                    >
+                                      <X className="w-4 h-4" />
+                                    </button>
+                                  )}
+                                </div>
+
+                                <SurahPickerDropdown
                                   value={surah}
-                                  onChange={(e) => {
+                                  index={index}
+                                  onChange={(chosenName) => {
                                     const newSurahs = [...correctSurahs];
-                                    newSurahs[index] = e.target.value;
+                                    newSurahs[index] = chosenName;
                                     setCorrectSurahs(newSurahs);
                                   }}
-                                  placeholder={`اسم السورة ${index + 1}...`}
-                                  className="w-full px-6 py-4 rounded-2xl bg-white border-2 border-slate-200 focus:border-brand-emerald outline-none font-bold text-lg"
                                 />
-                                {correctSurahs.length > 1 && (
-                                  <button
-                                    onClick={() => setCorrectSurahs(correctSurahs.filter((_, i) => i !== index))}
-                                    className="p-3 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
-                                  >
-                                    <X className="w-5 h-5" />
-                                  </button>
-                                )}
                               </div>
                             ))}
                           </div>
@@ -3027,6 +3952,93 @@ export default function AdminDashboard({
                   <h3 className="text-lg md:text-xl font-black text-slate-800 mb-2 quran-text leading-relaxed relative z-10 min-h-[3rem] line-clamp-2">
                     {c.keyword}
                   </h3>
+
+                  {activeTab === 'SURAH' && (
+                    <div className="space-y-2 my-3 pt-3 border-t border-slate-100 relative z-10 text-xs">
+                      {/* Correct Surahs */}
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-slate-400 font-black text-[10px]">السورة:</span>
+                        {(() => {
+                          let list: string[] = [];
+                          try {
+                            if (c.correctText?.startsWith('[')) {
+                              list = JSON.parse(c.correctText);
+                            } else if (c.correctText) {
+                              list = [c.correctText];
+                            }
+                          } catch {
+                            list = [c.correctText || ''];
+                          }
+                          return list.filter(Boolean).map((s, i) => (
+                            <span key={i} className="px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded-lg font-black text-xs border border-indigo-100 shadow-2xs">
+                              {s.startsWith('سورة') ? s : `سورة ${s}`}
+                            </span>
+                          ));
+                        })()}
+                      </div>
+
+                      {/* Auto Juz info */}
+                      {c.category && (
+                        <div className="flex items-center gap-1.5 text-emerald-800 font-bold text-[11px] flex-wrap">
+                          <span className="text-slate-400 font-black text-[10px]">الجزء:</span>
+                          <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-lg font-black border border-emerald-100">
+                            {c.category}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Difficulty Level */}
+                      {c.level && (
+                        <div className="flex items-center gap-1.5 text-amber-800 font-bold text-[11px]">
+                          <span className="text-slate-400 font-black text-[10px]">الصعوبة:</span>
+                          <span className="px-2 py-0.5 bg-amber-50 text-amber-800 rounded-lg font-black border border-amber-100">
+                            {c.level === 'easy' ? 'سهل 🌱' : c.level === 'hard' ? 'صعب 🔥' : 'متوسط ⚡'}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {activeTab === 'COMPLETION' && (
+                    <div className="space-y-2 my-3 pt-3 border-t border-slate-100 relative z-10 text-xs">
+                      {/* Surah and Juz info if present */}
+                      {(c.category || (Array.isArray(c.verses) && c.verses[0]?.surah)) && (
+                        <div className="flex items-center gap-1.5 text-emerald-800 font-bold text-[11px] flex-wrap">
+                          <span className="text-slate-400 font-black text-[10px]">الموضع:</span>
+                          <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 rounded-lg font-black border border-emerald-100">
+                            {c.category || `سورة ${c.verses[0].surah}${c.verses[0].juz ? ` - الجزء ${JUZ_NAMES_AR[c.verses[0].juz] || c.verses[0].juz}` : ''}`}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Difficulty Level */}
+                      {c.level && (
+                        <div className="flex items-center gap-1.5 text-amber-800 font-bold text-[11px]">
+                          <span className="text-slate-400 font-black text-[10px]">الصعوبة:</span>
+                          <span className="px-2 py-0.5 bg-amber-50 text-amber-800 rounded-lg font-black border border-amber-100">
+                            {c.level === 'easy' ? 'سهل 🌱' : c.level === 'hard' ? 'صعب 🔥' : 'متوسط ⚡'}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Correct Option */}
+                      {(() => {
+                        let answer = c.correctText;
+                        if (!answer && Array.isArray(c.options)) {
+                          const corr = c.options.find((o: any) => typeof o === 'object' && o.isCorrect);
+                          if (corr) answer = corr.text;
+                        }
+                        return answer ? (
+                          <div className="flex items-center gap-1.5 text-slate-700 font-bold text-[11px] flex-wrap">
+                            <span className="text-slate-400 font-black text-[10px]">التكملة:</span>
+                            <span className="px-2 py-0.5 bg-brand-emerald/10 text-brand-emerald rounded-lg font-black quran-text">
+                              {answer}
+                            </span>
+                          </div>
+                        ) : null;
+                      })()}
+                    </div>
+                  )}
                   
                   <div className="flex items-center justify-between pt-4 border-t border-slate-50 relative z-10">
                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2">
@@ -3047,7 +4059,8 @@ export default function AdminDashboard({
                 </div>
               )}
             </div>
-
+            </>
+            )}
           </>
         ) : canSeeAdminsTab ? (
           <div className="space-y-8">

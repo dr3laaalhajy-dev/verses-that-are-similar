@@ -1,6 +1,8 @@
 @import url('https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Noto+Naskh+Arabic:wght@400;500;600;700&family=Tajawal:wght@300;400;500;700;800;900&display=swap');
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --font-sans: "Tajawal", ui-sans-serif, system-ui, sans-serif;
   --font-quran: "Noto Naskh Arabic", "Tajawal", "Amiri", serif;
@@ -192,8 +194,9 @@
   box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
 }
 
-/* Library Dark Theme */
-.lib-dark {
+/* Library Dark Theme & Global Dark Mode Support */
+.lib-dark,
+html.dark {
   background-color: #0f172a !important; /* Slate 900 */
   color: #f8fafc !important;
   
@@ -205,50 +208,113 @@
   --mushaf-marker: #34d399;
 }
 
+.lib-dark .text-slate-900,
 .lib-dark .text-slate-800,
-.lib-dark .text-slate-700 {
+.lib-dark .text-slate-700,
+html.dark .text-slate-900,
+html.dark .text-slate-800,
+html.dark .text-slate-700 {
   color: #f8fafc !important; /* Slate 50 */
 }
 
 .lib-dark .text-slate-600,
 .lib-dark .text-slate-50,
 .lib-dark .text-slate-500,
-.lib-dark .text-slate-400 {
+.lib-dark .text-slate-400,
+html.dark .text-slate-600,
+html.dark .text-slate-50,
+html.dark .text-slate-500,
+html.dark .text-slate-400 {
   color: #cbd5e1 !important; /* Slate 300 */
 }
 
+/* Ensure all dark green shades in dark mode brighten up to radiant emerald */
+.lib-dark .text-brand-emerald,
+.lib-dark .text-emerald-950,
+.lib-dark .text-emerald-900,
+.lib-dark .text-emerald-800,
+.lib-dark .text-emerald-700,
+html.dark .text-brand-emerald,
+html.dark .text-emerald-950,
+html.dark .text-emerald-900,
+html.dark .text-emerald-800,
+html.dark .text-emerald-700 {
+  color: #34d399 !important; /* Emerald 400 */
+}
+
+/* Backgrounds in dark mode */
 .lib-dark .bg-white,
 .lib-dark .bg-slate-50,
-.lib-dark .bg-slate-100 {
+.lib-dark .bg-slate-100,
+html.dark .bg-white,
+html.dark .bg-slate-50,
+html.dark .bg-slate-100 {
   background-color: #1e293b !important; /* Slate 800 */
 }
 
+/* Book pages & Cream backgrounds in dark mode */
+.lib-dark .bg-\[\#fcfaf5\],
+html.dark .bg-\[\#fcfaf5\] {
+  background-color: #0f172a !important;
+  border-color: rgba(212, 175, 55, 0.3) !important;
+  color: #f8fafc !important;
+}
+
+/* Opacity variants of white and slate in dark mode: converts light opacity backgrounds to slate-800 */
+.lib-dark [class*="bg-white/"],
+html.dark [class*="bg-white/"] {
+  background-color: rgba(30, 41, 59, 0.9) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.lib-dark [class*="bg-slate-50/"],
+html.dark [class*="bg-slate-50/"],
+.lib-dark [class*="bg-slate-100/"],
+html.dark [class*="bg-slate-100/"] {
+  background-color: rgba(30, 41, 59, 0.85) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Admin Sidebar in Dark Mode */
+.lib-dark aside,
+html.dark aside {
+  background-color: #0f172a !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  color: #f8fafc !important;
+}
+
+/* Borders in dark mode */
 .lib-dark .border-slate-100,
+.lib-dark .border-slate-150,
+.lib-dark .border-slate-200,
 .lib-dark .border-white\/80,
 .lib-dark .border-white\/55,
 .lib-dark .border-white\/50,
 .lib-dark .border-white\/40,
-.lib-dark .border-white\/20 {
+.lib-dark .border-white\/20,
+html.dark .border-slate-100,
+html.dark .border-slate-150,
+html.dark .border-slate-200 {
   border-color: rgba(255, 255, 255, 0.08) !important;
 }
 
-.lib-dark .glass {
-  background: rgba(15, 23, 42, 0.6) !important; /* Lighter transparent Slate 900 */
-  border-color: rgba(255, 255, 255, 0.05) !important;
+.lib-dark .glass,
+html.dark .glass {
+  background: rgba(15, 23, 42, 0.75) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
   backdrop-filter: blur(12px) !important;
 }
 
-.lib-dark .bg-slate-50,
-.lib-dark .bg-slate-100 {
-  background-color: #1e293b !important;
+/* Quran Verse Numbers and Markers in Dark Mode */
+.lib-dark .verse-marker-inline,
+html.dark .verse-marker-inline {
+  color: #34d399 !important;
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="45" fill="none" stroke="%2334d399" stroke-width="2"/><path d="M50 10 L60 40 L90 50 L60 60 L50 90 L40 60 L10 50 L40 40 Z" fill="%2334d399" opacity="0.15"/><circle cx="50" cy="50" r="35" fill="none" stroke="%2334d399" stroke-width="1" stroke-dasharray="2,2"/></svg>') !important;
 }
 
-.lib-dark .text-brand-emerald {
-  color: #34d399 !important; /* Emerald 400 */
-}
-
-.lib-dark .word-allah {
-  color: #ff5555 !important;
+.lib-dark .word-allah,
+html.dark .word-allah {
+  color: #ff6b6b !important;
 }
 
 .theme-transition {

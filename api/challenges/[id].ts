@@ -22,7 +22,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // Protected PUT
   if (req.method === 'PUT') {
-    const { keyword, verses, category, level } = req.body
+    const { keyword, verses, category, level, type, audioUrl, options, correctText } = req.body
     try {
       const challenge = await prisma.challenge.update({
         where: { id: Number(id) },
@@ -30,7 +30,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           keyword, 
           verses,
           category: category !== undefined ? category : undefined,
-          level: level !== undefined ? level : undefined
+          level: level !== undefined ? level : undefined,
+          type: type !== undefined ? type : undefined,
+          audioUrl: audioUrl !== undefined ? audioUrl : undefined,
+          options: options !== undefined ? options : undefined,
+          correctText: correctText !== undefined ? correctText : undefined,
         }
       })
       return res.status(200).json(challenge)

@@ -13,7 +13,9 @@ import {
   Share2,
   Check,
   RefreshCw,
-  Sparkles
+  Sparkles,
+  AlertTriangle,
+  Copy
 } from 'lucide-react';
 
 // Official-style multi-color Google Play triangle SVG icon
@@ -179,6 +181,15 @@ export const GooglePlayTesterModal: React.FC<GooglePlayTesterModalProps> = ({
   const isApproved = testerStatus === 'approved';
   const isPending = testerStatus === 'pending';
   const isLoading = testerStatus === 'loading';
+  const [copiedLinkSuccess, setCopiedLinkSuccess] = useState(false);
+
+  const handleCopyTestLink = () => {
+    try {
+      navigator.clipboard.writeText(internalTestLink);
+      setCopiedLinkSuccess(true);
+      setTimeout(() => setCopiedLinkSuccess(false), 3000);
+    } catch {}
+  };
 
   return (
     <AnimatePresence>
@@ -249,23 +260,73 @@ export const GooglePlayTesterModal: React.FC<GooglePlayTesterModalProps> = ({
                 <motion.div
                   initial={{ opacity: 0, scale: 0.96 }}
                   animate={{ opacity: 1, scale: 1 }}
-                  className="flex flex-col gap-4"
+                  className="flex flex-col gap-4 text-right"
                 >
+                  {/* Success Status Banner */}
                   <div className="p-4 sm:p-5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-right flex items-start gap-3.5 shadow-inner">
                     <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/30 mt-0.5">
                       <CheckCircle2 className="w-6 h-6 text-emerald-400" />
                     </div>
                     <div>
                       <h4 className="font-black text-base text-emerald-300">
-                        تهانينا! تمت الموافقة على طلبك بنجاح
+                        تهانينا! بريدك الإلكتروني معتمد كمختبر رسمي
                       </h4>
                       <p className="text-xs sm:text-sm text-emerald-100/90 font-medium mt-1 leading-relaxed">
-                        تم اعتماد بريدك الإلكتروني{' '}
+                        تم تسجيل بريدك{' '}
                         <span className="font-bold text-white underline decoration-emerald-400">
                           {testerEmail}
                         </span>{' '}
-                        في قائمة المختبرين الرسمية. يمكنك الآن فتح الرابط المباشر وتثبيت التطبيق من Google Play.
+                        بنجاح في نظام Google Play. يرجى اتباع التعليمات الهامة أدناه لقبول الاختبار وتثبيت التطبيق.
                       </p>
+                    </div>
+                  </div>
+
+                  {/* CRITICAL WARNING & INSTRUCTIONS BOX */}
+                  <div className="p-4 sm:p-5 rounded-2xl bg-amber-500/15 border-2 border-amber-400/50 shadow-lg text-right space-y-3">
+                    <div className="flex items-center gap-2 text-amber-300 font-black text-sm sm:text-base border-b border-amber-500/20 pb-2">
+                      <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 animate-pulse" />
+                      <span>تنبيه وإرشادات هامة جداً للتحميل (Google Play)</span>
+                    </div>
+
+                    <div className="space-y-3 text-xs sm:text-[13px] text-amber-100 font-medium leading-relaxed">
+                      {/* Step 1 */}
+                      <div className="flex items-start gap-2.5">
+                        <span className="w-5 h-5 rounded-full bg-amber-400 text-slate-950 font-black text-xs flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
+                          1
+                        </span>
+                        <div>
+                          <strong className="text-white font-black block text-xs sm:text-sm">تسجيل الدخول بنفس الإيميل:</strong>
+                          <span className="text-amber-100/90">
+                            عند فتح رابط Google Play، <strong className="text-amber-300 underline font-black">يجب إجبارياً</strong> تسجيل الدخول في المتصفح بنفس الإيميل المسجل (<span className="text-white font-bold" dir="ltr">{testerEmail}</span>). إذا فتحت برابط أو حساب آخر، سيظهر لك متجر جوجل أن التطبيق غير متاح لهذا الحساب!
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Step 2 */}
+                      <div className="flex items-start gap-2.5">
+                        <span className="w-5 h-5 rounded-full bg-amber-400 text-slate-950 font-black text-xs flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
+                          2
+                        </span>
+                        <div>
+                          <strong className="text-white font-black block text-xs sm:text-sm">الضغط على زر قبول الدعوة (Become a tester):</strong>
+                          <span className="text-amber-100/90">
+                            داخل صفحة الرابط، اضغط على الزر المكتوب عليه: <strong className="text-white font-black">«القبول كـ مختبر / Become a tester»</strong> لتفعيل حسابك في متجر Play.
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Step 3 */}
+                      <div className="flex items-start gap-2.5">
+                        <span className="w-5 h-5 rounded-full bg-amber-400 text-slate-950 font-black text-xs flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
+                          3
+                        </span>
+                        <div>
+                          <strong className="text-white font-black block text-xs sm:text-sm">تنزيل التطبيق من متجر Google Play:</strong>
+                          <span className="text-amber-100/90">
+                            افتح متجر Google Play على هاتفك بنفس الحساب (<span className="text-white font-bold" dir="ltr">{testerEmail}</span>)، واضغط على رابط التنزيل لتثبيت التطبيق ومتابعة التحديثات تلقائياً.
+                          </span>
+                        </div>
+                      </div>
                     </div>
                   </div>
 
@@ -274,12 +335,31 @@ export const GooglePlayTesterModal: React.FC<GooglePlayTesterModalProps> = ({
                     href={internalTestLink}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="w-full py-3.5 sm:py-4 px-6 bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 rounded-2xl font-black text-sm sm:text-base shadow-xl shadow-emerald-950/60 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2.5 cursor-pointer"
+                    className="w-full py-4 px-6 bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 rounded-2xl font-black text-sm sm:text-base shadow-xl shadow-emerald-950/60 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2.5 cursor-pointer text-center"
                   >
-                    <GooglePlayLogo className="w-5 h-5" />
-                    <span>افتح الرابط وثبّت التطبيق (Google Play)</span>
-                    <ExternalLink className="w-4 h-4 text-slate-950" />
+                    <GooglePlayLogo className="w-5 h-5 shrink-0" />
+                    <span>قبول الاختبار وتثبيت التطبيق من Google Play</span>
+                    <ExternalLink className="w-4 h-4 text-slate-950 shrink-0" />
                   </a>
+
+                  {/* Copy Link Button */}
+                  <button
+                    type="button"
+                    onClick={handleCopyTestLink}
+                    className="w-full py-2.5 px-4 bg-slate-800/80 hover:bg-slate-700/80 text-slate-200 border border-slate-700 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 active:scale-95 cursor-pointer"
+                  >
+                    {copiedLinkSuccess ? (
+                      <>
+                        <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                        <span className="text-emerald-300 font-black">تم نسخ رابط قبول الاختبار بنجاح ✓</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-4 h-4 text-brand-gold shrink-0" />
+                        <span>نسخ رابط الاختبار المباشر (لفتحه في متصفح حسابك)</span>
+                      </>
+                    )}
+                  </button>
 
                   <div className="flex items-center justify-center pt-1">
                     <button
@@ -363,10 +443,16 @@ export const GooglePlayTesterModal: React.FC<GooglePlayTesterModalProps> = ({
                   animate={{ opacity: 1 }}
                   className="flex flex-col gap-4 text-right"
                 >
-                  <div className="text-xs sm:text-sm text-slate-300 font-medium leading-relaxed bg-slate-800/50 p-4 rounded-2xl border border-white/5">
+                  <div className="text-xs sm:text-sm text-slate-300 font-medium leading-relaxed bg-slate-800/50 p-4 rounded-2xl border border-white/5 space-y-2.5">
                     <p>
-                      يسعدنا انضمامك لقائمة مختبري تطبيق «متين»! نظراً لسياسات Google Play للمسار التجريبي، يتطلب المتجر إضافة بريدك الإلكتروني (Gmail) في قائمة المختبرين لتتمكن من تنزيل التطبيق.
+                      يسعدنا انضمامك لقائمة مختبري تطبيق «متين» على متجر Google Play! نظراً لسياسات المتجر للمسار التجريبي، يتطلب التنزيل إضافة بريدك الإلكتروني (Gmail) أولاً في قائمة المختبرين.
                     </p>
+                    <div className="p-3 rounded-xl bg-amber-500/15 border border-amber-500/40 text-xs text-amber-200 font-bold flex items-start gap-2.5 leading-relaxed">
+                      <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                      <span>
+                        <strong className="text-white font-black">تنبيه هام:</strong> يرجى التأكد من كتابة نفس بريد Gmail الذي تستخدمه في متجر Google Play على هاتفك، لتتمكن لاحقاً من قبول الاختبار وتنزيل التطبيق من المتجر دون مشاكل.
+                      </span>
+                    </div>
                   </div>
 
                   <form onSubmit={onRegister} className="flex flex-col gap-3">

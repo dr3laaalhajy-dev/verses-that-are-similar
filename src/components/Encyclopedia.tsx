@@ -4,33 +4,48 @@ import { ArrowRight, BookOpen, ExternalLink, Globe, Sparkles } from 'lucide-reac
 
 interface EncyclopediaProps {
   onBack: () => void;
+  darkMode?: boolean;
 }
 
-const Encyclopedia: React.FC<EncyclopediaProps> = ({ onBack }) => {
+const Encyclopedia: React.FC<EncyclopediaProps> = ({ onBack, darkMode = false }) => {
   return (
-    <div className="flex flex-col h-screen bg-slate-50 overflow-hidden font-inter" dir="rtl">
+    <div className={`flex flex-col min-h-screen overflow-hidden font-inter pb-32 sm:pb-40 transition-colors ${
+      darkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'
+    }`} dir="rtl">
       {/* Elegant Header */}
       <motion.header 
         initial={{ y: -50 }}
         animate={{ y: 0 }}
-        className="flex items-center justify-between px-6 py-4 bg-white border-b border-slate-200 shadow-sm z-30 shrink-0"
+        className={`flex items-center justify-between px-6 py-4 border-b shadow-sm z-30 shrink-0 transition-colors ${
+          darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
+        }`}
       >
         <div className="flex items-center gap-3">
           <button
             onClick={onBack}
-            className="group flex items-center gap-2 p-1.5 md:p-2 pr-3 md:pr-4 rounded-xl hover:bg-indigo-50 text-slate-600 hover:text-indigo-600 transition-all border border-transparent hover:border-indigo-100"
+            className={`group flex items-center gap-2 p-1.5 md:p-2 pr-3 md:pr-4 rounded-xl transition-all border ${
+              darkMode 
+                ? 'hover:bg-slate-800 text-slate-200 hover:text-indigo-400 border-transparent hover:border-slate-700'
+                : 'hover:bg-indigo-50 text-slate-600 hover:text-indigo-600 border-transparent hover:border-indigo-100'
+            }`}
           >
             <ArrowRight className="w-5 h-5 md:w-6 md:h-6" />
             <span className="font-black text-xs md:text-sm hidden sm:inline">العودة</span>
           </button>
-          <div className="h-6 md:h-8 w-px bg-slate-200 mx-1 md:mx-2 hidden sm:block" />
+          <div className={`h-6 md:h-8 w-px mx-1 md:mx-2 hidden sm:block ${
+            darkMode ? 'bg-slate-800' : 'bg-slate-200'
+          }`} />
           <div className="flex items-center gap-2 md:gap-3">
             <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg md:rounded-xl bg-indigo-600/10 text-indigo-600 flex items-center justify-center">
               <Globe className="w-4 h-4 md:w-5 md:h-5" />
             </div>
             <div>
-              <h1 className="text-sm md:text-xl font-black text-slate-800 leading-tight">موسوعة المتشابهات</h1>
-              <p className="text-[9px] md:text-xs font-bold text-indigo-600 opacity-80">المصدر الخارجي المعتمد</p>
+              <h1 className={`text-sm md:text-xl font-black leading-tight ${
+                darkMode ? 'text-slate-100' : 'text-slate-800'
+              }`}>موسوعة المتشابهات</h1>
+              <p className={`text-[9px] md:text-xs font-bold opacity-80 ${
+                darkMode ? 'text-indigo-400' : 'text-indigo-600'
+              }`}>المصدر الخارجي المعتمد</p>
             </div>
           </div>
         </div>
@@ -42,7 +57,9 @@ const Encyclopedia: React.FC<EncyclopediaProps> = ({ onBack }) => {
       </motion.header>
 
       {/* Fallback View Area */}
-      <main className="flex-1 w-full bg-linear-to-b from-white to-slate-50 flex items-center justify-center p-4 md:p-6 relative overflow-hidden">
+      <main className={`flex-1 w-full flex items-center justify-center p-4 md:p-6 relative overflow-hidden transition-colors ${
+        darkMode ? 'bg-linear-to-b from-slate-900 to-slate-950' : 'bg-linear-to-b from-white to-slate-50'
+      }`}>
         {/* Abstract Background Shapes */}
         <div className="absolute top-0 left-0 w-full h-full opacity-5 pointer-events-none bg-islamic-pattern" />
         <div className="absolute -top-24 -right-24 w-64 md:w-96 h-64 md:h-96 bg-indigo-500/5 rounded-full blur-3xl" />
@@ -62,8 +79,12 @@ const Encyclopedia: React.FC<EncyclopediaProps> = ({ onBack }) => {
               </div>
             </div>
             <div className="space-y-2 md:space-y-3 px-4">
-              <h2 className="text-xl md:text-4xl font-black text-slate-800 tracking-tight leading-snug">موسوعة القرآن الكريم للمتشابهات</h2>
-              <div className="flex items-center justify-center gap-2 text-brand-emerald font-black text-[10px] md:text-sm uppercase tracking-widest">
+              <h2 className={`text-xl md:text-4xl font-black tracking-tight leading-snug ${
+                darkMode ? 'text-slate-100' : 'text-slate-800'
+              }`}>موسوعة القرآن الكريم للمتشابهات</h2>
+              <div className={`flex items-center justify-center gap-2 font-black text-[10px] md:text-sm uppercase tracking-widest ${
+                darkMode ? 'text-emerald-400' : 'text-brand-emerald'
+              }`}>
                 <Sparkles className="w-3 md:w-4 h-3 md:h-4 text-brand-gold" />
                 <span>محتوى مميز من QuranPedia</span>
               </div>
@@ -71,8 +92,12 @@ const Encyclopedia: React.FC<EncyclopediaProps> = ({ onBack }) => {
           </div>
 
           {/* Explanation Text */}
-          <div className="glass bg-white/60 p-6 md:p-8 rounded-[1.5rem] md:rounded-[2.5rem] border border-white shadow-sm">
-             <p className="text-slate-600 font-bold text-sm md:text-lg leading-relaxed">
+          <div className={`p-6 md:p-8 rounded-[1.5rem] md:rounded-[2.5rem] border shadow-sm transition-colors ${
+            darkMode ? 'bg-slate-900/90 border-slate-800' : 'bg-white/85 border-slate-200/80'
+          }`}>
+             <p className={`font-bold text-sm md:text-lg leading-relaxed ${
+               darkMode ? 'text-slate-200' : 'text-slate-600'
+             }`}>
                هذا المحتوى مقدم من موقع خارجي (QuranPedia). للحفاظ على تجربة الاستخدام وضمان أفضل عرض للمحتوى، سيتم فتح الموسوعة في نافذة جديدة بمتصفحك.
              </p>
           </div>

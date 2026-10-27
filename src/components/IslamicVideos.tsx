@@ -170,7 +170,7 @@ export const IslamicVideos: React.FC<IslamicVideosProps> = ({ onBack }) => {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8F6F0] text-slate-800 pb-28 font-sans selection:bg-[#0D6E52]/20" dir="rtl">
+    <div className="min-h-screen bg-[#F8F6F0] text-slate-800 pb-36 sm:pb-48 font-sans selection:bg-[#0D6E52]/20" dir="rtl">
       {/* 1. Top Header with Islamic Geometric Pattern background (Opacity 5%) */}
       <header className="relative bg-gradient-to-b from-[#0D6E52] to-[#0A5640] text-white overflow-hidden shadow-xl border-b border-[#D4AF37]/30">
         {/* Islamic Geometric SVG Pattern Background (5% opacity) */}

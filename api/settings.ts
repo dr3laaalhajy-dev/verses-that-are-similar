@@ -16,6 +16,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         hideAudioChallenge: setting?.hideAudioChallenge ?? false,
         hideCompletionChallenge: setting?.hideCompletionChallenge ?? false,
         hideSurahChallenge: setting?.hideSurahChallenge ?? false,
+        hideIslamicVideos: setting?.hideIslamicVideos ?? false,
         updatedAt: setting?.updatedAt ?? null
       })
     } catch (error: any) {
@@ -23,7 +24,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({
         hideAudioChallenge: false,
         hideCompletionChallenge: false,
-        hideSurahChallenge: false
+        hideSurahChallenge: false,
+        hideIslamicVideos: false
       })
     }
   }
@@ -56,7 +58,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(403).json({ message: 'خاص بالمؤسس: فقط المؤسس علاء (ID: 5) يملك صلاحية التحكم في ظهور التحديات' })
     }
 
-    const { hideAudioChallenge, hideCompletionChallenge, hideSurahChallenge } = req.body
+    const { hideAudioChallenge, hideCompletionChallenge, hideSurahChallenge, hideIslamicVideos } = req.body
 
     try {
       const updated = await prisma.systemSetting.upsert({
@@ -64,13 +66,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         update: {
           ...(typeof hideAudioChallenge === 'boolean' ? { hideAudioChallenge } : {}),
           ...(typeof hideCompletionChallenge === 'boolean' ? { hideCompletionChallenge } : {}),
-          ...(typeof hideSurahChallenge === 'boolean' ? { hideSurahChallenge } : {})
+          ...(typeof hideSurahChallenge === 'boolean' ? { hideSurahChallenge } : {}),
+          ...(typeof hideIslamicVideos === 'boolean' ? { hideIslamicVideos } : {})
         },
         create: {
           id: 1,
           hideAudioChallenge: !!hideAudioChallenge,
           hideCompletionChallenge: !!hideCompletionChallenge,
-          hideSurahChallenge: !!hideSurahChallenge
+          hideSurahChallenge: !!hideSurahChallenge,
+          hideIslamicVideos: !!hideIslamicVideos
         }
       })
 
@@ -79,7 +83,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         settings: {
           hideAudioChallenge: updated.hideAudioChallenge,
           hideCompletionChallenge: updated.hideCompletionChallenge,
-          hideSurahChallenge: updated.hideSurahChallenge
+          hideSurahChallenge: updated.hideSurahChallenge,
+          hideIslamicVideos: updated.hideIslamicVideos
         }
       })
     } catch (error: any) {

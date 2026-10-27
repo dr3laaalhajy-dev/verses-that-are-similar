@@ -125,29 +125,38 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const updateData: any = {};
 
-    // 1. If challengeId is provided and NOT already completed
-    if (challengeId !== undefined && challengeId !== null && !completedIds.includes(Number(challengeId))) {
-      updateData.points = { increment: points || 0 };
+    // 1. Points handling:
+    const addedPoints = Number(points || 0);
+    const explicitTotalPoints = req.body.totalPoints !== undefined ? Number(req.body.totalPoints) : null;
+    const clientScore = req.body.score !== undefined ? Number(req.body.score) : null;
+
+    if (addedPoints > 0) {
+      updateData.points = { increment: addedPoints };
+    } else if (explicitTotalPoints !== null && !isNaN(explicitTotalPoints)) {
+      updateData.points = Math.max(player.points || 0, explicitTotalPoints);
+    } else if (clientScore !== null && !isNaN(clientScore) && clientScore > (player.points || 0)) {
+      updateData.points = clientScore;
+    }
+
+    // 2. Cups handling:
+    const addedCups = req.body.cups !== undefined ? Number(req.body.cups) : 0;
+    const explicitTotalCups = req.body.totalCups !== undefined ? Number(req.body.totalCups) : null;
+
+    let isNewChallenge = false;
+    if (challengeId !== undefined && challengeId !== null) {
+      const cId = Number(challengeId);
+      if (!isNaN(cId) && !completedIds.includes(cId)) {
+        isNewChallenge = true;
+        updateData.completedChallengeIds = [...completedIds, cId];
+      }
+    }
+
+    if (addedCups > 0) {
+      updateData.cups = { increment: addedCups };
+    } else if (isNewChallenge) {
       updateData.cups = { increment: 1 };
-      updateData.completedChallengeIds = [...completedIds, Number(challengeId)];
-    } else {
-      if (req.body.totalPoints !== undefined) {
-        const incPoints = Number(req.body.totalPoints);
-        if (!isNaN(incPoints)) {
-          updateData.points = Math.max(player.points || 0, incPoints);
-        }
-      } else if (points !== undefined) {
-        updateData.points = { increment: Number(points) };
-      }
-      
-      if (req.body.totalCups !== undefined) {
-        const incCups = Number(req.body.totalCups);
-        if (!isNaN(incCups)) {
-          updateData.cups = Math.max(player.cups || 0, incCups);
-        }
-      } else if (req.body.cups !== undefined) {
-        updateData.cups = { increment: Number(req.body.cups) };
-      }
+    } else if (explicitTotalCups !== null && !isNaN(explicitTotalCups)) {
+      updateData.cups = Math.max(player.cups || 0, explicitTotalCups);
     }
 
     if (seerahCompleted !== undefined) updateData.seerahCompleted = Boolean(seerahCompleted);

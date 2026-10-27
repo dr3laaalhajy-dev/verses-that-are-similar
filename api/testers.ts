@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { prisma } from './_lib/prisma.js';
 import { handleCors } from './_lib/cors.js';
 
-const INTERNAL_TEST_URL = 'https://play.google.com/apps/internaltest/4700647113151529861';
+const INTERNAL_TEST_URL = 'https://play.google.com/apps/testing/com.mateen.game';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (handleCors(req, res)) return;

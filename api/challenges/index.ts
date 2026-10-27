@@ -5,21 +5,32 @@ import jwt from 'jsonwebtoken'
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
 
 const mapChallenges = (challenges: any[]) => 
-  (challenges || []).map(c => ({ 
-    ...c, 
-    verseText: c.verseText || c.keyword || c.text || '',
-    text: c.verseText || c.keyword || c.text || '' 
-  }));
+  (challenges || []).map(c => {
+    let category = c.category || '';
+    if (!category && c.type === 'COMPLETION' && Array.isArray(c.verses) && c.verses[0]?.surah) {
+      const v = c.verses[0];
+      const sName = String(v.surah).replace(/^سورة\s+/, '').trim();
+      const jNum = v.juz;
+      category = jNum ? `سورة ${sName} - الجزء ${jNum}` : `سورة ${sName}`;
+    }
+    return { 
+      ...c, 
+      category,
+      verseText: c.verseText || c.keyword || c.text || '',
+      text: c.verseText || c.keyword || c.text || '' 
+    };
+  });
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Public GET
   if (req.method === 'GET') {
-    const { type, limit, excludeIds } = req.query
+    const { type, limit, excludeIds, category } = req.query
     
     // Parse parameters robustly
     const effectiveType = Array.isArray(type) ? type[0] : (type as string)
     const rawLimit = Array.isArray(limit) ? limit[0] : (limit as string)
     const take = rawLimit ? parseInt(rawLimit) : undefined
+    const effectiveCategory = Array.isArray(category) ? category[0] : (category as string)
 
     let excluded: number[] = []
     if (excludeIds) {
@@ -48,6 +59,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         where.type = effectiveType;
       } else if (hiddenTypes.length > 0 && req.query.adminView !== 'true') {
         where.type = { notIn: hiddenTypes };
+      }
+      if (effectiveCategory && effectiveCategory !== 'all' && effectiveCategory.trim() !== '') {
+        where.category = { contains: effectiveCategory.trim(), mode: 'insensitive' };
       }
       if (excluded.length > 0) where.id = { notIn: excluded };
 

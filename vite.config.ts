@@ -65,6 +65,7 @@ function apiServerPlugin(): Plugin {
           else if (pathname === '/api/admin') relativePath = 'api/admin/index.ts';
           else if (pathname === '/api/settings') relativePath = 'api/settings.ts';
           else if (pathname === '/api/challenges') relativePath = 'api/challenges/index.ts';
+          else if (pathname === '/api/testers') relativePath = 'api/testers.ts';
           else if (pathname.startsWith('/api/challenges/')) {
             const id = pathname.replace('/api/challenges/', '');
             req.query.id = id;

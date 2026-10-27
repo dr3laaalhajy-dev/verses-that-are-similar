@@ -18,7 +18,7 @@ interface Verse {
   number: string | number;
 }
 import { HADITHS, Hadith } from './services/HadithRepository';
-import { juzBoundaries } from './services/JuzRepository';
+import { juzBoundaries, JUZ_NAMES_AR, ALL_QURAN_SURAHS, getJuzsForSurah } from './services/JuzRepository';
 import { getPageNumber, juzStartPages, surahStartPages } from './services/PageRepository';
 import { adhkarData, Dhikr } from './services/AdhkarRepository';
 import { normalizeArabicText, getSimilarity, convertArabicNumbersToEnglish } from './utils/arabic';
@@ -35,6 +35,7 @@ import BookReader from './components/BookReader';
 import Encyclopedia from './components/Encyclopedia';
 import IslamicQuiz from './components/IslamicQuiz';
 import { IslamicVideos } from './components/IslamicVideos';
+import QuranZoomViewer from './components/QuranZoomViewer';
 import IslamicRoomConfigModal from './components/IslamicRoomConfigModal';
 import { getRandomIslamicRoomQuestions } from './utils/islamicChallengeHelper';
 import { islamicCategoriesList } from './data/islamicCategories';
@@ -167,16 +168,50 @@ interface VerseCardProps {
   wordStates: Record<number, 'correct' | 'skipped'>;
 }
 
-const SkillsChallengeHeader = ({ index, total, mode, title, verseText, totalPoints: pts, onSkip, isComplete }: any) => (
+export const superNormalizeArabic = (text: any) => {
+  if (!text || typeof text !== 'string') return '';
+  return text
+    .replace(/[\u0610-\u061A\u064B-\u065F\u0670]/g, '') // حذف التشكيل
+    .replace(/[أإآ]/g, 'ا') // توحيد الألف
+    .replace(/ة/g, 'ه') // توحيد التاء المربوطة والهاء
+    .replace(/ي/g, 'ى') // توحيد الياء
+    .replace(/\s+/g, '') // حذف جميع المسافات العادية
+    .replace(/[\u200B-\u200D\uFEFF\u200E\u200F]/g, ''); // حذف المسافات والرموز المخفية
+};
+
+// Helper to determine question time in Speed Challenge based on admin level:
+// صعب = 20s, سهل = 10s, متوسط = 15s (default)
+export const getSpeedQuestionDuration = (challenge: any): number => {
+  if (!challenge) return 15;
+  const lvl = String(challenge.level || challenge.difficulty || '').toLowerCase().trim();
+  if (lvl === 'hard' || lvl === 'صعب') return 20;
+  if (lvl === 'easy' || lvl === 'سهل') return 10;
+  return 15; // متوسط (medium) default
+};
+
+const SkillsChallengeHeader = ({ index, total, mode, title, verseText, totalPoints: pts, onSkip, isComplete, level }: any) => (
   <div className="flex justify-between items-start gap-2 mb-2 md:mb-4 relative z-10 w-full">
     <div className="flex items-center gap-2 md:gap-3 min-w-0 pt-0.5">
       <div className="w-7 h-7 md:w-11 md:h-11 bg-brand-gold/10 rounded-lg md:rounded-xl flex items-center justify-center text-brand-gold shrink-0">
         {mode === 'audio' ? <Mic className="w-3.5 h-3.5 md:w-5 md:h-5" /> : mode === 'surah' ? <BookOpen className="w-3.5 h-3.5 md:w-5 md:h-5" /> : <CheckCircle className="w-3.5 h-3.5 md:w-5 md:h-5" />}
       </div>
       <div className="text-right min-w-0">
-        <span className={`font-black text-brand-emerald block leading-tight ${mode === 'complete' ? 'text-xs md:text-lg' : 'text-[9px] md:text-xs mb-0.5'}`}>
-          {title ? title : (mode === 'audio' ? 'تحدي التلاوة' : mode === 'surah' ? 'تحدي السور' : 'تحدي الإكمال')}
-        </span>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className={`font-black text-brand-emerald block leading-tight ${mode === 'complete' ? 'text-xs md:text-lg' : 'text-[9px] md:text-xs mb-0.5'}`}>
+            {title ? title : (mode === 'audio' ? 'تحدي التلاوة' : mode === 'surah' ? 'تحدي السور' : 'تحدي الإكمال')}
+          </span>
+          {level && (
+            <span className={`text-[10px] md:text-xs font-bold px-2 py-0.5 rounded-full border ${
+              (level === 'hard' || level === 'صعب') ? 'bg-rose-50 text-rose-700 border-rose-200' :
+              (level === 'easy' || level === 'سهل') ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+              'bg-amber-50 text-amber-700 border-amber-200'
+            }`}>
+              {(level === 'hard' || level === 'صعب') ? 'صعب 🔥 (20ث)' :
+               (level === 'easy' || level === 'سهل') ? 'سهل 🌱 (10ث)' :
+               'متوسط ⚡ (15ث)'}
+            </span>
+          )}
+        </div>
         {mode !== 'complete' && !title && (
           <h2 className="text-xs md:text-base font-bold text-slate-700 quran-text truncate max-w-[140px] sm:max-w-xs md:max-w-md">
             {verseText ? renderQuranText(verseText.substring(0, 25) + (verseText.length > 25 ? '...' : '')) : 'جاري التحميل...'}
@@ -321,7 +356,7 @@ const AudioChallengeUI = ({ targetVerses, matchedIds, isListening, onToggleListe
   );
 };
 
-const SurahChallengeUI = ({ verseText, inputs, onInputChange, onSubmit, feedback, onSkip, isComplete, challengeMode, saveScore, KEYWORD, score, setDailyCompleted, updateStatsAfterWin, handlePromptNextChallenge, onViewTafsir, currentChallenge }: any) => (
+const SurahChallengeUI = ({ verseText, inputs, onInputChange, onSubmit, feedback, onSkip, isComplete, challengeMode, saveScore, KEYWORD, score, setDailyCompleted, updateStatsAfterWin, handlePromptNextChallenge, onViewTafsir, currentChallenge, surahFeedbackData }: any) => (
   <div className="flex flex-col items-center gap-2 md:gap-4 w-full max-w-xl md:max-w-3xl lg:max-w-4xl mx-auto">
     <div className="glass p-3.5 md:p-8 lg:p-10 rounded-2xl md:rounded-3xl w-full text-center border-white/80 shadow-lg relative overflow-hidden group">
       <div className="absolute top-0 inset-x-0 h-1 bg-linear-to-r from-transparent via-brand-gold/30 to-transparent" />
@@ -330,18 +365,79 @@ const SurahChallengeUI = ({ verseText, inputs, onInputChange, onSubmit, feedback
       </div>
 
       <form onSubmit={(e) => { e.preventDefault(); onSubmit(); }} className="flex flex-col gap-2.5 md:gap-3 max-w-xs md:max-w-md mx-auto relative z-10 w-full">
-        {inputs.map((input: string, idx: number) => (
-          <motion.div key={idx} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: idx * 0.1 }}>
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => onInputChange(idx, e.target.value)}
-              placeholder={inputs.length > 1 ? `اسم السورة ${idx + 1}` : "ما اسم السورة؟"}
-              className="w-full p-3.5 md:p-4 rounded-xl md:rounded-2xl bg-white border-2 border-slate-100 focus:border-brand-gold outline-none text-lg sm:text-xl md:text-xl font-bold text-center quran-text shadow-xs transition-all focus:shadow-sm"
-              autoFocus={idx === 0}
-            />
+        {inputs.map((input: string, idx: number) => {
+          let inputStyle = "bg-white border-slate-100 focus:border-brand-gold";
+          let isMatch = false;
+          if (feedback && surahFeedbackData) {
+            isMatch = surahFeedbackData.correctSurahs.some((c: string) => normalizeArabicText(c).trim() === normalizeArabicText(input).trim());
+            inputStyle = isMatch
+              ? "bg-emerald-50 border-emerald-500 text-emerald-800 ring-2 ring-emerald-300"
+              : "bg-red-50 border-red-500 text-red-800 ring-2 ring-red-300";
+          }
+          return (
+            <motion.div key={idx} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: idx * 0.1 }} className="relative">
+              <input
+                type="text"
+                list="surah-names-list"
+                value={input}
+                disabled={feedback}
+                onChange={(e) => onInputChange(idx, e.target.value)}
+                placeholder={inputs.length > 1 ? `اسم السورة ${idx + 1}` : "ما اسم السورة؟"}
+                className={`w-full p-3.5 md:p-4 rounded-xl md:rounded-2xl border-2 ${inputStyle} outline-none text-lg sm:text-xl md:text-xl font-bold text-center quran-text shadow-xs transition-all focus:shadow-sm`}
+                autoFocus={idx === 0}
+              />
+              {feedback && surahFeedbackData && (
+                <div className="absolute left-3 top-1/2 -translate-y-1/2">
+                  {isMatch ? (
+                    <CheckCircle className="w-5 h-5 text-emerald-600 animate-bounce" />
+                  ) : (
+                    <XCircle className="w-5 h-5 text-red-500" />
+                  )}
+                </div>
+              )}
+            </motion.div>
+          );
+        })}
+        <datalist id="surah-names-list">
+          {quranData.map((s: any) => (
+            <option key={s.id} value={`سورة ${s.name}`} />
+          ))}
+          {quranData.map((s: any) => (
+            <option key={`plain-${s.id}`} value={s.name} />
+          ))}
+        </datalist>
+
+        {feedback && surahFeedbackData && (
+          <motion.div
+            initial={{ opacity: 0, y: 5 }}
+            animate={{ opacity: 1, y: 0 }}
+            className={`w-full p-3.5 rounded-xl md:rounded-2xl text-right shadow-sm border ${
+              surahFeedbackData.isFullyCorrect
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                : 'bg-rose-50 border-rose-200 text-rose-800'
+            }`}
+          >
+            <div className="flex items-start gap-2.5">
+              {surahFeedbackData.isFullyCorrect ? (
+                <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+              ) : (
+                <XCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+              )}
+              <div className="flex-1">
+                <span className="font-black text-xs sm:text-sm block">
+                  {surahFeedbackData.isFullyCorrect ? 'إجابة صحيحة بارك الله فيك 🌟' : 'إجابة غير صحيحة ❌'}
+                </span>
+                <div className="text-xs sm:text-sm mt-1">
+                  <span className="font-bold">الإجابة الصحيحة {surahFeedbackData.correctSurahs.length > 1 ? 'هي السور:' : 'هي سورة:'} </span>
+                  <span className="font-black text-emerald-800 bg-emerald-100/80 px-2 py-0.5 rounded-md inline-block mt-0.5">
+                    {surahFeedbackData.correctSurahs.join('، ')}
+                  </span>
+                </div>
+              </div>
+            </div>
           </motion.div>
-        ))}
+        )}
+
         <motion.button
           whileHover={{ scale: 1.01 }}
           whileTap={{ scale: 0.98 }}
@@ -412,7 +508,7 @@ const SurahChallengeUI = ({ verseText, inputs, onInputChange, onSubmit, feedback
   </div>
 );
 
-const CompleteChallengeUI = ({ verseText, options, selectedOption, onOptionSelect, onConfirm, feedback, onSkip, isComplete, challengeMode, saveScore, KEYWORD, score, setDailyCompleted, updateStatsAfterWin, handlePromptNextChallenge, onViewTafsir, currentChallenge, onFinishDaily }: any) => (
+const CompleteChallengeUI = ({ verseText, options, selectedOption, onOptionSelect, onConfirm, feedback, onSkip, isComplete, challengeMode, saveScore, KEYWORD, score, setDailyCompleted, updateStatsAfterWin, handlePromptNextChallenge, onViewTafsir, currentChallenge, onFinishDaily, correctText }: any) => (
   <div className="flex flex-col items-center gap-2 md:gap-4 w-full max-w-xl md:max-w-3xl lg:max-w-4xl mx-auto">
     <div className="glass p-3.5 md:p-8 lg:p-10 rounded-2xl md:rounded-3xl w-full text-center border-white/80 shadow-lg relative overflow-hidden">
       <div className="absolute top-0 inset-x-0 h-1 bg-linear-to-r from-transparent via-brand-emerald/30 to-transparent" />
@@ -422,39 +518,89 @@ const CompleteChallengeUI = ({ verseText, options, selectedOption, onOptionSelec
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 md:gap-4 w-full">
         {options.map((opt: any, idx: number) => {
-          const isSelected = selectedOption === opt;
+          const rawSelectedText = selectedOption ? (typeof selectedOption === 'object' ? selectedOption.text : selectedOption) : null;
+          const isSelected = selectedOption === opt || (rawSelectedText !== null && rawSelectedText === opt.text);
+          const isOptionCorrect = !!opt.isCorrect || (correctText && superNormalizeArabic(opt.text) === superNormalizeArabic(correctText));
+
+          let btnClass = 'bg-white border-slate-100 text-slate-700 hover:border-brand-gold/30 hover:bg-brand-gold/5';
+          if (feedback) {
+            if (isOptionCorrect) {
+              btnClass = 'bg-emerald-600 border-emerald-600 text-white shadow-lg ring-2 ring-emerald-300 font-black scale-[1.02]';
+            } else if (isSelected && !isOptionCorrect) {
+              btnClass = 'bg-red-500 border-red-500 text-white shadow-md line-through';
+            } else {
+              btnClass = 'bg-slate-100 border-slate-200 text-slate-400 opacity-40';
+            }
+          } else if (isSelected) {
+            btnClass = 'bg-brand-gold border-brand-gold text-brand-emerald shadow-md scale-[1.01]';
+          }
+
           return (
             <button
               key={idx}
               disabled={feedback}
               onClick={() => onOptionSelect(opt)}
-              className={`p-3.5 sm:p-4 md:py-5 md:px-6 rounded-xl md:rounded-2xl border-2 transition-all text-lg sm:text-xl md:text-xl lg:text-2xl font-bold quran-text active:scale-98 relative shadow-xs min-h-[62px] sm:min-h-[68px] md:min-h-[75px] flex items-center justify-center text-center ${isSelected
-                ? 'bg-brand-gold border-brand-gold text-brand-emerald shadow-md scale-[1.01]'
-                : 'bg-white border-slate-100 text-slate-700 hover:border-brand-gold/30 hover:bg-brand-gold/5'
-                } ${feedback ? 'opacity-50 cursor-not-allowed' : ''}`}
+              className={`p-3.5 sm:p-4 md:py-5 md:px-6 rounded-xl md:rounded-2xl border-2 transition-all text-lg sm:text-xl md:text-xl lg:text-2xl font-bold quran-text active:scale-98 relative shadow-xs min-h-[62px] sm:min-h-[68px] md:min-h-[75px] flex items-center justify-center text-center gap-2 ${btnClass}`}
             >
-              {renderQuranText(opt.text)}
+              {feedback && isOptionCorrect && (
+                <CheckCircle className="w-5 h-5 text-white shrink-0 animate-bounce" />
+              )}
+              {feedback && isSelected && !isOptionCorrect && (
+                <XCircle className="w-5 h-5 text-white shrink-0" />
+              )}
+              <span>{renderQuranText(opt.text)}</span>
             </button>
           );
         })}
       </div>
 
-      {selectedOption && (
+      {feedback && (
+        <motion.div
+          initial={{ opacity: 0, y: 5 }}
+          animate={{ opacity: 1, y: 0 }}
+          className={`w-full mt-3.5 p-3.5 sm:p-4 rounded-xl md:rounded-2xl text-right shadow-sm border ${
+            selectedOption && (selectedOption.isCorrect || (correctText && superNormalizeArabic(typeof selectedOption === 'object' ? selectedOption.text : selectedOption) === superNormalizeArabic(correctText)))
+              ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+              : 'bg-rose-50 border-rose-200 text-rose-800'
+          }`}
+        >
+          <div className="flex items-start gap-2.5">
+            {selectedOption && (selectedOption.isCorrect || (correctText && superNormalizeArabic(typeof selectedOption === 'object' ? selectedOption.text : selectedOption) === superNormalizeArabic(correctText))) ? (
+              <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+            ) : (
+              <XCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+            )}
+            <div className="flex-1">
+              <span className="font-black text-xs sm:text-sm block">
+                {selectedOption && (selectedOption.isCorrect || (correctText && superNormalizeArabic(typeof selectedOption === 'object' ? selectedOption.text : selectedOption) === superNormalizeArabic(correctText)))
+                  ? 'إجابة صحيحة! أحسنت 🌟'
+                  : 'إجابة غير صحيحة ❌'}
+              </span>
+              <div className="text-xs sm:text-sm font-bold opacity-95 mt-1">
+                <span>الإجابة الصحيحة (تكملة الآية): </span>
+                <strong className="quran-text font-black text-emerald-800 bg-emerald-100/80 px-2.5 py-1 rounded-md inline-block mt-0.5">
+                  {correctText || options.find((o: any) => o.isCorrect)?.text || ''}
+                </strong>
+                {currentChallenge?.verses?.[0]?.surah && (
+                  <span className="block text-[11px] text-emerald-700/80 font-normal mt-1">
+                    (سورة {currentChallenge.verses[0].surah}{currentChallenge.verses[0].juz ? ` • الجزء ${currentChallenge.verses[0].juz}` : ''})
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </motion.div>
+      )}
+
+      {selectedOption && !feedback && (
         <motion.button
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           onClick={onConfirm}
-          disabled={feedback}
           className="w-full mt-3.5 md:mt-6 py-3 md:py-3.5 bg-brand-emerald text-white rounded-xl md:rounded-2xl font-black text-base sm:text-lg md:text-lg shadow-md shadow-brand-emerald/20 hover:shadow-brand-emerald/40 transition-all flex items-center justify-center gap-2"
         >
-          {feedback ? (
-            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-          ) : (
-            <>
-              <CheckCircle2 className="w-4 h-4 md:w-5 md:h-5" />
-              <span>تأكيد الإجابة</span>
-            </>
-          )}
+          <CheckCircle2 className="w-4 h-4 md:w-5 md:h-5" />
+          <span>تأكيد الإجابة</span>
         </motion.button>
       )}
     </div>
@@ -855,12 +1001,12 @@ export default function App() {
   });
   const [testerStatus, setTesterStatus] = useState<'idle' | 'loading' | 'pending' | 'approved' | 'rejected' | 'error'>('idle');
   const [testerMessage, setTesterMessage] = useState('');
-  const [internalTestLink, setInternalTestLink] = useState('https://play.google.com/apps/internaltest/4700647113151529861');
+  const [internalTestLink, setInternalTestLink] = useState('https://play.google.com/apps/testing/com.mateen.game');
   const [isCheckingSavedStatus, setIsCheckingSavedStatus] = useState(false);
 
   const checkTesterStatus = useCallback(async (emailToCheck: string, isSilent = false) => {
-    const clean = emailToCheck.trim().toLowerCase();
-    if (!clean || !clean.includes('@')) return;
+    const clean = (emailToCheck || '').trim().toLowerCase();
+    if (!clean || !clean.includes('@') || !clean.includes('.') || clean.indexOf('@') >= clean.lastIndexOf('.')) return;
     if (!isSilent) setIsCheckingSavedStatus(true);
     try {
       const res = await fetch(`/api/testers?email=${encodeURIComponent(clean)}`);
@@ -889,12 +1035,10 @@ export default function App() {
     }
   }, []);
 
-  // Automatic real-time status polling:
-  // When an email exists and is not yet approved, poll in background every 5 seconds
-  // and when window gains focus, so status updates automatically without user intervention!
+  // Automatic real-time status polling for saved registered tester email
   useEffect(() => {
-    const saved = localStorage.getItem('mateen_tester_email') || testerEmail;
-    if (!saved) return;
+    const saved = localStorage.getItem('mateen_tester_email');
+    if (!saved || !saved.includes('@') || !saved.includes('.')) return;
 
     // Immediate check
     checkTesterStatus(saved, true);
@@ -902,16 +1046,18 @@ export default function App() {
     if (testerStatus === 'approved') return;
 
     const timer = setInterval(() => {
-      const currentSaved = localStorage.getItem('mateen_tester_email') || testerEmail;
-      if (currentSaved) {
+      const currentSaved = localStorage.getItem('mateen_tester_email');
+      if (currentSaved && currentSaved.includes('@') && currentSaved.includes('.')) {
         checkTesterStatus(currentSaved, true);
       }
-    }, 5000);
+    }, 8000);
 
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
-        const currentSaved = localStorage.getItem('mateen_tester_email') || testerEmail;
-        if (currentSaved) checkTesterStatus(currentSaved, true);
+        const currentSaved = localStorage.getItem('mateen_tester_email');
+        if (currentSaved && currentSaved.includes('@') && currentSaved.includes('.')) {
+          checkTesterStatus(currentSaved, true);
+        }
       }
     };
     document.addEventListener('visibilitychange', handleVisibility);
@@ -920,7 +1066,7 @@ export default function App() {
       clearInterval(timer);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [testerEmail, testerStatus, checkTesterStatus]);
+  }, [testerStatus, checkTesterStatus]);
 
   const handleRegisterTester = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -972,6 +1118,7 @@ export default function App() {
     hideAudioChallenge: boolean;
     hideCompletionChallenge: boolean;
     hideSurahChallenge: boolean;
+    hideIslamicVideos: boolean;
   }>(() => {
     try {
       const saved = localStorage.getItem('cached_system_settings');
@@ -980,14 +1127,16 @@ export default function App() {
         return {
           hideAudioChallenge: parsed.hideAudioChallenge !== undefined ? !!parsed.hideAudioChallenge : true,
           hideCompletionChallenge: !!parsed.hideCompletionChallenge,
-          hideSurahChallenge: !!parsed.hideSurahChallenge
+          hideSurahChallenge: !!parsed.hideSurahChallenge,
+          hideIslamicVideos: !!parsed.hideIslamicVideos
         };
       }
     } catch {}
     return {
       hideAudioChallenge: true, // Hidden by founder default
       hideCompletionChallenge: false,
-      hideSurahChallenge: false
+      hideSurahChallenge: false,
+      hideIslamicVideos: false
     };
   });
 
@@ -999,7 +1148,8 @@ export default function App() {
         const newSettings = {
           hideAudioChallenge: !!data.hideAudioChallenge,
           hideCompletionChallenge: !!data.hideCompletionChallenge,
-          hideSurahChallenge: !!data.hideSurahChallenge
+          hideSurahChallenge: !!data.hideSurahChallenge,
+          hideIslamicVideos: !!data.hideIslamicVideos
         };
         setSystemSettings(newSettings);
         try {
@@ -1142,6 +1292,11 @@ export default function App() {
   const [adhkarSearchQuery, setAdhkarSearchQuery] = useState('');
   const [isSearchSubmitted, setIsSearchSubmitted] = useState(false);
   const [selectedJuz, setSelectedJuz] = useState<number | null>(null);
+  const [selectedSkillJuzs, setSelectedSkillJuzs] = useState<number[]>([]);
+  const [selectedSkillSurahs, setSelectedSkillSurahs] = useState<string[]>([]);
+  const [skillsScopeMode, setSkillsScopeMode] = useState<'juz' | 'surah'>('juz');
+  const [skillSurahSearch, setSkillSurahSearch] = useState<string>('');
+  const [selectedSkillCount, setSelectedSkillCount] = useState<number>(10);
   const [isJuzMenuOpen, setIsJuzMenuOpen] = useState(false);
   const [isSurahMenuOpen, setIsSurahMenuOpen] = useState(false);
   const [mushafZoomScale, setMushafZoomScale] = useState(1);
@@ -1208,6 +1363,7 @@ export default function App() {
   const [speedTotalTimeSpent, setSpeedTotalTimeSpent] = useState(0);
   const [isSpeedGameOver, setIsSpeedGameOver] = useState(false);
   const [surahInputs, setSurahInputs] = useState<string[]>([]);
+  const [surahFeedbackData, setSurahFeedbackData] = useState<{ isFullyCorrect: boolean; correctSurahs: string[] } | null>(null);
   const [speedStartTime, setSpeedStartTime] = useState<number | null>(null);
 
   // Quiz Session State
@@ -1505,7 +1661,7 @@ export default function App() {
     }
   };
 
-  const handleStartSkillsSession = async (count: number) => {
+  const handleStartSkillsSession = async (count: number, chosenJuzs?: number[], chosenSurahs?: string[]) => {
     setQuestionsCount(count);
     setSessionCorrect(0);
     setSessionWrong(0);
@@ -1562,18 +1718,132 @@ export default function App() {
       }
     }
 
+    // 1. If specific Surahs are chosen (e.g. for completion challenge)
+    if (chosenSurahs && chosenSurahs.length > 0 && pool.length > 0) {
+      const isSurahMatch = (c: any) => {
+        const vSurah = Array.isArray(c.verses) && c.verses[0]?.surah ? String(c.verses[0].surah).replace(/^سورة\s+/, '').trim() : '';
+        const cat = c.category || '';
+        const kw = c.keyword || '';
+        return chosenSurahs.some(s => {
+          const cleanS = s.replace(/^سورة\s+/, '').trim();
+          const cleanSNorm = cleanS.replace(/[أإآ]/g, 'ا');
+          if (vSurah && (vSurah === cleanS || vSurah.replace(/[أإآ]/g, 'ا') === cleanSNorm)) return true;
+          if (cat && (cat.includes(cleanS) || cat.replace(/[أإآ]/g, 'ا').includes(cleanSNorm))) return true;
+          if (kw && (kw.includes(cleanS) || kw.replace(/[أإآ]/g, 'ا').includes(cleanSNorm))) return true;
+          return false;
+        });
+      };
+
+      let surahFiltered = pool.filter(isSurahMatch);
+      // If not enough questions from database, generate from local Quran dataset for those exact surahs
+      if (surahFiltered.length < count && dbType === 'COMPLETION') {
+        try {
+          const gen = generateCompletionChallenges(count, { surahs: chosenSurahs });
+          const mappedGen = gen.map((g, idx) => ({
+            id: 98000 + idx,
+            type: 'COMPLETION',
+            keyword: g.prompt,
+            verseText: g.prompt,
+            text: g.prompt,
+            category: g.verseSource,
+            level: 'medium',
+            options: g.options.map(opt => ({
+              text: opt,
+              isCorrect: opt === g.options[g.correctIndex]
+            })),
+            correctText: g.options[g.correctIndex],
+            verses: [{
+              id: `gen-comp-surah-${idx}`,
+              number: 1,
+              text: g.prompt,
+              surah: g.surah || '',
+              juz: g.juz || 1
+            }]
+          }));
+          surahFiltered = [...surahFiltered, ...mappedGen];
+        } catch (e) {
+          console.warn('Failed to generate extra completion challenges for surahs:', e);
+        }
+      }
+      if (surahFiltered.length > 0) {
+        pool = surahFiltered;
+      }
+    }
+
+    // 2. If specific Juzs are chosen (e.g. for completion challenge)
+    if (chosenJuzs && chosenJuzs.length > 0 && chosenJuzs.length < 30 && pool.length > 0) {
+      const isJuzMatch = (c: any) => {
+        const cJuz = Array.isArray(c.verses) && c.verses[0]?.juz ? Number(c.verses[0].juz) : null;
+        if (cJuz && chosenJuzs.includes(cJuz)) return true;
+        if (!c.category) return false;
+        return chosenJuzs.some(j => {
+          const arOrdinal = JUZ_NAMES_AR[j] || '';
+          return (
+            (arOrdinal && c.category.includes(arOrdinal)) ||
+            c.category.includes(`الجزء ${j}`) ||
+            c.category.includes(`جزء ${j}`)
+          );
+        });
+      };
+
+      let juzFiltered = pool.filter(isJuzMatch);
+      // If not enough questions from database, generate from local Quran dataset for those exact juzs
+      if (juzFiltered.length < count && dbType === 'COMPLETION') {
+        try {
+          const gen = generateCompletionChallenges(count, { juzs: chosenJuzs });
+          const mappedGen = gen.map((g, idx) => ({
+            id: 97000 + idx,
+            type: 'COMPLETION',
+            keyword: g.prompt,
+            verseText: g.prompt,
+            text: g.prompt,
+            category: g.verseSource,
+            level: 'medium',
+            options: g.options.map(opt => ({
+              text: opt,
+              isCorrect: opt === g.options[g.correctIndex]
+            })),
+            correctText: g.options[g.correctIndex],
+            verses: [{
+              id: `gen-comp-juz-${idx}`,
+              number: 1,
+              text: g.prompt,
+              surah: g.surah || '',
+              juz: g.juz || 1
+            }]
+          }));
+          juzFiltered = [...juzFiltered, ...mappedGen];
+        } catch (e) {
+          console.warn('Failed to generate extra completion challenges for juzs:', e);
+        }
+      }
+      if (juzFiltered.length > 0) {
+        pool = juzFiltered;
+      }
+    }
+
     if (pool && pool.length > 0) {
       // Ensure we only take up to `count` questions and shuffle for variety
       const finalSelection = [...pool].sort(() => Math.random() - 0.5).slice(0, count);
       setChallenges(finalSelection);
+      if (isSpeedMode) {
+        setSpeedTimeLeft(getSpeedQuestionDuration(finalSelection[0]));
+      } else {
+        setSpeedTimeLeft(skillsType === 'audio' ? 30 : 15);
+      }
       setView('challenge');
     } else {
-      setChallengesError('قاعدة البيانات فارغة حالياً لهذا النوع من التحديات.');
+      setChallengesError('قاعدة البيانات فارغة حالياً لهذا النوع من التحديات أو لم يتم العثور على أسئلة للأجزاء أو السور المختارة.');
     }
   };
 
   useEffect(() => {
     localStorage.setItem('quran_mushaf_settings', JSON.stringify(librarySettings));
+    if (librarySettings.darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
   }, [librarySettings]);
   const [currentPage, setCurrentPage] = useState<number>(() => {
     try {
@@ -1601,12 +1871,51 @@ export default function App() {
     }
   }, [selectedSurahId]);
 
+  const filteredSurahsList = useMemo(() => {
+    if (!skillSurahSearch.trim()) return ALL_QURAN_SURAHS;
+    const cleanSearch = skillSurahSearch.trim().replace(/^سورة\s+/, '');
+    const normSearch = cleanSearch.replace(/[أإآ]/g, 'ا');
+    return ALL_QURAN_SURAHS.filter(s => {
+      const sName = s.name.replace(/^سورة\s+/, '');
+      const sNorm = sName.replace(/[أإآ]/g, 'ا');
+      return sName.includes(cleanSearch) || sNorm.includes(normSearch) || String(s.id).includes(cleanSearch);
+    });
+  }, [skillSurahSearch]);
+
   const [isPageModeActive, setIsPageModeActive] = useState(false);
   const [isMushafFullscreen, setIsMushafFullscreen] = useState(false);
+  const [areFullscreenControlsVisible, setAreFullscreenControlsVisible] = useState(true);
+  const fullscreenControlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const resetFullscreenControlsTimer = useCallback(() => {
+    if (fullscreenControlsTimeoutRef.current) {
+      clearTimeout(fullscreenControlsTimeoutRef.current);
+    }
+    setAreFullscreenControlsVisible(true);
+    fullscreenControlsTimeoutRef.current = setTimeout(() => {
+      setAreFullscreenControlsVisible(false);
+    }, 5000);
+  }, []);
+
+  const toggleFullscreenControls = useCallback(() => {
+    setAreFullscreenControlsVisible(prev => {
+      if (!prev) {
+        if (fullscreenControlsTimeoutRef.current) clearTimeout(fullscreenControlsTimeoutRef.current);
+        fullscreenControlsTimeoutRef.current = setTimeout(() => {
+          setAreFullscreenControlsVisible(false);
+        }, 5000);
+        return true;
+      } else {
+        if (fullscreenControlsTimeoutRef.current) clearTimeout(fullscreenControlsTimeoutRef.current);
+        return false;
+      }
+    });
+  }, []);
 
   const enterMushafFullscreen = useCallback(() => {
     setIsPageModeActive(true);
     setIsMushafFullscreen(true);
+    resetFullscreenControlsTimer();
     try {
       if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
         document.documentElement.requestFullscreen().catch(() => {});
@@ -1614,10 +1923,13 @@ export default function App() {
     } catch {
       // ignore
     }
-  }, []);
+  }, [resetFullscreenControlsTimer]);
 
   const exitMushafFullscreen = useCallback(() => {
     setIsMushafFullscreen(false);
+    if (fullscreenControlsTimeoutRef.current) {
+      clearTimeout(fullscreenControlsTimeoutRef.current);
+    }
     try {
       if (document.fullscreenElement && document.exitFullscreen) {
         document.exitFullscreen().catch(() => {});
@@ -1642,7 +1954,13 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!isMushafFullscreen) return;
+    if (!isMushafFullscreen) {
+      if (fullscreenControlsTimeoutRef.current) {
+        clearTimeout(fullscreenControlsTimeoutRef.current);
+      }
+      return;
+    }
+    resetFullscreenControlsTimer();
     document.body.style.overflow = 'hidden';
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -1651,11 +1969,13 @@ export default function App() {
         if (currentPage < 604) {
           setPageTurnDirection('next');
           setCurrentPage(prev => Math.min(604, prev + 1));
+          resetFullscreenControlsTimer();
         }
       } else if (e.key === 'ArrowRight') {
         if (currentPage > 1) {
           setPageTurnDirection('prev');
           setCurrentPage(prev => Math.max(1, prev - 1));
+          resetFullscreenControlsTimer();
         }
       }
     };
@@ -1663,8 +1983,11 @@ export default function App() {
     return () => {
       document.body.style.overflow = '';
       window.removeEventListener('keydown', handleKeyDown);
+      if (fullscreenControlsTimeoutRef.current) {
+        clearTimeout(fullscreenControlsTimeoutRef.current);
+      }
     };
-  }, [isMushafFullscreen, currentPage, exitMushafFullscreen]);
+  }, [isMushafFullscreen, currentPage, exitMushafFullscreen, resetFullscreenControlsTimer]);
 
   const [challengeMode, setChallengeMode] = useState<'daily' | 'normal'>('normal');
   const [currentChallengeIndex, setCurrentChallengeIndex] = useState(0);
@@ -2189,11 +2512,12 @@ export default function App() {
   // Reset Speed timer on each match
   useEffect(() => {
     if (view === 'speed_challenge' && !isSpeedGameOver && matchedIds.size > 0 && !isComplete) {
-      const timeTaken = 30 - speedTimeLeft;
+      const qDuration = getSpeedQuestionDuration(currentChallenge);
+      const timeTaken = Math.max(0, qDuration - speedTimeLeft);
       setSpeedTotalTimeSpent(prev => prev + timeTaken);
-      setSpeedTimeLeft(30);
+      setSpeedTimeLeft(qDuration);
     }
-  }, [matchedIds.size, view, isSpeedGameOver, isComplete]);
+  }, [matchedIds.size, view, isSpeedGameOver, isComplete, currentChallenge]);
 
   // Effect to handle Surah Name Challenge inputs initialization
   useEffect(() => {
@@ -2224,13 +2548,14 @@ export default function App() {
   // Handle Speed Challenge progression
   useEffect(() => {
     if (view === 'speed_challenge' && isComplete && !isSpeedGameOver) {
-      const timeTaken = 30 - speedTimeLeft;
+      const qDuration = getSpeedQuestionDuration(currentChallenge);
+      const timeTaken = Math.max(0, qDuration - speedTimeLeft);
       setSpeedTotalTimeSpent(prev => prev + timeTaken);
 
       const timer = setTimeout(() => {
         const nextIdx = Math.floor(Math.random() * challenges.length);
         setCurrentChallengeIndex(nextIdx);
-        setSpeedTimeLeft(30);
+        setSpeedTimeLeft(getSpeedQuestionDuration(challenges[nextIdx]));
         setMatchedIds(new Set());
         setWordStates({});
         resetTranscript();
@@ -2238,7 +2563,7 @@ export default function App() {
       }, 1500);
       return () => clearTimeout(timer);
     }
-  }, [isComplete, view, isSpeedGameOver, challenges.length, speedTimeLeft, resetTranscript]);
+  }, [isComplete, view, isSpeedGameOver, challenges.length, speedTimeLeft, resetTranscript, currentChallenge]);
 
   // Effect to lock body scroll when modal is open
   useEffect(() => {
@@ -2312,7 +2637,7 @@ export default function App() {
     const randomIdx = Math.floor(Math.random() * Math.min(challenges.length, 50));
     setCurrentChallengeIndex(randomIdx);
     setView('speed_challenge');
-    setSpeedTimeLeft(30);
+    setSpeedTimeLeft(getSpeedQuestionDuration(challenges[randomIdx]));
     setSpeedTotalTimeSpent(0);
     setIsSpeedGameOver(false);
     setSpeedStartTime(Date.now());
@@ -2330,17 +2655,6 @@ export default function App() {
     const info = { index: currentChallengeIndex, mode: 'normal' as const, surah: firstVerse?.surah || '' };
     setIncompleteChallenge(info);
     localStorage.setItem('quran_incomplete_challenge', JSON.stringify(info));
-  };
-
-  const superNormalizeArabic = (text: any) => {
-    if (!text || typeof text !== 'string') return '';
-    return text
-      .replace(/[\u0610-\u061A\u064B-\u065F\u0670]/g, '') // حذف التشكيل
-      .replace(/[أإآ]/g, 'ا') // توحيد الألف
-      .replace(/ة/g, 'ه') // توحيد التاء المربوطة والهاء
-      .replace(/ي/g, 'ى') // توحيد الياء
-      .replace(/\s+/g, '') // حذف جميع المسافات العادية
-      .replace(/[\u200B-\u200D\uFEFF\u200E\u200F]/g, ''); // حذف المسافات والرموز المخفية
   };
 
   const generateOptions = useCallback((type: 'complete' | 'surah', correctValue: string) => {
@@ -2421,6 +2735,7 @@ export default function App() {
   const moveToNextQuestion = () => {
     setSkillsFeedback(false);
     setSelectedOption(null);
+    setSurahFeedbackData(null);
 
     const challengesLength = challenges.length || room?.challenges?.length || 0;
 
@@ -2429,8 +2744,33 @@ export default function App() {
         syncGroupProgress(true);
       }
       if (view === 'challenge') {
-        if (room) setView('group_game'); // Show leaderboard at end
-        else setView('skills_results');
+        if (room) {
+          setView('group_game'); // Show leaderboard at end
+        } else {
+          // Award a cup if the session was completed with correct answers!
+          if (sessionCorrect > 0) {
+            setCups(prev => {
+              const nextCups = prev + 1;
+              localStorage.setItem('quran_total_cups', nextCups.toString());
+              localStorage.setItem('quran_cups', nextCups.toString());
+              return nextCups;
+            });
+            if (playerUsername || playerName) {
+              fetch('/api/player-score', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  username: playerUsername,
+                  name: playerName,
+                  cups: 1,
+                  totalCups: cups + 1,
+                  totalPoints: totalPoints
+                })
+              }).catch(err => console.error('Failed to sync cup on session complete:', err));
+            }
+          }
+          setView('skills_results');
+        }
       }
       return;
     }
@@ -2445,7 +2785,9 @@ export default function App() {
     setWordStates({});
     const isAudio = skillsType === 'audio' || roomGameMode === 'audio';
     const roomTime = (room && (room.timePerQuestion || 0) > 0) ? room.timePerQuestion : 0;
-    setSpeedTimeLeft(roomTime > 0 ? roomTime : (isAudio ? 30 : 15));
+    const nextQ = challenges[currentChallengeIndex + 1];
+    const nextTime = isSpeedMode ? getSpeedQuestionDuration(nextQ) : (isAudio ? 30 : 15);
+    setSpeedTimeLeft(roomTime > 0 ? roomTime : nextTime);
     resetTranscript();
   };
 
@@ -2471,7 +2813,16 @@ export default function App() {
       }
 
       const rawSelected = selectedOption ? (typeof selectedOption === 'object' ? selectedOption.text : selectedOption) : null;
-      const rawCorrect = currentQuestion.correctText || "";
+      let rawCorrect = currentQuestion.correctText || "";
+      if (!rawCorrect && skillsOptions && Array.isArray(skillsOptions)) {
+        const correctOpt = skillsOptions.find(o => o.isCorrect);
+        if (correctOpt) rawCorrect = correctOpt.text;
+      }
+      if (!rawCorrect && currentQuestion.options && Array.isArray(currentQuestion.options)) {
+        const correctOpt = currentQuestion.options.find((o: any) => o.isCorrect);
+        if (correctOpt) rawCorrect = typeof correctOpt === 'object' ? correctOpt.text : correctOpt;
+      }
+
       const isObjectCorrect = selectedOption && typeof selectedOption === 'object' && selectedOption.isCorrect === true;
       const isTextMatch = !!(
         (rawSelected && rawCorrect && superNormalizeArabic(rawSelected) === superNormalizeArabic(rawCorrect)) ||
@@ -2482,10 +2833,32 @@ export default function App() {
       const answer = rawSelected || "لم يتم اختيار إجابة (انتهى الوقت)";
 
       if (isCorrect) {
-        const newScore = sessionCorrect + 10;
-        setSessionCorrect(newScore);
+        setSessionCorrect(prev => prev + 1);
+
+        const earnedPoints = 10;
+        setTotalPoints(prev => {
+          const next = prev + earnedPoints;
+          localStorage.setItem('quran_total_points', next.toString());
+          return next;
+        });
+
+        if (playerUsername || playerName) {
+          fetch('/api/player-score', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              username: playerUsername,
+              name: playerName,
+              points: earnedPoints,
+              totalPoints: totalPoints + earnedPoints,
+              challengeId: currentQuestion?.id,
+              roomId: room?.id
+            })
+          }).catch(err => console.error('Failed to sync score:', err));
+        }
+
         if (view === 'group_game') {
-          syncGroupProgress(false, newScore);
+          syncGroupProgress(false, sessionCorrect + 1);
         }
         if (window.navigator.vibrate) window.navigator.vibrate(50);
 
@@ -2515,8 +2888,14 @@ export default function App() {
         if (window.navigator.vibrate) window.navigator.vibrate(200);
         setSessionMistakes(prev => [...prev, {
           challenge: currentQuestion,
+          keyword: currentQuestion.keyword || currentQuestion.verseText || currentQuestion.text || "",
           userAnswer: answer || "لا يوجد إجابة",
-          correctAnswer: rawCorrect
+          correctAnswer: rawCorrect,
+          correctText: rawCorrect,
+          type: currentQuestion.type || 'COMPLETION',
+          isFullyCorrect: false,
+          pointsEarned: 0,
+          totalPossible: 1
         }]);
 
         if (challengeMode === 'daily') {
@@ -2528,9 +2907,10 @@ export default function App() {
         }
       }
 
+      const advanceDelay = isCorrect ? 1000 : 2500;
       setTimeout(() => {
         moveToNextQuestion();
-      }, 1000);
+      }, advanceDelay);
     } catch (error) {
       console.error('handleConfirmAnswer Error:', error);
       setSkillsFeedback(false);
@@ -2580,37 +2960,63 @@ export default function App() {
     const isFullyCorrect = correctCount === normalizedCorrect.length && normalizedInputs.length === normalizedCorrect.length;
 
     if (isFullyCorrect) {
-      const newScore = sessionCorrect + 10;
-      setSessionCorrect(newScore);
+      setSessionCorrect(prev => prev + 1);
+
+      const earnedPoints = 10;
+      setTotalPoints(prev => {
+        const next = prev + earnedPoints;
+        localStorage.setItem('quran_total_points', next.toString());
+        return next;
+      });
+
+      if (playerUsername || playerName) {
+        fetch('/api/player-score', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username: playerUsername,
+            name: playerName,
+            points: earnedPoints,
+            totalPoints: totalPoints + earnedPoints,
+            challengeId: currentQuestion?.id,
+            roomId: room?.id
+          })
+        }).catch(err => console.error('Failed to sync score:', err));
+      }
+
       if (view === 'group_game') {
-        syncGroupProgress(false, newScore);
+        syncGroupProgress(false, sessionCorrect + 1);
       }
       if (view === 'group_game' && currentQuestion.verses) {
         const allVerseIds = currentQuestion.verses.map((v: any) => v.id);
         setMatchedIds(new Set(allVerseIds));
       }
     } else {
-      setSessionWrong(prev => prev + (correctSurahs.length - correctCount));
+      setSessionWrong(prev => prev + 1);
     }
-    setTotalPoints(prev => prev + correctCount);
+
+    setSurahFeedbackData({
+      isFullyCorrect,
+      correctSurahs
+    });
 
     setSessionMistakes(prev => [...prev, {
       challenge: currentQuestion,
       text: currentQuestion.keyword || "",
+      keyword: currentQuestion.keyword || "",
       type: 'SURAH',
-      userInputs: surahInputs,
+      userInputs: [...surahInputs],
       correctSurahsList: correctSurahs,
       pointsEarned: correctCount,
       totalPossible: correctSurahs.length,
       isFullyCorrect
     }]);
 
-    setSurahInputs(new Array(surahInputs.length).fill(''));
-
-    // 4. Auto-advance
+    // 4. Auto-advance (giving enough time to read the correct surahs on mistake)
+    const advanceDelay = isFullyCorrect ? 1000 : 2500;
     setTimeout(() => {
       moveToNextQuestion();
-    }, 1000);
+    }, advanceDelay);
   };
 
   const handleBackToHome = () => {
@@ -2646,10 +3052,21 @@ export default function App() {
     const currentQuestion = currentChallenge;
     if (currentQuestion) {
       setSessionWrong(prev => prev + 1);
+      let rawCorrect = currentQuestion.correctText || "";
+      if (!rawCorrect && skillsOptions && Array.isArray(skillsOptions)) {
+        const correctOpt = skillsOptions.find(o => o.isCorrect);
+        if (correctOpt) rawCorrect = correctOpt.text;
+      }
       setSessionMistakes(prev => [...prev, {
         challenge: currentQuestion,
-        userAnswer: "تخطي",
-        correctAnswer: currentQuestion.correctText || currentQuestion.keyword || ""
+        keyword: currentQuestion.keyword || currentQuestion.verseText || currentQuestion.text || "",
+        userAnswer: "تخطي السؤال",
+        correctAnswer: rawCorrect,
+        correctText: rawCorrect,
+        type: currentQuestion.type || (skillsType === 'complete' ? 'COMPLETION' : skillsType === 'surah' ? 'SURAH' : 'STANDARD'),
+        isFullyCorrect: false,
+        pointsEarned: 0,
+        totalPossible: 1
       }]);
     }
 
@@ -2860,41 +3277,47 @@ export default function App() {
         localStorage.setItem('quran_completed_ids', JSON.stringify(Array.from(newSet)));
         return newSet;
       });
-      const newPoints = totalPoints + score;
-      setTotalPoints(newPoints);
-      localStorage.setItem('quran_total_points', newPoints.toString());
+    }
 
-      const newCupsCount = cups + 1;
+    const pointsToAdd = score > 0 ? score : 10;
+    const newPoints = totalPoints + pointsToAdd;
+    setTotalPoints(newPoints);
+    localStorage.setItem('quran_total_points', newPoints.toString());
+
+    let newCupsCount = cups;
+    if (isNewCompletion) {
+      newCupsCount = cups + 1;
       setCups(newCupsCount);
       localStorage.setItem('quran_total_cups', newCupsCount.toString());
       localStorage.setItem('quran_cups', newCupsCount.toString());
-
-      // Sync with backend using player username / name
-      fetch('/api/player-score', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username: playerUsername,
-          name: playerName,
-          points: score,
-          challengeId: currentChallenge?.id,
-          roomId: room?.id,
-          score: newPoints,
-          seerahCompleted: (getActiveAchievement() === 'seerah'),
-          generalCompleted: (getActiveAchievement() === 'general'),
-          quranCompleted: (completedChallengeIds.size >= 15)
-        })
-      })
-        .then(async (res) => {
-          if (!res.ok) {
-            const text = await res.text();
-            console.error('Score sync failed:', text);
-          }
-        })
-        .catch(err => console.error('Failed to sync score:', err));
-    } else {
-      console.log('Challenge already completed previously. No new points/cups awarded.');
     }
+
+    // Sync with backend using player username / name
+    fetch('/api/player-score', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: playerUsername,
+        name: playerName,
+        points: pointsToAdd,
+        totalPoints: newPoints,
+        cups: isNewCompletion ? 1 : 0,
+        totalCups: newCupsCount,
+        challengeId: currentChallenge?.id,
+        roomId: room?.id,
+        score: newPoints,
+        seerahCompleted: (getActiveAchievement() === 'seerah'),
+        generalCompleted: (getActiveAchievement() === 'general'),
+        quranCompleted: (completedChallengeIds.size >= 15)
+      })
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          const text = await res.text();
+          console.error('Score sync failed:', text);
+        }
+      })
+      .catch(err => console.error('Failed to sync score:', err));
 
     // Update leaderboard entry & sync
     syncLeaderboard();
@@ -3185,6 +3608,9 @@ export default function App() {
     setSessionCurrentIndex(prev => prev + 1);
     setMatchedIds(new Set());
     setWordStates({});
+    if (isSpeedMode) {
+      setSpeedTimeLeft(getSpeedQuestionDuration(challenges[currentChallengeIndex + 1]));
+    }
     resetTranscript();
   };
 
@@ -3382,6 +3808,27 @@ ${versesList}
                   <span className="hidden sm:inline">{showScores ? 'العودة' : 'المتصدرين'}</span>
                 </button>
 
+                {/* Dark Mode / Light Mode Toggle Button */}
+                <button
+                  onClick={() => setLibrarySettings(prev => ({ ...prev, darkMode: !prev.darkMode }))}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-1.5 rounded-xl transition-all text-xs sm:text-sm font-bold shadow-md hover:scale-105 active:scale-95 ${
+                    librarySettings.darkMode
+                      ? 'bg-amber-400/25 text-amber-300 border border-amber-400/40 hover:bg-amber-400/35'
+                      : 'bg-white/10 text-white hover:bg-white/20 border border-white/10'
+                  }`}
+                  title={librarySettings.darkMode ? 'التبديل إلى الوضع الفاتح (Light Mode)' : 'التبديل إلى الوضع الداكن (Dark Mode)'}
+                  aria-label="تبديل الوضع الداكن والفاتح"
+                >
+                  {librarySettings.darkMode ? (
+                    <Sun className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-300" />
+                  ) : (
+                    <Moon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-200" />
+                  )}
+                  <span className="hidden sm:inline">
+                    {librarySettings.darkMode ? 'فاتح' : 'داكن'}
+                  </span>
+                </button>
+
 
                 <button
                   onClick={() => setShowAboutModal(true)}
@@ -3450,9 +3897,9 @@ ${versesList}
           </header>
           )}
 
-          {/* Floating Back Button & Fullscreen Button Directly Below Top Header Bar - ONLY visible when viewing Holy Quran (view === 'mushaf') */}
+          {/* Floating Back Button Directly Below Top Header Bar - ONLY visible when viewing Holy Quran (view === 'mushaf') */}
           {view === 'mushaf' && !isMushafFullscreen && (
-            <div className="w-full max-w-6xl mx-auto px-4 sm:px-8 pt-3 pb-1 flex justify-between items-center gap-3 animate-in fade-in slide-in-from-top-2 duration-300">
+            <div className="w-full max-w-6xl mx-auto px-4 sm:px-8 pt-3 pb-1 flex justify-start items-center gap-3 animate-in fade-in slide-in-from-top-2 duration-300">
               <button
                 onClick={() => {
                   setView('library');
@@ -3464,20 +3911,11 @@ ${versesList}
                   stopListening();
                   window.scrollTo({ top: 0, behavior: 'smooth' });
                 }}
-                className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-white/90 backdrop-blur-md text-slate-700 hover:text-brand-emerald border border-slate-200/80 shadow-sm hover:bg-white transition-all text-xs sm:text-sm font-black active:scale-95 group"
+                className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-white dark:bg-slate-800 backdrop-blur-md border border-emerald-200/60 dark:border-slate-700 shadow-sm hover:bg-emerald-50 dark:hover:bg-slate-700 transition-all text-xs sm:text-sm font-black active:scale-95 group cursor-pointer"
                 title="الرجوع للمكتبة"
               >
                 <ArrowRight className="w-4 h-4 text-brand-gold group-hover:-translate-x-1 transition-transform" />
-                <span>الرجوع للمكتبة</span>
-              </button>
-
-              <button
-                onClick={enterMushafFullscreen}
-                className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-brand-emerald text-white hover:bg-emerald-700 border border-brand-emerald/80 shadow-md transition-all text-xs sm:text-sm font-black active:scale-95 group cursor-pointer"
-                title="ملء الشاشة"
-              >
-                <Maximize2 className="w-4 h-4 text-brand-gold group-hover:scale-110 transition-transform" />
-                <span>ملء الشاشة</span>
+                <span className="text-emerald-800 dark:text-emerald-300 font-black">الرجوع للمكتبة</span>
               </button>
             </div>
           )}
@@ -3797,16 +4235,16 @@ ${versesList}
                     </div>
 
                     {/* Minimalist Summary Ribbon */}
-                    <div className="bg-white rounded-xl sm:rounded-2xl border border-slate-150 p-2.5 sm:p-3 shadow-xs flex flex-wrap items-center justify-between gap-2 text-xs">
-                      <div className="flex items-center gap-2 text-slate-600 font-bold text-xs">
-                        <Users className="w-4 h-4 text-emerald-600" />
-                        <span>عدد المستخدمين: <strong className="text-slate-900 font-black">{totalUsersCount || leaderboard.length}</strong> مستخدم</span>
+                    <div className="bg-white dark:bg-slate-900 rounded-xl sm:rounded-2xl border border-slate-150 dark:border-slate-800 p-2.5 sm:p-3 shadow-xs flex flex-wrap items-center justify-between gap-2 text-xs">
+                      <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300 font-bold text-xs">
+                        <Users className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                        <span>عدد المستخدمين: <strong className="text-slate-900 dark:text-slate-100 font-black">{totalUsersCount || leaderboard.length}</strong> مستخدم</span>
                       </div>
                       {playerName && (
-                        <div className="text-[11px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg flex items-center gap-1.5 flex-wrap">
-                          <span>حسابك: <strong className="font-black text-slate-900">{playerName}</strong></span>
-                          <span className="text-emerald-300 font-normal">|</span>
-                          <span className="font-black text-amber-700">
+                        <div className="text-[11px] font-bold text-emerald-800 dark:text-emerald-200 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 px-2.5 py-1 rounded-lg flex items-center gap-1.5 flex-wrap">
+                          <span>حسابك: <strong className="font-black text-slate-900 dark:text-white">{playerName}</strong></span>
+                          <span className="text-emerald-300 dark:text-emerald-700 font-normal">|</span>
+                          <span className="font-black text-amber-700 dark:text-amber-400">
                             {userLeaderboardRank === 1
                               ? 'ترتيبك: الأول 👑'
                               : userLeaderboardRank === 2
@@ -3822,14 +4260,14 @@ ${versesList}
                     </div>
 
                     {isSyncing && leaderboard.length === 0 ? (
-                      <div className="text-center py-12 bg-white rounded-2xl border border-slate-150 shadow-xs">
+                      <div className="text-center py-12 bg-white dark:bg-slate-900 rounded-2xl border border-slate-150 dark:border-slate-800 shadow-xs">
                         <div className="w-8 h-8 border-3 border-emerald-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-                        <p className="text-slate-500 font-bold text-xs sm:text-sm">جاري جلب قائمة الأبطال والمتصدرين...</p>
+                        <p className="text-slate-500 dark:text-slate-400 font-bold text-xs sm:text-sm">جاري جلب قائمة الأبطال والمتصدرين...</p>
                       </div>
                     ) : leaderboard.length === 0 ? (
-                      <div className="text-center py-12 bg-white rounded-2xl border border-slate-150 shadow-xs">
-                        <Sparkles className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-                        <p className="text-slate-400 font-bold text-xs sm:text-sm">كن أول من يسجل اسمه ويتصدر القائمة!</p>
+                      <div className="text-center py-12 bg-white dark:bg-slate-900 rounded-2xl border border-slate-150 dark:border-slate-800 shadow-xs">
+                        <Sparkles className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
+                        <p className="text-slate-400 dark:text-slate-500 font-bold text-xs sm:text-sm">كن أول من يسجل اسمه ويتصدر القائمة!</p>
                       </div>
                     ) : (
                       <div className="space-y-2">
@@ -3868,31 +4306,31 @@ ${versesList}
                               key={player.name + index}
                               className={`flex justify-between items-center px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl sm:rounded-2xl border transition-all duration-200 group relative ${
                                 isRank1
-                                  ? 'bg-gradient-to-l from-amber-500/10 via-amber-500/5 to-white border-amber-300 shadow-xs'
+                                  ? 'bg-gradient-to-l from-amber-500/10 via-amber-500/5 to-white dark:to-slate-900 border-amber-300 dark:border-amber-700/60 shadow-xs'
                                   : isRank2
-                                  ? 'bg-gradient-to-l from-slate-100/80 via-slate-50/40 to-white border-slate-200 shadow-xs'
+                                  ? 'bg-gradient-to-l from-slate-100/80 via-slate-50/40 to-white dark:to-slate-900 border-slate-200 dark:border-slate-700 shadow-xs'
                                   : isRank3
-                                  ? 'bg-gradient-to-l from-amber-600/10 via-amber-600/5 to-white border-amber-200 shadow-xs'
-                                  : 'bg-white border-slate-150 hover:border-amber-300 shadow-xs'
-                              } ${isCurrentPlayer ? 'ring-1.5 ring-emerald-500 border-emerald-400 bg-emerald-50/40' : ''}`}
+                                  ? 'bg-gradient-to-l from-amber-600/10 via-amber-600/5 to-white dark:to-slate-900 border-amber-200 dark:border-amber-800/60 shadow-xs'
+                                  : 'bg-white dark:bg-slate-900 border-slate-150 dark:border-slate-800 hover:border-amber-300 dark:hover:border-amber-500 shadow-xs'
+                              } ${isCurrentPlayer ? 'ring-1.5 ring-emerald-500 border-emerald-400 bg-emerald-50/40 dark:bg-emerald-950/40' : ''}`}
                             >
                               <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
                                 {/* Rank Badge */}
                                 <div className="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center shrink-0">
                                   {isRank1 ? (
-                                    <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-amber-500/15 border border-amber-300 text-amber-800 flex items-center justify-center font-black text-xs sm:text-sm shadow-xs">
+                                    <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-amber-500/15 border border-amber-300 dark:border-amber-700/60 text-amber-800 dark:text-amber-300 flex items-center justify-center font-black text-xs sm:text-sm shadow-xs">
                                       👑
                                     </div>
                                   ) : isRank2 ? (
-                                    <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-slate-100 border border-slate-200 text-slate-700 flex items-center justify-center font-black text-xs sm:text-sm shadow-xs">
+                                    <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 flex items-center justify-center font-black text-xs sm:text-sm shadow-xs">
                                       🥈
                                     </div>
                                   ) : isRank3 ? (
-                                    <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-amber-100/70 border border-amber-200 text-amber-900 flex items-center justify-center font-black text-xs sm:text-sm shadow-xs">
+                                    <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-amber-100/70 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800/60 text-amber-900 dark:text-amber-200 flex items-center justify-center font-black text-xs sm:text-sm shadow-xs">
                                       🥉
                                     </div>
                                   ) : (
-                                    <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-slate-50 border border-slate-100 text-slate-400 flex items-center justify-center font-black text-[11px] sm:text-xs">
+                                    <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 text-slate-400 dark:text-slate-400 flex items-center justify-center font-black text-[11px] sm:text-xs">
                                       #{index + 1}
                                     </div>
                                   )}
@@ -3936,7 +4374,7 @@ ${versesList}
                                     <span className={`font-black text-xs sm:text-sm leading-tight truncate ${
                                       isPlayerElite
                                         ? `text-transparent bg-clip-text bg-gradient-to-r ${style.textColor}`
-                                        : 'text-slate-800'
+                                        : 'text-slate-800 dark:text-slate-100'
                                     }`}>
                                       {player.name}
                                     </span>
@@ -4434,7 +4872,13 @@ ${versesList}
                           <span className={`text-base md:text-xl font-black block tabular-nums ${speedTimeLeft <= 10 ? 'text-red-600' : 'text-slate-800'}`}>
                             {speedTimeLeft} ثانية
                           </span>
-                          <span className="text-[9px] md:text-[10px] font-black uppercase tracking-widest text-slate-400">الوقت المتبقي للآية</span>
+                          <span className="text-[9px] md:text-[10px] font-black uppercase tracking-widest text-slate-400">
+                            الوقت المتبقي للآية ({
+                              (currentChallenge?.level === 'hard' || currentChallenge?.level === 'صعب') ? 'صعب: 20ث' :
+                              (currentChallenge?.level === 'easy' || currentChallenge?.level === 'سهل') ? 'سهل: 10ث' :
+                              'متوسط: 15ث'
+                            })
+                          </span>
                         </div>
                         <div className="w-px h-7 bg-slate-100 mx-1" />
                         <div className="text-right">
@@ -4484,6 +4928,7 @@ ${versesList}
                           mode={skillsType}
                           verseText={KEYWORD}
                           totalPoints={totalPoints}
+                          level={currentChallenge?.level}
                         />
 
                         {skillsType === 'audio' ? (
@@ -4507,6 +4952,7 @@ ${versesList}
                             }}
                             onSubmit={handleSubmitSurah}
                             feedback={skillsFeedback}
+                            surahFeedbackData={surahFeedbackData}
                           />
                         ) : (
                           <CompleteChallengeUI
@@ -4516,6 +4962,8 @@ ${versesList}
                             onOptionSelect={handleOptionSelect}
                             onConfirm={handleConfirmAnswer}
                             feedback={skillsFeedback}
+                            correctText={skillsCorrectAnswer || currentChallenge?.correctText}
+                            currentChallenge={currentChallenge}
                           />
                         )}
                       </div>
@@ -4543,37 +4991,346 @@ ${versesList}
                     />
                   </motion.div>
                 ) : view === 'skills_count_selection' ? (
-                  <motion.div
-                    key="skills_count_selection"
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.95 }}
-                    className="max-w-xl mx-auto py-6 md:py-8 px-4 text-center"
-                  >
-                    <h2 className="text-xl md:text-2xl font-black text-brand-emerald mb-1">اختر عدد الأسئلة</h2>
-                    <p className="text-slate-500 font-bold text-xs md:text-sm mb-6">كم عدد الأسئلة التي تود التحدي فيها؟</p>
-
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 md:gap-4">
-                      {[5, 10, 15, 20].map((count) => (
-                        <button
-                          key={count}
-                          onClick={() => handleStartSkillsSession(count)}
-                          className="glass p-4 md:p-6 rounded-2xl border-2 border-slate-100 hover:border-brand-emerald/30 hover:shadow-lg transition-all group active:scale-95"
-                        >
-                          <span className="text-3xl md:text-4xl font-black text-brand-emerald block mb-1">{count}</span>
-                          <span className="text-slate-400 font-bold text-xs md:text-sm">سؤال</span>
-                        </button>
-                      ))}
-                    </div>
-
-                    <button
-                      onClick={() => setView('skills_menu')}
-                      className="mt-6 text-slate-400 font-bold hover:text-brand-emerald transition-colors flex items-center gap-1.5 mx-auto text-xs md:text-sm"
+                  skillsType === 'complete' ? (
+                    <motion.div
+                      key="skills_complete_selection"
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.95 }}
+                      className="max-w-2xl mx-auto py-6 md:py-8 px-4"
                     >
-                      <ArrowRight className="w-4 h-4" />
-                      العودة للأوضاع
-                    </button>
-                  </motion.div>
+                      <div className="glass bg-white dark:bg-slate-900 p-6 md:p-8 rounded-3xl border-2 border-brand-gold/30 shadow-xl space-y-6">
+                        {/* Header */}
+                        <div className="text-center">
+                          <span className="text-[10px] font-black uppercase tracking-widest px-3 py-1 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 rounded-full border border-amber-200 dark:border-amber-800/60">
+                            تحدي إكمال الآية
+                          </span>
+                          <h2 className="text-xl md:text-2xl font-black text-slate-800 dark:text-slate-100 mt-2">
+                            إعدادات التحدي وتحديد الأجزاء
+                          </h2>
+                          <p className="text-slate-400 font-bold text-xs md:text-sm mt-1">
+                            حدد عدد الأسئلة والأجزاء التي تود التحدي في آياتها
+                          </p>
+                        </div>
+
+                        {/* 1. عدد الأسئلة */}
+                        <div>
+                          <label className="block text-xs font-black text-slate-500 mb-3 uppercase tracking-wider text-right">
+                            1. عدد الأسئلة
+                          </label>
+                          <div className="grid grid-cols-4 gap-3">
+                            {[5, 10, 15, 20].map((num) => (
+                              <button
+                                key={num}
+                                type="button"
+                                onClick={() => setSelectedSkillCount(num)}
+                                className={`py-3.5 px-2 rounded-2xl border-2 font-black text-center transition-all ${
+                                  selectedSkillCount === num
+                                    ? 'border-brand-gold bg-brand-gold text-white shadow-lg shadow-brand-gold/20 scale-[1.02]'
+                                    : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700'
+                                }`}
+                              >
+                                <span className="text-xl block">{num}</span>
+                                <span className="text-[10px] opacity-80">أسئلة</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* 2. نطاق التحدي (الأجزاء أو السور) */}
+                        <div className="space-y-3">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <label className="text-xs font-black text-slate-500 uppercase tracking-wider">
+                              2. نطاق الأسئلة (الأجزاء أو سور معينة)
+                            </label>
+
+                            {/* Mode toggle tabs */}
+                            <div className="flex items-center p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl self-start sm:self-auto border border-slate-200/60 dark:border-slate-700">
+                              <button
+                                type="button"
+                                onClick={() => setSkillsScopeMode('juz')}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all flex items-center gap-1.5 ${
+                                  skillsScopeMode === 'juz'
+                                    ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-xs'
+                                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                                }`}
+                              >
+                                <Hash className="w-3.5 h-3.5 text-brand-gold" />
+                                <span>حسب الأجزاء</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setSkillsScopeMode('surah')}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all flex items-center gap-1.5 ${
+                                  skillsScopeMode === 'surah'
+                                    ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-xs'
+                                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                                }`}
+                              >
+                                <BookOpen className="w-3.5 h-3.5 text-brand-gold" />
+                                <span>سور معينة</span>
+                              </button>
+                            </div>
+                          </div>
+
+                          {skillsScopeMode === 'juz' ? (
+                            <div>
+                              <div className="flex items-center justify-between mb-2.5">
+                                <span className="text-[11px] font-bold text-slate-400">
+                                  اختر جزءاً أو عدة أجزاء لتخصيص التحدي:
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (selectedSkillJuzs.length === 30) {
+                                      setSelectedSkillJuzs([]);
+                                    } else {
+                                      setSelectedSkillJuzs(Array.from({ length: 30 }, (_, i) => i + 1));
+                                    }
+                                  }}
+                                  className="text-xs font-black text-brand-gold hover:text-amber-700 transition-colors"
+                                >
+                                  {selectedSkillJuzs.length === 30 ? 'إلغاء التحديد' : 'تحديد كامل القرآن (30 جزءاً)'}
+                                </button>
+                              </div>
+
+                              {/* Quick selection status */}
+                              <div className="mb-3 flex items-center justify-between p-3 rounded-2xl bg-amber-50/70 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-xs font-bold text-amber-900 dark:text-amber-200">
+                                <span>
+                                  {selectedSkillJuzs.length === 0
+                                    ? '📖 يتم التحدي في: كامل القرآن الكريم'
+                                    : selectedSkillJuzs.length === 30
+                                      ? '📖 يتم التحدي في: كامل القرآن (جميع الأجزاء)'
+                                      : `📖 تم تحديد ${selectedSkillJuzs.length} ${selectedSkillJuzs.length === 1 ? 'جزء' : 'أجزاء'}: (${selectedSkillJuzs.join(', ')})`}
+                                </span>
+                                {selectedSkillJuzs.length > 0 && selectedSkillJuzs.length < 30 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedSkillJuzs([])}
+                                    className="text-[11px] font-black text-amber-700 dark:text-amber-400 underline"
+                                  >
+                                    إعادة لكامل المصحف
+                                  </button>
+                                )}
+                              </div>
+
+                              {/* 30 Juz Grid */}
+                              <div className="grid grid-cols-5 sm:grid-cols-6 md:grid-cols-10 gap-2 max-h-48 overflow-y-auto p-2 bg-slate-50/70 dark:bg-slate-900/60 rounded-2xl border border-slate-100 dark:border-slate-800 custom-scrollbar">
+                                {Array.from({ length: 30 }, (_, i) => i + 1).map((juzNum) => {
+                                  const isSelected = selectedSkillJuzs.includes(juzNum);
+                                  return (
+                                    <button
+                                      key={juzNum}
+                                      type="button"
+                                      onClick={() => {
+                                        if (isSelected) {
+                                          setSelectedSkillJuzs(selectedSkillJuzs.filter(j => j !== juzNum));
+                                        } else {
+                                          setSelectedSkillJuzs([...selectedSkillJuzs, juzNum].sort((a, b) => a - b));
+                                        }
+                                      }}
+                                      className={`py-2 px-1 rounded-xl text-xs font-black transition-all border ${
+                                        isSelected
+                                          ? 'bg-brand-gold text-white border-brand-gold shadow-xs scale-105'
+                                          : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-brand-gold/50'
+                                      }`}
+                                      title={`الجزء ${JUZ_NAMES_AR[juzNum] || juzNum}`}
+                                    >
+                                      <span>{juzNum}</span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="space-y-2.5">
+                              {/* Search & Actions */}
+                              <div className="flex items-center gap-2">
+                                <div className="relative flex-1">
+                                  <Search className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                                  <input
+                                    type="text"
+                                    value={skillSurahSearch}
+                                    onChange={(e) => setSkillSurahSearch(e.target.value)}
+                                    placeholder="ابحث عن سورة (مثال: الكهف، البقرة، 18)..."
+                                    className="w-full pr-10 pl-10 py-2.5 rounded-xl bg-slate-50/80 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 text-xs font-bold outline-none focus:border-brand-gold focus:bg-white dark:focus:bg-slate-800 transition-all text-right"
+                                  />
+                                  {skillSurahSearch && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setSkillSurahSearch('')}
+                                      className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold"
+                                    >
+                                      مسح
+                                    </button>
+                                  )}
+                                </div>
+
+                                {selectedSkillSurahs.length > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedSkillSurahs([])}
+                                    className="text-xs font-black text-rose-500 hover:text-rose-600 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/50 px-3 py-2.5 rounded-xl border border-rose-200 dark:border-rose-800 transition-all shrink-0"
+                                  >
+                                    مسح الكل
+                                  </button>
+                                )}
+                              </div>
+
+                              {/* Presets */}
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-[10px] font-black text-slate-400">اختيارات سريعة:</span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const amma = ALL_QURAN_SURAHS.filter(s => s.id >= 78).map(s => s.name);
+                                    setSelectedSkillSurahs(amma);
+                                  }}
+                                  className="text-[11px] font-black px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/50 text-amber-800 dark:text-amber-200 border border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-all"
+                                >
+                                  جزء عمّ (قصار السور)
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const longSurahs = ['البقرة', 'آل عمران', 'النساء', 'المائدة', 'الأنعام', 'الأعراف'];
+                                    setSelectedSkillSurahs(longSurahs);
+                                  }}
+                                  className="text-[11px] font-black px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/50 text-amber-800 dark:text-amber-200 border border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-all"
+                                >
+                                  السبع الطوال
+                                </button>
+                              </div>
+
+                              {/* Selected Status */}
+                              <div className="flex items-center justify-between p-3 rounded-2xl bg-amber-50/70 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-xs font-bold text-amber-900 dark:text-amber-200">
+                                <span className="truncate">
+                                  {selectedSkillSurahs.length === 0
+                                    ? '📖 لم تحدد سوراً بعد (سيتم التحدي في كامل القرآن الكريم)'
+                                    : `📖 تم تحديد ${selectedSkillSurahs.length} ${selectedSkillSurahs.length === 1 ? 'سورة' : 'سور'}: ${selectedSkillSurahs.slice(0, 3).map(s => `سورة ${s}`).join('، ')}${selectedSkillSurahs.length > 3 ? ` و+${selectedSkillSurahs.length - 3}` : ''}`}
+                                </span>
+                                {selectedSkillSurahs.length > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedSkillSurahs([])}
+                                    className="text-[11px] font-black text-amber-700 dark:text-amber-400 underline shrink-0 mr-2"
+                                  >
+                                    إلغاء التحديد
+                                  </button>
+                                )}
+                              </div>
+
+                              {/* Surahs Grid */}
+                              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-h-52 overflow-y-auto p-2 bg-slate-50/70 dark:bg-slate-900/60 rounded-2xl border border-slate-100 dark:border-slate-800 custom-scrollbar">
+                                {filteredSurahsList.map((surah) => {
+                                  const isSelected = selectedSkillSurahs.includes(surah.name);
+                                  return (
+                                    <button
+                                      key={surah.id}
+                                      type="button"
+                                      onClick={() => {
+                                        if (isSelected) {
+                                          setSelectedSkillSurahs(selectedSkillSurahs.filter(s => s !== surah.name));
+                                        } else {
+                                          setSelectedSkillSurahs([...selectedSkillSurahs, surah.name]);
+                                        }
+                                      }}
+                                      className={`py-2 px-2.5 rounded-xl text-xs font-black transition-all border text-right flex items-center justify-between gap-1.5 ${
+                                        isSelected
+                                          ? 'bg-brand-gold text-white border-brand-gold shadow-xs scale-[1.02]'
+                                          : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-brand-gold/50'
+                                      }`}
+                                    >
+                                      <div className="flex items-center gap-1.5 min-w-0">
+                                        <span className={`w-5 h-5 rounded-md text-[10px] flex items-center justify-center font-black shrink-0 ${
+                                          isSelected ? 'bg-white/20 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400'
+                                        }`}>
+                                          {surah.id}
+                                        </span>
+                                        <span className="truncate">سورة {surah.name}</span>
+                                      </div>
+                                      {isSelected && <Check className="w-3.5 h-3.5 text-white shrink-0" />}
+                                    </button>
+                                  );
+                                })}
+                                {filteredSurahsList.length === 0 && (
+                                  <div className="col-span-full py-6 text-center text-xs font-bold text-slate-400">
+                                    لم يتم العثور على سورة مطابقة
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Actions */}
+                        <div className="pt-2 space-y-3">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (skillsScopeMode === 'juz') {
+                                handleStartSkillsSession(selectedSkillCount, selectedSkillJuzs, undefined);
+                              } else {
+                                handleStartSkillsSession(selectedSkillCount, undefined, selectedSkillSurahs);
+                              }
+                            }}
+                            className="w-full py-4 bg-brand-gold hover:bg-amber-600 text-white rounded-2xl font-black text-base shadow-xl shadow-brand-gold/20 active:scale-98 transition-all flex items-center justify-center gap-2"
+                          >
+                            <span>
+                              ابدأ تحدي إكمال الآية ({selectedSkillCount} أسئلة)
+                              {skillsScopeMode === 'surah' && selectedSkillSurahs.length > 0 
+                                ? ` • ${selectedSkillSurahs.length} سور` 
+                                : skillsScopeMode === 'juz' && selectedSkillJuzs.length > 0 && selectedSkillJuzs.length < 30 
+                                  ? ` • ${selectedSkillJuzs.length} أجزاء` 
+                                  : ' • كامل القرآن'}
+                            </span>
+                            <ArrowLeft className="w-5 h-5" />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setView('skills_menu')}
+                            className="w-full py-2 text-slate-400 font-bold hover:text-slate-600 transition-colors text-xs md:text-sm flex items-center justify-center gap-1.5"
+                          >
+                            <ArrowRight className="w-4 h-4" />
+                            <span>العودة للأوضاع</span>
+                          </button>
+                        </div>
+                      </div>
+                    </motion.div>
+                  ) : (
+                    <motion.div
+                      key="skills_count_selection"
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.95 }}
+                      className="max-w-xl mx-auto py-6 md:py-8 px-4 text-center"
+                    >
+                      <h2 className="text-xl md:text-2xl font-black text-brand-emerald mb-1">اختر عدد الأسئلة</h2>
+                      <p className="text-slate-500 font-bold text-xs md:text-sm mb-6">كم عدد الأسئلة التي تود التحدي فيها؟</p>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 md:gap-4">
+                        {[5, 10, 15, 20].map((count) => (
+                          <button
+                            key={count}
+                            onClick={() => handleStartSkillsSession(count)}
+                            className="glass bg-white dark:bg-slate-800 p-4 md:p-6 rounded-2xl border-2 border-slate-150 dark:border-slate-700 hover:border-brand-emerald/30 dark:hover:border-emerald-500/50 hover:shadow-lg transition-all group active:scale-95"
+                          >
+                            <span className="text-3xl md:text-4xl font-black text-brand-emerald dark:text-emerald-400 block mb-1">{count}</span>
+                            <span className="text-slate-500 dark:text-slate-300 font-bold text-xs md:text-sm">سؤال</span>
+                          </button>
+                        ))}
+                      </div>
+
+                      <button
+                        onClick={() => setView('skills_menu')}
+                        className="mt-6 text-slate-400 font-bold hover:text-brand-emerald transition-colors flex items-center gap-1.5 mx-auto text-xs md:text-sm"
+                      >
+                        <ArrowRight className="w-4 h-4" />
+                        العودة للأوضاع
+                      </button>
+                    </motion.div>
+                  )
                 ) : view === 'skills_results' ? (
                   <motion.div
                     key="skills_results"
@@ -4594,7 +5351,7 @@ ${versesList}
 
                       <p className="text-slate-500 font-bold mb-10">إليك ملخص أدائك في هذا التحدي</p>
 
-                      <div className="grid grid-cols-2 gap-6 mb-12">
+                      <div className="grid grid-cols-2 gap-6 mb-6">
                         <div className="bg-brand-emerald/5 p-8 rounded-[2rem] border border-brand-emerald/10">
                           <span className="text-4xl font-black text-brand-emerald block mb-1">{sessionCorrect}</span>
                           <span className="text-slate-500 font-bold">{skillsType === 'surah' ? 'سورة صحيحة' : 'إجابة صحيحة'}</span>
@@ -4602,6 +5359,20 @@ ${versesList}
                         <div className="bg-red-50 p-8 rounded-[2rem] border border-red-100">
                           <span className="text-4xl font-black text-red-600 block mb-1">{sessionWrong}</span>
                           <span className="text-slate-500 font-bold">{skillsType === 'surah' ? 'سورة خاطئة' : 'إجابة خاطئة'}</span>
+                        </div>
+                      </div>
+
+                      {/* Points and cups summary badge */}
+                      <div className="mb-10 p-5 rounded-3xl bg-linear-to-r from-brand-emerald/10 via-amber-500/10 to-brand-emerald/10 border border-brand-gold/30 flex items-center justify-around gap-4 flex-wrap">
+                        <div className="flex items-center gap-2">
+                          <Sparkles className="w-5 h-5 text-brand-gold shrink-0" />
+                          <span className="text-slate-600 font-bold text-sm">النقاط المكتسبة:</span>
+                          <span className="text-brand-emerald font-black text-xl">+{sessionCorrect * 10} نقطة</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Trophy className="w-5 h-5 text-amber-500 shrink-0" />
+                          <span className="text-slate-600 font-bold text-sm">إجمالي رصيدك:</span>
+                          <span className="text-slate-800 font-black text-base">{totalPoints} نقطة • {cups} كأس</span>
                         </div>
                       </div>
 
@@ -4652,26 +5423,76 @@ ${versesList}
                                       <p className="text-xs font-bold text-red-500">تم التعرف على {m.matchedCount} آيات، وفاتك {m.missedCount} آيات بسبب ضيق الوقت.</p>
                                     </div>
                                   ) : m.correctSurahsList ? (
-                                    <div className="grid grid-cols-2 md:grid-cols-2 gap-2 md:gap-3 mt-2 md:mt-4">
-                                      {m.correctSurahsList.map((correct: string, idx: number) => {
-                                        const userHasIt = m.userInputs?.some((input: string) => normalizeArabicText(input).trim() === normalizeArabicText(correct).trim());
-                                        return (
-                                          <div key={idx} className={`p-2 md:p-3 rounded-lg md:rounded-xl flex items-center justify-between gap-2 md:gap-3 border ${userHasIt ? 'bg-white border-brand-emerald/30 text-brand-emerald shadow-sm' : 'bg-red-50/50 border-red-100 text-red-600'}`}>
-                                            <span className="font-bold text-[10px] md:font-quran-text-sm leading-tight">{correct}</span>
-                                            {userHasIt ? <CheckCircle className="w-3.5 h-3.5 md:w-4 md:h-4" /> : <XCircle className="w-3.5 h-3.5 md:w-4 md:h-4" />}
+                                    <div className="flex flex-col gap-2.5 text-xs sm:text-sm mt-3 pt-3 border-t border-slate-200/60">
+                                      {/* ما أدخله المستخدم */}
+                                      <div className="flex items-start gap-2 bg-red-50/70 p-2.5 rounded-xl border border-red-100">
+                                        <XCircle className="w-4 h-4 mt-0.5 shrink-0 text-red-500" />
+                                        <div className="flex-1">
+                                          <span className="text-slate-500 font-semibold block text-[11px]">ما اخترته/أدخلته أنت:</span>
+                                          <div className="flex flex-wrap gap-1.5 mt-1">
+                                            {m.userInputs && m.userInputs.length > 0 && m.userInputs.some((u: string) => u.trim()) ? (
+                                              m.userInputs.map((input: string, uIdx: number) => {
+                                                const isMatch = m.correctSurahsList?.some((c: string) => normalizeArabicText(c).trim() === normalizeArabicText(input).trim());
+                                                return (
+                                                  <span
+                                                    key={uIdx}
+                                                    className={`px-2 py-0.5 rounded-md text-xs font-black ${
+                                                      isMatch
+                                                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                                        : 'bg-red-100 text-red-800 border border-red-300'
+                                                    }`}
+                                                  >
+                                                    {input.trim() || "(فارغ)"} {isMatch ? '✓' : '✗'}
+                                                  </span>
+                                                );
+                                              })
+                                            ) : (
+                                              <span className="text-red-700 font-bold">لم تُدخل أي إجابة</span>
+                                            )}
                                           </div>
-                                        );
-                                      })}
+                                        </div>
+                                      </div>
+
+                                      {/* الإجابات الصحيحة */}
+                                      <div className="flex items-start gap-2 bg-emerald-50/70 p-2.5 rounded-xl border border-emerald-100">
+                                        <CheckCircle className="w-4 h-4 mt-0.5 shrink-0 text-emerald-600" />
+                                        <div>
+                                          <span className="text-slate-500 font-semibold block text-[11px]">الإجابات الصحيحة (أسماء السور):</span>
+                                          <div className="flex flex-wrap gap-1.5 mt-1">
+                                            {m.correctSurahsList?.map((s: string, sIdx: number) => (
+                                              <span key={sIdx} className="px-2.5 py-0.5 rounded-md text-xs font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                                {s}
+                                              </span>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      </div>
                                     </div>
                                   ) : (
-                                    <div className="flex flex-col gap-2 text-sm">
-                                      <div className="flex items-center gap-2 text-red-600 font-bold">
-                                        <XCircle className="w-4 h-4" />
-                                        <span>إجابتك: <span className="quran-text-sm">{m.userAnswer}</span></span>
+                                    <div className="flex flex-col gap-2.5 text-xs sm:text-sm mt-3 pt-3 border-t border-slate-200/60">
+                                      {/* إجابة المستخدم */}
+                                      <div className="flex items-start gap-2 bg-red-50/70 p-2.5 rounded-xl border border-red-100 text-red-700">
+                                        <XCircle className="w-4 h-4 mt-0.5 shrink-0 text-red-500" />
+                                        <div>
+                                          <span className="text-slate-500 font-semibold block text-[11px]">إجابتك التي اخترتها:</span>
+                                          <span className="quran-text text-sm sm:text-base font-black text-red-700">{m.userAnswer || "لم يتم اختيار إجابة"}</span>
+                                        </div>
                                       </div>
-                                      <div className="flex items-center gap-2 text-brand-emerald font-bold">
-                                        <CheckCircle className="w-4 h-4" />
-                                        <span>الإجابة الصحيحة: <span className="quran-text-sm">{m.correctText || (m.type === 'COMPLETION' ? m.text.split(' ').pop() : (m.challenge?.verses?.[0]?.surah || ''))}</span></span>
+
+                                      {/* الإجابة الصحيحة لتكملة الآية */}
+                                      <div className="flex items-start gap-2 bg-emerald-50/70 p-2.5 rounded-xl border border-emerald-100 text-emerald-800">
+                                        <CheckCircle className="w-4 h-4 mt-0.5 shrink-0 text-emerald-600" />
+                                        <div>
+                                          <span className="text-slate-500 font-semibold block text-[11px]">الإجابة الصحيحة (تكملة الآية):</span>
+                                          <span className="quran-text text-sm sm:text-base font-black text-emerald-800">
+                                            {m.correctAnswer || m.correctText || m.challenge?.correctText || m.challenge?.options?.find((o: any) => o.isCorrect)?.text || "غير متوفر"}
+                                          </span>
+                                          {m.challenge?.verses?.[0]?.surah && (
+                                            <span className="block text-[11px] text-emerald-600 font-bold mt-1">
+                                              (الموضع: سورة {m.challenge.verses[0].surah}{m.challenge.verses[0].juz ? ` • الجزء ${m.challenge.verses[0].juz}` : ''})
+                                            </span>
+                                          )}
+                                        </div>
                                       </div>
                                     </div>
                                   )}
@@ -4796,7 +5617,7 @@ ${versesList}
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.98 }}
-                    className="flex flex-col gap-6 md:gap-10 max-w-6xl mx-auto py-6 md:py-10 px-4 overflow-visible pb-28"
+                    className="flex flex-col gap-6 md:gap-10 max-w-6xl mx-auto py-6 md:py-10 px-4 overflow-visible pb-36 sm:pb-48"
                   >
                     {/* Premium Welcome Header Section */}
                     <motion.div
@@ -4999,47 +5820,49 @@ ${versesList}
                     </div>
 
                     {/* Islamic Videos Quick Entry on Home */}
-                    <div className="px-1 mt-1">
-                      <motion.div
-                        whileHover={{ y: -2 }}
-                        whileTap={{ scale: 0.99 }}
-                        onClick={() => setView('islamic_videos')}
-                        className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-[#0D6E52] via-[#0A5640] to-[#043325] text-white shadow-md hover:shadow-xl transition-all cursor-pointer relative overflow-hidden flex flex-col sm:flex-row items-center justify-between gap-4 border border-[#D4AF37]/30"
-                      >
-                        {/* Geometric Pattern Overlay */}
-                        <div
-                          className="absolute inset-0 pointer-events-none opacity-5 mix-blend-overlay"
-                          style={{
-                            backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M30 0l30 30-30 30L0 30zM30 6.863L53.137 30 30 53.137 6.863 30zM30 15l15 15-15 15-15-15z' fill='%23ffffff' fill-opacity='1' fill-rule='evenodd'/%3E%3C/svg%3E")`,
-                            backgroundSize: '40px 40px'
-                          }}
-                        />
+                    {!systemSettings.hideIslamicVideos && (
+                      <div className="px-1 mt-1">
+                        <motion.div
+                          whileHover={{ y: -2 }}
+                          whileTap={{ scale: 0.99 }}
+                          onClick={() => setView('islamic_videos')}
+                          className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-[#0D6E52] via-[#0A5640] to-[#043325] text-white shadow-md hover:shadow-xl transition-all cursor-pointer relative overflow-hidden flex flex-col sm:flex-row items-center justify-between gap-4 border border-[#D4AF37]/30"
+                        >
+                          {/* Geometric Pattern Overlay */}
+                          <div
+                            className="absolute inset-0 pointer-events-none opacity-5 mix-blend-overlay"
+                            style={{
+                              backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M30 0l30 30-30 30L0 30zM30 6.863L53.137 30 30 53.137 6.863 30zM30 15l15 15-15 15-15-15z' fill='%23ffffff' fill-opacity='1' fill-rule='evenodd'/%3E%3C/svg%3E")`,
+                              backgroundSize: '40px 40px'
+                            }}
+                          />
 
-                        <div className="flex items-center gap-3.5 relative z-10 w-full sm:w-auto">
-                          <VideoLibraryIcon className="w-12 h-12 shrink-0 drop-shadow-md" />
-                          <div className="text-right">
-                            <div className="flex items-center gap-2 mb-0.5">
-                              <h4 className="font-black text-white text-base">
-                                المكتبة المرئية الإسلامية
-                              </h4>
-                              <span className="text-[10px] bg-[#D4AF37] text-[#0A5640] font-black px-2 py-0.5 rounded-full shadow-xs">
-                                جديد
-                              </span>
+                          <div className="flex items-center gap-3.5 relative z-10 w-full sm:w-auto">
+                            <VideoLibraryIcon className="w-12 h-12 shrink-0 drop-shadow-md" />
+                            <div className="text-right">
+                              <div className="flex items-center gap-2 mb-0.5">
+                                <h4 className="font-black text-white text-base">
+                                  المكتبة المرئية الإسلامية
+                                </h4>
+                                <span className="text-[10px] bg-[#D4AF37] text-[#0A5640] font-black px-2 py-0.5 rounded-full shadow-xs">
+                                  جديد
+                                </span>
+                              </div>
+                              <p className="text-xs text-emerald-100/90 font-semibold leading-relaxed">
+                                روائع المقاطع الدعوية، شروحات الحديث، الفقه، والتفسير لكبار العلماء
+                              </p>
                             </div>
-                            <p className="text-xs text-emerald-100/90 font-semibold leading-relaxed">
-                              روائع المقاطع الدعوية، شروحات الحديث، الفقه، والتفسير لكبار العلماء
-                            </p>
                           </div>
-                        </div>
 
-                        <div className="flex items-center gap-2 relative z-10 self-end sm:self-center shrink-0">
-                          <span className="px-4 py-2 bg-white/15 hover:bg-white/25 text-[#FCEEB5] border border-white/20 rounded-xl font-black text-xs transition-all flex items-center gap-1.5 backdrop-blur-md">
-                            <span>استعراض المرئيات</span>
-                            <ArrowLeft className="w-3.5 h-3.5 text-[#D4AF37]" />
-                          </span>
-                        </div>
-                      </motion.div>
-                    </div>
+                          <div className="flex items-center gap-2 relative z-10 self-end sm:self-center shrink-0">
+                            <span className="px-4 py-2 bg-white/15 hover:bg-white/25 text-[#FCEEB5] border border-white/20 rounded-xl font-black text-xs transition-all flex items-center gap-1.5 backdrop-blur-md">
+                              <span>استعراض المرئيات</span>
+                              <ArrowLeft className="w-3.5 h-3.5 text-[#D4AF37]" />
+                            </span>
+                          </div>
+                        </motion.div>
+                      </div>
+                    )}
 
                     {/* Google Play Tester Button at the bottom (Web Version Only) */}
                     {!isNativeApp && (
@@ -5057,7 +5880,7 @@ ${versesList}
                     initial={{ opacity: 0, y: 15 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.98 }}
-                    className="flex flex-col gap-6 max-w-6xl mx-auto py-4 md:py-6 px-4 pb-28"
+                    className="flex flex-col gap-6 max-w-6xl mx-auto py-4 md:py-6 px-4 pb-36 sm:pb-48"
                   >
                     {/* Clean Header */}
                     <div className="flex items-center justify-between px-1">
@@ -5276,7 +6099,7 @@ ${versesList}
                     initial={{ opacity: 0, y: 15 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.98 }}
-                    className="flex flex-col gap-6 max-w-6xl mx-auto py-4 md:py-6 px-4 pb-28"
+                    className="flex flex-col gap-6 max-w-6xl mx-auto py-4 md:py-6 px-4 pb-36 sm:pb-48"
                   >
                     {/* Clean Header */}
                     <div className="flex items-center justify-between px-1">
@@ -5432,31 +6255,33 @@ ${versesList}
                       </motion.button>
 
                       {/* 6. Islamic Videos Card (المكتبة المرئية) */}
-                      <motion.button
-                        whileHover={{ y: -3 }}
-                        whileTap={{ scale: 0.98 }}
-                        onClick={() => setView('islamic_videos')}
-                        className="group relative p-5 md:p-6 rounded-2xl text-right overflow-hidden transition-all duration-200 flex flex-col justify-between border border-slate-150 hover:border-[#0D6E52] bg-white shadow-xs hover:shadow-md min-h-[160px]"
-                      >
-                        <div className="flex items-start justify-between">
-                          <VideoLibraryIcon className="w-12 h-12 shrink-0 transition-transform duration-200 group-hover:scale-105" />
-                          <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200/50">
-                              مرئيات دعوية
-                            </span>
-                            <ArrowLeft className="w-5 h-5 text-slate-300 group-hover:text-[#0D6E52] group-hover:-translate-x-1 transition-all" />
+                      {!systemSettings.hideIslamicVideos && (
+                        <motion.button
+                          whileHover={{ y: -3 }}
+                          whileTap={{ scale: 0.98 }}
+                          onClick={() => setView('islamic_videos')}
+                          className="group relative p-5 md:p-6 rounded-2xl text-right overflow-hidden transition-all duration-200 flex flex-col justify-between border border-slate-150 hover:border-[#0D6E52] bg-white shadow-xs hover:shadow-md min-h-[160px]"
+                        >
+                          <div className="flex items-start justify-between">
+                            <VideoLibraryIcon className="w-12 h-12 shrink-0 transition-transform duration-200 group-hover:scale-105" />
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200/50">
+                                مرئيات دعوية
+                              </span>
+                              <ArrowLeft className="w-5 h-5 text-slate-300 group-hover:text-[#0D6E52] group-hover:-translate-x-1 transition-all" />
+                            </div>
                           </div>
-                        </div>
 
-                        <div className="mt-4">
-                          <h3 className="text-base md:text-lg font-black text-slate-800 group-hover:text-[#0D6E52] transition-colors">
-                            المكتبة المرئية
-                          </h3>
-                          <p className="text-slate-400 font-bold text-xs mt-1 leading-relaxed">
-                            دروس وشروحات ومواعظ مرئية مبوبة لكبار العلماء والدعاة
-                          </p>
-                        </div>
-                      </motion.button>
+                          <div className="mt-4">
+                            <h3 className="text-base md:text-lg font-black text-slate-800 group-hover:text-[#0D6E52] transition-colors">
+                              المكتبة المرئية
+                            </h3>
+                            <p className="text-slate-400 font-bold text-xs mt-1 leading-relaxed">
+                              دروس وشروحات ومواعظ مرئية مبوبة لكبار العلماء والدعاة
+                            </p>
+                          </div>
+                        </motion.button>
+                      )}
 
                     </div>
                   </motion.div>
@@ -5596,7 +6421,7 @@ ${versesList}
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -20 }}
-                    className={`w-full ${isPageModeActive ? 'max-w-full lg:max-w-[92rem] px-0' : 'md:max-w-5xl lg:max-w-6xl px-0 md:px-6'} mx-auto space-y-4 pt-1 pb-4 md:pt-2 md:pb-8 transition-all duration-500 pb-28`}
+                    className={`w-full ${isPageModeActive ? 'max-w-full lg:max-w-[92rem] px-0' : 'md:max-w-5xl lg:max-w-6xl px-0 md:px-6'} mx-auto space-y-4 pt-1 pb-56 sm:pb-64 md:pt-2 transition-all duration-500`}
                   >
                     {!selectedSurahId && !selectedJuz && !isSearchSubmitted ? (
                       <div className="space-y-6 px-2 md:px-0">
@@ -5785,94 +6610,34 @@ ${versesList}
                                   : 'radial-gradient(circle at center, rgba(217, 119, 6, 0.05) 0%, transparent 75%)',
                               }}
                             >
-                              {/* Floating Fullscreen button in corner of Quran Page */}
-                              <button
-                                type="button"
-                                onClick={enterMushafFullscreen}
-                                className="absolute top-2 left-2 sm:top-3 sm:left-3 z-30 p-2 sm:p-2.5 rounded-xl bg-black/60 hover:bg-black/80 text-white backdrop-blur-md border border-white/20 shadow-lg transition-all active:scale-95 flex items-center gap-1.5 group cursor-pointer"
-                                title="ملء الشاشة"
-                              >
-                                <Maximize2 className="w-4 h-4 text-brand-gold group-hover:scale-110 transition-transform" />
-                                <span className="text-xs font-black hidden sm:inline">ملء الشاشة</span>
-                              </button>
-
                               {/* Decorative Inner Gold Border Line for Desktop */}
                               <div className="hidden md:block absolute inset-2 rounded-[2rem] border border-brand-gold/20 pointer-events-none" />
 
-                              {/* Full-Width Mobile & Desktop Image reaching screen borders with 3D Page Flip & Drag Swipe */}
-                              <div className="w-full flex flex-col items-center p-0 overflow-x-auto custom-scrollbar relative z-10 [perspective:1200px]">
-                                <AnimatePresence mode="wait" initial={false}>
-                                  <motion.div
-                                    key={currentPage}
-                                    drag={mushafZoomScale === 1 ? "x" : false}
-                                    dragConstraints={{ left: 0, right: 0 }}
-                                    dragElastic={0.2}
-                                    onDragEnd={(_, info) => {
-                                      if (mushafZoomScale !== 1) return;
-                                      const swipeThreshold = 40;
-                                      if (info.offset.x > swipeThreshold) {
-                                        // Swipe Left -> Right: Go to Next Page (الأمام)
-                                        if (currentPage < 604) {
-                                          setPageTurnDirection('next');
-                                          setCurrentPage(prev => prev + 1);
-                                        }
-                                      } else if (info.offset.x < -swipeThreshold) {
-                                        // Swipe Right -> Left: Go to Previous Page (رجوع للخلف)
-                                        if (currentPage > 1) {
-                                          setPageTurnDirection('prev');
-                                          setCurrentPage(prev => prev - 1);
-                                        }
-                                      }
-                                    }}
-                                    initial={{
-                                      opacity: 0,
-                                      rotateY: pageTurnDirection === 'next' ? -25 : 25,
-                                      scale: 0.96,
-                                      transformOrigin: pageTurnDirection === 'next' ? 'left center' : 'right center'
-                                    }}
-                                    animate={{
-                                      opacity: 1,
-                                      rotateY: 0,
-                                      scale: 1,
-                                      transformOrigin: 'center center'
-                                    }}
-                                    exit={{
-                                      opacity: 0,
-                                      rotateY: pageTurnDirection === 'next' ? 25 : -25,
-                                      scale: 0.96,
-                                      transformOrigin: pageTurnDirection === 'next' ? 'right center' : 'left center'
-                                    }}
-                                    transition={{ duration: 0.35, ease: [0.25, 1, 0.5, 1] }}
-                                    className="w-full flex justify-center cursor-grab active:cursor-grabbing touch-pan-y"
-                                  >
-                                    <div
-                                      className="transition-all duration-200 ease-out flex justify-center shrink-0"
-                                      style={{
-                                        width: `${Math.round(mushafZoomScale * 100)}%`,
-                                        minWidth: `${Math.round(mushafZoomScale * 100)}%`,
-                                        maxWidth: 'none'
-                                      }}
-                                    >
-                                      <img
-                                        src={`/quran-pages/${currentPage.toString().padStart(3, '0')}.png`}
-                                        alt={`صفحة ${currentPage}`}
-                                        className="w-full h-auto max-h-[260vh] object-contain shadow-none md:shadow-xl rounded-none md:rounded-2xl border-none pointer-events-none select-none transition-all duration-300"
-                                        style={{
-                                          filter: librarySettings.darkMode
-                                            ? 'invert(0.92) hue-rotate(180deg) brightness(0.88) contrast(1.12)'
-                                            : 'none'
-                                        }}
-                                      />
-                                    </div>
-                                  </motion.div>
-                                </AnimatePresence>
+                              {/* Full-Width Mobile & Desktop Image with 2D Pan, Pinch-Zoom & Page Flip */}
+                              <div className="w-full flex flex-col items-center p-0 relative z-10 min-h-[70vh]">
+                                <QuranZoomViewer
+                                  pageNumber={currentPage}
+                                  darkMode={librarySettings.darkMode}
+                                  isFullscreen={false}
+                                  externalScale={mushafZoomScale}
+                                  onExternalScaleChange={setMushafZoomScale}
+                                  onPageTurn={(dir) => {
+                                    setPageTurnDirection(dir);
+                                    if (dir === 'next') {
+                                      setCurrentPage(prev => Math.min(604, prev + 1));
+                                    } else {
+                                      setCurrentPage(prev => Math.max(1, prev - 1));
+                                    }
+                                  }}
+                                  pageTurnDirection={pageTurnDirection}
+                                />
                               </div>
                             </div>
 
                             {/* Controls Area Completely OUTSIDE & BELOW Image Frame Container */}
                             <div className={`flex flex-col items-center gap-2 py-2.5 px-3 w-full max-w-2xl backdrop-blur-xl border rounded-2xl shadow-md mt-2 transition-colors ${librarySettings.darkMode
                                 ? 'bg-slate-900/95 border-slate-800 text-slate-100'
-                                : 'bg-white/70 border-white/80 text-slate-800'
+                                : 'bg-white/85 border-slate-200/90 text-slate-800'
                               }`}>
                               {/* Single Row: Page Navigation + Zoom Controls Side-by-Side */}
                               <div className="flex flex-nowrap items-center justify-center gap-2 sm:gap-3 w-full overflow-x-auto">
@@ -5885,7 +6650,7 @@ ${versesList}
                                       setCurrentPage(prev => Math.max(1, prev - 1));
                                     }}
                                     disabled={currentPage === 1}
-                                    className={`p-1.5 sm:p-2 rounded-lg text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-2xs shrink-0 active:scale-95 ${librarySettings.darkMode ? 'bg-slate-700 hover:bg-emerald-600' : 'bg-slate-800 hover:bg-brand-emerald'
+                                    className={`p-1.5 sm:p-2 rounded-lg text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-2xs shrink-0 active:scale-95 ${librarySettings.darkMode ? 'bg-slate-700 hover:bg-emerald-600' : 'bg-emerald-700 hover:bg-emerald-800'
                                       }`}
                                     title="الصفحة السابقة"
                                   >
@@ -5917,7 +6682,7 @@ ${versesList}
                                       setCurrentPage(prev => Math.min(604, prev + 1));
                                     }}
                                     disabled={currentPage === 604}
-                                    className={`p-1.5 sm:p-2 rounded-lg text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-2xs shrink-0 active:scale-95 ${librarySettings.darkMode ? 'bg-slate-700 hover:bg-emerald-600' : 'bg-slate-800 hover:bg-brand-emerald'
+                                    className={`p-1.5 sm:p-2 rounded-lg text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-2xs shrink-0 active:scale-95 ${librarySettings.darkMode ? 'bg-slate-700 hover:bg-emerald-600' : 'bg-emerald-700 hover:bg-emerald-800'
                                       }`}
                                     title="الصفحة التالية"
                                   >
@@ -5934,7 +6699,7 @@ ${versesList}
                                   <button
                                     onClick={() => setMushafZoomScale(prev => Math.min(1.8, Number((prev + 0.1).toFixed(1))))}
                                     disabled={mushafZoomScale >= 1.8}
-                                    className={`p-1.5 sm:p-2 rounded-lg text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-2xs shrink-0 active:scale-95 ${librarySettings.darkMode ? 'bg-slate-700 hover:bg-emerald-600' : 'bg-slate-800 hover:bg-brand-emerald'
+                                    className={`p-1.5 sm:p-2 rounded-lg text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-2xs shrink-0 active:scale-95 ${librarySettings.darkMode ? 'bg-slate-700 hover:bg-emerald-600' : 'bg-emerald-700 hover:bg-emerald-800'
                                       }`}
                                     title="تكبير الصفحة"
                                   >
@@ -5955,28 +6720,13 @@ ${versesList}
                                   <button
                                     onClick={() => setMushafZoomScale(prev => Math.max(0.7, Number((prev - 0.1).toFixed(1))))}
                                     disabled={mushafZoomScale <= 0.7}
-                                    className={`p-1.5 sm:p-2 rounded-lg text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-2xs shrink-0 active:scale-95 ${librarySettings.darkMode ? 'bg-slate-700 hover:bg-emerald-600' : 'bg-slate-800 hover:bg-brand-emerald'
+                                    className={`p-1.5 sm:p-2 rounded-lg text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-2xs shrink-0 active:scale-95 ${librarySettings.darkMode ? 'bg-slate-700 hover:bg-emerald-600' : 'bg-emerald-700 hover:bg-emerald-800'
                                       }`}
                                     title="تصغير الصفحة"
                                   >
                                     <ZoomOut className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                                   </button>
                                 </div>
-
-                                {/* Separator Divider */}
-                                <div className={`w-px h-6 shrink-0 ${librarySettings.darkMode ? 'bg-slate-700' : 'bg-slate-300/80'}`} />
-
-                                {/* Fullscreen Mode Button */}
-                                <button
-                                  type="button"
-                                  onClick={enterMushafFullscreen}
-                                  className={`p-1.5 sm:p-2 rounded-xl text-white transition-all shadow-xs shrink-0 active:scale-95 flex items-center gap-1.5 cursor-pointer ${librarySettings.darkMode ? 'bg-slate-800 hover:bg-emerald-600 border border-slate-700' : 'bg-slate-800 hover:bg-brand-emerald border border-slate-700/50'
-                                    }`}
-                                  title="عرض ملء الشاشة"
-                                >
-                                  <Maximize2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-brand-gold" />
-                                  <span className="text-[10px] sm:text-xs font-bold hidden md:inline">ملء الشاشة</span>
-                                </button>
                               </div>
 
                               {/* Row 2: Index Return Button */}
@@ -5985,7 +6735,7 @@ ${versesList}
                                   setIsPageModeActive(false);
                                   window.scrollTo({ top: 0, behavior: 'smooth' });
                                 }}
-                                className={`flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-white transition-all font-bold text-xs shadow-sm border active:scale-95 ${librarySettings.darkMode ? 'bg-slate-800 hover:bg-emerald-600 border-slate-700' : 'bg-slate-800 hover:bg-brand-emerald border-slate-700/50'
+                                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-white transition-all font-bold text-xs shadow-sm border active:scale-95 cursor-pointer ${librarySettings.darkMode ? 'bg-slate-800 hover:bg-emerald-600 border-slate-700' : 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 border-emerald-500/60'
                                   }`}
                                 title="العودة لفهرس السور والأجزاء"
                               >
@@ -5993,6 +6743,9 @@ ${versesList}
                                 <span>العودة لفهرس السور والأجزاء</span>
                               </button>
                             </div>
+
+                            {/* Generous Bottom Spacer to guarantee full comfortable scrolling above bottom nav bar */}
+                            <div className="h-28 sm:h-36 w-full shrink-0" />
                           </div>
                         ) : (
                           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -6161,11 +6914,17 @@ ${versesList}
                                 setSelectedJuz(null);
                                 window.scrollTo({ top: 0, behavior: 'smooth' });
                               }}
-                              className="text-slate-500 hover:text-slate-800 font-bold transition-colors"
+                              className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl font-black text-xs md:text-sm shadow-md transition-all active:scale-95 cursor-pointer ${
+                                librarySettings.darkMode
+                                  ? 'bg-slate-800 text-slate-100 hover:bg-emerald-600 border border-slate-700'
+                                  : 'bg-brand-emerald text-white hover:bg-emerald-700 shadow-emerald-800/20'
+                              }`}
                             >
-                              العودة للفهرس
+                              <RotateCcw className="w-4 h-4 text-brand-gold" />
+                              <span>العودة لفهرس السور والأجزاء</span>
                             </button>
                           </div>
+                          <div className="h-28 sm:h-36 w-full shrink-0" />
                         </div>
                       </div>
                     ) : (
@@ -6256,11 +7015,17 @@ ${versesList}
                                 setSelectedSurahId(null);
                                 window.scrollTo({ top: 0, behavior: 'smooth' });
                               }}
-                              className="text-slate-500 hover:text-slate-800 font-bold transition-colors"
+                              className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl font-black text-xs md:text-sm shadow-md transition-all active:scale-95 cursor-pointer ${
+                                librarySettings.darkMode
+                                  ? 'bg-slate-800 text-slate-100 hover:bg-emerald-600 border border-slate-700'
+                                  : 'bg-brand-emerald text-white hover:bg-emerald-700 shadow-emerald-800/20'
+                              }`}
                             >
-                              العودة للفهرس
+                              <RotateCcw className="w-4 h-4 text-brand-gold" />
+                              <span>العودة لفهرس السور والأجزاء</span>
                             </button>
                           </div>
+                          <div className="h-28 sm:h-36 w-full shrink-0" />
                         </div>
                       </div>
                     )}
@@ -6271,7 +7036,7 @@ ${versesList}
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -20 }}
-                    className="w-full max-w-5xl mx-auto space-y-12 transition-all duration-500"
+                    className="w-full max-w-5xl mx-auto space-y-12 transition-all duration-500 pb-36 sm:pb-48"
                   >
                     {/* Adhkar Header */}
                     <div className="flex flex-col md:flex-row items-center justify-between gap-6">
@@ -6465,7 +7230,7 @@ ${versesList}
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -20 }}
-                    className="w-full max-w-5xl mx-auto space-y-12 transition-all duration-500"
+                    className="w-full max-w-5xl mx-auto space-y-12 transition-all duration-500 pb-36 sm:pb-48"
                   >
                     <div className="flex flex-col md:flex-row items-center justify-between gap-6">
                       <div className="flex items-center gap-4">
@@ -6529,7 +7294,7 @@ ${versesList}
                     exit={{ opacity: 0, scale: 0.98 }}
                     className="w-full"
                   >
-                    <BookReader onBack={() => setView('home')} />
+                    <BookReader onBack={() => setView('home')} darkMode={librarySettings.darkMode} />
                   </motion.div>
                 ) : view === 'encyclopedia' ? (
                   <motion.div
@@ -6539,18 +7304,27 @@ ${versesList}
                     exit={{ opacity: 0, scale: 0.98 }}
                     className="w-full"
                   >
-                    <Encyclopedia onBack={() => setView('home')} />
+                    <Encyclopedia onBack={() => setView('home')} darkMode={librarySettings.darkMode} />
                   </motion.div>
                 ) : view === 'islamic_videos' ? (
-                  <motion.div
-                    key="islamic_videos"
-                    initial={{ opacity: 0, scale: 0.98 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.98 }}
-                    className="w-full"
-                  >
-                    <IslamicVideos onBack={() => setView('library')} />
-                  </motion.div>
+                  !systemSettings.hideIslamicVideos ? (
+                    <motion.div
+                      key="islamic_videos"
+                      initial={{ opacity: 0, scale: 0.98 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.98 }}
+                      className="w-full"
+                    >
+                      <IslamicVideos onBack={() => setView('library')} />
+                    </motion.div>
+                  ) : (
+                    <div className="text-center py-24 px-4 max-w-md mx-auto">
+                      <p className="text-slate-500 font-bold mb-4">هذا القسم غير متاح حالياً.</p>
+                      <button onClick={() => setView('home')} className="px-6 py-2.5 bg-brand-emerald text-white rounded-xl font-black text-sm">
+                        العودة للرئيسية
+                      </button>
+                    </div>
+                  )
                 ) : view === 'islamic_quiz' ? (
                   <motion.div
                     key="islamic_quiz"
@@ -6603,6 +7377,17 @@ ${versesList}
                                 <span className={`text-xs md:text-sm font-black tabular-nums ${speedTimeLeft <= 5 ? 'text-red-600' : 'text-slate-800'}`}>
                                   {speedTimeLeft} ثانية
                                 </span>
+                                {isSpeedMode && currentChallenge?.level && (
+                                  <span className={`text-[10px] md:text-xs font-bold px-1.5 py-0.5 rounded-full ${
+                                    (currentChallenge.level === 'hard' || currentChallenge.level === 'صعب') ? 'bg-rose-100 text-rose-700' :
+                                    (currentChallenge.level === 'easy' || currentChallenge.level === 'سهل') ? 'bg-emerald-100 text-emerald-700' :
+                                    'bg-amber-100 text-amber-700'
+                                  }`}>
+                                    {(currentChallenge.level === 'hard' || currentChallenge.level === 'صعب') ? 'صعب (20ث)' :
+                                     (currentChallenge.level === 'easy' || currentChallenge.level === 'سهل') ? 'سهل (10ث)' :
+                                     'متوسط (15ث)'}
+                                  </span>
+                                )}
                               </div>
                             </motion.div>
                           </div>
@@ -6617,6 +7402,7 @@ ${versesList}
                           totalPoints={totalPoints}
                           onSkip={challengeMode !== 'daily' ? handleSkip : undefined}
                           isComplete={isComplete}
+                          level={currentChallenge?.level}
                         />
                         {skillsType === 'audio' && challengeMode !== 'daily' ? (
                           <AudioChallengeUI
@@ -6660,6 +7446,7 @@ ${versesList}
                             handlePromptNextChallenge={handlePromptNextChallenge}
                             onViewTafsir={handleOpenTafsir}
                             currentChallenge={currentChallenge}
+                            surahFeedbackData={surahFeedbackData}
                           />
                         ) : (
                           <CompleteChallengeUI
@@ -6669,6 +7456,7 @@ ${versesList}
                             onOptionSelect={handleOptionSelect}
                             onConfirm={handleConfirmAnswer}
                             feedback={skillsFeedback}
+                            correctText={skillsCorrectAnswer || currentChallenge?.correctText}
                             onSkip={challengeMode !== 'daily' ? handleSkip : undefined}
                             isComplete={isComplete}
                             challengeMode={challengeMode}
@@ -7280,7 +8068,8 @@ ${versesList}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.2 }}
-                className="fixed inset-0 z-[100] w-screen h-screen flex flex-col justify-between overflow-hidden select-none"
+                onClick={toggleFullscreenControls}
+                className="fixed inset-0 z-[100] w-screen h-screen flex flex-col justify-between overflow-hidden select-none cursor-pointer"
                 style={{
                   backgroundColor: librarySettings.darkMode ? '#0B132B' : '#fcfaf5',
                   color: librarySettings.darkMode ? '#e2e8f0' : '#1e293b',
@@ -7289,143 +8078,146 @@ ${versesList}
                     : 'radial-gradient(circle at center, rgba(217, 119, 6, 0.05) 0%, #fcfaf5 85%)',
                 }}
               >
-                {/* Floating Top Controls: Exit 'X' Button on Corner */}
-                <div className="absolute top-3 left-3 sm:top-5 sm:left-5 z-50">
-                  <button
-                    onClick={exitMushafFullscreen}
-                    className="p-2.5 sm:p-3 rounded-2xl bg-black/60 hover:bg-black/80 text-white backdrop-blur-xl border border-white/20 shadow-2xl transition-all active:scale-95 flex items-center gap-2 group cursor-pointer"
-                    title="خروج من ملء الشاشة (Esc)"
-                    aria-label="خروج من ملء الشاشة"
-                  >
-                    <X className="w-5 h-5 sm:w-6 sm:h-6 text-white group-hover:rotate-90 transition-transform duration-200" />
-                    <span className="text-xs sm:text-sm font-black hidden sm:inline text-white/90">خروج</span>
-                  </button>
-                </div>
+                {/* Floating Top Controls: Exit 'X' Button on Corner & Page Info */}
+                <AnimatePresence>
+                  {areFullscreenControlsVisible && (
+                    <>
+                      <motion.div
+                        initial={{ opacity: 0, y: -20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -20 }}
+                        transition={{ duration: 0.2 }}
+                        onClick={(e) => e.stopPropagation()}
+                        className="absolute top-3 left-3 sm:top-5 sm:left-5 z-50 pointer-events-auto"
+                      >
+                        <button
+                          onClick={exitMushafFullscreen}
+                          className="p-2.5 sm:p-3 rounded-2xl bg-black/60 hover:bg-black/80 text-white backdrop-blur-xl border border-white/20 shadow-2xl transition-all active:scale-95 flex items-center gap-2 group cursor-pointer"
+                          title="خروج من ملء الشاشة (Esc)"
+                          aria-label="خروج من ملء الشاشة"
+                        >
+                          <X className="w-5 h-5 sm:w-6 sm:h-6 text-white group-hover:rotate-90 transition-transform duration-200" />
+                          <span className="text-xs sm:text-sm font-black hidden sm:inline text-white/90">خروج</span>
+                        </button>
+                      </motion.div>
 
-                <div className="absolute top-3 right-3 sm:top-5 sm:right-5 z-50">
-                  <div className="px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-2xl bg-black/60 text-white backdrop-blur-xl border border-white/20 shadow-2xl text-xs sm:text-sm font-black flex items-center gap-2">
-                    <BookOpen className="w-4 h-4 text-brand-gold" />
-                    <span>المصحف الشريف</span>
-                    <span className="text-white/40">•</span>
-                    <span className="text-brand-gold">صفحة {currentPage}</span>
-                  </div>
-                </div>
+                      <motion.div
+                        initial={{ opacity: 0, y: -20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -20 }}
+                        transition={{ duration: 0.2 }}
+                        onClick={(e) => e.stopPropagation()}
+                        className="absolute top-3 right-3 sm:top-5 sm:right-5 z-50 pointer-events-auto"
+                      >
+                        <div className="px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-2xl bg-black/60 text-white backdrop-blur-xl border border-white/20 shadow-2xl text-xs sm:text-sm font-black flex items-center gap-2">
+                          <BookOpen className="w-4 h-4 text-brand-gold" />
+                          <span>المصحف الشريف</span>
+                          <span className="text-white/40">•</span>
+                          <span className="text-brand-gold">صفحة {currentPage}</span>
+                        </div>
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
 
-                {/* Main Fullscreen Quran Page View with Swipe / Drag & 3D Flip */}
-                <div className="relative flex-1 w-full h-full flex items-center justify-center overflow-hidden p-0 sm:p-2 [perspective:1200px]">
-                  <AnimatePresence mode="wait" initial={false}>
-                    <motion.div
-                      key={currentPage}
-                      drag="x"
-                      dragConstraints={{ left: 0, right: 0 }}
-                      dragElastic={0.25}
-                      onDragEnd={(_, info) => {
-                        const swipeThreshold = 40;
-                        if (info.offset.x > swipeThreshold) {
-                          // Swipe Left -> Right: Next Page in Arabic RTL
-                          if (currentPage < 604) {
-                            setPageTurnDirection('next');
-                            setCurrentPage(prev => prev + 1);
-                          }
-                        } else if (info.offset.x < -swipeThreshold) {
-                          // Swipe Right -> Left: Previous Page in Arabic RTL
-                          if (currentPage > 1) {
-                            setPageTurnDirection('prev');
-                            setCurrentPage(prev => prev - 1);
-                          }
-                        }
-                      }}
-                      initial={{
-                        opacity: 0,
-                        rotateY: pageTurnDirection === 'next' ? -25 : 25,
-                        scale: 0.96,
-                        transformOrigin: pageTurnDirection === 'next' ? 'left center' : 'right center'
-                      }}
-                      animate={{
-                        opacity: 1,
-                        rotateY: 0,
-                        scale: 1,
-                        transformOrigin: 'center center'
-                      }}
-                      exit={{
-                        opacity: 0,
-                        rotateY: pageTurnDirection === 'next' ? 25 : -25,
-                        scale: 0.96,
-                        transformOrigin: pageTurnDirection === 'next' ? 'right center' : 'left center'
-                      }}
-                      transition={{ duration: 0.35, ease: [0.25, 1, 0.5, 1] }}
-                      className="w-full h-full flex items-center justify-center cursor-grab active:cursor-grabbing touch-pan-y"
-                    >
-                      <img
-                        src={`/quran-pages/${currentPage.toString().padStart(3, '0')}.png`}
-                        alt={`صفحة ${currentPage}`}
-                        className="w-auto h-auto max-h-[100dvh] max-w-full object-contain pointer-events-none select-none transition-all duration-300 drop-shadow-2xl"
-                        style={{
-                          filter: librarySettings.darkMode
-                            ? 'invert(0.92) hue-rotate(180deg) brightness(0.88) contrast(1.12)'
-                            : 'none'
-                        }}
-                      />
-                    </motion.div>
-                  </AnimatePresence>
+                {/* Main Fullscreen Quran Page View with Pinch-to-Zoom & Free 2D Pan */}
+                <div className="relative flex-1 w-full h-full flex items-center justify-center overflow-hidden p-0 sm:p-2">
+                  <QuranZoomViewer
+                    pageNumber={currentPage}
+                    darkMode={librarySettings.darkMode}
+                    isFullscreen={true}
+                    onPageTurn={(dir) => {
+                      setPageTurnDirection(dir);
+                      if (dir === 'next') {
+                        setCurrentPage(prev => Math.min(604, prev + 1));
+                      } else {
+                        setCurrentPage(prev => Math.max(1, prev - 1));
+                      }
+                      resetFullscreenControlsTimer();
+                    }}
+                    onTap={toggleFullscreenControls}
+                    onInteraction={resetFullscreenControlsTimer}
+                    pageTurnDirection={pageTurnDirection}
+                  />
                 </div>
 
                 {/* Bottom Floating Navigation Arrows & Page Jump */}
-                <div className="absolute bottom-4 sm:bottom-6 inset-x-0 flex justify-center items-center pointer-events-none z-50 px-4">
-                  <div className="pointer-events-auto flex items-center gap-2 sm:gap-3 px-4 sm:px-5 py-2 sm:py-2.5 rounded-full bg-black/65 hover:bg-black/85 backdrop-blur-2xl border border-white/20 shadow-2xl transition-all">
-                    {/* Previous Page Button (In Arabic RTL: right arrow = previous page) */}
-                    <button
-                      onClick={() => {
-                        if (currentPage > 1) {
-                          setPageTurnDirection('prev');
-                          setCurrentPage(prev => Math.max(1, prev - 1));
-                        }
+                <AnimatePresence>
+                  {areFullscreenControlsVisible && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 25 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 25 }}
+                      transition={{ duration: 0.2 }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        resetFullscreenControlsTimer();
                       }}
-                      disabled={currentPage === 1}
-                      className="p-2 sm:p-2.5 rounded-full text-white hover:text-brand-gold disabled:opacity-30 disabled:hover:text-white transition-all active:scale-90"
-                      title="الصفحة السابقة"
-                      aria-label="الصفحة السابقة"
+                      className="absolute bottom-4 sm:bottom-6 inset-x-0 flex justify-center items-center pointer-events-none z-50 px-4"
                     >
-                      <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6" />
-                    </button>
+                      <div className="pointer-events-auto flex items-center gap-2 sm:gap-3 px-4 sm:px-5 py-2 sm:py-2.5 rounded-full bg-black/65 hover:bg-black/85 backdrop-blur-2xl border border-white/20 shadow-2xl transition-all">
+                        {/* Previous Page Button (In Arabic RTL: right arrow = previous page) */}
+                        <button
+                          onClick={() => {
+                            if (currentPage > 1) {
+                              setPageTurnDirection('prev');
+                              setCurrentPage(prev => Math.max(1, prev - 1));
+                              resetFullscreenControlsTimer();
+                            }
+                          }}
+                          disabled={currentPage === 1}
+                          className="p-2 sm:p-2.5 rounded-full text-white hover:text-brand-gold disabled:opacity-30 disabled:hover:text-white transition-all active:scale-90"
+                          title="الصفحة السابقة"
+                          aria-label="الصفحة السابقة"
+                        >
+                          <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6" />
+                        </button>
 
-                    {/* Page indicator & direct input */}
-                    <div className="flex items-center gap-1.5 px-2 text-white font-black text-xs sm:text-sm select-none">
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        value={currentPage}
-                        onChange={(e) => {
-                          const val = e.target.value.replace(/[^0-9]/g, '');
-                          if (val === '') return;
-                          const num = parseInt(val);
-                          if (num >= 1 && num <= 604) {
-                            setCurrentPage(num);
-                          }
-                        }}
-                        className="w-10 sm:w-12 bg-white/10 border border-white/20 rounded-lg text-center text-xs sm:text-sm font-black text-brand-gold focus:outline-none focus:ring-1 focus:ring-brand-gold py-0.5"
-                      />
-                      <span className="text-white/40">/</span>
-                      <span className="text-white/70">604</span>
-                    </div>
+                        {/* Page indicator & direct input */}
+                        <div className="flex items-center gap-1.5 px-2 text-white font-black text-xs sm:text-sm select-none">
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={currentPage}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              resetFullscreenControlsTimer();
+                            }}
+                            onChange={(e) => {
+                              resetFullscreenControlsTimer();
+                              const val = e.target.value.replace(/[^0-9]/g, '');
+                              if (val === '') return;
+                              const num = parseInt(val);
+                              if (num >= 1 && num <= 604) {
+                                setCurrentPage(num);
+                              }
+                            }}
+                            className="w-10 sm:w-12 bg-white/10 border border-white/20 rounded-lg text-center text-xs sm:text-sm font-black text-brand-gold focus:outline-none focus:ring-1 focus:ring-brand-gold py-0.5"
+                          />
+                          <span className="text-white/40">/</span>
+                          <span className="text-white/70">604</span>
+                        </div>
 
-                    {/* Next Page Button (In Arabic RTL: left arrow = next page) */}
-                    <button
-                      onClick={() => {
-                        if (currentPage < 604) {
-                          setPageTurnDirection('next');
-                          setCurrentPage(prev => Math.min(604, prev + 1));
-                        }
-                      }}
-                      disabled={currentPage === 604}
-                      className="p-2 sm:p-2.5 rounded-full text-white hover:text-brand-gold disabled:opacity-30 disabled:hover:text-white transition-all active:scale-90"
-                      title="الصفحة التالية"
-                      aria-label="الصفحة التالية"
-                    >
-                      <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6" />
-                    </button>
-                  </div>
-                </div>
+                        {/* Next Page Button (In Arabic RTL: left arrow = next page) */}
+                        <button
+                          onClick={() => {
+                            if (currentPage < 604) {
+                              setPageTurnDirection('next');
+                              setCurrentPage(prev => Math.min(604, prev + 1));
+                              resetFullscreenControlsTimer();
+                            }
+                          }}
+                          disabled={currentPage === 604}
+                          className="p-2 sm:p-2.5 rounded-full text-white hover:text-brand-gold disabled:opacity-30 disabled:hover:text-white transition-all active:scale-90"
+                          title="الصفحة التالية"
+                          aria-label="الصفحة التالية"
+                        >
+                          <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6" />
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </motion.div>
             )}
           </AnimatePresence>
