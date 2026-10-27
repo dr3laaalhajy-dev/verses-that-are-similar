@@ -2764,7 +2764,15 @@ export default function App() {
           // If room was cancelled by host or server
           if (data.status === 'CANCELLED') {
             setRoom(null);
-            toast.error('قام المضيف بإلغاء الغرفة أو إنهاء التحدي', { icon: '⚠️' });
+            toast.error('تم إلغاء الغرفة من قبل المضيف', { icon: '⚠️' });
+            setView('group_join');
+            return;
+          }
+
+          // If room expired due to 10-minute TTL
+          if (data.status === 'EXPIRED') {
+            setRoom(null);
+            toast.error('انتهت صلاحية الغرفة (مرور أكثر من 10 دقائق دون بدء التحدي)', { icon: '⏱️' });
             setView('group_join');
             return;
           }
@@ -2923,6 +2931,14 @@ export default function App() {
   const handleResumeActiveRoom = (targetRoom: any) => {
     if (!targetRoom) return;
     setRoom(targetRoom);
+
+    // If room is WAITING, it's host's pending room - return to waiting room
+    if (targetRoom.status === 'WAITING') {
+      setView('group_waiting');
+      setActiveRunningRoom(null);
+      toast.success('تمت العودة لقاعة انتظار الغرفة كمضيف 👑');
+      return;
+    }
 
     const mapped = (targetRoom.challenges || []).map((q: any) => ({
       ...q,
@@ -5675,7 +5691,16 @@ ${versesList}
                         </div>
                       </div>
 
-                      {(room?.player1?.name === playerName || (room?.player1?.username && room?.player1?.username === playerUsername)) ? (
+                      {(
+                        room?.player1Id === player?.id ||
+                        String(room?.player1Id) === String(player?.id) ||
+                        room?.player1?.id === player?.id ||
+                        String(room?.player1?.id) === String(player?.id) ||
+                        room?.player1?.name === playerName ||
+                        (room?.player1?.username && playerUsername && room.player1.username.toLowerCase() === playerUsername.toLowerCase()) ||
+                        (room?.hostName && room.hostName === playerName) ||
+                        (room?.hostUsername && playerUsername && room.hostUsername.toLowerCase() === playerUsername.toLowerCase())
+                      ) ? (
                         <div className="space-y-3">
                           <button
                             onClick={handleStartRoomV1}
@@ -5696,6 +5721,15 @@ ${versesList}
                           >
                             <Trash2 className="w-4 h-4 text-red-500" />
                             <span>إلغاء الغرفة وحذفها ✕</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setView('group_join')}
+                            className="w-full py-2.5 rounded-2xl font-bold text-xs text-slate-500 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                          >
+                            <ArrowRight className="w-4 h-4" />
+                            <span>العودة لقائمة الغرف (ستظل الغرفة متاحة)</span>
                           </button>
                         </div>
                       ) : (
@@ -5826,101 +5860,137 @@ ${versesList}
                         </div>
                       ) : (
                         <div className="grid grid-cols-1 gap-3">
-                          {availableRooms.map((r: any) => (
-                            <motion.div
-                              key={r.id}
-                              initial={{ opacity: 0, y: 10 }}
-                              animate={{ opacity: 1, y: 0 }}
-                              onClick={() => {
-                                if (r.isPrivate) {
-                                  setPrivateRoomModal({
-                                    isOpen: true,
-                                    room: r,
-                                    password: '',
-                                    error: undefined
-                                  });
-                                } else {
-                                  handleJoinV1(r.id);
-                                }
-                              }}
-                              className="glass p-4 md:p-5 rounded-2xl border border-slate-100 hover:border-orange-300 transition-all shadow-xs hover:shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-4 cursor-pointer group"
-                            >
-                              <div className="text-right space-y-2">
-                                <div className="flex items-center gap-2 justify-end sm:justify-start">
-                                  {r.isPrivate ? (
-                                    <span className="px-2.5 py-0.5 bg-amber-500/10 text-amber-600 rounded-full text-[11px] font-black flex items-center gap-1 border border-amber-500/20">
-                                      <Lock className="w-3 h-3" />
-                                      <span>خاصة</span>
+                          {availableRooms.map((r: any) => {
+                            const isMyRoom = Boolean(
+                              (player && r.hostId && (r.hostId === player.id || String(r.hostId) === String(player.id))) ||
+                              (r.hostUsername && playerUsername && r.hostUsername.toLowerCase() === playerUsername.toLowerCase()) ||
+                              (r.hostName && playerName && r.hostName === playerName)
+                            );
+
+                            const createdTime = r.createdAt ? new Date(r.createdAt).getTime() : Date.now();
+                            const elapsedMs = Date.now() - createdTime;
+                            const remainingMins = Math.max(1, Math.min(10, Math.ceil((10 * 60 * 1000 - elapsedMs) / (60 * 1000))));
+
+                            return (
+                              <motion.div
+                                key={r.id}
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                onClick={() => {
+                                  if (isMyRoom) {
+                                    handleJoinV1(r.id);
+                                  } else if (r.isPrivate) {
+                                    setPrivateRoomModal({
+                                      isOpen: true,
+                                      room: r,
+                                      password: '',
+                                      error: undefined
+                                    });
+                                  } else {
+                                    handleJoinV1(r.id);
+                                  }
+                                }}
+                                className={`glass p-4 md:p-5 rounded-2xl border transition-all shadow-xs hover:shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-4 cursor-pointer group ${
+                                  isMyRoom
+                                    ? 'border-orange-400 bg-orange-50/40 hover:border-orange-500 shadow-orange-500/10 ring-1 ring-orange-300/50'
+                                    : 'border-slate-100 hover:border-orange-300'
+                                }`}
+                              >
+                                <div className="text-right space-y-2">
+                                  <div className="flex items-center gap-2 justify-end sm:justify-start">
+                                    {isMyRoom && (
+                                      <span className="px-2.5 py-0.5 bg-orange-500 text-white rounded-full text-[11px] font-black flex items-center gap-1 shadow-xs animate-pulse">
+                                        <span>غرفتك (أنت المضيف) 👑</span>
+                                      </span>
+                                    )}
+                                    {r.isPrivate ? (
+                                      <span className="px-2.5 py-0.5 bg-amber-500/10 text-amber-600 rounded-full text-[11px] font-black flex items-center gap-1 border border-amber-500/20">
+                                        <Lock className="w-3 h-3" />
+                                        <span>خاصة</span>
+                                      </span>
+                                    ) : (
+                                      <span className="px-2.5 py-0.5 bg-emerald-500/10 text-emerald-600 rounded-full text-[11px] font-black flex items-center gap-1 border border-emerald-500/20">
+                                        <Globe className="w-3 h-3" />
+                                        <span>عامة</span>
+                                      </span>
+                                    )}
+                                    <h3 className="font-black text-slate-800 text-sm md:text-base group-hover:text-orange-600 transition-colors">
+                                      {r.name || 'غرفة التحدي'}
+                                    </h3>
+                                  </div>
+
+                                  <div className="flex flex-wrap items-center gap-2 text-[10px] md:text-xs text-slate-500 font-bold justify-end sm:justify-start">
+                                    <span className="bg-slate-100 px-2 py-0.5 rounded-md text-slate-600">
+                                      المنشئ: {isMyRoom ? 'أنت 👑' : (r.hostName || 'متسابق')}
                                     </span>
-                                  ) : (
-                                    <span className="px-2.5 py-0.5 bg-emerald-500/10 text-emerald-600 rounded-full text-[11px] font-black flex items-center gap-1 border border-emerald-500/20">
-                                      <Globe className="w-3 h-3" />
-                                      <span>عامة</span>
+                                    <span className="bg-slate-100 px-2 py-0.5 rounded-md text-slate-600 flex items-center gap-1">
+                                      <Users className="w-3 h-3" />
+                                      <span>{r.participantCount} متسابقين</span>
                                     </span>
-                                  )}
-                                  <h3 className="font-black text-slate-800 text-sm md:text-base group-hover:text-orange-600 transition-colors">
-                                    {r.name || 'غرفة التحدي'}
-                                  </h3>
+                                    <span className="bg-slate-100 px-2 py-0.5 rounded-md text-slate-600">
+                                      {r.questionCount} أسئلة
+                                    </span>
+                                    {r.timePerQuestion > 0 && (
+                                      <span className="bg-orange-100/70 text-orange-600 px-2 py-0.5 rounded-md flex items-center gap-0.5">
+                                        <Clock className="w-3 h-3" />
+                                        <span>{r.timePerQuestion} ثانية</span>
+                                      </span>
+                                    )}
+                                    <span className="bg-amber-50 text-amber-700 px-2 py-0.5 rounded-md border border-amber-200/50 flex items-center gap-0.5 text-[10px]">
+                                      <Clock className="w-2.5 h-2.5 text-amber-600" />
+                                      <span>صالحة لـ {remainingMins} د</span>
+                                    </span>
+                                  </div>
                                 </div>
 
-                                <div className="flex flex-wrap items-center gap-2 text-[10px] md:text-xs text-slate-500 font-bold justify-end sm:justify-start">
-                                  <span className="bg-slate-100 px-2 py-0.5 rounded-md text-slate-600">
-                                    المنشئ: {r.hostName || 'متسابق'}
-                                  </span>
-                                  <span className="bg-slate-100 px-2 py-0.5 rounded-md text-slate-600 flex items-center gap-1">
-                                    <Users className="w-3 h-3" />
-                                    <span>{r.participantCount} متسابقين</span>
-                                  </span>
-                                  <span className="bg-slate-100 px-2 py-0.5 rounded-md text-slate-600">
-                                    {r.questionCount} أسئلة
-                                  </span>
-                                  {r.timePerQuestion > 0 && (
-                                    <span className="bg-orange-100/70 text-orange-600 px-2 py-0.5 rounded-md flex items-center gap-0.5">
-                                      <Clock className="w-3 h-3" />
-                                      <span>{r.timePerQuestion} ثانية</span>
-                                    </span>
-                                  )}
+                                <div className="flex items-center gap-2 justify-end">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (isMyRoom) {
+                                        handleJoinV1(r.id);
+                                      } else if (r.isPrivate) {
+                                        setPrivateRoomModal({
+                                          isOpen: true,
+                                          room: r,
+                                          password: '',
+                                          error: undefined
+                                        });
+                                      } else {
+                                        handleJoinV1(r.id);
+                                      }
+                                    }}
+                                    disabled={isJoiningRoom}
+                                    className={`w-full sm:w-auto px-5 py-2.5 rounded-xl font-black text-xs md:text-sm transition-all shadow-sm active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 ${
+                                      isMyRoom
+                                        ? 'bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white shadow-orange-500/25 ring-2 ring-orange-400/40'
+                                        : r.isPrivate
+                                        ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-amber-500/20'
+                                        : 'bg-brand-emerald hover:bg-brand-emerald/90 text-white shadow-brand-emerald/20'
+                                    }`}
+                                  >
+                                    {isMyRoom ? (
+                                      <>
+                                        <Play className="w-3.5 h-3.5 fill-current" />
+                                        <span>دخول غرفتك (المضيف) 👑</span>
+                                      </>
+                                    ) : r.isPrivate ? (
+                                      <>
+                                        <Lock className="w-3.5 h-3.5" />
+                                        <span>انضمام بكلمة مرور</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Zap className="w-3.5 h-3.5" />
+                                        <span>انضمام مباشر</span>
+                                      </>
+                                    )}
+                                  </button>
                                 </div>
-                              </div>
-
-                              <div className="flex items-center gap-2 justify-end">
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (r.isPrivate) {
-                                      setPrivateRoomModal({
-                                        isOpen: true,
-                                        room: r,
-                                        password: '',
-                                        error: undefined
-                                      });
-                                    } else {
-                                      handleJoinV1(r.id);
-                                    }
-                                  }}
-                                  disabled={isJoiningRoom}
-                                  className={`w-full sm:w-auto px-5 py-2.5 rounded-xl font-black text-xs md:text-sm transition-all shadow-sm active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 ${
-                                    r.isPrivate
-                                      ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-amber-500/20'
-                                      : 'bg-brand-emerald hover:bg-brand-emerald/90 text-white shadow-brand-emerald/20'
-                                  }`}
-                                >
-                                  {r.isPrivate ? (
-                                    <>
-                                      <Lock className="w-3.5 h-3.5" />
-                                      <span>انضمام بكلمة مرور</span>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Zap className="w-3.5 h-3.5" />
-                                      <span>انضمام مباشر</span>
-                                    </>
-                                  )}
-                                </button>
-                              </div>
-                            </motion.div>
-                          ))}
+                              </motion.div>
+                            );
+                          })}
                         </div>
                       )}
                     </div>
@@ -6967,17 +7037,21 @@ ${versesList}
                           <div>
                             <div className="flex items-center gap-2">
                               <span className="text-[10px] md:text-xs bg-white/25 px-2.5 py-0.5 rounded-full font-black text-white inline-block">
-                                تحدي جاري الآن ⚡
+                                {activeRunningRoom.status === 'WAITING' ? 'غرفتك قيد الانتظار 👑' : 'تحدي جاري الآن ⚡'}
                               </span>
                               <span className="text-[10px] md:text-xs opacity-90 font-bold">
-                                {activeRunningRoom.transitionMode === 'ASYNC' ? 'سباق فردي سريع' : 'متزامن'}
+                                {activeRunningRoom.status === 'WAITING'
+                                  ? 'أنت منشئ الغرفة'
+                                  : (activeRunningRoom.transitionMode === 'ASYNC' ? 'سباق فردي سريع' : 'متزامن')}
                               </span>
                             </div>
                             <h3 className="text-sm md:text-base font-black text-white mt-1">
                               {activeRunningRoom.name || 'غرفة التحدي الجماعي'}
                             </h3>
                             <p className="text-[11px] text-orange-100 font-bold">
-                              لديك تحدي قيد التشغيل لم يكتمل بعد!
+                              {activeRunningRoom.status === 'WAITING'
+                                ? 'أنشأت هذه الغرفة وما زالت بانتظار المتسابقين، يمكنك إدارتها وبدء التحدي!'
+                                : 'لديك تحدي قيد التشغيل لم يكتمل بعد!'}
                             </p>
                           </div>
                         </div>
@@ -6988,7 +7062,7 @@ ${versesList}
                           className="w-full sm:w-auto px-6 py-3 bg-white text-orange-700 hover:bg-orange-50 active:scale-95 rounded-2xl font-black text-xs md:text-sm shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0"
                         >
                           <Play className="w-4 h-4 fill-current" />
-                          <span>إكمال التحدي / العودة للغرفة</span>
+                          <span>{activeRunningRoom.status === 'WAITING' ? 'دخول قاعة الانتظار (المضيف) 👑' : 'إكمال التحدي / العودة للغرفة'}</span>
                         </button>
                       </motion.div>
                     )}

@@ -252,14 +252,19 @@ async function handleJoin(req: VercelRequest, res: VercelResponse) {
     
     // Status can be WAITING or PLAYING (allow late join if within maxPlayers)
     if (room.status === 'FINISHED') return res.status(400).json({ message: 'هذا التحدي انتهى بالفعل' })
+    if (room.status === 'CANCELLED') return res.status(410).json({ message: 'تم إلغاء هذه الغرفة من قبل المضيف' })
 
-    // Private Room Password Verification
-    if (room.isPrivate) {
-      const enteredPass = password ? String(password).trim() : ''
-      const actualPass = room.password ? String(room.password).trim() : ''
-      if (!enteredPass || enteredPass !== actualPass) {
-        return res.status(403).json({ message: 'كلمة المرور غير صحيحة، يرجى كتابة كلمة المرور الصحيحة للغرفة' })
-      }
+    // Check 10-minute TTL for WAITING rooms
+    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000)
+    if (room.status === 'WAITING' && room.createdAt < tenMinutesAgo) {
+      await prisma.room.update({
+        where: { id: room.id },
+        data: { status: 'EXPIRED' }
+      }).catch(() => {})
+      return res.status(410).json({ message: 'انتهت صلاحية هذه الغرفة (تجاوزت 10 دقائق دون بدء)' })
+    }
+    if (room.status === 'EXPIRED') {
+      return res.status(410).json({ message: 'انتهت صلاحية هذه الغرفة' })
     }
 
     let player = await findPlayer(player2Id, playerName)
@@ -277,6 +282,17 @@ async function handleJoin(req: VercelRequest, res: VercelResponse) {
         where: { id: player.id },
         data: { name: String(playerName).trim() }
       })
+    }
+
+    const isHost = player.id === room.player1Id
+
+    // Private Room Password Verification (Host bypasses password verification)
+    if (room.isPrivate && !isHost) {
+      const enteredPass = password ? String(password).trim() : ''
+      const actualPass = room.password ? String(room.password).trim() : ''
+      if (!enteredPass || enteredPass !== actualPass) {
+        return res.status(403).json({ message: 'كلمة المرور غير صحيحة، يرجى كتابة كلمة المرور الصحيحة للغرفة' })
+      }
     }
 
     let playersProgress = (room.playersProgress as any) || {}
@@ -309,10 +325,24 @@ async function handleJoin(req: VercelRequest, res: VercelResponse) {
 
 async function handleListRooms(req: VercelRequest, res: VercelResponse) {
   try {
-    // Only return rooms in WAITING status (active rooms waiting for players)
+    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000)
+
+    // Automatically mark orphaned WAITING rooms older than 10 minutes as EXPIRED
+    await prisma.room.updateMany({
+      where: {
+        status: 'WAITING',
+        createdAt: { lt: tenMinutesAgo }
+      },
+      data: {
+        status: 'EXPIRED'
+      }
+    }).catch(e => console.error('Error auto-expiring old rooms:', e))
+
+    // Only return active WAITING rooms created within the last 10 minutes
     const rooms = await prisma.room.findMany({
       where: {
-        status: 'WAITING'
+        status: 'WAITING',
+        createdAt: { gte: tenMinutesAgo }
       },
       orderBy: {
         createdAt: 'desc'
@@ -338,7 +368,9 @@ async function handleListRooms(req: VercelRequest, res: VercelResponse) {
         gameMode: r.gameMode,
         transitionMode: (r as any).transitionMode || 'SYNC',
         participantCount,
+        hostId: r.player1Id,
         hostName: r.player1?.name || 'مجهول',
+        hostUsername: r.player1?.username || null,
         createdAt: r.createdAt
       }
     })
@@ -838,6 +870,24 @@ async function handleCheckActive(req: VercelRequest, res: VercelResponse) {
     const player = await findPlayer(playerId)
     if (!player) return res.status(404).json({ error: 'Player not found' })
 
+    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000)
+
+    // 1. Check if user is the host of an active WAITING room (< 10 mins old)
+    const hostWaitingRoom = await prisma.room.findFirst({
+      where: {
+        player1Id: player.id,
+        status: 'WAITING',
+        createdAt: { gte: tenMinutesAgo }
+      },
+      orderBy: { createdAt: 'desc' }
+    })
+
+    if (hostWaitingRoom) {
+      const fullRoom = await getFullRoom(hostWaitingRoom.id)
+      return res.status(200).json(fullRoom)
+    }
+
+    // 2. Check if user is participant or host of an ongoing PLAYING room (< 2 hours old)
     const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000)
     const rooms = await prisma.room.findMany({
       where: {
@@ -891,23 +941,11 @@ async function handlePresence(req: VercelRequest, res: VercelResponse) {
     playersProgress[pIdStr].isOnline = onlineStatus
     playersProgress[pIdStr].lastSeen = Date.now()
 
-    const isHost = player.id === room.player1Id
+    // Note: Do NOT cancel WAITING rooms if the host goes offline!
+    // Rooms are only cancelled when the host explicitly clicks "إلغاء الغرفة"
+    // or when the 10-minute TTL expires while in WAITING status.
 
-    // 1. Host disconnected / went offline:
-    // If the host leaves unexpectedly or closes the room, set room to CANCELLED
-    if (isHost && !onlineStatus && room.status !== 'FINISHED' && room.status !== 'CANCELLED') {
-      await prisma.room.update({
-        where: { id: room.id },
-        data: {
-          status: 'CANCELLED',
-          playersProgress
-        }
-      })
-      const fullRoom = await getFullRoom(room.id)
-      return res.status(200).json(fullRoom)
-    }
-
-    // 2. In SYNC mode: If an ordinary player goes offline,
+    // In SYNC mode: If an ordinary player goes offline during PLAYING,
     // advance question if all remaining online players have answered
     if (!onlineStatus && room.status === 'PLAYING' && (room as any).transitionMode !== 'ASYNC') {
       const currentAnswers = (room.currentAnswers as any) || {}
