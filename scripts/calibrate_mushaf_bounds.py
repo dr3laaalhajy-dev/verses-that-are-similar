@@ -73,10 +73,10 @@ def calibrate_all_pages():
                     left_min_x = left_seg[3]
 
                     available_space = split_x - left_min_x
-                    if available_space >= 80:
-                        shift = 40
-                    elif available_space >= 40:
-                        shift = int(available_space * 0.5)
+                    if available_space >= 100:
+                        shift = 58
+                    elif available_space >= 60:
+                        shift = int(available_space * 0.55)
                     else:
                         shift = max(0, available_space - 15)
 
@@ -113,3 +113,4 @@ def calibrate_all_pages():
 
 if __name__ == '__main__':
     calibrate_all_pages()
+
