@@ -3,9 +3,9 @@ import {
   Sparkles, Trophy, RotateCcw, X, Mic, MicOff, Search, BookOpen, CheckCircle, CheckCircle2,
   ChevronRight, ChevronLeft, LayoutGrid, Heart, History, Compass, Home, Plane, Award, Star,
   ListFilter, Sun, Moon, Calendar, Settings, Copy, Check, Lightbulb, ChevronDown, User, Users, Quote,
-  ArrowRight, ArrowLeft, Zap, Lock, AlertCircle, Hash, XCircle, Eye, List, Loader2, Flame, ZoomIn, ZoomOut, Maximize2, LogOut,
+  ArrowRight, ArrowLeft, Zap, Lock, AlertCircle, Hash, XCircle, Eye, EyeOff, List, Loader2, Flame, ZoomIn, ZoomOut, Maximize2, LogOut,
   Info, HelpCircle, AtSign, Key, LogIn, UserPlus, Smartphone, Download, Share2, Mail, ExternalLink, Send,
-  Clock, RefreshCw
+  Clock, RefreshCw, Globe
 } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import CertificateGenerator from './components/CertificateGenerator';
@@ -1351,6 +1351,18 @@ export default function App() {
   const [v1Timer, setV1Timer] = useState(false);
   const [v1QuestionCount, setV1QuestionCount] = useState(10);
   const [v1TimePerQuestion, setV1TimePerQuestion] = useState(20);
+  const [v1RoomName, setV1RoomName] = useState<string>('');
+  const [v1IsPrivate, setV1IsPrivate] = useState<boolean>(false);
+  const [v1RoomPassword, setV1RoomPassword] = useState<string>('');
+  const [availableRooms, setAvailableRooms] = useState<any[]>([]);
+  const [isLoadingRooms, setIsLoadingRooms] = useState<boolean>(false);
+  const [showPasswordText, setShowPasswordText] = useState<boolean>(false);
+  const [privateRoomModal, setPrivateRoomModal] = useState<{ isOpen: boolean; room: any | null; password: string; error?: string }>({
+    isOpen: false,
+    room: null,
+    password: '',
+    error: undefined
+  });
   const [v1IsStartingRoom, setV1IsStartingRoom] = useState(false);
   const [v1Category, setV1Category] = useState<string>('');
   const [skillsType, setSkillsType] = useState<'audio' | 'complete' | 'surah'>('audio');
@@ -2274,19 +2286,53 @@ export default function App() {
     }
   }, [playerName]);
 
-  const handleJoinV1 = async (code: string) => {
+  const fetchAvailableRooms = useCallback(async (showLoading = false) => {
+    if (showLoading) setIsLoadingRooms(true);
+    try {
+      const res = await fetch('/api/1v1?action=list-rooms');
+      const data = await res.json();
+      if (res.ok && Array.isArray(data.rooms)) {
+        setAvailableRooms(data.rooms);
+      }
+    } catch (e) {
+      console.error('Failed to fetch rooms', e);
+    } finally {
+      if (showLoading) setIsLoadingRooms(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (view === 'group_join') {
+      fetchAvailableRooms(true);
+      const timer = setInterval(() => {
+        fetchAvailableRooms(false);
+      }, 3500);
+      return () => clearInterval(timer);
+    }
+  }, [view, fetchAvailableRooms]);
+
+  const handleJoinV1 = async (code: string, password?: string) => {
     if (!playerName) return;
     setIsJoiningRoom(true);
     setV1Error(null);
+    if (privateRoomModal.isOpen) {
+      setPrivateRoomModal(prev => ({ ...prev, error: undefined }));
+    }
     try {
       const res = await fetch('/api/1v1', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'join', code, player2Id: playerUsername || playerName })
+        body: JSON.stringify({ 
+          action: 'join', 
+          code, 
+          player2Id: playerUsername || playerName,
+          password: password ? password.trim() : undefined
+        })
       });
       const data = await res.json();
       if (res.ok) {
         setRoom(data);
+        setPrivateRoomModal({ isOpen: false, room: null, password: '', error: undefined });
         if (data.status === 'PLAYING') {
           const roomMode = data.gameMode === 'STANDARD' ? 'audio' : (data.gameMode === 'COMPLETION' || data.gameMode === 'ISLAMIC') ? 'complete' : 'surah';
           setSkillsType(roomMode);
@@ -2307,10 +2353,22 @@ export default function App() {
         toast.success('تم دخول الغرفة بنجاح');
         window.history.replaceState({}, '', window.location.pathname);
       } else {
-        setV1Error(data.message || 'فشل الانضمام للتحدي');
+        const errMsg = data.message || 'فشل الانضمام للتحدي';
+        if (privateRoomModal.isOpen) {
+          setPrivateRoomModal(prev => ({ ...prev, error: errMsg }));
+        } else {
+          setV1Error(errMsg);
+          toast.error(errMsg);
+        }
       }
     } catch (err) {
-      setV1Error('حدث خطأ في الاتصال');
+      const errMsg = 'حدث خطأ في الاتصال';
+      if (privateRoomModal.isOpen) {
+        setPrivateRoomModal(prev => ({ ...prev, error: errMsg }));
+      } else {
+        setV1Error(errMsg);
+        toast.error(errMsg);
+      }
     } finally {
       setIsJoiningRoom(false);
     }
@@ -2318,6 +2376,10 @@ export default function App() {
 
   const handleCreateV1 = async () => {
     if (!playerName) return;
+    if (v1IsPrivate && !v1RoomPassword.trim()) {
+      toast.error('يرجى كتابة كلمة المرور للغرفة الخاصة');
+      return;
+    }
     setIsCreatingRoom(true);
     setV1Error(null);
     try {
@@ -2364,6 +2426,9 @@ export default function App() {
         action: 'create',
         player1Id: playerUsername || playerName,
         player1Name: playerName,
+        name: v1RoomName.trim() || 'غرفة التحدي',
+        isPrivate: v1IsPrivate,
+        password: v1IsPrivate ? v1RoomPassword.trim() : null,
         gameMode: v1GameModes.length === 1 
           ? (v1GameModes[0] === 'islamic' ? 'ISLAMIC' : v1GameModes[0] === 'audio' ? 'STANDARD' : v1GameModes[0] === 'complete' ? 'COMPLETION' : 'SURAH')
           : 'MIXED',
@@ -4559,6 +4624,98 @@ ${versesList}
                       <h2 className="text-xl md:text-2xl font-black text-slate-800 mb-6 text-center">إعدادات التحدي الجماعي</h2>
 
                       <div className="space-y-6">
+                        {/* 1. اسم الغرفة */}
+                        <div className="text-right">
+                          <label className="block text-xs font-black text-slate-600 mb-2">
+                            اسم الغرفة
+                          </label>
+                          <input
+                            type="text"
+                            maxLength={40}
+                            value={v1RoomName}
+                            onChange={(e) => setV1RoomName(e.target.value)}
+                            placeholder="اكتب اسماً مميزاً للغرفة (مثال: سباق الحفاظ، تحدي الأصدقاء)"
+                            className="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 focus:border-orange-500 focus:outline-none bg-white text-slate-800 font-bold text-sm text-right transition-all shadow-xs"
+                          />
+                        </div>
+
+                        {/* 2. نوع الغرفة (عامة / خاصة) */}
+                        <div className="text-right">
+                          <label className="block text-xs font-black text-slate-600 mb-2">
+                            نوع الغرفة (الخصوصية)
+                          </label>
+                          <div className="grid grid-cols-2 gap-3">
+                            <button
+                              type="button"
+                              onClick={() => setV1IsPrivate(false)}
+                              className={`p-3.5 rounded-2xl border-2 transition-all flex items-center justify-center gap-2.5 cursor-pointer ${
+                                !v1IsPrivate
+                                  ? 'border-brand-emerald bg-brand-emerald/10 text-brand-emerald shadow-sm'
+                                  : 'border-slate-100 bg-white text-slate-500 hover:border-slate-200'
+                              }`}
+                            >
+                              <Globe className="w-5 h-5 shrink-0" />
+                              <div className="text-right">
+                                <div className="text-xs md:text-sm font-black">عامة (Public)</div>
+                                <div className="text-[10px] opacity-75 font-bold">تظهر للجميع في القائمة</div>
+                              </div>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setV1IsPrivate(true)}
+                              className={`p-3.5 rounded-2xl border-2 transition-all flex items-center justify-center gap-2.5 cursor-pointer ${
+                                v1IsPrivate
+                                  ? 'border-orange-500 bg-orange-50 text-orange-600 shadow-sm'
+                                  : 'border-slate-100 bg-white text-slate-500 hover:border-slate-200'
+                              }`}
+                            >
+                              <Lock className="w-5 h-5 shrink-0" />
+                              <div className="text-right">
+                                <div className="text-xs md:text-sm font-black">خاصة (Private)</div>
+                                <div className="text-[10px] opacity-75 font-bold">محمية بكلمة مرور</div>
+                              </div>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* الظهور الشرطي لحقل كلمة المرور */}
+                        {v1IsPrivate && (
+                          <motion.div
+                            initial={{ opacity: 0, height: 0, y: -6 }}
+                            animate={{ opacity: 1, height: 'auto', y: 0 }}
+                            exit={{ opacity: 0, height: 0, y: -6 }}
+                            className="bg-orange-50/70 border border-orange-200 p-4 rounded-2xl space-y-2 text-right"
+                          >
+                            <div className="flex items-center justify-between">
+                              <label className="text-xs font-black text-orange-900 flex items-center gap-1.5">
+                                <Lock className="w-3.5 h-3.5" />
+                                <span>كلمة مرور الغرفة (مطلوبة) *</span>
+                              </label>
+                              <button
+                                type="button"
+                                onClick={() => setShowPasswordText(!showPasswordText)}
+                                className="text-[11px] font-bold text-orange-600 hover:text-orange-700 flex items-center gap-1"
+                              >
+                                {showPasswordText ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                                <span>{showPasswordText ? 'إخفاء' : 'إظهار'}</span>
+                              </button>
+                            </div>
+                            <input
+                              type={showPasswordText ? "text" : "password"}
+                              maxLength={30}
+                              value={v1RoomPassword}
+                              onChange={(e) => setV1RoomPassword(e.target.value)}
+                              placeholder="أدخل كلمة مرور الغرفة ليتمكن أصدقاؤك من الانضمام"
+                              required
+                              className="w-full px-4 py-2.5 rounded-xl border-2 border-orange-200 focus:border-orange-500 focus:outline-none bg-white text-slate-800 font-bold text-sm text-right"
+                            />
+                            <p className="text-[10px] text-orange-700/80 font-bold">
+                              🔒 لن يتمكن أي متسابق من الدخول للغرفة إلا بعد إدخال هذه الكلمة.
+                            </p>
+                          </motion.div>
+                        )}
+
                         <div>
                           <div className="flex items-center justify-between mb-3 text-right">
                             <label className="block text-xs font-black text-slate-500 uppercase tracking-widest">
@@ -4832,35 +4989,193 @@ ${versesList}
                 ) : view === 'group_join' ? (
                   <motion.div
                     key="group_join"
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    className="max-w-sm mx-auto py-8 md:py-12 px-4"
+                    initial={{ opacity: 0, y: 15 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.98 }}
+                    className="max-w-2xl mx-auto py-6 md:py-8 px-4 space-y-6"
                   >
-                    <div className="glass p-6 md:p-8 rounded-3xl border-brand-emerald/10 shadow-xl text-center">
-                      <div className="w-14 h-14 bg-brand-emerald text-white rounded-2xl flex items-center justify-center mx-auto mb-5 shadow-lg">
-                        <Lock className="w-7 h-7" />
-                      </div>
-                      <h2 className="text-2xl font-black text-slate-800 mb-2">رمز الانضمام</h2>
-                      <p className="text-slate-500 font-bold text-xs md:text-sm mb-6">أدخل الرمز المكون من 6 أرقام</p>
-
-                      <input
-                        type="text"
-                        maxLength={6}
-                        placeholder="000000"
-                        value={joinCode}
-                        onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-                        className="w-full px-4 py-3 rounded-xl bg-slate-50 border-2 border-slate-100 focus:border-brand-emerald focus:outline-none text-center font-black tracking-[0.3em] text-2xl mb-5 shadow-inner"
-                      />
-
+                    {/* Header with Back and Refresh */}
+                    <div className="flex items-center justify-between">
                       <button
-                        onClick={() => handleJoinV1(joinCode)}
-                        disabled={isJoiningRoom || joinCode.length < 4}
-                        className="w-full py-3 md:py-3.5 bg-brand-emerald text-white rounded-xl font-black text-base shadow-lg hover:bg-brand-emerald/90 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50"
+                        onClick={() => setView('group_menu')}
+                        className="p-2.5 rounded-xl bg-white/60 hover:bg-white transition-all text-slate-500 font-bold flex items-center gap-2 text-xs md:text-sm border border-slate-100 shadow-xs cursor-pointer"
                       >
-                        {isJoiningRoom ? <div className="w-5 h-5 border-3 border-white border-t-transparent rounded-full animate-spin" /> : 'دخول الغرفة'}
+                        <ArrowRight className="w-4 h-4" />
+                        <span>رجوع</span>
                       </button>
 
-                      <button onClick={() => setView('group_menu')} className="mt-5 text-slate-400 font-bold hover:text-slate-600 text-xs md:text-sm">رجوع</button>
+                      <div className="text-center">
+                        <h2 className="text-xl md:text-2xl font-black text-slate-800">الانضمام للتحدي الجماعي</h2>
+                        <p className="text-slate-400 font-bold text-xs">تحدَّ أصدقاءك في غرف المتشابهات المباشرة</p>
+                      </div>
+
+                      <button
+                        onClick={() => fetchAvailableRooms(true)}
+                        disabled={isLoadingRooms}
+                        className="p-2.5 rounded-xl bg-white/60 hover:bg-white transition-all text-slate-600 font-bold flex items-center gap-1.5 text-xs md:text-sm border border-slate-100 shadow-xs cursor-pointer disabled:opacity-60"
+                        title="تحديث قائمة الغرف"
+                      >
+                        <RefreshCw className={`w-4 h-4 ${isLoadingRooms ? 'animate-spin text-orange-500' : ''}`} />
+                        <span className="hidden sm:inline">تحديث</span>
+                      </button>
+                    </div>
+
+                    {/* Direct Code Join Card */}
+                    <div className="glass p-5 rounded-3xl border border-brand-emerald/15 shadow-md text-right">
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="text-[10px] font-black bg-brand-emerald/10 text-brand-emerald px-2.5 py-0.5 rounded-full">
+                          انضمام فوري
+                        </span>
+                        <label className="text-xs font-black text-slate-700 flex items-center gap-1.5">
+                          <span>لديك رمز غرفة خاص؟</span>
+                          <Hash className="w-3.5 h-3.5 text-brand-emerald" />
+                        </label>
+                      </div>
+                      <div className="flex flex-col sm:flex-row items-center gap-2.5">
+                        <input
+                          type="text"
+                          maxLength={6}
+                          placeholder="أدخل الرمز (مثال: AB12CD)"
+                          value={joinCode}
+                          onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                          className="w-full sm:flex-1 px-4 py-2.5 rounded-xl bg-slate-50 border-2 border-slate-100 focus:border-brand-emerald focus:outline-none text-center font-black tracking-[0.2em] text-lg shadow-inner"
+                        />
+                        <button
+                          onClick={() => handleJoinV1(joinCode)}
+                          disabled={isJoiningRoom || joinCode.length < 4}
+                          className="w-full sm:w-auto px-6 py-2.5 bg-brand-emerald text-white rounded-xl font-black text-sm shadow-md hover:bg-brand-emerald/90 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+                        >
+                          {isJoiningRoom ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : 'دخول'}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Available Rooms List */}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between px-1">
+                        <div className="flex items-center gap-2">
+                          <span className="relative flex h-2.5 w-2.5">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                          </span>
+                          <span className="text-xs font-black text-slate-700">
+                            الغرف المتاحة حالياً ({availableRooms.length})
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-slate-400 font-bold">
+                          يتم التحديث تلقائياً ⚡
+                        </span>
+                      </div>
+
+                      {isLoadingRooms && availableRooms.length === 0 ? (
+                        <div className="glass p-12 rounded-3xl text-center border-slate-100 shadow-md">
+                          <div className="w-8 h-8 border-3 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                          <p className="text-xs font-bold text-slate-400">جاري تحميل الغرف النشطة...</p>
+                        </div>
+                      ) : availableRooms.length === 0 ? (
+                        <div className="glass p-8 md:p-10 rounded-3xl text-center border-slate-100 shadow-md space-y-4">
+                          <div className="w-14 h-14 bg-slate-100 text-slate-400 rounded-2xl flex items-center justify-center mx-auto shadow-inner">
+                            <Users className="w-7 h-7" />
+                          </div>
+                          <div>
+                            <h3 className="text-base font-black text-slate-700 mb-1">لا توجد غرف قيد الانتظار حالياً</h3>
+                            <p className="text-xs text-slate-400 font-bold max-w-xs mx-auto">
+                              جميع التحديات بدأت أو تم إنهاؤها. بادر بإنشاء غرفتك وشارك الرمز مع أصدقائك!
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => setView('group_create')}
+                            className="px-6 py-2.5 bg-orange-500 text-white rounded-xl font-black text-xs md:text-sm hover:bg-orange-600 transition-all shadow-md shadow-orange-500/20 active:scale-95 inline-flex items-center gap-2 cursor-pointer"
+                          >
+                            <Zap className="w-4 h-4" />
+                            <span>إنشاء غرفة جديدة</span>
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 gap-3">
+                          {availableRooms.map((r: any) => (
+                            <motion.div
+                              key={r.id || r.code}
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              className="glass p-4 md:p-5 rounded-2xl border border-slate-100 hover:border-slate-200 transition-all shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                            >
+                              <div className="text-right space-y-2">
+                                <div className="flex items-center gap-2 justify-end sm:justify-start">
+                                  {r.isPrivate ? (
+                                    <span className="px-2.5 py-0.5 bg-amber-500/10 text-amber-600 rounded-full text-[11px] font-black flex items-center gap-1 border border-amber-500/20">
+                                      <Lock className="w-3 h-3" />
+                                      <span>خاصة</span>
+                                    </span>
+                                  ) : (
+                                    <span className="px-2.5 py-0.5 bg-emerald-500/10 text-emerald-600 rounded-full text-[11px] font-black flex items-center gap-1 border border-emerald-500/20">
+                                      <Globe className="w-3 h-3" />
+                                      <span>عامة</span>
+                                    </span>
+                                  )}
+                                  <h3 className="font-black text-slate-800 text-sm md:text-base">
+                                    {r.name || 'غرفة التحدي'}
+                                  </h3>
+                                </div>
+
+                                <div className="flex flex-wrap items-center gap-2 text-[10px] md:text-xs text-slate-500 font-bold justify-end sm:justify-start">
+                                  <span className="bg-slate-100 px-2 py-0.5 rounded-md text-slate-600">
+                                    المنشئ: {r.hostName || 'متسابق'}
+                                  </span>
+                                  <span className="bg-slate-100 px-2 py-0.5 rounded-md text-slate-600 flex items-center gap-1">
+                                    <Users className="w-3 h-3" />
+                                    <span>{r.participantCount} متسابقين</span>
+                                  </span>
+                                  <span className="bg-slate-100 px-2 py-0.5 rounded-md text-slate-600">
+                                    {r.questionCount} أسئلة
+                                  </span>
+                                  {r.timePerQuestion > 0 && (
+                                    <span className="bg-orange-100/70 text-orange-600 px-2 py-0.5 rounded-md flex items-center gap-0.5">
+                                      <Clock className="w-3 h-3" />
+                                      <span>{r.timePerQuestion} ثانية</span>
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-2 justify-end">
+                                <button
+                                  onClick={() => {
+                                    if (r.isPrivate) {
+                                      setPrivateRoomModal({
+                                        isOpen: true,
+                                        room: r,
+                                        password: '',
+                                        error: undefined
+                                      });
+                                    } else {
+                                      handleJoinV1(r.code);
+                                    }
+                                  }}
+                                  disabled={isJoiningRoom}
+                                  className={`w-full sm:w-auto px-5 py-2.5 rounded-xl font-black text-xs md:text-sm transition-all shadow-sm active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 ${
+                                    r.isPrivate
+                                      ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-amber-500/20'
+                                      : 'bg-brand-emerald hover:bg-brand-emerald/90 text-white shadow-brand-emerald/20'
+                                  }`}
+                                >
+                                  {r.isPrivate ? (
+                                    <>
+                                      <Lock className="w-3.5 h-3.5" />
+                                      <span>انضمام بكلمة مرور</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Zap className="w-3.5 h-3.5" />
+                                      <span>انضمام مباشر</span>
+                                    </>
+                                  )}
+                                </button>
+                              </div>
+                            </motion.div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </motion.div>
                 ) : view === 'group_game' ? (
@@ -8342,6 +8657,94 @@ ${versesList}
             selectedTopics={islamicRoomTopics}
             onSelectTopics={setIslamicRoomTopics}
           />
+
+          {/* Private Room Password Dialog */}
+          <AnimatePresence>
+            {privateRoomModal.isOpen && privateRoomModal.room && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                  className="bg-white rounded-3xl p-6 md:p-8 max-w-sm w-full shadow-2xl border border-orange-100 text-right space-y-5"
+                >
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                    <button
+                      onClick={() => setPrivateRoomModal({ isOpen: false, room: null, password: '', error: undefined })}
+                      className="p-1.5 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                    <div className="flex items-center gap-2">
+                      <div className="text-right">
+                        <h3 className="font-black text-slate-800 text-base md:text-lg">غرفة خاصة محمية</h3>
+                        <p className="text-[11px] text-slate-400 font-bold">{privateRoomModal.room.name || 'غرفة التحدي'}</p>
+                      </div>
+                      <div className="w-10 h-10 rounded-2xl bg-orange-100 text-orange-600 flex items-center justify-center">
+                        <Lock className="w-5 h-5" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-100 space-y-1 text-xs text-slate-600 font-bold">
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">المنشئ:</span>
+                      <span className="text-slate-800 font-black">{privateRoomModal.room.hostName}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-400">رمز الغرفة:</span>
+                      <span className="font-mono text-orange-600 font-black tracking-wider">{privateRoomModal.room.code}</span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="block text-xs font-black text-slate-700">
+                      أدخل كلمة المرور للانضمام
+                    </label>
+                    <input
+                      type="password"
+                      autoFocus
+                      value={privateRoomModal.password}
+                      onChange={(e) => setPrivateRoomModal(prev => ({ ...prev, password: e.target.value, error: undefined }))}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && privateRoomModal.password.trim() && !isJoiningRoom) {
+                          handleJoinV1(privateRoomModal.room.code, privateRoomModal.password);
+                        }
+                      }}
+                      placeholder="كلمة مرور الغرفة"
+                      className="w-full px-4 py-3 rounded-2xl border-2 border-slate-200 focus:border-orange-500 focus:outline-none text-slate-800 font-black text-sm text-center shadow-inner"
+                    />
+                    {privateRoomModal.error && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="flex items-center gap-1.5 text-xs font-bold text-red-500 justify-end"
+                      >
+                        <span>{privateRoomModal.error}</span>
+                        <AlertCircle className="w-4 h-4 shrink-0" />
+                      </motion.div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-3 pt-2">
+                    <button
+                      onClick={() => handleJoinV1(privateRoomModal.room.code, privateRoomModal.password)}
+                      disabled={isJoiningRoom || !privateRoomModal.password.trim()}
+                      className="flex-1 py-3 bg-orange-500 text-white rounded-2xl font-black text-sm hover:bg-orange-600 transition-all shadow-md shadow-orange-500/20 disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      {isJoiningRoom ? <Loader2 className="w-5 h-5 animate-spin" /> : 'تأكيد الانضمام'}
+                    </button>
+                    <button
+                      onClick={() => setPrivateRoomModal({ isOpen: false, room: null, password: '', error: undefined })}
+                      className="px-5 py-3 bg-slate-100 text-slate-600 rounded-2xl font-bold text-sm hover:bg-slate-200 transition-colors cursor-pointer"
+                    >
+                      إلغاء
+                    </button>
+                  </div>
+                </motion.div>
+              </div>
+            )}
+          </AnimatePresence>
 
           <AnimatePresence>
             {showCertificate && (

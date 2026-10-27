@@ -7,6 +7,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   switch (action) {
     case 'create': return handleCreate(req, res)
     case 'join': return handleJoin(req, res)
+    case 'list-rooms': return handleListRooms(req, res)
     case 'poll': return handlePoll(req, res)
     case 'start': return handleStart(req, res)
     case 'submit-progress': return handleSubmitProgress(req, res)
@@ -78,10 +79,16 @@ async function getFullRoom(roomId: string) {
 }
 
 async function handleCreate(req: VercelRequest, res: VercelResponse) {
-    const { player1Id, player1Name, category, categories, level, levels, questionCount, questionIds, maxPlayers, gameMode, gameModes, timePerQuestion, customChallenges, topics } = req.body
+    const { player1Id, player1Name, category, categories, level, levels, questionCount, questionIds, maxPlayers, gameMode, gameModes, timePerQuestion, customChallenges, topics, roomName, name, isPrivate, password } = req.body
     if (!player1Id && !player1Name) return res.status(400).json({ message: 'Missing player1Id' })
 
     const maxQuestions = Number(questionCount) || 5
+    const finalIsPrivate = Boolean(isPrivate)
+    const finalPassword = finalIsPrivate ? (password ? String(password).trim() : '') : null
+    if (finalIsPrivate && !finalPassword) {
+      return res.status(400).json({ message: 'يرجى إدخال كلمة المرور للغرفة الخاصة' })
+    }
+    const finalRoomName = (name && String(name).trim()) || (roomName && String(roomName).trim()) || 'غرفة التحدي'
 
     try {
       let player1 = await findPlayer(player1Id, player1Name)
@@ -185,6 +192,9 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
     const roomData = await prisma.room.create({
       data: {
         code,
+        name: finalRoomName,
+        isPrivate: finalIsPrivate,
+        password: finalPassword,
         player1Id: player1.id,
         challengeIds: selectedIds,
         status: 'WAITING',
@@ -207,7 +217,7 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
 }
 
 async function handleJoin(req: VercelRequest, res: VercelResponse) {
-  const { code, player2Id, playerName } = req.body
+  const { code, player2Id, playerName, password } = req.body
   if (!code || !player2Id) return res.status(400).json({ message: 'يرجى إدخال رمز الغرفة' })
 
   const cleanCode = String(code).trim().toUpperCase()
@@ -224,6 +234,15 @@ async function handleJoin(req: VercelRequest, res: VercelResponse) {
     
     // Status can be WAITING or PLAYING (allow late join if within maxPlayers)
     if (room.status === 'FINISHED') return res.status(400).json({ message: 'هذا التحدي انتهى بالفعل' })
+
+    // Private Room Password Verification
+    if (room.isPrivate) {
+      const enteredPass = password ? String(password).trim() : ''
+      const actualPass = room.password ? String(room.password).trim() : ''
+      if (!enteredPass || enteredPass !== actualPass) {
+        return res.status(403).json({ message: 'كلمة المرور غير صحيحة، يرجى كتابة كلمة المرور الصحيحة للغرفة' })
+      }
+    }
 
     let player = await findPlayer(player2Id, playerName)
     
@@ -267,6 +286,49 @@ async function handleJoin(req: VercelRequest, res: VercelResponse) {
   } catch (error: any) {
     console.error('Error in handleJoin:', error)
     return res.status(500).json({ message: 'فشل الانضمام للغرفة', error: error.message })
+  }
+}
+
+async function handleListRooms(req: VercelRequest, res: VercelResponse) {
+  try {
+    // Only return rooms in WAITING status (active rooms waiting for players)
+    const rooms = await prisma.room.findMany({
+      where: {
+        status: 'WAITING'
+      },
+      orderBy: {
+        createdAt: 'desc'
+      },
+      take: 40,
+      include: {
+        player1: {
+          select: { id: true, name: true, username: true }
+        }
+      }
+    })
+
+    const formattedRooms = rooms.map(r => {
+      const progress = (r.playersProgress as any) || {}
+      const participantCount = Object.keys(progress).length || 1
+      return {
+        id: r.id,
+        code: r.code,
+        name: r.name || 'غرفة التحدي',
+        isPrivate: Boolean(r.isPrivate),
+        status: r.status,
+        questionCount: r.questionCount,
+        timePerQuestion: r.timePerQuestion,
+        gameMode: r.gameMode,
+        participantCount,
+        hostName: r.player1?.name || 'مجهول',
+        createdAt: r.createdAt
+      }
+    })
+
+    return res.status(200).json({ rooms: formattedRooms })
+  } catch (err: any) {
+    console.error('Error in handleListRooms:', err)
+    return res.status(500).json({ message: 'فشل جلب قائمة الغرف', error: err.message })
   }
 }
 

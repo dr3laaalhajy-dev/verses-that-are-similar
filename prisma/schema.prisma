@@ -73,6 +73,9 @@ model Player {
 model Room {
   id              String   @id @default(uuid())
   code            String   @unique
+  name            String?  @default("")
+  isPrivate       Boolean  @default(false)
+  password        String?
   player1Id       Int
   player2Id       Int?
   player1Progress Int      @default(0)
