@@ -16,6 +16,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     case 'submit-progress': return handleSubmitProgress(req, res)
     case 'list-challenges': return handleListChallenges(req, res)
     case 'check-active': return handleCheckActive(req, res)
+    case 'presence': return handlePresence(req, res)
+    case 'cancel-room': return handleCancelRoom(req, res)
     case 'resign': return handleResign(req, res)
     default:
       return res.status(400).json({ message: 'Invalid action' })
@@ -516,10 +518,28 @@ async function advanceRoomToNextQuestion(room: any, currentAnswers: Record<strin
 }
 
 async function handlePoll(req: VercelRequest, res: VercelResponse) {
-  const { roomId } = req.query
+  const { roomId, playerId } = req.query
   try {
     const room = await prisma.room.findUnique({ where: { id: roomId as string } })
     if (!room) return res.status(404).json({ error: 'Room not found' })
+
+    if (room.status === 'CANCELLED') {
+      const fullRoom = await getFullRoom(room.id)
+      return res.status(200).json(fullRoom)
+    }
+
+    let playersProgress: any = (room.playersProgress as any) || {}
+    let needUpdate = false
+
+    // Update polling player's presence heartbeat
+    if (playerId) {
+      const pIdStr = String(playerId)
+      if (playersProgress[pIdStr]) {
+        playersProgress[pIdStr].isOnline = true
+        playersProgress[pIdStr].lastSeen = Date.now()
+        needUpdate = true
+      }
+    }
 
     // Auto-advance if timer expired on server side
     if (room.status === 'PLAYING' && room.timePerQuestion > 0 && room.questionStartTime) {
@@ -528,6 +548,13 @@ async function handlePoll(req: VercelRequest, res: VercelResponse) {
         const advancedRoom = await advanceRoomToNextQuestion(room, (room.currentAnswers as any) || {})
         return res.status(200).json(advancedRoom)
       }
+    }
+
+    if (needUpdate) {
+      await prisma.room.update({
+        where: { id: room.id },
+        data: { playersProgress }
+      })
     }
 
     const fullRoom = await getFullRoom(roomId as string)
@@ -615,6 +642,9 @@ async function handleSubmitAnswer(req: VercelRequest, res: VercelResponse) {
 
         const qNum = Number(questionIndex)
         pData.progress = Math.round(((qNum + 1) / room.questionCount) * 100)
+        pData.playerCurrentQuestionIndex = qNum + 1
+        pData.lastSeen = Date.now()
+        pData.isOnline = true
 
         // If player completed all questions
         if (qNum + 1 >= room.questionCount) {
@@ -662,11 +692,19 @@ async function handleSubmitAnswer(req: VercelRequest, res: VercelResponse) {
         }
       }
 
-      const totalParticipants = Object.keys(playersProgress).length || 1
+      pData.lastSeen = Date.now()
+      pData.isOnline = true
+
+      // Filter only currently online players (or those who already submitted)
+      const onlinePlayers = Object.entries(playersProgress).filter(([id, p]: [string, any]) => {
+        if (currentAnswers[id]) return true
+        return p.isOnline !== false
+      })
+      const activeParticipants = Math.max(1, onlinePlayers.length)
       const answeredCount = Object.keys(currentAnswers).length
 
-      // Condition A: All players in the room answered!
-      if (answeredCount >= totalParticipants) {
+      // Condition A: All online players in the room answered!
+      if (answeredCount >= activeParticipants) {
         const advancedRoom = await advanceRoomToNextQuestion(room, currentAnswers)
         return res.status(200).json(advancedRoom)
       }
@@ -800,27 +838,129 @@ async function handleCheckActive(req: VercelRequest, res: VercelResponse) {
     const player = await findPlayer(playerId)
     if (!player) return res.status(404).json({ error: 'Player not found' })
 
-    const room = await prisma.room.findFirst({
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000)
+    const rooms = await prisma.room.findMany({
       where: {
         status: 'PLAYING',
-        OR: [
-          { player1Id: player.id },
-          { player2Id: player.id }
-        ]
+        createdAt: { gte: twoHoursAgo }
       },
-      include: {
-        player1: true,
-        player2: true,
-        winner: true
-      },
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: 'desc' },
+      take: 20
     })
-    if (!room) return res.status(200).json(null)
+
+    const pIdStr = String(player.id)
+    const activeRoom = rooms.find(r => {
+      if (r.player1Id === player.id) {
+        return true
+      }
+      const progress = (r.playersProgress as any) || {}
+      if (progress[pIdStr]) {
+        // Only active if player hasn't finished yet
+        return !progress[pIdStr].finishTime
+      }
+      return false
+    })
+
+    if (!activeRoom) return res.status(200).json(null)
+
+    const fullRoom = await getFullRoom(activeRoom.id)
+    return res.status(200).json(fullRoom)
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message })
+  }
+}
+
+async function handlePresence(req: VercelRequest, res: VercelResponse) {
+  const { roomId, playerId, isOnline } = req.body
+  if (!roomId || !playerId) return res.status(400).json({ message: 'Missing roomId or playerId' })
+
+  try {
+    const player = await findPlayer(playerId)
+    if (!player) return res.status(404).json({ message: 'Player not found' })
+
+    const room = await prisma.room.findUnique({ where: { id: String(roomId) } })
+    if (!room) return res.status(404).json({ message: 'Room not found' })
+
+    const pIdStr = String(player.id)
+    const playersProgress = (room.playersProgress as any) || {}
+    if (!playersProgress[pIdStr]) {
+      playersProgress[pIdStr] = { name: player.name }
+    }
+
+    const onlineStatus = isOnline !== false
+    playersProgress[pIdStr].isOnline = onlineStatus
+    playersProgress[pIdStr].lastSeen = Date.now()
+
+    const isHost = player.id === room.player1Id
+
+    // 1. Host disconnected / went offline:
+    // If the host leaves unexpectedly or closes the room, set room to CANCELLED
+    if (isHost && !onlineStatus && room.status !== 'FINISHED' && room.status !== 'CANCELLED') {
+      await prisma.room.update({
+        where: { id: room.id },
+        data: {
+          status: 'CANCELLED',
+          playersProgress
+        }
+      })
+      const fullRoom = await getFullRoom(room.id)
+      return res.status(200).json(fullRoom)
+    }
+
+    // 2. In SYNC mode: If an ordinary player goes offline,
+    // advance question if all remaining online players have answered
+    if (!onlineStatus && room.status === 'PLAYING' && (room as any).transitionMode !== 'ASYNC') {
+      const currentAnswers = (room.currentAnswers as any) || {}
+      const onlinePlayers = Object.entries(playersProgress).filter(([id, p]: [string, any]) => {
+        if (currentAnswers[id]) return true
+        return p.isOnline !== false
+      })
+      const answeredCount = Object.keys(currentAnswers).length
+      if (answeredCount >= onlinePlayers.length && onlinePlayers.length > 0) {
+        const advancedRoom = await advanceRoomToNextQuestion(room, currentAnswers)
+        return res.status(200).json(advancedRoom)
+      }
+    }
+
+    await prisma.room.update({
+      where: { id: room.id },
+      data: { playersProgress }
+    })
 
     const fullRoom = await getFullRoom(room.id)
     return res.status(200).json(fullRoom)
   } catch (err: any) {
-    return res.status(500).json({ error: err.message })
+    console.error('Error in handlePresence:', err)
+    return res.status(500).json({ message: 'Failed to update presence', error: err.message })
+  }
+}
+
+async function handleCancelRoom(req: VercelRequest, res: VercelResponse) {
+  const { roomId, playerId } = req.body
+  if (!roomId || !playerId) return res.status(400).json({ message: 'Missing roomId or playerId' })
+
+  try {
+    const player = await findPlayer(playerId)
+    if (!player) return res.status(404).json({ message: 'Player not found' })
+
+    const room = await prisma.room.findUnique({ where: { id: String(roomId) } })
+    if (!room) return res.status(404).json({ message: 'Room not found' })
+
+    // Security check: Only the host can cancel the room
+    if (player.id !== room.player1Id) {
+      return res.status(403).json({ message: 'غير مصرح لك بإلغاء الغرفة. المضيف فقط يمكنه الإلغاء.' })
+    }
+
+    await prisma.room.update({
+      where: { id: room.id },
+      data: { status: 'CANCELLED' }
+    })
+
+    const fullRoom = await getFullRoom(room.id)
+    return res.status(200).json(fullRoom)
+  } catch (err: any) {
+    console.error('Error in handleCancelRoom:', err)
+    return res.status(500).json({ message: 'Failed to cancel room', error: err.message })
   }
 }
 

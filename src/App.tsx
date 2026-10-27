@@ -5,7 +5,7 @@ import {
   ListFilter, Sun, Moon, Calendar, Settings, Copy, Check, Lightbulb, ChevronDown, User, Users, Quote,
   ArrowRight, ArrowLeft, Zap, Lock, AlertCircle, Hash, XCircle, Eye, EyeOff, List, Loader2, Flame, ZoomIn, ZoomOut, Maximize2, LogOut,
   Info, HelpCircle, AtSign, Key, LogIn, UserPlus, Smartphone, Download, Share2, Mail, ExternalLink, Send,
-  Clock, RefreshCw, Globe, Plus
+  Clock, RefreshCw, Globe, Plus, Gamepad2, Trash2, Play
 } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import CertificateGenerator from './components/CertificateGenerator';
@@ -1376,6 +1376,7 @@ export default function App() {
   });
   const [v1TimePerQuestion, setV1TimePerQuestion] = useState(20);
   const [v1TransitionMode, setV1TransitionMode] = useState<'SYNC' | 'ASYNC'>('SYNC');
+  const [activeRunningRoom, setActiveRunningRoom] = useState<any | null>(null);
   const [v1RoomName, setV1RoomName] = useState<string>('');
   const [v1IsPrivate, setV1IsPrivate] = useState<boolean>(false);
   const [v1RoomPassword, setV1RoomPassword] = useState<string>('');
@@ -2750,10 +2751,19 @@ export default function App() {
 
     const poll = async () => {
       try {
-        const res = await fetch(`/api/1v1?action=poll&roomId=${room.id}`);
+        const playerIdParam = encodeURIComponent(playerUsername || playerName || '');
+        const res = await fetch(`/api/1v1?action=poll&roomId=${room.id}&playerId=${playerIdParam}`);
         const data = await res.json();
         if (res.ok) {
           prevParticipantsCount.current = data.participants?.length || 0;
+
+          // If room was cancelled by host or server
+          if (data.status === 'CANCELLED') {
+            setRoom(null);
+            toast.error('قام المضيف بإلغاء الغرفة أو إنهاء التحدي', { icon: '⚠️' });
+            setView('group_join');
+            return;
+          }
 
           // If room finished, switch to group_game results
           if (data.status === 'FINISHED') {
@@ -2832,6 +2842,163 @@ export default function App() {
     const interval = setInterval(poll, 1000); // Poll every 1 second for real-time multiplayer sync
     return () => clearInterval(interval);
   }, [room?.id, view, room?.status, currentChallengeIndex, playerName, playerUsername, hasAnsweredCurrentQuestion, challenges]);
+
+  // Presence & Connection Management: Track online/offline status & background lifecycle
+  useEffect(() => {
+    if (!room?.id || (view !== 'group_waiting' && view !== 'challenge' && view !== 'group_game')) return;
+
+    const sendPresence = (online: boolean) => {
+      const payload = JSON.stringify({
+        action: 'presence',
+        roomId: room.id,
+        playerId: playerUsername || playerName,
+        isOnline: online
+      });
+
+      if (!online && typeof navigator !== 'undefined' && navigator.sendBeacon) {
+        const blob = new Blob([payload], { type: 'application/json' });
+        navigator.sendBeacon('/api/1v1', blob);
+      } else {
+        fetch('/api/1v1', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: payload,
+          keepalive: true
+        }).catch(err => console.error('Presence error:', err));
+      }
+    };
+
+    // Mark online on entering
+    sendPresence(true);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        sendPresence(false);
+      } else if (document.visibilityState === 'visible') {
+        sendPresence(true);
+      }
+    };
+
+    const handleBeforeUnload = () => {
+      sendPresence(false);
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [room?.id, view, playerName, playerUsername]);
+
+  // Check for active unfinished challenges on the Home screen
+  useEffect(() => {
+    if (view !== 'home' || !playerName) return;
+
+    const checkActive = async () => {
+      try {
+        const pIdParam = encodeURIComponent(playerUsername || playerName || '');
+        const res = await fetch(`/api/1v1?action=check-active&playerId=${pIdParam}`);
+        const data = await res.json();
+        if (res.ok && data && data.id && data.status === 'PLAYING') {
+          setActiveRunningRoom(data);
+        } else {
+          setActiveRunningRoom(null);
+        }
+      } catch (err) {
+        console.error('Error checking active room:', err);
+      }
+    };
+
+    checkActive();
+    const interval = setInterval(checkActive, 8000);
+    return () => clearInterval(interval);
+  }, [view, playerName, playerUsername]);
+
+  const handleResumeActiveRoom = (targetRoom: any) => {
+    if (!targetRoom) return;
+    setRoom(targetRoom);
+
+    const mapped = (targetRoom.challenges || []).map((q: any) => ({
+      ...q,
+      verseText: q.verseText || q.keyword || q.text
+    }));
+    setChallenges(mapped);
+    setChallengesLoading(false);
+
+    // Notify server of rejoining presence
+    fetch('/api/1v1', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'presence',
+        roomId: targetRoom.id,
+        playerId: playerUsername || playerName,
+        isOnline: true
+      })
+    }).catch(err => console.error('Error sending presence on resume:', err));
+
+    const pIdStr = String(targetRoom.participants?.find((p: any) => p.name === playerName || p.username === playerUsername)?.id);
+    const myProg = targetRoom.playersProgress?.[pIdStr] || {};
+
+    if (targetRoom.transitionMode === 'ASYNC') {
+      // In ASYNC mode: resume from exact question where this player left off
+      const resumeIndex = myProg.playerCurrentQuestionIndex ?? 0;
+      setCurrentChallengeIndex(Math.min(resumeIndex, Math.max(0, (mapped.length || 1) - 1)));
+    } else {
+      // In SYNC mode: sync directly to the room's current active question index
+      setCurrentChallengeIndex(targetRoom.currentQuestionIndex || 0);
+    }
+
+    setHasAnsweredCurrentQuestion(false);
+    setSkillsFeedback(false);
+    setSelectedOption(null);
+    setMatchedIds(new Set());
+    setSurahFeedbackData(null);
+
+    const roomTime = (targetRoom.timePerQuestion && targetRoom.timePerQuestion > 0) ? targetRoom.timePerQuestion : 0;
+    if (roomTime > 0) {
+      setSpeedTimeLeft(roomTime);
+    }
+
+    const curQ = mapped[targetRoom.currentQuestionIndex || 0];
+    if (curQ) {
+      const mode = curQ.type === 'SURAH' ? 'surah' : (curQ.type === 'STANDARD' || curQ.type === 'AUDIO') ? 'audio' : 'complete';
+      setSkillsType(mode);
+    }
+
+    setActiveRunningRoom(null);
+    setView('challenge');
+  };
+
+  const handleCancelRoomByHost = async () => {
+    if (!room?.id) return;
+    const isConfirmed = window.confirm('هل أنت متأكد من إلغاء الغرفة؟ سيتم حذفها وإشعار جميع المتسابقين.');
+    if (!isConfirmed) return;
+
+    try {
+      const res = await fetch('/api/1v1', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'cancel-room',
+          roomId: room.id,
+          playerId: playerUsername || playerName
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast.success('تم إلغاء الغرفة بنجاح');
+        setRoom(null);
+        setView('group_join');
+      } else {
+        toast.error(data.message || 'فشل إلغاء الغرفة');
+      }
+    } catch (err) {
+      toast.error('حدث خطأ في الاتصال');
+    }
+  };
 
   const syncGroupProgress = async (isFinished = false, forcedScore?: number) => {
     if (!room?.id) return;
@@ -5504,21 +5671,53 @@ ${versesList}
                         </div>
                       </div>
 
-                      {(room?.player1?.name === playerName || (room?.player1?.username && room?.player1?.username === playerUsername)) && (
+                      {(room?.player1?.name === playerName || (room?.player1?.username && room?.player1?.username === playerUsername)) ? (
+                        <div className="space-y-3">
+                          <button
+                            onClick={handleStartRoomV1}
+                            disabled={v1IsStartingRoom || (room?.participants?.length || 0) < 2}
+                            className={`w-full py-3.5 text-white rounded-2xl font-black text-base md:text-lg shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer ${(room?.participants?.length || 0) < 2
+                              ? 'bg-slate-400 opacity-50 cursor-not-allowed'
+                              : v1IsStartingRoom ? 'bg-orange-400' : 'bg-brand-emerald hover:bg-brand-emerald/90'
+                              }`}
+                          >
+                            {v1IsStartingRoom && <Loader2 className="w-5 h-5 animate-spin" />}
+                            {v1IsStartingRoom ? 'جاري التحميل...' : 'ابدأ التحدي الآن'}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={handleCancelRoomByHost}
+                            className="w-full py-3 rounded-2xl font-black text-xs md:text-sm text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
+                          >
+                            <Trash2 className="w-4 h-4 text-red-500" />
+                            <span>إلغاء الغرفة وحذفها ✕</span>
+                          </button>
+                        </div>
+                      ) : (
                         <button
-                          onClick={handleStartRoomV1}
-                          disabled={v1IsStartingRoom || (room?.participants?.length || 0) < 2}
-                          className={`w-full py-3.5 text-white rounded-2xl font-black text-base md:text-lg shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 ${(room?.participants?.length || 0) < 2
-                            ? 'bg-slate-400 opacity-50 cursor-not-allowed'
-                            : v1IsStartingRoom ? 'bg-orange-400' : 'bg-brand-emerald hover:bg-brand-emerald/90'
-                            }`}
+                          type="button"
+                          onClick={() => {
+                            if (room?.id) {
+                              fetch('/api/1v1', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                  action: 'presence',
+                                  roomId: room.id,
+                                  playerId: playerUsername || playerName,
+                                  isOnline: false
+                                })
+                              }).catch(() => {});
+                            }
+                            setRoom(null);
+                            setView('group_join');
+                          }}
+                          className="mt-6 text-slate-400 font-bold hover:text-slate-600 text-xs md:text-sm cursor-pointer"
                         >
-                          {v1IsStartingRoom && <Loader2 className="w-5 h-5 animate-spin" />}
-                          {v1IsStartingRoom ? 'جاري التحميل...' : 'ابدأ التحدي الآن'}
+                          مغادرة قاعة الانتظار
                         </button>
                       )}
-
-                      <button onClick={() => setView('home')} className="mt-6 text-slate-400 font-bold hover:text-slate-600 text-xs md:text-sm">إلغاء والتراجع</button>
                     </div>
                   </motion.div>
                 ) : view === 'group_join' ? (
@@ -6750,6 +6949,45 @@ ${versesList}
                     exit={{ opacity: 0, scale: 0.98 }}
                     className="flex flex-col gap-6 md:gap-10 max-w-6xl mx-auto py-6 md:py-10 px-4 overflow-visible pb-36 sm:pb-48"
                   >
+                    {/* Active Running Room Banner */}
+                    {activeRunningRoom && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -15, scale: 0.98 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        className="p-4 md:p-5 rounded-3xl bg-linear-to-r from-orange-500 via-amber-500 to-orange-600 text-white shadow-xl shadow-orange-500/25 border-2 border-white/20 flex flex-col sm:flex-row items-center justify-between gap-4 text-right"
+                      >
+                        <div className="flex items-center gap-3.5 w-full sm:w-auto">
+                          <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center shrink-0 border border-white/30 shadow-xs">
+                            <Gamepad2 className="w-6 h-6 text-white animate-pulse" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] md:text-xs bg-white/25 px-2.5 py-0.5 rounded-full font-black text-white inline-block">
+                                تحدي جاري الآن ⚡
+                              </span>
+                              <span className="text-[10px] md:text-xs opacity-90 font-bold">
+                                {activeRunningRoom.transitionMode === 'ASYNC' ? 'سباق فردي سريع' : 'متزامن'}
+                              </span>
+                            </div>
+                            <h3 className="text-sm md:text-base font-black text-white mt-1">
+                              {activeRunningRoom.name || 'غرفة التحدي الجماعي'}
+                            </h3>
+                            <p className="text-[11px] text-orange-100 font-bold">
+                              لديك تحدي قيد التشغيل لم يكتمل بعد!
+                            </p>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleResumeActiveRoom(activeRunningRoom)}
+                          className="w-full sm:w-auto px-6 py-3 bg-white text-orange-700 hover:bg-orange-50 active:scale-95 rounded-2xl font-black text-xs md:text-sm shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0"
+                        >
+                          <Play className="w-4 h-4 fill-current" />
+                          <span>إكمال التحدي / العودة للغرفة</span>
+                        </button>
+                      </motion.div>
+                    )}
                     {/* Premium Welcome Header Section */}
                     <motion.div
                       initial={{ opacity: 0, y: -20 }}
