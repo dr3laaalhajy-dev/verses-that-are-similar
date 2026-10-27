@@ -30,21 +30,10 @@ for (const surah of quranData) {
 }
 
 /**
- * Get the SVG polygon bounds for all ayahs on a given page (1-604).
- * Coordinates are calibrated from the master Hafs 1421H edition so each Ayah's highlight
- * starts after the previous verse marker and accurately encompasses its ending marker circle.
+ * Get the SVG polygon bounds for all ayahs on a given page (1-604)
  */
 export const getAyahBoundsForPage = (pageNumber: number): PageBoundsData | null => {
   return ayahBoundsMap[pageNumber.toString()] || null;
-};
-
-/**
- * Get the specific SVG path bound for a single ayah on a given page
- */
-export const getAyahBoundItem = (pageNumber: number, surahNumber: number, ayahNumber: number): AyahBoundItem | null => {
-  const page = getAyahBoundsForPage(pageNumber);
-  if (!page || !page.b) return null;
-  return page.b.find(item => item.s === surahNumber && item.a === ayahNumber) || null;
 };
 
 /**

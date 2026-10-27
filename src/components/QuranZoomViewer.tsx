@@ -270,7 +270,10 @@ export const QuranZoomViewer: React.FC<QuranZoomViewerProps> = ({
           transformOrigin: 'center center',
         }}
       >
-        <div className="relative inline-block max-w-full">
+        <div
+          className="relative inline-block max-w-full"
+          style={{ lineHeight: 0, isolation: 'isolate' }}
+        >
           <img
             src={`/quran-pages/${pageNumber.toString().padStart(3, '0')}.png`}
             alt={`صفحة ${pageNumber}`}

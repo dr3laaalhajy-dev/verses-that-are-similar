@@ -24,7 +24,7 @@ export const QuranAyahOverlay: React.FC<QuranAyahOverlayProps> = ({
     <svg
       viewBox={pageBounds.v}
       preserveAspectRatio="none"
-      className="absolute inset-0 w-full h-full pointer-events-auto select-none overflow-visible"
+      className="absolute inset-0 w-full h-full pointer-events-auto select-none"
       style={{
         zIndex: 15,
         mixBlendMode: darkMode ? 'screen' : 'multiply',
@@ -32,8 +32,8 @@ export const QuranAyahOverlay: React.FC<QuranAyahOverlayProps> = ({
     >
       <defs>
         {/* Soft Ambient Glow for Selected Ayah in Dark Mode */}
-        <filter id="ayahSelectionGlow" x="-20%" y="-20%" width="140%" height="140%">
-          <feGaussianBlur stdDeviation="3" result="blur" />
+        <filter id="ayahSelectionGlow" x="-10%" y="-10%" width="120%" height="120%">
+          <feGaussianBlur stdDeviation="2.5" result="blur" />
           <feComposite in="SourceGraphic" in2="blur" operator="over" />
         </filter>
       </defs>
@@ -50,21 +50,14 @@ export const QuranAyahOverlay: React.FC<QuranAyahOverlayProps> = ({
               e.stopPropagation();
               onSelectAyah(item.s, item.a);
             }}
-            strokeLinejoin="round"
-            strokeLinecap="round"
-            className="cursor-pointer transition-all duration-200 outline-none"
+            className="cursor-pointer transition-all duration-150 outline-none"
             style={{
               fill: isSelected
                 ? darkMode
-                  ? 'rgba(251, 191, 36, 0.35)' // Warm golden glow in Dark Mode
-                  : 'rgba(234, 179, 8, 0.32)'   // Natural amber text-highlighter in Light Mode
+                  ? 'rgba(251, 191, 36, 0.26)' // Warm soft golden glow in Dark Mode
+                  : 'rgba(234, 179, 8, 0.20)'  // Delicate authentic amber highlighter in Light Mode
                 : 'transparent',
-              stroke: isSelected
-                ? darkMode
-                  ? 'rgba(251, 191, 36, 0.4)'
-                  : 'rgba(217, 119, 6, 0.3)'
-                : 'transparent',
-              strokeWidth: isSelected ? 1 : 0,
+              stroke: 'none',
               filter: isSelected && darkMode ? 'url(#ayahSelectionGlow)' : 'none',
             }}
           />
