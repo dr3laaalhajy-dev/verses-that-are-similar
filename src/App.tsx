@@ -1890,6 +1890,7 @@ export default function App() {
   }, [skillSurahSearch]);
 
   const [isPageModeActive, setIsPageModeActive] = useState(false);
+  const [isMushafFeaturesModalOpen, setIsMushafFeaturesModalOpen] = useState(false);
   const [isMushafFullscreen, setIsMushafFullscreen] = useState(false);
   const [areFullscreenControlsVisible, setAreFullscreenControlsVisible] = useState(true);
   const fullscreenControlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -6458,7 +6459,7 @@ ${versesList}
                           /* ========================================================
                              شاشة الترحيب والتعريف بمزايا المصحف الشريف وتفاصيل الآيات
                              ======================================================== */
-                          <div className="space-y-6 max-w-4xl mx-auto px-2 md:px-0 py-2">
+                          <div className="space-y-5 max-w-4xl mx-auto px-2 md:px-0 py-1">
                             {/* شريط ملاحة علوي بسيط: العودة للمكتبة + شارة المصحف */}
                             <div className="flex items-center justify-between">
                               <button
@@ -6470,7 +6471,7 @@ ${versesList}
                                 className={`px-4 py-2 rounded-2xl border transition-all flex items-center gap-2 font-bold text-xs md:text-sm shadow-xs cursor-pointer ${
                                   librarySettings.darkMode
                                     ? 'bg-slate-800/80 border-slate-700 text-slate-200 hover:text-emerald-400'
-                                    : 'bg-white border-slate-200 text-slate-600 hover:text-brand-emerald'
+                                    : 'bg-white/80 border-slate-200 text-slate-600 hover:text-brand-emerald'
                                 }`}
                               >
                                 <ArrowRight className="w-4 h-4 text-brand-emerald" />
@@ -6483,202 +6484,290 @@ ${versesList}
                               </span>
                             </div>
 
-                            {/* البطاقة الرئيسية الشاملة */}
-                            <div
-                              className={`p-6 md:p-8 rounded-3xl border shadow-xl transition-colors space-y-6 ${
-                                librarySettings.darkMode
-                                  ? 'bg-slate-900/90 border-slate-800 text-slate-100'
-                                  : 'bg-white/85 border-white/80 text-slate-900'
-                              }`}
-                            >
-                              {/* رأس البطاقة: الأيقونة والعنوان والوصف */}
-                              <div className="flex flex-col sm:flex-row items-center gap-4 text-center sm:text-right border-b pb-6 border-slate-200/60 dark:border-slate-800">
-                                <div className="w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-gradient-to-br from-brand-emerald to-teal-800 text-brand-gold flex items-center justify-center shrink-0 shadow-lg border-2 border-brand-gold/30">
-                                  <BookOpen className="w-8 h-8 md:w-10 md:h-10 text-brand-gold" />
+                            {/* رأس الصفحة: الأيقونة والعنوان والوصف (بدون خلفية بيضاء) */}
+                            <div className="flex flex-col sm:flex-row items-center gap-4 text-center sm:text-right pt-1">
+                              <div className="w-14 h-14 md:w-16 md:h-16 rounded-2xl bg-gradient-to-br from-brand-emerald to-teal-800 text-brand-gold flex items-center justify-center shrink-0 shadow-md border-2 border-brand-gold/30">
+                                <BookOpen className="w-7 h-7 md:w-8 md:h-8 text-brand-gold" />
+                              </div>
+                              <div className="flex-1">
+                                <h2 className="text-2xl md:text-3xl font-black text-brand-emerald flex items-center justify-center sm:justify-start gap-2">
+                                  <span>المصحف الشريف</span>
+                                  <Sparkles className="w-5 h-5 text-brand-gold" />
+                                </h2>
+                                <p className="text-xs md:text-sm text-slate-500 dark:text-slate-400 font-bold mt-0.5 leading-relaxed">
+                                  نسخة رقمية تفاعلية فائقة الجودة بالرسم العثماني المعتمد لمصحف المدينة النبوية، تعمل محلياً بالكامل بدون إنترنت.
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* أزرار العمل في الأعلى: فتح المصحف الشريف + زر الميزات */}
+                            <div className="flex flex-wrap items-center gap-3 pt-1">
+                              {/* زر فتح المصحف الشريف في الأعلى مباشرة */}
+                              <button
+                                onClick={() => {
+                                  setIsPageModeActive(true);
+                                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                                }}
+                                className="flex-1 min-w-[220px] px-6 md:px-8 py-3.5 md:py-4 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-700 hover:to-teal-800 text-white font-black text-sm md:text-base shadow-lg hover:shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2.5 border border-emerald-400/30 cursor-pointer group"
+                              >
+                                <BookOpen className="w-5 h-5 text-brand-gold group-hover:rotate-6 transition-transform" />
+                                <span>فتح المصحف الشريف</span>
+                                <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-white/20 text-white">
+                                  {currentPage > 1 ? `متابعة (صفحة ${currentPage})` : 'سورة الفاتحة'}
+                                </span>
+                              </button>
+
+                              {/* زر إظهار المميزات والخصائص في نافذة منبثقة */}
+                              <button
+                                onClick={() => setIsMushafFeaturesModalOpen(true)}
+                                className={`px-5 py-3.5 md:py-4 rounded-2xl border transition-all flex items-center justify-center gap-2 font-black text-xs md:text-sm shadow-xs cursor-pointer active:scale-95 ${
+                                  librarySettings.darkMode
+                                    ? 'bg-slate-800/90 border-slate-700 text-slate-200 hover:bg-slate-700 hover:text-emerald-400'
+                                    : 'bg-white/90 border-slate-200 text-slate-700 hover:bg-emerald-50 hover:text-brand-emerald hover:border-emerald-300'
+                                }`}
+                                title="عرض مميزات وخصائص المصحف"
+                              >
+                                <Sparkles className="w-4 h-4 text-brand-gold" />
+                                <span>مميزات وخصائص المصحف</span>
+                              </button>
+
+                              {currentPage > 1 && (
+                                <button
+                                  onClick={() => {
+                                    setCurrentPage(1);
+                                    setIsPageModeActive(true);
+                                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                                  }}
+                                  className={`px-4 py-3.5 md:py-4 rounded-2xl border font-bold text-xs md:text-sm transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 ${
+                                    librarySettings.darkMode
+                                      ? 'bg-slate-800/60 border-slate-700 text-slate-300 hover:bg-slate-800'
+                                      : 'bg-white/70 border-slate-200 text-slate-600 hover:bg-slate-100'
+                                  }`}
+                                  title="البدء من الفاتحة صفحة 1"
+                                >
+                                  <RotateCcw className="w-4 h-4 text-slate-400" />
+                                  <span>البدء من الفاتحة (ص 1)</span>
+                                </button>
+                              )}
+                            </div>
+
+                            {/* مربع الإرشاد البارز: لإظهار تفاصيل الآية، اضغط عليها (بدون خلفية بيضاء صلبة) */}
+                            <div className={`p-4 md:p-6 rounded-2xl md:rounded-3xl border-2 transition-colors space-y-4 ${
+                              librarySettings.darkMode
+                                ? 'bg-emerald-950/20 border-emerald-500/30 text-slate-200'
+                                : 'bg-emerald-50/70 border-emerald-500/25 text-slate-800'
+                            }`}>
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-brand-emerald text-brand-gold flex items-center justify-center shrink-0 shadow-md">
+                                  <Sparkles className="w-5 h-5" />
                                 </div>
-                                <div className="flex-1">
-                                  <h2 className="text-2xl md:text-3xl font-black text-brand-emerald flex items-center justify-center sm:justify-start gap-2">
-                                    <span>المصحف الشريف</span>
-                                    <Sparkles className="w-5 h-5 text-brand-gold" />
-                                  </h2>
-                                  <p className="text-xs md:text-sm text-slate-500 dark:text-slate-400 font-bold mt-1 leading-relaxed">
-                                    نسخة رقمية تفاعلية فائقة الجودة بالرسم العثماني المعتمد لمصحف المدينة النبوية، مصممة للتلاوة والتدبر وضبط المتشابهات أوفلاين بدون إنترنت.
+                                <div>
+                                  <h3 className="text-lg md:text-xl font-black text-brand-emerald">
+                                    لإظهار تفاصيل الآية، اضغط عليها
+                                  </h3>
+                                  <p className="text-xs md:text-sm font-bold text-slate-500 dark:text-slate-400">
+                                    أثناء تصفحك للمصحف، انقر مباشرة على أي آية وستظهر لك نافذة تفاعلية شاملة تقدم:
                                   </p>
                                 </div>
                               </div>
 
-                              {/* مربع الإرشاد البارز: لإظهار تفاصيل الآية، اضغط عليها */}
-                              <div className="p-5 md:p-6 rounded-2xl md:rounded-3xl bg-gradient-to-br from-emerald-500/10 via-amber-500/5 to-teal-500/10 border-2 border-brand-emerald/30 shadow-inner space-y-4">
-                                <div className="flex items-center gap-3">
-                                  <div className="w-10 h-10 rounded-xl bg-brand-emerald text-brand-gold flex items-center justify-center shrink-0 shadow-md">
-                                    <Sparkles className="w-5 h-5" />
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                                {/* تفصيل 1: التفسير الميسر */}
+                                <div className={`p-3.5 rounded-xl border shadow-xs flex items-start gap-3 transition-colors ${
+                                  librarySettings.darkMode
+                                    ? 'bg-slate-800/60 border-slate-700'
+                                    : 'bg-white/85 border-emerald-100'
+                                }`}>
+                                  <div className="w-9 h-9 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0 text-xl">
+                                    📖
                                   </div>
-                                  <div>
-                                    <h3 className="text-lg md:text-xl font-black text-brand-emerald">
-                                      لإظهار تفاصيل الآية، اضغط عليها
-                                    </h3>
-                                    <p className="text-xs md:text-sm font-bold text-slate-600 dark:text-slate-300">
-                                      أثناء تصفحك للمصحف، انقر مباشرة على أي آية وستظهر لك نافذة تفاعلية شاملة تقدم:
+                                  <div className="flex-1">
+                                    <h4 className="font-black text-sm text-slate-800 dark:text-slate-100">التفسير الميسر أوفلاين</h4>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400 font-bold mt-0.5 leading-relaxed">
+                                      قراءة التفسير المعتمد للآية كاملاً وفهم معانيها مباشرة دون الحاجة لأي اتصال بالإنترنت.
                                     </p>
                                   </div>
                                 </div>
 
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                                  {/* تفصيل 1: التفسير الميسر */}
-                                  <div className="p-3.5 rounded-xl bg-white/90 dark:bg-slate-800/90 border border-emerald-500/20 shadow-xs flex items-start gap-3">
-                                    <div className="w-9 h-9 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 flex items-center justify-center shrink-0 text-xl">
-                                      📖
-                                    </div>
-                                    <div className="flex-1">
-                                      <h4 className="font-black text-sm text-slate-800 dark:text-slate-100">التفسير الميسر أوفلاين</h4>
-                                      <p className="text-xs text-slate-500 dark:text-slate-400 font-bold mt-0.5 leading-relaxed">
-                                        قراءة التفسير المعتمد للآية كاملاً وفهم معانيها مباشرة دون الحاجة لأي اتصال بالإنترنت.
-                                      </p>
-                                    </div>
+                                {/* تفصيل 2: كشف المتشابهات */}
+                                <div className={`p-3.5 rounded-xl border shadow-xs flex items-start gap-3 transition-colors ${
+                                  librarySettings.darkMode
+                                    ? 'bg-slate-800/60 border-slate-700'
+                                    : 'bg-white/85 border-amber-100'
+                                }`}>
+                                  <div className="w-9 h-9 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0 text-xl">
+                                    🔍
                                   </div>
-
-                                  {/* تفصيل 2: كشف المتشابهات */}
-                                  <div className="p-3.5 rounded-xl bg-white/90 dark:bg-slate-800/90 border border-amber-500/20 shadow-xs flex items-start gap-3">
-                                    <div className="w-9 h-9 rounded-lg bg-amber-50 dark:bg-amber-950/50 flex items-center justify-center shrink-0 text-xl">
-                                      🔍
-                                    </div>
-                                    <div className="flex-1">
-                                      <h4 className="font-black text-sm text-slate-800 dark:text-slate-100">كشف المتشابهات القرآنية</h4>
-                                      <p className="text-xs text-slate-500 dark:text-slate-400 font-bold mt-0.5 leading-relaxed">
-                                        كشف فوري ودقيق للآيات المتشابهة لفظاً وموضعاً في كافة سور القرآن الكريم لضبط وتثبيت الحفظ.
-                                      </p>
-                                    </div>
-                                  </div>
-
-                                  {/* تفصيل 3: الاستماع للتلاوة */}
-                                  <div className="p-3.5 rounded-xl bg-white/90 dark:bg-slate-800/90 border border-blue-500/20 shadow-xs flex items-start gap-3">
-                                    <div className="w-9 h-9 rounded-lg bg-blue-50 dark:bg-blue-950/50 flex items-center justify-center shrink-0 text-xl">
-                                      🔊
-                                    </div>
-                                    <div className="flex-1">
-                                      <h4 className="font-black text-sm text-slate-800 dark:text-slate-100">الاستماع للتلاوة العطرة</h4>
-                                      <p className="text-xs text-slate-500 dark:text-slate-400 font-bold mt-0.5 leading-relaxed">
-                                        استماع فوري للآية بصوت نخبة من كبار القراء (الحصري، المنشاوي، مشاري العفاسي، عبد الباسط).
-                                      </p>
-                                    </div>
-                                  </div>
-
-                                  {/* تفصيل 4: نسخ ومشاركة الآية */}
-                                  <div className="p-3.5 rounded-xl bg-white/90 dark:bg-slate-800/90 border border-purple-500/20 shadow-xs flex items-start gap-3">
-                                    <div className="w-9 h-9 rounded-lg bg-purple-50 dark:bg-purple-950/50 flex items-center justify-center shrink-0 text-xl">
-                                      📋
-                                    </div>
-                                    <div className="flex-1">
-                                      <h4 className="font-black text-sm text-slate-800 dark:text-slate-100">نسخ ومشاركة الآية</h4>
-                                      <p className="text-xs text-slate-500 dark:text-slate-400 font-bold mt-0.5 leading-relaxed">
-                                        نسخ نص الآية الكريمة بالرسم العثماني المعتمد موثقة باسم السورة ورقم الآية للمشاركة السريعة.
-                                      </p>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-
-                              {/* الشغلات اللي جوا المصحف تبعنا: مزايا وخصائص المصحف */}
-                              <div className="space-y-3 pt-2">
-                                <h3 className="text-base md:text-lg font-black text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                                  <BookOpen className="w-5 h-5 text-brand-gold" />
-                                  <span>مميزات المصحف الشريف في تطبيقنا</span>
-                                </h3>
-
-                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                                  <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/60 flex flex-col justify-between">
-                                    <div className="font-black text-sm text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                                      <span className="text-lg">🖼️</span>
-                                      <span>رسم عثماني أصيل فائق النقاء</span>
-                                    </div>
-                                    <p className="text-xs text-slate-500 dark:text-slate-400 font-bold mt-1.5 leading-relaxed">
-                                      صفحات مصحف المدينة النبوية المعتمدة عالية الدقة بدون أي حواف أو إطارات مشتتة.
-                                    </p>
-                                  </div>
-
-                                  <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/60 flex flex-col justify-between">
-                                    <div className="font-black text-sm text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                                      <span className="text-lg">🔎</span>
-                                      <span>تكبير وتحريك ثنائي الأبعاد</span>
-                                    </div>
-                                    <p className="text-xs text-slate-500 dark:text-slate-400 font-bold mt-1.5 leading-relaxed">
-                                      حرية كاملة لتكبير الصفحات (2D Zoom & Pan) وقراءة الآيات بأي حجم مريح لعينيك.
-                                    </p>
-                                  </div>
-
-                                  <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/60 flex flex-col justify-between">
-                                    <div className="font-black text-sm text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                                      <span className="text-lg">📑</span>
-                                      <span>فهرس السور والأجزاء</span>
-                                    </div>
-                                    <p className="text-xs text-slate-500 dark:text-slate-400 font-bold mt-1.5 leading-relaxed">
-                                      تصفح سريع لكافة الـ 114 سورة والـ 30 جزءاً مع الانتقال المباشر لأي صفحة وبحث نصي ذكي.
-                                    </p>
-                                  </div>
-
-                                  <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/60 flex flex-col justify-between">
-                                    <div className="font-black text-sm text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                                      <span className="text-lg">📴</span>
-                                      <span>يعمل 100% بدون إنترنت</span>
-                                    </div>
-                                    <p className="text-xs text-slate-500 dark:text-slate-400 font-bold mt-1.5 leading-relaxed">
-                                      جميع صفحات المصحف وإحداثيات الآيات والتفاسير والمتشابهات مدمجة محلياً دون الحاجة لشبكة.
-                                    </p>
-                                  </div>
-
-                                  <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/60 flex flex-col justify-between">
-                                    <div className="font-black text-sm text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                                      <span className="text-lg">🌙</span>
-                                      <span>الوضع الليلي والنهاري</span>
-                                    </div>
-                                    <p className="text-xs text-slate-500 dark:text-slate-400 font-bold mt-1.5 leading-relaxed">
-                                      خلفيات مخطوطات دافئة في النهار، مع وضع داكن مهدئ ومريح للقراءة في الليل.
-                                    </p>
-                                  </div>
-
-                                  <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/60 flex flex-col justify-between">
-                                    <div className="font-black text-sm text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                                      <span className="text-lg">🖥️</span>
-                                      <span>قراءة غامرة بملء الشاشة</span>
-                                    </div>
-                                    <p className="text-xs text-slate-500 dark:text-slate-400 font-bold mt-1.5 leading-relaxed">
-                                      إمكانية تفعيل وضع ملء الشاشة لإخفاء كل ما حول الصفحة للتفرغ التام للتدبر والتلاوة.
+                                  <div className="flex-1">
+                                    <h4 className="font-black text-sm text-slate-800 dark:text-slate-100">كشف المتشابهات القرآنية</h4>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400 font-bold mt-0.5 leading-relaxed">
+                                      كشف فوري ودقيق للآيات المتشابهة لفظاً وموضعاً في كافة سور القرآن الكريم لضبط وتثبيت الحفظ.
                                     </p>
                                   </div>
                                 </div>
-                              </div>
 
-                              {/* زر فتح المصحف الشريف في الأسفل مباشرة */}
-                              <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-4 border-t border-slate-200/60 dark:border-slate-800">
-                                <button
-                                  onClick={() => {
-                                    setIsPageModeActive(true);
-                                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                                  }}
-                                  className="w-full sm:w-auto px-8 md:px-12 py-4 rounded-2xl md:rounded-3xl bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-700 hover:to-teal-800 text-white font-black text-base md:text-lg shadow-xl hover:shadow-2xl active:scale-95 transition-all flex items-center justify-center gap-3 border border-emerald-400/30 cursor-pointer group"
-                                >
-                                  <BookOpen className="w-5 h-5 text-brand-gold group-hover:rotate-6 transition-transform" />
-                                  <span>فتح المصحف الشريف</span>
-                                  <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-white/20 text-white">
-                                    {currentPage > 1 ? `متابعة (صفحة ${currentPage})` : 'سورة الفاتحة (صفحة 1)'}
-                                  </span>
-                                </button>
+                                {/* تفصيل 3: الاستماع للتلاوة */}
+                                <div className={`p-3.5 rounded-xl border shadow-xs flex items-start gap-3 transition-colors ${
+                                  librarySettings.darkMode
+                                    ? 'bg-slate-800/60 border-slate-700'
+                                    : 'bg-white/85 border-blue-100'
+                                }`}>
+                                  <div className="w-9 h-9 rounded-lg bg-blue-500/10 flex items-center justify-center shrink-0 text-xl">
+                                    🔊
+                                  </div>
+                                  <div className="flex-1">
+                                    <h4 className="font-black text-sm text-slate-800 dark:text-slate-100">الاستماع للتلاوة العطرة</h4>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400 font-bold mt-0.5 leading-relaxed">
+                                      استماع فوري للآية بصوت نخبة من كبار القراء (الحصري، المنشاوي، مشاري العفاسي، عبد الباسط).
+                                    </p>
+                                  </div>
+                                </div>
 
-                                {currentPage > 1 && (
-                                  <button
-                                    onClick={() => {
-                                      setCurrentPage(1);
-                                      setIsPageModeActive(true);
-                                      window.scrollTo({ top: 0, behavior: 'smooth' });
-                                    }}
-                                    className="w-full sm:w-auto px-5 py-4 rounded-2xl border font-bold text-xs md:text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all flex items-center justify-center gap-2 cursor-pointer"
-                                  >
-                                    <RotateCcw className="w-4 h-4 text-slate-400" />
-                                    <span>البدء من الفاتحة (صفحة 1)</span>
-                                  </button>
-                                )}
+                                {/* تفصيل 4: نسخ ومشاركة الآية */}
+                                <div className={`p-3.5 rounded-xl border shadow-xs flex items-start gap-3 transition-colors ${
+                                  librarySettings.darkMode
+                                    ? 'bg-slate-800/60 border-slate-700'
+                                    : 'bg-white/85 border-purple-100'
+                                }`}>
+                                  <div className="w-9 h-9 rounded-lg bg-purple-500/10 flex items-center justify-center shrink-0 text-xl">
+                                    📋
+                                  </div>
+                                  <div className="flex-1">
+                                    <h4 className="font-black text-sm text-slate-800 dark:text-slate-100">نسخ ومشاركة الآية</h4>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400 font-bold mt-0.5 leading-relaxed">
+                                      نسخ نص الآية الكريمة بالرسم العثماني المعتمد موثقة باسم السورة ورقم الآية للمشاركة السريعة.
+                                    </p>
+                                  </div>
+                                </div>
                               </div>
                             </div>
+
+                            {/* نافذة منبثقة لمميزات وخصائص المصحف الشريف */}
+                            <AnimatePresence>
+                              {isMushafFeaturesModalOpen && (
+                                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+                                  <motion.div
+                                    initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                                    exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                                    className={`relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl p-6 md:p-8 shadow-2xl border ${
+                                      librarySettings.darkMode
+                                        ? 'bg-slate-900 border-slate-800 text-slate-100'
+                                        : 'bg-white border-slate-200 text-slate-900'
+                                    }`}
+                                  >
+                                    {/* رأس النافذة */}
+                                    <div className="flex items-center justify-between pb-4 border-b border-slate-200 dark:border-slate-800 mb-6">
+                                      <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-xl bg-brand-emerald text-brand-gold flex items-center justify-center shadow-md">
+                                          <BookOpen className="w-5 h-5" />
+                                        </div>
+                                        <div>
+                                          <h3 className="text-lg md:text-xl font-black text-brand-emerald">
+                                            مميزات وخصائص المصحف الشريف
+                                          </h3>
+                                          <p className="text-xs font-bold text-slate-400">
+                                            مصحف المدينة النبوية الشريف بالرسم العثماني • أوفلاين 100%
+                                          </p>
+                                        </div>
+                                      </div>
+
+                                      <button
+                                        onClick={() => setIsMushafFeaturesModalOpen(false)}
+                                        className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                                        title="إغلاق"
+                                      >
+                                        <X className="w-5 h-5" />
+                                      </button>
+                                    </div>
+
+                                    {/* شبكة المميزات */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 mb-6">
+                                      <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60">
+                                        <div className="font-black text-sm text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                                          <span className="text-xl">🖼️</span>
+                                          <span>رسم عثماني أصيل فائق النقاء</span>
+                                        </div>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 font-bold mt-1.5 leading-relaxed">
+                                          صفحات مصحف المدينة النبوية المعتمدة عالية الدقة بدون أي حواف أو إطارات مشتتة.
+                                        </p>
+                                      </div>
+
+                                      <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60">
+                                        <div className="font-black text-sm text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                                          <span className="text-xl">🔎</span>
+                                          <span>تكبير وتحريك ثنائي الأبعاد</span>
+                                        </div>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 font-bold mt-1.5 leading-relaxed">
+                                          حرية كاملة لتكبير الصفحات (2D Zoom & Pan) وقراءة الآيات بأي حجم مريح لعينيك.
+                                        </p>
+                                      </div>
+
+                                      <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60">
+                                        <div className="font-black text-sm text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                                          <span className="text-xl">📑</span>
+                                          <span>فهرس السور والأجزاء</span>
+                                        </div>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 font-bold mt-1.5 leading-relaxed">
+                                          تصفح سريع لكافة الـ 114 سورة والـ 30 جزءاً مع الانتقال المباشر لأي صفحة وبحث نصي ذكي.
+                                        </p>
+                                      </div>
+
+                                      <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60">
+                                        <div className="font-black text-sm text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                                          <span className="text-xl">📴</span>
+                                          <span>يعمل 100% بدون إنترنت</span>
+                                        </div>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 font-bold mt-1.5 leading-relaxed">
+                                          جميع صفحات المصحف وإحداثيات الآيات والتفاسير والمتشابهات مدمجة محلياً دون الحاجة لشبكة.
+                                        </p>
+                                      </div>
+
+                                      <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60">
+                                        <div className="font-black text-sm text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                                          <span className="text-xl">🌙</span>
+                                          <span>الوضع الليلي والنهاري</span>
+                                        </div>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 font-bold mt-1.5 leading-relaxed">
+                                          خلفيات مخطوطات دافئة في النهار، مع وضع داكن مهدئ ومريح للقراءة في الليل.
+                                        </p>
+                                      </div>
+
+                                      <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60">
+                                        <div className="font-black text-sm text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                                          <span className="text-xl">🖥️</span>
+                                          <span>قراءة غامرة بملء الشاشة</span>
+                                        </div>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 font-bold mt-1.5 leading-relaxed">
+                                          إمكانية تفعيل وضع ملء الشاشة لإخفاء كل ما حول الصفحة للتفرغ التام للتدبر والتلاوة.
+                                        </p>
+                                      </div>
+                                    </div>
+
+                                    {/* أزرار أسفل النافذة */}
+                                    <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-800">
+                                      <button
+                                        onClick={() => setIsMushafFeaturesModalOpen(false)}
+                                        className="px-5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 font-bold text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                                      >
+                                        إغلاق
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          setIsMushafFeaturesModalOpen(false);
+                                          setIsPageModeActive(true);
+                                          window.scrollTo({ top: 0, behavior: 'smooth' });
+                                        }}
+                                        className="px-6 py-2.5 rounded-xl bg-brand-emerald text-white font-black text-xs hover:bg-brand-emerald/90 transition-all shadow-md active:scale-95 flex items-center gap-2 cursor-pointer"
+                                      >
+                                        <BookOpen className="w-4 h-4 text-brand-gold" />
+                                        <span>فتح المصحف الآن</span>
+                                      </button>
+                                    </div>
+                                  </motion.div>
+                                </div>
+                              )}
+                            </AnimatePresence>
                           </div>
                         ) : (
                           /* ========================================================
