@@ -24,16 +24,17 @@ export const QuranAyahOverlay: React.FC<QuranAyahOverlayProps> = ({
     <svg
       viewBox={pageBounds.v}
       preserveAspectRatio="none"
-      className="absolute inset-0 w-full h-full pointer-events-auto select-none"
-      style={{ zIndex: 15 }}
+      className="absolute inset-0 w-full h-full pointer-events-auto select-none overflow-visible"
+      style={{
+        zIndex: 15,
+        mixBlendMode: darkMode ? 'screen' : 'multiply',
+      }}
     >
       <defs>
-        {/* Glow filter for selected ayah */}
-        <filter id="goldGlow" x="-20%" y="-20%" width="140%" height="140%">
-          <feDropShadow dx="0" dy="0" stdDeviation="2.5" floodColor="#f59e0b" floodOpacity="0.6" />
-        </filter>
-        <filter id="emeraldGlow" x="-20%" y="-20%" width="140%" height="140%">
-          <feDropShadow dx="0" dy="0" stdDeviation="2.5" floodColor="#10b981" floodOpacity="0.6" />
+        {/* Soft Ambient Glow for Selected Ayah in Dark Mode */}
+        <filter id="ayahSelectionGlow" x="-20%" y="-20%" width="140%" height="140%">
+          <feGaussianBlur stdDeviation="3" result="blur" />
+          <feComposite in="SourceGraphic" in2="blur" operator="over" />
         </filter>
       </defs>
 
@@ -49,20 +50,22 @@ export const QuranAyahOverlay: React.FC<QuranAyahOverlayProps> = ({
               e.stopPropagation();
               onSelectAyah(item.s, item.a);
             }}
-            className="cursor-pointer transition-all duration-150 outline-none"
+            strokeLinejoin="round"
+            strokeLinecap="round"
+            className="cursor-pointer transition-all duration-200 outline-none"
             style={{
               fill: isSelected
                 ? darkMode
-                  ? 'rgba(251, 191, 36, 0.32)' // Gold highlight in dark mode
-                  : 'rgba(217, 119, 6, 0.28)'  // Amber/gold highlight in light mode
+                  ? 'rgba(251, 191, 36, 0.35)' // Warm golden glow in Dark Mode
+                  : 'rgba(234, 179, 8, 0.32)'   // Natural amber text-highlighter in Light Mode
                 : 'transparent',
               stroke: isSelected
                 ? darkMode
-                  ? 'rgba(251, 191, 36, 0.9)'
-                  : 'rgba(217, 119, 6, 0.85)'
+                  ? 'rgba(251, 191, 36, 0.4)'
+                  : 'rgba(217, 119, 6, 0.3)'
                 : 'transparent',
-              strokeWidth: isSelected ? 1.5 : 0,
-              filter: isSelected ? 'url(#goldGlow)' : 'none',
+              strokeWidth: isSelected ? 1 : 0,
+              filter: isSelected && darkMode ? 'url(#ayahSelectionGlow)' : 'none',
             }}
           />
         );

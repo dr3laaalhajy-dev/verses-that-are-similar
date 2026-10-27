@@ -131,3 +131,4 @@ export const findSimilarAyahs = (surahNumber: number, ayahNumber: number): Simil
 
   return results;
 };
+
