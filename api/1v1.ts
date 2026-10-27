@@ -78,7 +78,7 @@ async function getFullRoom(roomId: string) {
 }
 
 async function handleCreate(req: VercelRequest, res: VercelResponse) {
-    const { player1Id, player1Name, category, level, questionCount, questionIds, maxPlayers, gameMode, timePerQuestion, customChallenges } = req.body
+    const { player1Id, player1Name, category, categories, level, levels, questionCount, questionIds, maxPlayers, gameMode, gameModes, timePerQuestion, customChallenges, topics } = req.body
     if (!player1Id && !player1Name) return res.status(400).json({ message: 'Missing player1Id' })
 
     const maxQuestions = Number(questionCount) || 5
@@ -121,18 +121,37 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
     } else {
       let whereClause: any = {}
       
-      // Strict Category Filtering
-      if (category && category !== "") {
-        whereClause.category = category
+      // Multi-Category Filtering (WHERE category IN (...))
+      const cats = Array.isArray(categories) && categories.length > 0 
+        ? categories 
+        : (category && category !== "" ? [category] : []);
+      if (cats.length > 0) {
+        whereClause.category = { in: cats };
       }
 
-      // Strict Mode Filtering 
-      if (gameMode === 'COMPLETION') {
-        whereClause.type = 'COMPLETION'
-      } else if (gameMode === 'SURAH') {
-        whereClause.type = 'SURAH'
-      } else if (gameMode === 'STANDARD' || gameMode === 'audio' || !gameMode) {
-        whereClause.type = { in: ['STANDARD', 'AUDIO', ''] }
+      // Multi-Level Filtering (WHERE level IN (...))
+      const lvls = Array.isArray(levels) && levels.length > 0
+        ? levels.map(Number).filter(n => !isNaN(n))
+        : (level ? [Number(level)] : []);
+      if (lvls.length > 0) {
+        whereClause.level = { in: lvls };
+      }
+
+      // Multi-Mode Filtering (WHERE type IN (...))
+      const modesList: string[] = Array.isArray(gameModes) && gameModes.length > 0 
+        ? gameModes 
+        : (gameMode ? [gameMode] : []);
+
+      const typeConditions: string[] = [];
+      for (const m of modesList) {
+        const upper = String(m).toUpperCase();
+        if (upper === 'COMPLETION' || upper === 'COMPLETE') typeConditions.push('COMPLETION');
+        else if (upper === 'SURAH') typeConditions.push('SURAH');
+        else if (upper === 'STANDARD' || upper === 'AUDIO') typeConditions.push('STANDARD', 'AUDIO', '');
+      }
+
+      if (typeConditions.length > 0) {
+        whereClause.type = { in: Array.from(new Set(typeConditions)) };
       }
 
       // In group/room challenges, select randomly from ALL matching challenges

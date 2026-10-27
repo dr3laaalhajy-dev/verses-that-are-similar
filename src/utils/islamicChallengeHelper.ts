@@ -12,25 +12,46 @@ export interface RoomCustomChallenge {
 }
 
 export function getRandomIslamicRoomQuestions(
-  categoryId: string,
-  levelNum: 1 | 2 | 3,
-  topicName: string,
+  categoriesInput: string[] | string,
+  levelsInput: (1 | 2 | 3)[] | (1 | 2 | 3) | number[] | number,
+  topicsInput: string[] | string,
   count: number
 ): RoomCustomChallenge[] {
+  const categories = Array.isArray(categoriesInput)
+    ? (categoriesInput.length > 0 ? categoriesInput : ['akida'])
+    : [categoriesInput || 'akida'];
+
+  const levelsRaw = Array.isArray(levelsInput)
+    ? (levelsInput.length > 0 ? levelsInput : [1, 2, 3])
+    : [levelsInput || 1];
+  const levels = levelsRaw.map(Number) as (1 | 2 | 3)[];
+
+  const topics = Array.isArray(topicsInput)
+    ? (topicsInput.length > 0 ? topicsInput : ['all'])
+    : [topicsInput || 'all'];
+
   let pool: Array<{ question: string; options: string[]; answer: string }> = [];
 
-  if (categoryId === 'general') {
-    const diff = levelNum === 1 ? 'easy' : 'hard';
-    pool = quizQuestions.filter(q => (q.category || 'general') === 'general' && q.difficulty === diff);
-  } else if (categoryId === 'seerah') {
-    pool = quizQuestions.filter(q => q.category === 'seerah');
-  } else if (islamicCategoriesData[categoryId]) {
-    const cat = islamicCategoriesData[categoryId];
-    cat.topics.forEach(t => {
-      if (topicName && topicName !== 'all' && t.name !== topicName) return;
-      const levelQuestions = t.levels[levelNum] || [];
-      pool.push(...levelQuestions);
-    });
+  for (const categoryId of categories) {
+    if (categoryId === 'general') {
+      for (const lvl of levels) {
+        const diff = lvl === 1 ? 'easy' : 'hard';
+        const qs = quizQuestions.filter(q => (q.category || 'general') === 'general' && q.difficulty === diff);
+        pool.push(...qs);
+      }
+    } else if (categoryId === 'seerah') {
+      const qs = quizQuestions.filter(q => q.category === 'seerah');
+      pool.push(...qs);
+    } else if (islamicCategoriesData[categoryId]) {
+      const cat = islamicCategoriesData[categoryId];
+      cat.topics.forEach(t => {
+        if (topics.length > 0 && !topics.includes('all') && !topics.includes(t.name)) return;
+        for (const lvl of levels) {
+          const levelQuestions = t.levels[lvl as (1 | 2 | 3)] || [];
+          pool.push(...levelQuestions);
+        }
+      });
+    }
   }
 
   // Fallback if pool is empty
@@ -38,9 +59,17 @@ export function getRandomIslamicRoomQuestions(
     pool = quizQuestions;
   }
 
+  // Deduplicate questions by question text
+  const seen = new Set<string>();
+  const uniquePool = pool.filter(q => {
+    if (seen.has(q.question)) return false;
+    seen.add(q.question);
+    return true;
+  });
+
   // Shuffle pool randomly
-  const shuffled = [...pool].sort(() => Math.random() - 0.5);
-  const selected = shuffled.slice(0, count);
+  const shuffled = [...uniquePool].sort(() => Math.random() - 0.5);
+  const selected = shuffled.slice(0, Math.max(1, count));
 
   return selected.map((q, idx) => ({
     id: 990000 + idx,
