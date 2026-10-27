@@ -1316,6 +1316,7 @@ export default function App() {
 
   const [isExitModalOpen, setIsExitModalOpen] = useState(false);
   const [isResignModalOpen, setIsResignModalOpen] = useState(false);
+  const [isCancelRoomModalOpen, setIsCancelRoomModalOpen] = useState(false);
   const [isNextChallengeModalOpen, setIsNextChallengeModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
@@ -2992,10 +2993,13 @@ export default function App() {
     setView('challenge');
   };
 
-  const handleCancelRoomByHost = async () => {
+  const handleCancelRoomByHost = () => {
     if (!room?.id) return;
-    const isConfirmed = window.confirm('هل أنت متأكد من إلغاء الغرفة؟ سيتم حذفها وإشعار جميع المتسابقين.');
-    if (!isConfirmed) return;
+    setIsCancelRoomModalOpen(true);
+  };
+
+  const confirmCancelRoomByHost = async () => {
+    if (!room?.id) return;
 
     try {
       const res = await fetch('/api/1v1', {
@@ -9173,6 +9177,7 @@ ${versesList}
                             className="flex items-center justify-between gap-2.5 p-3 md:p-3.5 bg-linear-to-r from-slate-900/90 to-slate-800/90 text-white rounded-2xl border border-white/10 shadow-lg mb-4 text-xs font-bold"
                           >
                             <div className="flex items-center gap-2">
+  
                               <span className="text-sm">🚀</span>
                               <span className="text-white font-black text-xs md:text-sm">
                                 سباق فردي سريع (أجب بأقصى سرعة ودقة!)
@@ -9634,6 +9639,17 @@ ${versesList}
             message="هل أنت متأكد من الانسحاب من هذا التحدي الجماعي؟ سيتم احتساب 0 نقاط وتسجيل أنك أنهيت التحدي بالانسحاب."
             confirmText="تأكيد الانسحاب"
             cancelText="إلغاء"
+            isDanger={true}
+          />
+
+          <ConfirmModal
+            isOpen={isCancelRoomModalOpen}
+            onClose={() => setIsCancelRoomModalOpen(false)}
+            onConfirm={confirmCancelRoomByHost}
+            title="تأكيد إلغاء الغرفة"
+            message="هل أنت متأكد من إلغاء الغرفة؟ سيتم حذفها وإشعار جميع المتسابقين المتواجدين."
+            confirmText="تأكيد الإلغاء"
+            cancelText="تراجع"
             isDanger={true}
           />
 
