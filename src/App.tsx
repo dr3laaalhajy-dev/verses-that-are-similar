@@ -5811,6 +5811,31 @@ ${versesList}
                           </motion.div>
                         )}
 
+                        {/* Multiplayer Waiting State after answering - Placed ABOVE the question */}
+                        {room && hasAnsweredCurrentQuestion && (
+                          <motion.div
+                            initial={{ opacity: 0, scale: 0.98, y: -6 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            className="mb-4 p-3.5 md:p-4 rounded-2xl bg-linear-to-r from-amber-50 via-orange-50/80 to-amber-50 border-2 border-amber-300 shadow-md text-center space-y-2"
+                          >
+                            <div className="flex items-center justify-center gap-2.5">
+                              <div className="w-7 h-7 bg-amber-500 text-white rounded-xl flex items-center justify-center shadow-xs shrink-0">
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              </div>
+                              <h4 className="text-sm md:text-base font-black text-amber-900">
+                                تم تسجيل إجابتك بنجاح، بانتظار باقي المتسابقين...
+                              </h4>
+                            </div>
+                            <p className="text-[11px] md:text-xs text-amber-700 font-bold max-w-lg mx-auto leading-relaxed">
+                              سينتقل الجميع تلقائياً إلى السؤال التالي فور اكتمال إجابات اللاعبين أو انتهاء وقت السؤال.
+                            </p>
+                            <div className="inline-flex items-center gap-2 bg-white px-3.5 py-1 rounded-full border border-amber-200 text-[11px] font-black text-amber-800 shadow-xs">
+                              <Users className="w-3.5 h-3.5 text-amber-600" />
+                              <span>أجاب ({room.answeredCount ?? 0} من {room.totalParticipants ?? room.participants?.length ?? 1})</span>
+                            </div>
+                          </motion.div>
+                        )}
+
                         <SkillsChallengeHeader
                           mode={skillsType}
                           verseText={KEYWORD}
@@ -5852,31 +5877,6 @@ ${versesList}
                             correctText={skillsCorrectAnswer || currentChallenge?.correctText}
                             currentChallenge={currentChallenge}
                           />
-                        )}
-
-                        {/* Multiplayer Waiting State after answering */}
-                        {room && hasAnsweredCurrentQuestion && (
-                          <motion.div
-                            initial={{ opacity: 0, scale: 0.96, y: 10 }}
-                            animate={{ opacity: 1, scale: 1, y: 0 }}
-                            className="mt-6 p-4 md:p-6 rounded-3xl bg-amber-50/95 border-2 border-amber-300 shadow-xl text-center space-y-3"
-                          >
-                            <div className="w-10 h-10 bg-amber-100 text-amber-700 rounded-2xl flex items-center justify-center mx-auto shadow-xs">
-                              <Loader2 className="w-5 h-5 animate-spin text-amber-600" />
-                            </div>
-                            <div>
-                              <h4 className="text-base font-black text-amber-900 mb-0.5">
-                                تم تسجيل إجابتك بنجاح!
-                              </h4>
-                              <p className="text-xs text-amber-700 font-bold max-w-md mx-auto">
-                                ننتظر باقي المتسابقين... سينتقل الجميع سوياً إلى السؤال التالي فور اكتمال الإجابات أو انتهاء المؤقت.
-                              </p>
-                            </div>
-                            <div className="inline-flex items-center gap-2 bg-white px-3.5 py-1.5 rounded-full border border-amber-200 text-xs font-black text-amber-800 shadow-xs">
-                              <Users className="w-3.5 h-3.5 text-amber-600" />
-                              <span>أجاب ({room.answeredCount ?? 0} من {room.totalParticipants ?? room.participants?.length ?? 1})</span>
-                            </div>
-                          </motion.div>
                         )}
                       </div>
                     )}
@@ -8636,6 +8636,31 @@ ${versesList}
                           </motion.div>
                         )}
 
+                        {/* Multiplayer Waiting State after answering - Placed ABOVE the question */}
+                        {room && hasAnsweredCurrentQuestion && (
+                          <motion.div
+                            initial={{ opacity: 0, scale: 0.98, y: -6 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            className="mb-4 p-3.5 md:p-4 rounded-2xl bg-linear-to-r from-amber-50 via-orange-50/80 to-amber-50 border-2 border-amber-300 shadow-md text-center space-y-2"
+                          >
+                            <div className="flex items-center justify-center gap-2.5">
+                              <div className="w-7 h-7 bg-amber-500 text-white rounded-xl flex items-center justify-center shadow-xs shrink-0">
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              </div>
+                              <h4 className="text-sm md:text-base font-black text-amber-900">
+                                تم تسجيل إجابتك بنجاح، بانتظار باقي المتسابقين...
+                              </h4>
+                            </div>
+                            <p className="text-[11px] md:text-xs text-amber-700 font-bold max-w-lg mx-auto leading-relaxed">
+                              سينتقل الجميع تلقائياً إلى السؤال التالي فور اكتمال إجابات اللاعبين أو انتهاء وقت السؤال.
+                            </p>
+                            <div className="inline-flex items-center gap-2 bg-white px-3.5 py-1 rounded-full border border-amber-200 text-[11px] font-black text-amber-800 shadow-xs">
+                              <Users className="w-3.5 h-3.5 text-amber-600" />
+                              <span>أجاب ({room.answeredCount ?? 0} من {room.totalParticipants ?? room.participants?.length ?? 1})</span>
+                            </div>
+                          </motion.div>
+                        )}
+
                         <SkillsChallengeHeader
                           index={challengeMode === 'daily' ? dailyChallengeIndex : (view === 'challenge' ? currentChallengeIndex : sessionCurrentIndex)}
                           total={challengeMode === 'daily' ? 1 : (challenges.length > 50 ? 20 : Math.max(challenges.length, 1))}
@@ -8716,31 +8741,6 @@ ${versesList}
                               setView('home');
                             }}
                           />
-                        )}
-
-                        {/* Multiplayer Waiting State after answering */}
-                        {room && hasAnsweredCurrentQuestion && (
-                          <motion.div
-                            initial={{ opacity: 0, scale: 0.96, y: 10 }}
-                            animate={{ opacity: 1, scale: 1, y: 0 }}
-                            className="mt-6 p-4 md:p-6 rounded-3xl bg-amber-50/95 border-2 border-amber-300 shadow-xl text-center space-y-3"
-                          >
-                            <div className="w-10 h-10 bg-amber-100 text-amber-700 rounded-2xl flex items-center justify-center mx-auto shadow-xs">
-                              <Loader2 className="w-5 h-5 animate-spin text-amber-600" />
-                            </div>
-                            <div>
-                              <h4 className="text-base font-black text-amber-900 mb-0.5">
-                                تم تسجيل إجابتك بنجاح!
-                              </h4>
-                              <p className="text-xs text-amber-700 font-bold max-w-md mx-auto">
-                                ننتظر باقي المتسابقين... سينتقل الجميع سوياً إلى السؤال التالي فور اكتمال الإجابات أو انتهاء المؤقت.
-                              </p>
-                            </div>
-                            <div className="inline-flex items-center gap-2 bg-white px-3.5 py-1.5 rounded-full border border-amber-200 text-xs font-black text-amber-800 shadow-xs">
-                              <Users className="w-3.5 h-3.5 text-amber-600" />
-                              <span>أجاب ({room.answeredCount ?? 0} من {room.totalParticipants ?? room.participants?.length ?? 1})</span>
-                            </div>
-                          </motion.div>
                         )}
 
                         {/* Transcript Debug */}
