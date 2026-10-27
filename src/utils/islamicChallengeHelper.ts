@@ -84,3 +84,137 @@ export function getRandomIslamicRoomQuestions(
     correctText: q.answer
   }));
 }
+
+export function getIslamicTopicAvailableCount(
+  topicName: string,
+  categoryId?: string,
+  levels: (1 | 2 | 3)[] = [1, 2, 3]
+): number {
+  if (topicName === 'seerah' || categoryId === 'seerah') {
+    return quizQuestions.filter(q => q.category === 'seerah').length;
+  }
+  if (topicName === 'general' || categoryId === 'general') {
+    return quizQuestions.filter(q => (q.category || 'general') === 'general').length;
+  }
+  
+  if (categoryId && islamicCategoriesData[categoryId]) {
+    const cat = islamicCategoriesData[categoryId];
+    const topic = cat.topics.find(t => t.name === topicName || t.slug === topicName);
+    if (topic) {
+      let count = 0;
+      levels.forEach(lvl => {
+        count += (topic.levels[lvl] || []).length;
+      });
+      return count;
+    }
+  }
+
+  // Fallback: search across all categories
+  for (const cat of Object.values(islamicCategoriesData)) {
+    const topic = cat.topics.find(t => t.name === topicName || t.slug === topicName);
+    if (topic) {
+      let count = 0;
+      levels.forEach(lvl => {
+        count += (topic.levels[lvl] || []).length;
+      });
+      return count;
+    }
+  }
+
+  return 0;
+}
+
+export function getTotalIslamicAvailableCount(
+  categories: string[],
+  levels: (1 | 2 | 3)[] = [1, 2, 3],
+  topics: string[] = ['all']
+): number {
+  if (topics.includes('all')) {
+    let total = 0;
+    categories.forEach(catId => {
+      if (catId === 'seerah') {
+        total += quizQuestions.filter(q => q.category === 'seerah').length;
+      } else if (catId === 'general') {
+        total += quizQuestions.filter(q => (q.category || 'general') === 'general').length;
+      } else if (islamicCategoriesData[catId]) {
+        islamicCategoriesData[catId].topics.forEach(t => {
+          levels.forEach(lvl => {
+            total += (t.levels[lvl] || []).length;
+          });
+        });
+      }
+    });
+    return total;
+  }
+
+  let total = 0;
+  topics.forEach(tName => {
+    total += getIslamicTopicAvailableCount(tName, undefined, levels);
+  });
+  return total;
+}
+
+export function getTargetedIslamicQuestions(
+  topicAllocations: Record<string, number | { count: number; categoryId?: string }>,
+  levels: (1 | 2 | 3)[] = [1, 2, 3],
+  categories: string[] = ['akida']
+): RoomCustomChallenge[] {
+  const result: RoomCustomChallenge[] = [];
+
+  for (const [topicName, val] of Object.entries(topicAllocations)) {
+    const reqCount = typeof val === 'number' ? val : val?.count || 0;
+    const catId = typeof val === 'number' ? undefined : val?.categoryId;
+    if (reqCount <= 0) continue;
+
+    if (topicName === 'all') {
+      const allQs = getRandomIslamicRoomQuestions(categories, levels, ['all'], reqCount);
+      result.push(...allQs);
+      continue;
+    }
+
+    let pool: Array<{ question: string; options: string[]; answer: string }> = [];
+
+    if (topicName === 'seerah' || catId === 'seerah') {
+      pool = quizQuestions.filter(q => q.category === 'seerah');
+    } else if (topicName === 'general' || catId === 'general') {
+      pool = quizQuestions.filter(q => (q.category || 'general') === 'general');
+    } else {
+      let found = false;
+      if (catId && islamicCategoriesData[catId]) {
+        const cat = islamicCategoriesData[catId];
+        const topic = cat.topics.find(t => t.name === topicName || t.slug === topicName);
+        if (topic) {
+          levels.forEach(lvl => pool.push(...(topic.levels[lvl] || [])));
+          found = true;
+        }
+      }
+      if (!found) {
+        for (const cat of Object.values(islamicCategoriesData)) {
+          const topic = cat.topics.find(t => t.name === topicName || t.slug === topicName);
+          if (topic) {
+            levels.forEach(lvl => pool.push(...(topic.levels[lvl] || [])));
+            break;
+          }
+        }
+      }
+    }
+
+    const shuffled = [...pool].sort(() => Math.random() - 0.5).slice(0, reqCount);
+    shuffled.forEach(q => {
+      result.push({
+        id: 990000 + result.length,
+        keyword: q.question,
+        verseText: q.question,
+        text: q.question,
+        type: 'COMPLETION',
+        options: q.options.map(opt => ({
+          text: opt,
+          isCorrect: opt === q.answer
+        })),
+        correctText: q.answer
+      });
+    });
+  }
+
+  return result;
+}

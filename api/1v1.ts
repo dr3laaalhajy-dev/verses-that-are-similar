@@ -8,6 +8,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     case 'create': return handleCreate(req, res)
     case 'join': return handleJoin(req, res)
     case 'list-rooms': return handleListRooms(req, res)
+    case 'available-counts': return handleAvailableCounts(req, res)
     case 'poll': return handlePoll(req, res)
     case 'start': return handleStart(req, res)
     case 'submit-answer': return handleSubmitAnswer(req, res)
@@ -340,6 +341,26 @@ async function handleListRooms(req: VercelRequest, res: VercelResponse) {
   } catch (err: any) {
     console.error('Error in handleListRooms:', err)
     return res.status(500).json({ message: 'فشل جلب قائمة الغرف', error: err.message })
+  }
+}
+
+async function handleAvailableCounts(req: VercelRequest, res: VercelResponse) {
+  try {
+    const [audio, complete, surah] = await Promise.all([
+      prisma.challenge.count({ where: { type: { in: ['STANDARD', 'AUDIO', ''] } } }),
+      prisma.challenge.count({ where: { type: 'COMPLETION' } }),
+      prisma.challenge.count({ where: { type: 'SURAH' } })
+    ])
+    return res.status(200).json({
+      counts: {
+        audio: audio || 0,
+        complete: complete || 0,
+        surah: surah || 0
+      }
+    })
+  } catch (err: any) {
+    console.error('Error in handleAvailableCounts:', err)
+    return res.status(500).json({ message: 'فشل جلب الأعداد المتاحة', error: err.message })
   }
 }
 

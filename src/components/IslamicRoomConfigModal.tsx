@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Sparkles, Check, Search } from 'lucide-react';
+import { X, Sparkles, Check, Search, AlertCircle, Hash } from 'lucide-react';
 import { islamicCategoriesData, islamicCategoriesList } from '../data/islamicCategories';
+import { getIslamicTopicAvailableCount } from '../utils/islamicChallengeHelper';
 
 interface IslamicRoomConfigModalProps {
   isOpen: boolean;
@@ -12,6 +13,8 @@ interface IslamicRoomConfigModalProps {
   onSelectLevels: (lvls: (1 | 2 | 3)[]) => void;
   selectedTopics: string[];
   onSelectTopics: (topics: string[]) => void;
+  topicQuestionCounts: Record<string, number>;
+  onUpdateTopicCount: (topic: string, count: number) => void;
 }
 
 const IslamicRoomConfigModal: React.FC<IslamicRoomConfigModalProps> = ({
@@ -23,26 +26,46 @@ const IslamicRoomConfigModal: React.FC<IslamicRoomConfigModalProps> = ({
   onSelectLevels,
   selectedTopics = ['all'],
   onSelectTopics,
+  topicQuestionCounts = {},
+  onUpdateTopicCount,
 }) => {
   const [topicSearchQuery, setTopicSearchQuery] = useState('');
 
   // Collect all available topics from all currently selected categories
   const allAvailableTopics = useMemo(() => {
-    const list: { categoryId: string; categoryTitle: string; name: string }[] = [];
+    const list: { categoryId: string; categoryTitle: string; name: string; availableCount: number }[] = [];
     selectedCategories.forEach(catId => {
-      const catData = islamicCategoriesData[catId];
-      if (catData && catData.topics) {
-        catData.topics.forEach(t => {
-          list.push({
-            categoryId: catId,
-            categoryTitle: catData.title || catId,
-            name: t.name,
-          });
+      if (catId === 'general' || catId === 'seerah') {
+        const title = catId === 'general' ? 'أسئلة عامة' : 'السيرة النبوية';
+        const avail = getIslamicTopicAvailableCount(catId, catId, selectedLevels);
+        list.push({
+          categoryId: catId,
+          categoryTitle: title,
+          name: catId,
+          availableCount: avail
         });
+      } else {
+        const catData = islamicCategoriesData[catId];
+        if (catData && catData.topics) {
+          catData.topics.forEach(t => {
+            const avail = getIslamicTopicAvailableCount(t.name, catId, selectedLevels);
+            list.push({
+              categoryId: catId,
+              categoryTitle: catData.title || catId,
+              name: t.name,
+              availableCount: avail
+            });
+          });
+        }
       }
     });
     return list;
-  }, [selectedCategories]);
+  }, [selectedCategories, selectedLevels]);
+
+  // Total available across all topics
+  const totalAllAvailable = useMemo(() => {
+    return allAvailableTopics.reduce((acc, t) => acc + t.availableCount, 0);
+  }, [allAvailableTopics]);
 
   // Filter topics by search query
   const filteredTopics = useMemo(() => {
@@ -115,13 +138,42 @@ const IslamicRoomConfigModal: React.FC<IslamicRoomConfigModalProps> = ({
       updated = [...selectedTopics, topicName];
     }
     onSelectTopics(updated);
+
+    // Default count if not set yet
+    if (!topicQuestionCounts[topicName]) {
+      onUpdateTopicCount(topicName, 3);
+    }
   };
 
   const isAllTopicsSelected = selectedTopics.includes('all') || selectedTopics.length === 0;
 
+  // Calculate sum of questions for Islamic quiz
+  const totalIslamicQuestions = isAllTopicsSelected 
+    ? (topicQuestionCounts['all'] || 5)
+    : selectedTopics.reduce((acc, tName) => acc + (topicQuestionCounts[tName] || 0), 0);
+
+  // Check if any topic exceeds available questions
+  let hasIslamicValidationError = false;
+  if (isAllTopicsSelected) {
+    const requested = topicQuestionCounts['all'] || 5;
+    if (requested > totalAllAvailable || requested <= 0) {
+      hasIslamicValidationError = true;
+    }
+  } else {
+    for (const tName of selectedTopics) {
+      const topicInfo = allAvailableTopics.find(t => t.name === tName);
+      const avail = topicInfo ? topicInfo.availableCount : 0;
+      const requested = topicQuestionCounts[tName] || 0;
+      if (requested > avail || requested <= 0) {
+        hasIslamicValidationError = true;
+        break;
+      }
+    }
+  }
+
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-[1000] flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm" dir="rtl">
+      <div className="fixed inset-0 z-[1000] flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs" dir="rtl">
         <motion.div
           initial={{ opacity: 0, scale: 0.95, y: 15 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -139,7 +191,7 @@ const IslamicRoomConfigModal: React.FC<IslamicRoomConfigModalProps> = ({
                   تخصيص تحدي المعلومات الإسلامية
                 </h3>
                 <p className="text-[11px] font-bold text-slate-400">
-                  اختيار متعدد للمجالات والمستويات والمواضيع لدمجها في التحدي
+                  حدد المواضيع وعدد الأسئلة لكل موضوع بشكل مستقل
                 </p>
               </div>
             </div>
@@ -182,14 +234,14 @@ const IslamicRoomConfigModal: React.FC<IslamicRoomConfigModalProps> = ({
                       onClick={() => handleToggleCategory(cat.id)}
                       className={`p-2.5 sm:p-3 rounded-2xl border-2 transition-all flex flex-col items-center text-center gap-1.5 relative cursor-pointer ${
                         isSelected
-                          ? 'border-amber-500 bg-amber-50/60 shadow-xs scale-[1.01]'
-                          : 'border-slate-100 hover:border-slate-200 bg-slate-50/40 text-slate-600'
+                          ? 'border-amber-500 bg-amber-50/80 shadow-xs'
+                          : 'border-slate-100 hover:border-slate-200 bg-white text-slate-600'
                       }`}
                     >
-                      <div className="w-8 h-8 rounded-xl bg-white p-1 flex items-center justify-center shadow-xs">
-                        <img src={cat.icon} alt={cat.title} className="w-full h-full object-contain" />
+                      <div className="w-9 h-9 rounded-xl flex items-center justify-center mb-0.5 shadow-xs overflow-hidden">
+                        <img src={cat.icon} alt={cat.title} className="w-7 h-7 object-contain" />
                       </div>
-                      <span className={`text-xs font-black line-clamp-1 ${isSelected ? 'text-amber-900' : 'text-slate-700'}`}>
+                      <span className={`text-xs font-black line-clamp-1 ${isSelected ? 'text-amber-800' : 'text-slate-700'}`}>
                         {cat.title}
                       </span>
                       {/* Checkbox indicator */}
@@ -204,38 +256,36 @@ const IslamicRoomConfigModal: React.FC<IslamicRoomConfigModalProps> = ({
               </div>
             </div>
 
-            {/* Step 2: Level Multi-Select */}
+            {/* Step 2: Levels Multi-Select */}
             <div>
               <div className="flex items-center justify-between mb-2.5">
                 <label className="text-xs font-black text-slate-700 flex items-center gap-1.5">
-                  <span>٢. اختر مستويات الصعوبة</span>
+                  <span>٢. مستويات الصعوبة (دمج عدة مستويات)</span>
                   <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200/60">
                     تم اختيار ({selectedLevels.length})
                   </span>
                 </label>
-                {selectedLevels.length < 3 && (
-                  <button
-                    type="button"
-                    onClick={handleSelectAllLevels}
-                    className="text-[11px] font-black text-brand-emerald hover:underline cursor-pointer"
-                  >
-                    تحديد كافة المستويات
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={handleSelectAllLevels}
+                  className="text-[11px] font-black text-brand-emerald hover:underline cursor-pointer"
+                >
+                  تحديد كافة المستويات
+                </button>
               </div>
 
-              <div className="grid grid-cols-3 gap-2 sm:gap-2.5">
+              <div className="grid grid-cols-3 gap-2.5">
                 {[
-                  { lvl: 1 as const, title: 'المستوى الأول', sub: '🌱 أساسي وميسر' },
-                  { lvl: 2 as const, title: 'المستوى الثاني', sub: '⚡ متوسط ومتنوع' },
-                  { lvl: 3 as const, title: 'المستوى الثالث', sub: '🔥 متقدم ومتعمق' },
+                  { level: 1 as const, title: 'المستوى الأول', sub: 'مبتدئ / أساسي' },
+                  { level: 2 as const, title: 'المستوى الثاني', sub: 'متوسط' },
+                  { level: 3 as const, title: 'المستوى الثالث', sub: 'متقدم' }
                 ].map((item) => {
-                  const isSelected = selectedLevels.includes(item.lvl);
+                  const isSelected = selectedLevels.includes(item.level);
                   return (
                     <button
-                      key={item.lvl}
+                      key={item.level}
                       type="button"
-                      onClick={() => handleToggleLevel(item.lvl)}
+                      onClick={() => handleToggleLevel(item.level)}
                       className={`p-3 rounded-2xl border-2 transition-all flex flex-col items-center text-center gap-1 relative cursor-pointer ${
                         isSelected
                           ? 'border-amber-500 bg-amber-500 text-white shadow-xs scale-[1.01]'
@@ -260,12 +310,12 @@ const IslamicRoomConfigModal: React.FC<IslamicRoomConfigModalProps> = ({
               </div>
             </div>
 
-            {/* Step 3: Topics Multi-Select */}
+            {/* Step 3: Topics Multi-Select with Dedicated Question Counts */}
             {allAvailableTopics.length > 0 && (
-              <div>
-                <div className="flex items-center justify-between mb-2">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
                   <label className="text-xs font-black text-slate-700 flex items-center gap-1.5">
-                    <span>٣. تحديد المواضيع (Multi-select Topics)</span>
+                    <span>٣. تحديد المواضيع وعدد الأسئلة لكل موضوع</span>
                     <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200/60">
                       {isAllTopicsSelected ? 'كافة المواضيع' : `${selectedTopics.length} موضوع`}
                     </span>
@@ -282,36 +332,70 @@ const IslamicRoomConfigModal: React.FC<IslamicRoomConfigModalProps> = ({
                 </div>
 
                 {/* Option to select All Topics */}
-                <button
-                  type="button"
-                  onClick={() => onSelectTopics(['all'])}
-                  className={`w-full p-2.5 sm:p-3 rounded-2xl border-2 transition-all flex items-center justify-between text-right mb-2 cursor-pointer ${
-                    isAllTopicsSelected
-                      ? 'border-emerald-500 bg-emerald-50 text-emerald-900 shadow-xs'
-                      : 'border-slate-100 hover:border-slate-200 bg-slate-50/60 text-slate-700'
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <span className="text-lg">🌟</span>
-                    <div>
-                      <span className="text-xs sm:text-sm font-black block">
-                        جميع موضوعات المجالات المختارة (عشوائي ومتنوع)
-                      </span>
-                      <span className="text-[10px] font-bold text-slate-400">
-                        سحب أسئلة متنوعة من كافة موضوعات المجالات المحددة
-                      </span>
+                <div className={`p-3 rounded-2xl border-2 transition-all text-right ${
+                  isAllTopicsSelected
+                    ? 'border-emerald-500 bg-emerald-50/70 text-emerald-950 shadow-xs'
+                    : 'border-slate-100 bg-slate-50/60 text-slate-700'
+                }`}>
+                  <div
+                    onClick={() => onSelectTopics(['all'])}
+                    className="flex items-center justify-between cursor-pointer mb-2"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">🌟</span>
+                      <div>
+                        <span className="text-xs sm:text-sm font-black block">
+                          جميع موضوعات المجالات المختارة (عشوائي ومتنوع)
+                        </span>
+                        <span className="text-[10px] font-bold text-slate-400">
+                          سحب أسئلة متنوعة من كافة موضوعات المجالات المحددة (المتاح: {totalAllAvailable})
+                        </span>
+                      </div>
+                    </div>
+                    <div className={`w-5 h-5 rounded-md flex items-center justify-center transition-all ${
+                      isAllTopicsSelected ? 'bg-emerald-600 text-white shadow-xs' : 'border border-slate-300 bg-white'
+                    }`}>
+                      {isAllTopicsSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
                     </div>
                   </div>
-                  <div className={`w-5 h-5 rounded-md flex items-center justify-center transition-all ${
-                    isAllTopicsSelected ? 'bg-emerald-600 text-white shadow-xs' : 'border border-slate-300 bg-white'
-                  }`}>
-                    {isAllTopicsSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                  </div>
-                </button>
+
+                  {isAllTopicsSelected && (
+                    <div className="pt-2 border-t border-emerald-200/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <label className="text-xs font-black text-emerald-800 flex items-center gap-1">
+                        <Hash className="w-3.5 h-3.5" />
+                        <span>عدد الأسئلة الإجمالي للمعلومات الإسلامية:</span>
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min={1}
+                          max={totalAllAvailable}
+                          value={topicQuestionCounts['all'] !== undefined ? topicQuestionCounts['all'] : 5}
+                          onChange={(e) => {
+                            const val = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
+                            onUpdateTopicCount('all', isNaN(val) ? 0 : val);
+                          }}
+                          className={`w-24 px-3 py-1.5 rounded-xl border-2 font-black text-sm text-center bg-white ${
+                            (topicQuestionCounts['all'] || 5) > totalAllAvailable
+                              ? 'border-red-400 text-red-600 focus:border-red-500'
+                              : 'border-emerald-300 text-emerald-800 focus:border-emerald-500'
+                          } focus:outline-none`}
+                        />
+                        <span className="text-xs font-bold text-emerald-700">سؤال</span>
+                      </div>
+                      {(topicQuestionCounts['all'] || 5) > totalAllAvailable && (
+                        <div className="text-[11px] font-bold text-red-500 flex items-center gap-1 w-full justify-end">
+                          <AlertCircle className="w-3.5 h-3.5" />
+                          <span>عذراً، أقصى عدد متاح هو {totalAllAvailable}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
 
                 {/* Search bar for topics */}
-                {allAvailableTopics.length > 6 && (
-                  <div className="relative mb-2">
+                {allAvailableTopics.length > 5 && (
+                  <div className="relative">
                     <Search className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2" />
                     <input
                       type="text"
@@ -323,36 +407,83 @@ const IslamicRoomConfigModal: React.FC<IslamicRoomConfigModalProps> = ({
                   </div>
                 )}
 
-                {/* Multi-Select Chips for Topics */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto p-1.5 border border-slate-100 rounded-2xl bg-slate-50/50">
+                {/* Multi-Select List for Topics with Individual Inputs */}
+                <div className="space-y-2 max-h-56 overflow-y-auto p-2 border border-slate-100 rounded-2xl bg-slate-50/50">
                   {filteredTopics.map((t) => {
                     const isSelected = !isAllTopicsSelected && selectedTopics.includes(t.name);
+                    const currentCount = topicQuestionCounts[t.name] !== undefined ? topicQuestionCounts[t.name] : 3;
+                    const isExceeded = currentCount > t.availableCount;
+
                     return (
-                      <button
+                      <div
                         key={`${t.categoryId}-${t.name}`}
-                        type="button"
-                        onClick={() => handleToggleTopic(t.name)}
-                        className={`p-2.5 rounded-xl border transition-all text-xs font-bold text-right flex items-center justify-between gap-2 cursor-pointer ${
+                        className={`p-3 rounded-2xl border transition-all text-right space-y-2 ${
                           isSelected
-                            ? 'bg-amber-500 text-white border-amber-500 shadow-xs'
-                            : 'bg-white border-slate-200 text-slate-700 hover:border-amber-300'
+                            ? 'bg-amber-50/80 border-amber-300 shadow-xs'
+                            : 'bg-white border-slate-200 hover:border-amber-200'
                         }`}
-                        title={t.name}
                       >
-                        <div className="flex items-center gap-2 min-w-0">
-                          <div className={`w-4 h-4 rounded flex items-center justify-center shrink-0 ${
-                            isSelected ? 'bg-white text-amber-600' : 'border border-slate-300 bg-slate-50'
-                          }`}>
-                            {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                        <div
+                          onClick={() => handleToggleTopic(t.name)}
+                          className="flex items-center justify-between gap-2 cursor-pointer"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className={`w-4 h-4 rounded flex items-center justify-center shrink-0 ${
+                              isSelected ? 'bg-amber-500 text-white' : 'border border-slate-300 bg-slate-50'
+                            }`}>
+                              {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                            </div>
+                            <span className="font-black text-xs md:text-sm text-slate-800 truncate">
+                              {t.name === 'seerah' ? 'السيرة النبوية الشريفة' : t.name === 'general' ? 'معارف وثقافة إسلامية عامة' : t.name}
+                            </span>
                           </div>
-                          <span className="truncate">{t.name}</span>
+
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-slate-100 text-slate-600">
+                              المتاح: {t.availableCount}
+                            </span>
+                            <span className="text-[9px] px-2 py-0.5 rounded-full font-bold bg-amber-100 text-amber-700">
+                              {t.categoryTitle.replace('الإسلامي', '').replace('الإسلامية', '').trim()}
+                            </span>
+                          </div>
                         </div>
-                        <span className={`text-[9px] px-1.5 py-0.5 rounded-full shrink-0 font-bold ${
-                          isSelected ? 'bg-amber-600 text-amber-100' : 'bg-slate-100 text-slate-400'
-                        }`}>
-                          {t.categoryTitle.replace('الإسلامي', '').replace('الإسلامية', '').trim()}
-                        </span>
-                      </button>
+
+                        {/* Dedicated Question Count Input when selected */}
+                        {isSelected && (
+                          <div className="pt-2 border-t border-amber-200/60 flex flex-wrap items-center justify-between gap-2">
+                            <label className="text-xs font-black text-amber-900 flex items-center gap-1">
+                              <Hash className="w-3 h-3 text-amber-600" />
+                              <span>عدد الأسئلة لهذا الموضوع:</span>
+                            </label>
+
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                min={1}
+                                max={t.availableCount}
+                                value={currentCount}
+                                onChange={(e) => {
+                                  const val = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
+                                  onUpdateTopicCount(t.name, isNaN(val) ? 0 : val);
+                                }}
+                                className={`w-20 px-2.5 py-1 rounded-xl border-2 font-black text-xs text-center bg-white ${
+                                  isExceeded
+                                    ? 'border-red-400 text-red-600 focus:border-red-500'
+                                    : 'border-amber-300 text-amber-900 focus:border-amber-500'
+                                } focus:outline-none shadow-inner`}
+                              />
+                              <span className="text-xs font-bold text-amber-800">سؤال</span>
+                            </div>
+
+                            {isExceeded && (
+                              <div className="w-full text-[11px] font-bold text-red-500 flex items-center gap-1 justify-end">
+                                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                                <span>عذراً، أقصى عدد متاح هو {t.availableCount}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     );
                   })}
                 </div>
@@ -360,17 +491,26 @@ const IslamicRoomConfigModal: React.FC<IslamicRoomConfigModalProps> = ({
             )}
           </div>
 
-          {/* Footer */}
-          <div className="p-4 border-t border-slate-100 bg-slate-50/60 flex items-center justify-between gap-3">
-            <div className="text-[11px] font-bold text-slate-500 hidden sm:block">
-              {selectedCategories.length} مجال • {selectedLevels.length} مستوى • {isAllTopicsSelected ? 'كل المواضيع' : `${selectedTopics.length} موضوع`}
+          {/* Footer with Reactive Total Summary */}
+          <div className="p-4 border-t border-slate-100 bg-slate-50/70 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="text-right">
+              <span className="text-[11px] font-black text-slate-500 block">إجمالي أسئلة المعلومات الإسلامية</span>
+              <span className="text-sm font-black text-amber-700">
+                {totalIslamicQuestions} أسئلة مختارة
+              </span>
             </div>
+
             <button
               onClick={onClose}
-              className="w-full sm:w-auto px-6 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-2xl font-black text-xs sm:text-sm shadow-md shadow-amber-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+              disabled={hasIslamicValidationError || totalIslamicQuestions <= 0}
+              className={`w-full sm:w-auto px-6 py-2.5 rounded-2xl font-black text-xs sm:text-sm transition-all flex items-center justify-center gap-2 active:scale-95 ${
+                hasIslamicValidationError || totalIslamicQuestions <= 0
+                  ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                  : 'bg-amber-500 hover:bg-amber-600 text-white shadow-md shadow-amber-500/20 cursor-pointer'
+              }`}
             >
-              <span>تأكيد الإعدادات والمتابعة</span>
-              <Check className="w-4 h-4" />
+              <span>{hasIslamicValidationError ? 'يرجى تصحيح الأعداد المتجاوزة' : 'تأكيد الإعدادات والمتابعة'}</span>
+              {!hasIslamicValidationError && <Check className="w-4 h-4" />}
             </button>
           </div>
         </motion.div>
