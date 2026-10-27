@@ -1340,7 +1340,6 @@ export default function App() {
   const prevRoomStatus = useRef<string>('WAITING');
   const [isCreatingRoom, setIsCreatingRoom] = useState(false);
   const [isJoiningRoom, setIsJoiningRoom] = useState(false);
-  const [joinCode, setJoinCode] = useState('');
   const [v1Error, setV1Error] = useState<string | null>(null);
   const [v1Polling, setV1Polling] = useState(false);
   const [v1GameModes, setV1GameModes] = useState<('audio' | 'complete' | 'surah' | 'islamic')[]>(['audio']);
@@ -2284,19 +2283,13 @@ export default function App() {
     }
   }, []);
 
-  // Check for 1v1 code in URL on mount
+  // Check for 1v1 room ID in URL on mount
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    let code = params.get('code');
-    if (!code) {
-      code = localStorage.getItem('pending_join_code');
-    }
+    const targetRoomId = params.get('roomId') || params.get('room') || params.get('code');
 
-    if (code && playerName) {
-      handleJoinV1(code);
-      localStorage.removeItem('pending_join_code');
-    } else if (code && !playerName) {
-      localStorage.setItem('pending_join_code', code);
+    if (targetRoomId && playerName) {
+      handleJoinV1(targetRoomId);
     }
   }, [playerName]);
 
@@ -2410,8 +2403,11 @@ export default function App() {
     return false;
   }, [v1GameModes, skillQuestionCounts, availableSkillCounts, islamicRoomTopics, islamicTopicQuestionCounts, islamicRoomCategories, islamicRoomLevels]);
 
-  const handleJoinV1 = async (code: string, password?: string) => {
-    if (!playerName) return;
+  const handleJoinV1 = async (roomId: string, password?: string) => {
+    if (!playerName) {
+      toast.error('يرجى تسجيل اسمك أولاً للانضمام');
+      return;
+    }
     setIsJoiningRoom(true);
     setV1Error(null);
     if (privateRoomModal.isOpen) {
@@ -2423,7 +2419,8 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           action: 'join', 
-          code, 
+          roomId,
+          code: roomId,
           player2Id: playerUsername || playerName,
           password: password ? password.trim() : undefined
         })
@@ -4831,62 +4828,6 @@ ${versesList}
                       </div>
                     )}
                   </motion.div>
-                ) : view === 'group_menu' ? (
-                  <motion.div
-                    key="group_menu"
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.98 }}
-                    className="flex flex-col gap-6 md:gap-8 max-w-2xl mx-auto py-6 md:py-8 px-4"
-                  >
-                    <div className="flex items-center justify-between">
-                      <button
-                        onClick={() => setView('home')}
-                        className="p-2.5 md:p-3 rounded-xl bg-white/50 hover:bg-white transition-all text-slate-500 font-bold flex items-center gap-2 text-xs md:text-sm"
-                      >
-                        <ArrowRight className="w-4 h-4 md:w-5 md:h-5" />
-                        الرئيسية
-                      </button>
-                    </div>
-
-                    <div className="text-center mb-2">
-                      <div className="w-14 h-14 bg-orange-100 text-orange-600 rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-md shadow-orange-500/10">
-                        <User className="w-7 h-7" />
-                      </div>
-                      <h2 className="text-2xl md:text-3xl font-black text-slate-800 mb-1">التحدي الجماعي</h2>
-                      <p className="text-slate-500 font-bold text-xs md:text-sm">نافس أصدقاءك في سباق مباشر للمتشابهات</p>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-                      <motion.button
-                        whileHover={{ y: -4 }}
-                        onClick={() => setView('group_create')}
-                        className="group p-6 md:p-7 rounded-2xl bg-white border-2 border-orange-100 hover:border-orange-500 transition-all text-center flex flex-col items-center gap-4 shadow-lg"
-                      >
-                        <div className="w-12 h-12 bg-orange-500 text-white rounded-xl flex items-center justify-center shadow-md group-hover:rotate-6 transition-transform">
-                          <Zap className="w-6 h-6" />
-                        </div>
-                        <div>
-                          <h3 className="text-lg md:text-xl font-black text-slate-800 mb-1">إنشاء غرفة</h3>
-                          <p className="text-slate-400 font-bold text-xs">تخصيص الخصائص ودعوة صديق</p>
-                        </div>
-                      </motion.button>
-
-                      <motion.button
-                        whileHover={{ y: -4 }}
-                        onClick={() => setView('group_join')}
-                        className="group p-6 md:p-7 rounded-2xl bg-white border-2 border-brand-emerald/10 hover:border-brand-emerald transition-all text-center flex flex-col items-center gap-4 shadow-lg"
-                      >
-                        <div className="w-12 h-12 bg-brand-emerald text-white rounded-xl flex items-center justify-center shadow-md">
-                          <Lock className="w-6 h-6" />
-                        </div>
-                        <div>
-                          <h3 className="text-lg md:text-xl font-black text-slate-800 mb-1">الانضمام لغرفة</h3>
-                          <p className="text-slate-400 font-bold text-xs">أدخل كود الغرفة للمنافسة</p>
-                        </div>
-                      </motion.button>
-                    </div>
-                  </motion.div>
                 ) : view === 'group_create' ? (
                   <motion.div
                     key="group_create"
@@ -5268,10 +5209,10 @@ ${versesList}
                           </button>
 
                           <button
-                            onClick={() => setView('group_menu')}
-                            className="w-full py-2 text-slate-400 font-bold hover:text-slate-600 transition-colors text-xs md:text-sm"
+                            onClick={() => setView('group_join')}
+                            className="w-full py-2 text-slate-400 font-bold hover:text-slate-600 transition-colors text-xs md:text-sm cursor-pointer"
                           >
-                            رجوع للإعدادات
+                            رجوع لقائمة الغرف
                           </button>
                         </div>
                       </div>
@@ -5296,19 +5237,43 @@ ${versesList}
                         </div>
                       </div>
 
-                      <div className="bg-slate-50 p-5 rounded-2xl mb-6 border border-slate-100 shadow-inner">
-                        <div className="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-widest mb-2">رمز الانضمام للغرفة</div>
-                        <div className="text-3xl md:text-4xl font-black text-orange-500 tracking-[0.2em] mb-2">{room?.code}</div>
-                        <button
-                          onClick={() => {
-                            if (room?.code) {
-                              navigator.clipboard.writeText(room.code);
-                            }
-                          }}
-                          className="px-4 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-500 hover:bg-slate-50"
-                        >
-                          نسخ الرمز
-                        </button>
+                      <div className="bg-slate-50 p-4 md:p-5 rounded-2xl mb-6 border border-slate-100 shadow-inner text-right space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm md:text-base font-black text-slate-800">{room?.name || 'غرفة التحدي'}</span>
+                          {room?.isPrivate ? (
+                            <span className="px-2.5 py-0.5 bg-amber-500/10 text-amber-600 rounded-full text-xs font-black flex items-center gap-1 border border-amber-500/20">
+                              <Lock className="w-3 h-3" />
+                              <span>غرفة خاصة</span>
+                            </span>
+                          ) : (
+                            <span className="px-2.5 py-0.5 bg-emerald-500/10 text-emerald-600 rounded-full text-xs font-black flex items-center gap-1 border border-emerald-500/20">
+                              <Globe className="w-3 h-3" />
+                              <span>غرفة عامة</span>
+                            </span>
+                          )}
+                        </div>
+                        {room?.isPrivate && room?.password && (
+                          <div className="flex items-center justify-between pt-2 border-t border-slate-200/60 text-xs">
+                            <span className="text-slate-500 font-bold">كلمة المرور:</span>
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono font-black text-amber-700 bg-amber-100/70 px-2.5 py-0.5 rounded-lg text-sm">{room.password}</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(room.password);
+                                  toast.success('تم نسخ كلمة المرور');
+                                }}
+                                className="text-[11px] text-amber-600 hover:text-amber-700 font-bold underline cursor-pointer"
+                              >
+                                نسخ
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                        <p className="text-[11px] text-slate-400 font-bold pt-1 flex items-center gap-1.5 justify-end">
+                          <span>الغرفة ظاهرة في قائمة الغرف المتاحة ليتمكن الجميع من الدخول</span>
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse inline-block" />
+                        </p>
                       </div>
 
                       <div className="space-y-3 mb-6">
@@ -5362,16 +5327,16 @@ ${versesList}
                     {/* Header with Back and Refresh */}
                     <div className="flex items-center justify-between">
                       <button
-                        onClick={() => setView('group_menu')}
+                        onClick={() => setView('home')}
                         className="p-2.5 rounded-xl bg-white/60 hover:bg-white transition-all text-slate-500 font-bold flex items-center gap-2 text-xs md:text-sm border border-slate-100 shadow-xs cursor-pointer"
                       >
                         <ArrowRight className="w-4 h-4" />
-                        <span>رجوع</span>
+                        <span>الرئيسية</span>
                       </button>
 
                       <div className="text-center">
-                        <h2 className="text-xl md:text-2xl font-black text-slate-800">الانضمام للتحدي الجماعي</h2>
-                        <p className="text-slate-400 font-bold text-xs">تحدَّ أصدقاءك في غرف المتشابهات المباشرة</p>
+                        <h2 className="text-xl md:text-2xl font-black text-slate-800">التحدي الجماعي</h2>
+                        <p className="text-slate-400 font-bold text-xs">قائمة الغرف المتاحة للتحدي المباشر</p>
                       </div>
 
                       <button
@@ -5385,35 +5350,30 @@ ${versesList}
                       </button>
                     </div>
 
-                    {/* Direct Code Join Card */}
-                    <div className="glass p-5 rounded-3xl border border-brand-emerald/15 shadow-md text-right">
-                      <div className="flex items-center justify-between mb-3">
-                        <span className="text-[10px] font-black bg-brand-emerald/10 text-brand-emerald px-2.5 py-0.5 rounded-full">
-                          انضمام فوري
-                        </span>
-                        <label className="text-xs font-black text-slate-700 flex items-center gap-1.5">
-                          <span>لديك رمز غرفة خاص؟</span>
-                          <Hash className="w-3.5 h-3.5 text-brand-emerald" />
-                        </label>
+                    {/* Prominent Create Room Action Banner */}
+                    <motion.button
+                      whileHover={{ scale: 1.01 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => setView('group_create')}
+                      className="w-full p-4 md:p-5 bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 text-white rounded-3xl font-black shadow-lg shadow-orange-500/25 flex items-center justify-between cursor-pointer border border-white/20 transition-all group"
+                    >
+                      <div className="flex items-center gap-3.5">
+                        <div className="w-11 h-11 md:w-12 md:h-12 rounded-2xl bg-white/20 backdrop-blur-xs flex items-center justify-center shadow-inner group-hover:rotate-6 transition-transform shrink-0">
+                          <Plus className="w-6 h-6 text-white stroke-[2.5]" />
+                        </div>
+                        <div className="text-right">
+                          <div className="text-base md:text-lg font-black flex items-center gap-2">
+                            <span>إنشاء غرفة تحدي جديدة</span>
+                            <span className="text-[10px] bg-white/25 px-2 py-0.5 rounded-full font-bold">مضيف 👑</span>
+                          </div>
+                          <p className="text-white/80 font-bold text-xs mt-0.5">خصص المهارات، عدد الأسئلة والمؤقت ثم نافس أصدقاءك</p>
+                        </div>
                       </div>
-                      <div className="flex flex-col sm:flex-row items-center gap-2.5">
-                        <input
-                          type="text"
-                          maxLength={6}
-                          placeholder="أدخل الرمز (مثال: AB12CD)"
-                          value={joinCode}
-                          onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-                          className="w-full sm:flex-1 px-4 py-2.5 rounded-xl bg-slate-50 border-2 border-slate-100 focus:border-brand-emerald focus:outline-none text-center font-black tracking-[0.2em] text-lg shadow-inner"
-                        />
-                        <button
-                          onClick={() => handleJoinV1(joinCode)}
-                          disabled={isJoiningRoom || joinCode.length < 4}
-                          className="w-full sm:w-auto px-6 py-2.5 bg-brand-emerald text-white rounded-xl font-black text-sm shadow-md hover:bg-brand-emerald/90 transition-all active:scale-95 flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
-                        >
-                          {isJoiningRoom ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : 'دخول'}
-                        </button>
+                      <div className="px-4 py-2 bg-white text-orange-600 rounded-2xl font-black text-xs md:text-sm shadow-sm shrink-0 flex items-center gap-1.5 group-hover:bg-orange-50 transition-colors">
+                        <Zap className="w-4 h-4 fill-orange-500" />
+                        <span>أنشئ الآن</span>
                       </div>
-                    </div>
+                    </motion.button>
 
                     {/* Available Rooms List */}
                     <div className="space-y-3">
@@ -5445,14 +5405,14 @@ ${versesList}
                           <div>
                             <h3 className="text-base font-black text-slate-700 mb-1">لا توجد غرف قيد الانتظار حالياً</h3>
                             <p className="text-xs text-slate-400 font-bold max-w-xs mx-auto">
-                              جميع التحديات بدأت أو تم إنهاؤها. بادر بإنشاء غرفتك وشارك الرمز مع أصدقائك!
+                              جميع التحديات بدأت أو تم إنهاؤها. بادر بإنشاء غرفتك ليراها الآخرون وينضموا إليك!
                             </p>
                           </div>
                           <button
                             onClick={() => setView('group_create')}
                             className="px-6 py-2.5 bg-orange-500 text-white rounded-xl font-black text-xs md:text-sm hover:bg-orange-600 transition-all shadow-md shadow-orange-500/20 active:scale-95 inline-flex items-center gap-2 cursor-pointer"
                           >
-                            <Zap className="w-4 h-4" />
+                            <Plus className="w-4 h-4 stroke-[2.5]" />
                             <span>إنشاء غرفة جديدة</span>
                           </button>
                         </div>
@@ -5460,10 +5420,22 @@ ${versesList}
                         <div className="grid grid-cols-1 gap-3">
                           {availableRooms.map((r: any) => (
                             <motion.div
-                              key={r.id || r.code}
+                              key={r.id}
                               initial={{ opacity: 0, y: 10 }}
                               animate={{ opacity: 1, y: 0 }}
-                              className="glass p-4 md:p-5 rounded-2xl border border-slate-100 hover:border-slate-200 transition-all shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                              onClick={() => {
+                                if (r.isPrivate) {
+                                  setPrivateRoomModal({
+                                    isOpen: true,
+                                    room: r,
+                                    password: '',
+                                    error: undefined
+                                  });
+                                } else {
+                                  handleJoinV1(r.id);
+                                }
+                              }}
+                              className="glass p-4 md:p-5 rounded-2xl border border-slate-100 hover:border-orange-300 transition-all shadow-xs hover:shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-4 cursor-pointer group"
                             >
                               <div className="text-right space-y-2">
                                 <div className="flex items-center gap-2 justify-end sm:justify-start">
@@ -5478,7 +5450,7 @@ ${versesList}
                                       <span>عامة</span>
                                     </span>
                                   )}
-                                  <h3 className="font-black text-slate-800 text-sm md:text-base">
+                                  <h3 className="font-black text-slate-800 text-sm md:text-base group-hover:text-orange-600 transition-colors">
                                     {r.name || 'غرفة التحدي'}
                                   </h3>
                                 </div>
@@ -5505,7 +5477,9 @@ ${versesList}
 
                               <div className="flex items-center gap-2 justify-end">
                                 <button
-                                  onClick={() => {
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
                                     if (r.isPrivate) {
                                       setPrivateRoomModal({
                                         isOpen: true,
@@ -5514,7 +5488,7 @@ ${versesList}
                                         error: undefined
                                       });
                                     } else {
-                                      handleJoinV1(r.code);
+                                      handleJoinV1(r.id);
                                     }
                                   }}
                                   disabled={isJoiningRoom}
@@ -5542,6 +5516,19 @@ ${versesList}
                         </div>
                       )}
                     </div>
+
+                    {/* Floating Action Button (FAB) on mobile */}
+                    <motion.button
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      whileTap={{ scale: 0.9 }}
+                      onClick={() => setView('group_create')}
+                      className="fixed bottom-6 left-6 z-40 sm:hidden p-3.5 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-full shadow-2xl shadow-orange-500/50 flex items-center gap-2 font-black cursor-pointer border-2 border-white"
+                      title="إنشاء غرفة جديدة"
+                    >
+                      <Plus className="w-5 h-5 stroke-[2.5]" />
+                      <span className="text-xs">غرفة جديدة</span>
+                    </motion.button>
                   </motion.div>
                 ) : view === 'group_game' ? (
                   <motion.div
@@ -6805,7 +6792,7 @@ ${versesList}
                       <motion.button
                         whileHover={{ y: -3 }}
                         whileTap={{ scale: 0.98 }}
-                        onClick={() => setView('group_menu')}
+                        onClick={() => setView('group_join')}
                         className="group relative p-5 md:p-6 rounded-2xl text-right overflow-hidden transition-all duration-200 flex flex-col justify-between border border-slate-150 hover:border-amber-400 bg-white shadow-xs hover:shadow-md min-h-[160px]"
                       >
                         <div className="flex items-start justify-between">
@@ -9166,10 +9153,6 @@ ${versesList}
                       <span className="text-slate-400">المنشئ:</span>
                       <span className="text-slate-800 font-black">{privateRoomModal.room.hostName}</span>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-400">رمز الغرفة:</span>
-                      <span className="font-mono text-orange-600 font-black tracking-wider">{privateRoomModal.room.code}</span>
-                    </div>
                   </div>
 
                   <div className="space-y-2">
@@ -9183,7 +9166,7 @@ ${versesList}
                       onChange={(e) => setPrivateRoomModal(prev => ({ ...prev, password: e.target.value, error: undefined }))}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' && privateRoomModal.password.trim() && !isJoiningRoom) {
-                          handleJoinV1(privateRoomModal.room.code, privateRoomModal.password);
+                          handleJoinV1(privateRoomModal.room.id, privateRoomModal.password);
                         }
                       }}
                       placeholder="كلمة مرور الغرفة"
@@ -9203,7 +9186,7 @@ ${versesList}
 
                   <div className="flex items-center gap-3 pt-2">
                     <button
-                      onClick={() => handleJoinV1(privateRoomModal.room.code, privateRoomModal.password)}
+                      onClick={() => handleJoinV1(privateRoomModal.room.id, privateRoomModal.password)}
                       disabled={isJoiningRoom || !privateRoomModal.password.trim()}
                       className="flex-1 py-3 bg-orange-500 text-white rounded-2xl font-black text-sm hover:bg-orange-600 transition-all shadow-md shadow-orange-500/20 disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
                     >

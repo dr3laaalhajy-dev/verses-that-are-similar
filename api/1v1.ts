@@ -229,20 +229,21 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
 }
 
 async function handleJoin(req: VercelRequest, res: VercelResponse) {
-  const { code, player2Id, playerName, password } = req.body
-  if (!code || !player2Id) return res.status(400).json({ message: 'يرجى إدخال رمز الغرفة' })
-
-  const cleanCode = String(code).trim().toUpperCase()
+  const { code, roomId, id, player2Id, playerName, password } = req.body
+  const targetId = String(roomId || id || '').trim()
+  const cleanCode = String(code || '').trim()
+  if (!targetId && !cleanCode) return res.status(400).json({ message: 'يرجى تحديد الغرفة' })
+  if (!player2Id && !playerName) return res.status(400).json({ message: 'Missing player2Id' })
 
   try {
     const room = await prisma.room.findFirst({ 
-      where: { 
-        code: { equals: cleanCode, mode: 'insensitive' } 
-      }, 
+      where: targetId 
+        ? { id: targetId } 
+        : { code: { equals: cleanCode, mode: 'insensitive' } }, 
       include: { player1: true } 
     })
     
-    if (!room) return res.status(404).json({ message: 'الغرفة غير موجودة، تأكد من صحة الرمز المكون من 6 خانات' })
+    if (!room) return res.status(404).json({ message: 'الغرفة غير موجودة أو تم إغلاقها' })
     
     // Status can be WAITING or PLAYING (allow late join if within maxPlayers)
     if (room.status === 'FINISHED') return res.status(400).json({ message: 'هذا التحدي انتهى بالفعل' })
@@ -324,7 +325,6 @@ async function handleListRooms(req: VercelRequest, res: VercelResponse) {
       const participantCount = Object.keys(progress).length || 1
       return {
         id: r.id,
-        code: r.code,
         name: r.name || 'غرفة التحدي',
         isPrivate: Boolean(r.isPrivate),
         status: r.status,
