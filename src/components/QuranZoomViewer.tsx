@@ -277,8 +277,8 @@ export const QuranZoomViewer: React.FC<QuranZoomViewerProps> = ({
             draggable={false}
             className={`block pointer-events-none select-none transition-filter duration-300 ${
               isFullscreen
-                ? 'w-auto h-auto max-h-[100dvh] max-w-full object-contain drop-shadow-2xl'
-                : 'w-auto h-auto max-h-[85vh] max-w-full object-contain shadow-none md:shadow-xl rounded-none md:rounded-2xl'
+                ? 'w-auto h-auto max-h-[100dvh] max-w-full drop-shadow-2xl'
+                : 'w-auto h-auto max-h-[85vh] max-w-full shadow-none md:shadow-xl rounded-none md:rounded-2xl'
             }`}
             style={{
               filter: darkMode
