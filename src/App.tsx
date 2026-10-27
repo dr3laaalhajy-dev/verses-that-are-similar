@@ -1342,7 +1342,19 @@ export default function App() {
   const [isJoiningRoom, setIsJoiningRoom] = useState(false);
   const [v1Error, setV1Error] = useState<string | null>(null);
   const [v1Polling, setV1Polling] = useState(false);
-  const [v1GameModes, setV1GameModes] = useState<('audio' | 'complete' | 'surah' | 'islamic')[]>(['audio']);
+  const [v1GameModes, setV1GameModes] = useState<('audio' | 'complete' | 'surah' | 'islamic')[]>(() => {
+    try {
+      const saved = localStorage.getItem('cached_system_settings');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (!parsed.hideCompletionChallenge) return ['complete'];
+        if (!parsed.hideSurahChallenge) return ['surah'];
+        if (!parsed.hideAudioChallenge) return ['audio'];
+        return ['islamic'];
+      }
+    } catch {}
+    return ['complete'];
+  });
   const [islamicRoomCategories, setIslamicRoomCategories] = useState<string[]>(['akida']);
   const [islamicRoomLevels, setIslamicRoomLevels] = useState<(1 | 2 | 3)[]>([1]);
   const [islamicRoomTopics, setIslamicRoomTopics] = useState<string[]>(['all']);
@@ -1350,9 +1362,9 @@ export default function App() {
   const [v1Timer, setV1Timer] = useState(false);
   const [v1QuestionCount, setV1QuestionCount] = useState(10);
   const [skillQuestionCounts, setSkillQuestionCounts] = useState<Record<'audio' | 'complete' | 'surah', number>>({
-    audio: 3,
-    complete: 3,
-    surah: 3
+    audio: 0,
+    complete: 5,
+    surah: 0
   });
   const [islamicTopicQuestionCounts, setIslamicTopicQuestionCounts] = useState<Record<string, number>>({
     all: 5
@@ -2355,11 +2367,40 @@ export default function App() {
     }
   }, [view, fetchAvailableSkillCounts]);
 
+  // Synchronize v1GameModes and counts with systemSettings (remove any hidden challenges)
+  useEffect(() => {
+    setV1GameModes(prev => {
+      const filtered = prev.filter(m => {
+        if (m === 'audio' && systemSettings.hideAudioChallenge) return false;
+        if (m === 'complete' && systemSettings.hideCompletionChallenge) return false;
+        if (m === 'surah' && systemSettings.hideSurahChallenge) return false;
+        return true;
+      });
+      if (filtered.length > 0) return filtered;
+      if (!systemSettings.hideCompletionChallenge) return ['complete'];
+      if (!systemSettings.hideSurahChallenge) return ['surah'];
+      if (!systemSettings.hideAudioChallenge) return ['audio'];
+      return ['islamic'];
+    });
+
+    setSkillQuestionCounts(prev => ({
+      audio: systemSettings.hideAudioChallenge ? 0 : prev.audio,
+      complete: systemSettings.hideCompletionChallenge ? 0 : prev.complete,
+      surah: systemSettings.hideSurahChallenge ? 0 : prev.surah
+    }));
+  }, [systemSettings.hideAudioChallenge, systemSettings.hideCompletionChallenge, systemSettings.hideSurahChallenge]);
+
   const totalConfiguredQuestions = useMemo(() => {
     let sum = 0;
-    if (v1GameModes.includes('audio')) sum += Math.max(0, Number(skillQuestionCounts.audio) || 0);
-    if (v1GameModes.includes('complete')) sum += Math.max(0, Number(skillQuestionCounts.complete) || 0);
-    if (v1GameModes.includes('surah')) sum += Math.max(0, Number(skillQuestionCounts.surah) || 0);
+    if (v1GameModes.includes('audio') && !systemSettings.hideAudioChallenge) {
+      sum += Math.max(0, Number(skillQuestionCounts.audio) || 0);
+    }
+    if (v1GameModes.includes('complete') && !systemSettings.hideCompletionChallenge) {
+      sum += Math.max(0, Number(skillQuestionCounts.complete) || 0);
+    }
+    if (v1GameModes.includes('surah') && !systemSettings.hideSurahChallenge) {
+      sum += Math.max(0, Number(skillQuestionCounts.surah) || 0);
+    }
     if (v1GameModes.includes('islamic')) {
       if (islamicRoomTopics.includes('all')) {
         sum += Math.max(0, Number(islamicTopicQuestionCounts['all']) || 0);
@@ -2370,11 +2411,16 @@ export default function App() {
       }
     }
     return sum;
-  }, [v1GameModes, skillQuestionCounts, islamicRoomTopics, islamicTopicQuestionCounts]);
+  }, [v1GameModes, skillQuestionCounts, islamicRoomTopics, islamicTopicQuestionCounts, systemSettings]);
 
   const hasCountValidationErrors = useMemo(() => {
     for (const skill of ['audio', 'complete', 'surah'] as const) {
-      if (v1GameModes.includes(skill)) {
+      const isHidden = 
+        (skill === 'audio' && systemSettings.hideAudioChallenge) ||
+        (skill === 'complete' && systemSettings.hideCompletionChallenge) ||
+        (skill === 'surah' && systemSettings.hideSurahChallenge);
+
+      if (v1GameModes.includes(skill) && !isHidden) {
         const count = Number(skillQuestionCounts[skill]) || 0;
         const max = availableSkillCounts[skill] || 0;
         if (count <= 0 || (max > 0 && count > max)) {
@@ -2401,7 +2447,7 @@ export default function App() {
       }
     }
     return false;
-  }, [v1GameModes, skillQuestionCounts, availableSkillCounts, islamicRoomTopics, islamicTopicQuestionCounts, islamicRoomCategories, islamicRoomLevels]);
+  }, [v1GameModes, skillQuestionCounts, availableSkillCounts, islamicRoomTopics, islamicTopicQuestionCounts, islamicRoomCategories, islamicRoomLevels, systemSettings]);
 
   const handleJoinV1 = async (roomId: string, password?: string) => {
     if (!playerName) {
@@ -2487,13 +2533,20 @@ export default function App() {
     setIsCreatingRoom(true);
     setV1Error(null);
     try {
-      const isIslamicIncluded = v1GameModes.includes('islamic');
+      const effectiveGameModes = v1GameModes.filter(m => {
+        if (m === 'audio' && systemSettings.hideAudioChallenge) return false;
+        if (m === 'complete' && systemSettings.hideCompletionChallenge) return false;
+        if (m === 'surah' && systemSettings.hideSurahChallenge) return false;
+        return true;
+      });
+
+      const isIslamicIncluded = effectiveGameModes.includes('islamic');
       const count = totalConfiguredQuestions;
 
       let customChallenges: any[] = [];
 
       // 1. Audio challenges
-      if (v1GameModes.includes('audio')) {
+      if (effectiveGameModes.includes('audio') && !systemSettings.hideAudioChallenge) {
         const audioCount = Math.max(0, Number(skillQuestionCounts.audio) || 0);
         if (audioCount > 0) {
           const pool = allChallenges.filter(c => {
@@ -2506,7 +2559,7 @@ export default function App() {
       }
 
       // 2. Completion challenges
-      if (v1GameModes.includes('complete')) {
+      if (effectiveGameModes.includes('complete') && !systemSettings.hideCompletionChallenge) {
         const completeCount = Math.max(0, Number(skillQuestionCounts.complete) || 0);
         if (completeCount > 0) {
           const pool = allChallenges.filter(c => (c.type || '').toUpperCase() === 'COMPLETION');
@@ -2516,7 +2569,7 @@ export default function App() {
       }
 
       // 3. Surah challenges
-      if (v1GameModes.includes('surah')) {
+      if (effectiveGameModes.includes('surah') && !systemSettings.hideSurahChallenge) {
         const surahCount = Math.max(0, Number(skillQuestionCounts.surah) || 0);
         if (surahCount > 0) {
           const pool = allChallenges.filter(c => (c.type || '').toUpperCase() === 'SURAH');
@@ -2549,10 +2602,10 @@ export default function App() {
         name: v1RoomName.trim() || 'غرفة التحدي',
         isPrivate: v1IsPrivate,
         password: v1IsPrivate ? v1RoomPassword.trim() : null,
-        gameMode: v1GameModes.length === 1 
-          ? (v1GameModes[0] === 'islamic' ? 'ISLAMIC' : v1GameModes[0] === 'audio' ? 'STANDARD' : v1GameModes[0] === 'complete' ? 'COMPLETION' : 'SURAH')
+        gameMode: effectiveGameModes.length === 1 
+          ? (effectiveGameModes[0] === 'islamic' ? 'ISLAMIC' : effectiveGameModes[0] === 'audio' ? 'STANDARD' : effectiveGameModes[0] === 'complete' ? 'COMPLETION' : 'SURAH')
           : 'MIXED',
-        gameModes: v1GameModes.map(m => m === 'islamic' ? 'ISLAMIC' : m === 'audio' ? 'STANDARD' : m === 'complete' ? 'COMPLETION' : 'SURAH'),
+        gameModes: effectiveGameModes.map(m => m === 'islamic' ? 'ISLAMIC' : m === 'audio' ? 'STANDARD' : m === 'complete' ? 'COMPLETION' : 'SURAH'),
         categories: isIslamicIncluded ? islamicRoomCategories : (v1Category ? [v1Category] : []),
         category: isIslamicIncluded ? islamicRoomCategories[0] : v1Category,
         levels: isIslamicIncluded ? islamicRoomLevels : undefined,
@@ -4937,7 +4990,7 @@ ${versesList}
                               اختر مهارات التحدي (يمكنك اختيار أكثر من مهارة)
                             </label>
                             <span className="text-[10px] font-black bg-brand-emerald/10 text-brand-emerald px-2.5 py-0.5 rounded-full border border-brand-emerald/20">
-                              تم اختيار ({v1GameModes.length})
+                              تم اختيار ({v1GameModes.filter(m => !(m === 'audio' && systemSettings.hideAudioChallenge) && !(m === 'complete' && systemSettings.hideCompletionChallenge) && !(m === 'surah' && systemSettings.hideSurahChallenge)).length})
                             </span>
                           </div>
 
@@ -4967,13 +5020,17 @@ ${versesList}
                                   <div
                                     onClick={() => {
                                       if (isSelected) {
-                                        if (v1GameModes.length <= 1) {
+                                        const activeNonHidden = v1GameModes.filter(m => !(m === 'audio' && systemSettings.hideAudioChallenge) && !(m === 'complete' && systemSettings.hideCompletionChallenge) && !(m === 'surah' && systemSettings.hideSurahChallenge));
+                                        if (activeNonHidden.length <= 1) {
                                           toast.error('يجب اختيار مهارة واحدة على الأقل');
                                           return;
                                         }
                                         setV1GameModes(v1GameModes.filter(m => m !== mode.id));
                                       } else {
                                         setV1GameModes([...v1GameModes, mode.id as any]);
+                                        if (mode.id !== 'islamic' && (skillQuestionCounts[mode.id as 'audio' | 'complete' | 'surah'] || 0) <= 0) {
+                                          setSkillQuestionCounts(prev => ({ ...prev, [mode.id]: 5 }));
+                                        }
                                         if (mode.id === 'islamic') {
                                           setShowIslamicConfigModal(true);
                                         }
@@ -5120,13 +5177,13 @@ ${versesList}
                             </div>
                             {/* Breakdown */}
                             <div className="flex flex-wrap items-center gap-1 text-[10px] font-bold text-slate-500">
-                              {v1GameModes.includes('audio') && (
+                              {v1GameModes.includes('audio') && !systemSettings.hideAudioChallenge && (
                                 <span className="bg-white px-2 py-0.5 rounded-md border border-slate-200">صوتي: {skillQuestionCounts.audio || 0}</span>
                               )}
-                              {v1GameModes.includes('complete') && (
+                              {v1GameModes.includes('complete') && !systemSettings.hideCompletionChallenge && (
                                 <span className="bg-white px-2 py-0.5 rounded-md border border-slate-200">إكمال: {skillQuestionCounts.complete || 0}</span>
                               )}
-                              {v1GameModes.includes('surah') && (
+                              {v1GameModes.includes('surah') && !systemSettings.hideSurahChallenge && (
                                 <span className="bg-white px-2 py-0.5 rounded-md border border-slate-200">سورة: {skillQuestionCounts.surah || 0}</span>
                               )}
                               {v1GameModes.includes('islamic') && (
