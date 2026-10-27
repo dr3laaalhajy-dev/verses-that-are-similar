@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { RotateCcw, ZoomIn, ZoomOut } from 'lucide-react';
+import QuranAyahOverlay from './QuranAyahOverlay';
 
 interface QuranZoomViewerProps {
   pageNumber: number;
@@ -11,6 +12,8 @@ interface QuranZoomViewerProps {
   onTap?: () => void;
   onInteraction?: () => void;
   pageTurnDirection?: 'next' | 'prev';
+  selectedAyah?: { surah: number; ayah: number } | null;
+  onSelectAyah?: (surah: number, ayah: number) => void;
 }
 
 export const QuranZoomViewer: React.FC<QuranZoomViewerProps> = ({
@@ -23,10 +26,13 @@ export const QuranZoomViewer: React.FC<QuranZoomViewerProps> = ({
   onTap,
   onInteraction,
   pageTurnDirection = 'next',
+  selectedAyah,
+  onSelectAyah,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [internalScale, setInternalScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
+  const ayahTapTriggeredRef = useRef(false);
 
   const scale = externalScale !== undefined ? externalScale : internalScale;
   const setScale = useCallback(
@@ -175,10 +181,10 @@ export const QuranZoomViewer: React.FC<QuranZoomViewerProps> = ({
             setScale(2.2);
           }
         } else {
-          // Single Tap
+          // Single Tap (suppressed if an Ayah was clicked)
           setTimeout(() => {
             const sinceLast = Date.now() - lastTapTimeRef.current;
-            if (sinceLast >= 300) {
+            if (sinceLast >= 300 && !ayahTapTriggeredRef.current) {
               onTap?.();
             }
           }, 300);
@@ -264,21 +270,40 @@ export const QuranZoomViewer: React.FC<QuranZoomViewerProps> = ({
           transformOrigin: 'center center',
         }}
       >
-        <img
-          src={`/quran-pages/${pageNumber.toString().padStart(3, '0')}.png`}
-          alt={`صفحة ${pageNumber}`}
-          draggable={false}
-          className={`pointer-events-none select-none transition-filter duration-300 ${
-            isFullscreen
-              ? 'w-auto h-auto max-h-[100dvh] max-w-full object-contain drop-shadow-2xl'
-              : 'w-auto h-auto max-h-[85vh] max-w-full object-contain shadow-none md:shadow-xl rounded-none md:rounded-2xl'
-          }`}
-          style={{
-            filter: darkMode
-              ? 'invert(0.92) hue-rotate(180deg) brightness(0.88) contrast(1.12)'
-              : 'none',
-          }}
-        />
+        <div className="relative inline-block max-w-full">
+          <img
+            src={`/quran-pages/${pageNumber.toString().padStart(3, '0')}.png`}
+            alt={`صفحة ${pageNumber}`}
+            draggable={false}
+            className={`block pointer-events-none select-none transition-filter duration-300 ${
+              isFullscreen
+                ? 'w-auto h-auto max-h-[100dvh] max-w-full object-contain drop-shadow-2xl'
+                : 'w-auto h-auto max-h-[85vh] max-w-full object-contain shadow-none md:shadow-xl rounded-none md:rounded-2xl'
+            }`}
+            style={{
+              filter: darkMode
+                ? 'invert(0.92) hue-rotate(180deg) brightness(0.88) contrast(1.12)'
+                : 'none',
+            }}
+          />
+
+          {onSelectAyah && (
+            <QuranAyahOverlay
+              pageNumber={pageNumber}
+              selectedAyah={selectedAyah || null}
+              onSelectAyah={(surah, ayah) => {
+                ayahTapTriggeredRef.current = true;
+                setTimeout(() => {
+                  ayahTapTriggeredRef.current = false;
+                }, 400);
+                if (movedDistanceRef.current < 8) {
+                  onSelectAyah(surah, ayah);
+                }
+              }}
+              darkMode={darkMode}
+            />
+          )}
+        </div>
       </div>
 
       {/* Floating Zoom Controls Badge when Zoomed In */}

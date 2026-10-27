@@ -36,6 +36,7 @@ import Encyclopedia from './components/Encyclopedia';
 import IslamicQuiz from './components/IslamicQuiz';
 import { IslamicVideos } from './components/IslamicVideos';
 import QuranZoomViewer from './components/QuranZoomViewer';
+import AyahActionSheet from './components/AyahActionSheet';
 import IslamicRoomConfigModal from './components/IslamicRoomConfigModal';
 import { getRandomIslamicRoomQuestions } from './utils/islamicChallengeHelper';
 import { islamicCategoriesList } from './data/islamicCategories';
@@ -1860,6 +1861,12 @@ export default function App() {
     } catch {
       // ignore
     }
+  }, [currentPage]);
+
+  const [selectedAyah, setSelectedAyah] = useState<{ surah: number; ayah: number } | null>(null);
+
+  useEffect(() => {
+    setSelectedAyah(null);
   }, [currentPage]);
 
   const [pageInput, setPageInput] = useState(() => currentPage.toString());
@@ -6629,7 +6636,10 @@ ${versesList}
                                       setCurrentPage(prev => Math.max(1, prev - 1));
                                     }
                                   }}
+                                  onTap={() => setSelectedAyah(null)}
                                   pageTurnDirection={pageTurnDirection}
+                                  selectedAyah={selectedAyah}
+                                  onSelectAyah={(s, a) => setSelectedAyah({ surah: s, ayah: a })}
                                 />
                               </div>
                             </div>
@@ -7874,6 +7884,22 @@ ${versesList}
             isCheckingSavedStatus={isCheckingSavedStatus}
           />
 
+          {selectedAyah && (
+            <AyahActionSheet
+              selectedAyah={selectedAyah}
+              onClose={() => setSelectedAyah(null)}
+              onNavigateToPage={(p) => {
+                setCurrentPage(p);
+                setSelectedAyah(null);
+              }}
+              onOpenEncyclopedia={(s, a) => {
+                setSelectedAyah(null);
+                setView('encyclopedia');
+              }}
+              darkMode={librarySettings.darkMode}
+            />
+          )}
+
           <PrivacyModal
             isOpen={showPrivacyModal}
             onClose={() => setShowPrivacyModal(false)}
@@ -8135,9 +8161,20 @@ ${versesList}
                       }
                       resetFullscreenControlsTimer();
                     }}
-                    onTap={toggleFullscreenControls}
+                    onTap={() => {
+                      if (selectedAyah) {
+                        setSelectedAyah(null);
+                      } else {
+                        toggleFullscreenControls();
+                      }
+                    }}
                     onInteraction={resetFullscreenControlsTimer}
                     pageTurnDirection={pageTurnDirection}
+                    selectedAyah={selectedAyah}
+                    onSelectAyah={(s, a) => {
+                      setSelectedAyah({ surah: s, ayah: a });
+                      resetFullscreenControlsTimer();
+                    }}
                   />
                 </div>
 
