@@ -2690,6 +2690,34 @@ export default function App() {
     }
   };
 
+  const isAdvancingRef = useRef(false);
+
+  // Requirement 4: Reset UI State immediately on question transition
+  const resetQuestionUIState = useCallback((newIndex: number, currentRoomData?: any) => {
+    setCurrentChallengeIndex(newIndex);
+    setHasAnsweredCurrentQuestion(false);
+    setSkillsFeedback(false);
+    setSelectedOption(null);
+    setMatchedIds(new Set());
+    setSurahFeedbackData(null);
+
+    const roomTime = (currentRoomData?.timePerQuestion && currentRoomData.timePerQuestion > 0)
+      ? currentRoomData.timePerQuestion
+      : (room?.timePerQuestion && room.timePerQuestion > 0)
+      ? room.timePerQuestion
+      : 0;
+    if (roomTime > 0) {
+      setSpeedTimeLeft(roomTime);
+    }
+
+    const currentChallengesList = (challenges && challenges.length > 0) ? challenges : (currentRoomData?.challenges || []);
+    const nextQ = currentChallengesList[newIndex] || currentRoomData?.challenges?.[newIndex];
+    if (nextQ) {
+      const mode = nextQ.type === 'SURAH' ? 'surah' : (nextQ.type === 'STANDARD' || nextQ.type === 'AUDIO') ? 'audio' : 'complete';
+      setSkillsType(mode);
+    }
+  }, [challenges, room?.timePerQuestion]);
+
   const handleRoomTimeout = async () => {
     if (!room?.id) return;
     if (room.transitionMode === 'ASYNC') {
@@ -2714,38 +2742,59 @@ export default function App() {
       return;
     }
 
-    try {
-      const res = await fetch('/api/1v1', {
+    // In SYNC mode: Submit answer as incorrect if not answered yet
+    if (!hasAnsweredCurrentQuestion) {
+      setHasAnsweredCurrentQuestion(true);
+      setSkillsFeedback(true);
+      fetch('/api/1v1', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'advance-question',
+          action: 'submit-answer',
           roomId: room.id,
-          questionIndex: room.currentQuestionIndex ?? currentChallengeIndex
+          playerId: playerUsername || playerName,
+          questionIndex: room.currentQuestionIndex ?? currentChallengeIndex,
+          isCorrect: false,
+          timestamp: Date.now()
         })
-      });
-      const data = await res.json();
-      if (res.ok && data) {
-        setRoom(data);
-        if (data.status === 'FINISHED') {
-          setView('group_game');
-        } else if (data.currentQuestionIndex > currentChallengeIndex) {
-          setCurrentChallengeIndex(data.currentQuestionIndex);
-          setHasAnsweredCurrentQuestion(false);
-          setSkillsFeedback(false);
-          setSelectedOption(null);
-          setMatchedIds(new Set());
-          setSurahFeedbackData(null);
-          setSpeedTimeLeft((data.timePerQuestion && data.timePerQuestion > 0) ? data.timePerQuestion : 0);
-          const nextQ = challenges[data.currentQuestionIndex] || data.challenges?.[data.currentQuestionIndex];
-          if (nextQ) {
-            const mode = nextQ.type === 'SURAH' ? 'surah' : (nextQ.type === 'STANDARD' || nextQ.type === 'AUDIO') ? 'audio' : 'complete';
-            setSkillsType(mode);
+      }).catch(err => console.error('Error submitting timeout answer:', err));
+    }
+
+    // Requirement 1: Only Host triggers advance-question on timeout
+    const isHost = Boolean(
+      (room?.player1?.name && playerName && room.player1.name === playerName) ||
+      (room?.player1?.username && playerUsername && room.player1.username.toLowerCase() === playerUsername.toLowerCase()) ||
+      (room?.hostName && playerName && room.hostName === playerName) ||
+      (room?.hostUsername && playerUsername && room.hostUsername.toLowerCase() === playerUsername.toLowerCase())
+    );
+
+    if (isHost && !isAdvancingRef.current) {
+      isAdvancingRef.current = true;
+      try {
+        const res = await fetch('/api/1v1', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'advance-question',
+            roomId: room.id,
+            playerId: playerUsername || playerName,
+            questionIndex: room.currentQuestionIndex ?? currentChallengeIndex
+          })
+        });
+        const data = await res.json();
+        isAdvancingRef.current = false;
+        if (res.ok && data) {
+          setRoom(data);
+          if (data.status === 'FINISHED') {
+            setView('group_game');
+          } else if (data.currentQuestionIndex > currentChallengeIndex) {
+            resetQuestionUIState(data.currentQuestionIndex, data);
           }
         }
+      } catch (err) {
+        isAdvancingRef.current = false;
+        console.error('Error in handleRoomTimeout:', err);
       }
-    } catch (err) {
-      console.error('Error in handleRoomTimeout:', err);
     }
   };
 
@@ -2815,30 +2864,77 @@ export default function App() {
               // In ASYNC mode, keep room data updated without overriding player's local question position
               setRoom(data);
             } else {
-              // In SYNC mode: Check if server advanced to next question
+              // In SYNC mode:
+              // 1. Requirement 4: Check if server advanced to next question and reset UI state immediately
               if (data.currentQuestionIndex !== undefined && data.currentQuestionIndex > currentChallengeIndex) {
-                setCurrentChallengeIndex(data.currentQuestionIndex);
-                setHasAnsweredCurrentQuestion(false);
-                setSkillsFeedback(false);
-                setSelectedOption(null);
-                setMatchedIds(new Set());
-                setSurahFeedbackData(null);
-                const roomTime = (data.timePerQuestion && data.timePerQuestion > 0) ? data.timePerQuestion : 0;
-                setSpeedTimeLeft(roomTime);
+                resetQuestionUIState(data.currentQuestionIndex, data);
+                setRoom(data);
+                return;
+              }
 
-                const nextQ = challenges[data.currentQuestionIndex] || data.challenges?.[data.currentQuestionIndex];
-                if (nextQ) {
-                  const mode = nextQ.type === 'SURAH' ? 'surah' : (nextQ.type === 'STANDARD' || nextQ.type === 'AUDIO') ? 'audio' : 'complete';
-                  setSkillsType(mode);
-                }
-              } else {
-                // Check if user's answer is recorded
-                const myPId = String(data.participants?.find((p: any) => p.name === playerName || p.username === playerUsername)?.id);
-                if (data.currentAnswers && myPId && data.currentAnswers[myPId] && !hasAnsweredCurrentQuestion) {
-                  setHasAnsweredCurrentQuestion(true);
-                  setSkillsFeedback(true);
+              // 2. Check if current user's answer is recorded
+              const myPId = String(data.participants?.find((p: any) => p.name === playerName || p.username === playerUsername)?.id);
+              if (data.currentAnswers && myPId && data.currentAnswers[myPId] && !hasAnsweredCurrentQuestion) {
+                setHasAnsweredCurrentQuestion(true);
+                setSkillsFeedback(true);
+              }
+
+              // 3. Requirement 1 & 3: Host-Only Transition Validation
+              const isHost = Boolean(
+                (room?.player1?.name && playerName && room.player1.name === playerName) ||
+                (room?.player1?.username && playerUsername && room.player1.username.toLowerCase() === playerUsername.toLowerCase()) ||
+                (room?.hostName && playerName && room.hostName === playerName) ||
+                (room?.hostUsername && playerUsername && room.hostUsername.toLowerCase() === playerUsername.toLowerCase()) ||
+                (data?.player1?.name && playerName && data.player1.name === playerName) ||
+                (data?.player1?.username && playerUsername && data.player1.username.toLowerCase() === playerUsername.toLowerCase()) ||
+                (data?.hostName && playerName && data.hostName === playerName) ||
+                (data?.hostUsername && playerUsername && data.hostUsername.toLowerCase() === playerUsername.toLowerCase())
+              );
+
+              if (isHost && !isAdvancingRef.current) {
+                const participants = data.participants || [];
+                const onlineParticipants = participants.filter((p: any) => p.isOnline !== false);
+                const onlineCount = onlineParticipants.length;
+                const currentAnswers = data.currentAnswers || {};
+
+                // Filter answers for active question
+                const validAnswers = Object.entries(currentAnswers).filter(([_, ans]: [string, any]) => {
+                  return ans && (ans.questionIndex === undefined || ans.questionIndex === data.currentQuestionIndex);
+                });
+
+                // Condition: all online participants have answered
+                const allOnlineAnswered = onlineCount > 0 && (
+                  validAnswers.length >= onlineCount ||
+                  onlineParticipants.every((p: any) => Boolean(currentAnswers[String(p.id)]))
+                );
+
+                if (allOnlineAnswered) {
+                  isAdvancingRef.current = true;
+                  fetch('/api/1v1', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      action: 'advance-question',
+                      roomId: room.id,
+                      playerId: playerUsername || playerName,
+                      questionIndex: data.currentQuestionIndex
+                    })
+                  })
+                  .then(res => res.json())
+                  .then(advData => {
+                    isAdvancingRef.current = false;
+                    if (advData && advData.currentQuestionIndex > currentChallengeIndex) {
+                      resetQuestionUIState(advData.currentQuestionIndex, advData);
+                      setRoom(advData);
+                    }
+                  })
+                  .catch(err => {
+                    isAdvancingRef.current = false;
+                    console.error('Host advance question error:', err);
+                  });
                 }
               }
+
               setRoom(data);
             }
           } else {
@@ -2854,7 +2950,7 @@ export default function App() {
 
     const interval = setInterval(poll, 1000); // Poll every 1 second for real-time multiplayer sync
     return () => clearInterval(interval);
-  }, [room?.id, view, room?.status, currentChallengeIndex, playerName, playerUsername, hasAnsweredCurrentQuestion, challenges]);
+  }, [room?.id, view, room?.status, currentChallengeIndex, playerName, playerUsername, hasAnsweredCurrentQuestion, challenges, resetQuestionUIState]);
 
   // Presence & Connection Management: Track online/offline status & background lifecycle
   useEffect(() => {
@@ -3550,18 +3646,7 @@ export default function App() {
             if (data.status === 'FINISHED') {
               setView('group_game');
             } else if (data.currentQuestionIndex !== undefined && data.currentQuestionIndex > currentChallengeIndex) {
-              setCurrentChallengeIndex(data.currentQuestionIndex);
-              setHasAnsweredCurrentQuestion(false);
-              setSkillsFeedback(false);
-              setSelectedOption(null);
-              setMatchedIds(new Set());
-              setSurahFeedbackData(null);
-              setSpeedTimeLeft((data.timePerQuestion && data.timePerQuestion > 0) ? data.timePerQuestion : 0);
-              const nextQ = challenges[data.currentQuestionIndex] || data.challenges?.[data.currentQuestionIndex];
-              if (nextQ) {
-                const mode = nextQ.type === 'SURAH' ? 'surah' : (nextQ.type === 'STANDARD' || nextQ.type === 'AUDIO') ? 'audio' : 'complete';
-                setSkillsType(mode);
-              }
+              resetQuestionUIState(data.currentQuestionIndex, data);
             }
           }
         }).catch(err => console.error('Error submitting room answer:', err));
@@ -3721,18 +3806,7 @@ export default function App() {
           if (data.status === 'FINISHED') {
             setView('group_game');
           } else if (data.currentQuestionIndex !== undefined && data.currentQuestionIndex > currentChallengeIndex) {
-            setCurrentChallengeIndex(data.currentQuestionIndex);
-            setHasAnsweredCurrentQuestion(false);
-            setSkillsFeedback(false);
-            setSelectedOption(null);
-            setMatchedIds(new Set());
-            setSurahFeedbackData(null);
-            setSpeedTimeLeft((data.timePerQuestion && data.timePerQuestion > 0) ? data.timePerQuestion : 0);
-            const nextQ = challenges[data.currentQuestionIndex] || data.challenges?.[data.currentQuestionIndex];
-            if (nextQ) {
-              const mode = nextQ.type === 'SURAH' ? 'surah' : (nextQ.type === 'STANDARD' || nextQ.type === 'AUDIO') ? 'audio' : 'complete';
-              setSkillsType(mode);
-            }
+            resetQuestionUIState(data.currentQuestionIndex, data);
           }
         }
       }).catch(err => console.error('Error submitting room surah answer:', err));
@@ -6322,7 +6396,7 @@ ${versesList}
                             </p>
                             <div className="inline-flex items-center gap-2 bg-white px-3.5 py-1 rounded-full border border-amber-200 text-[11px] font-black text-amber-800 shadow-xs">
                               <Users className="w-3.5 h-3.5 text-amber-600" />
-                              <span>أجاب ({room.answeredCount ?? 0} من {room.totalParticipants ?? room.participants?.length ?? 1})</span>
+                              <span>أجاب ({room.answeredCount ?? 0} من {room.onlineParticipantsCount ?? room.totalParticipants ?? room.participants?.length ?? 1})</span>
                             </div>
                           </motion.div>
                         )}
@@ -9211,7 +9285,7 @@ ${versesList}
                             </p>
                             <div className="inline-flex items-center gap-2 bg-white px-3.5 py-1 rounded-full border border-amber-200 text-[11px] font-black text-amber-800 shadow-xs">
                               <Users className="w-3.5 h-3.5 text-amber-600" />
-                              <span>أجاب ({room.answeredCount ?? 0} من {room.totalParticipants ?? room.participants?.length ?? 1})</span>
+                              <span>أجاب ({room.answeredCount ?? 0} من {room.onlineParticipantsCount ?? room.totalParticipants ?? room.participants?.length ?? 1})</span>
                             </div>
                           </motion.div>
                         )}
