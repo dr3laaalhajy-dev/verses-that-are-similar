@@ -1375,6 +1375,7 @@ export default function App() {
     surah: 0
   });
   const [v1TimePerQuestion, setV1TimePerQuestion] = useState(20);
+  const [v1TransitionMode, setV1TransitionMode] = useState<'SYNC' | 'ASYNC'>('SYNC');
   const [v1RoomName, setV1RoomName] = useState<string>('');
   const [v1IsPrivate, setV1IsPrivate] = useState<boolean>(false);
   const [v1RoomPassword, setV1RoomPassword] = useState<string>('');
@@ -2612,6 +2613,7 @@ export default function App() {
         topics: isIslamicIncluded ? islamicRoomTopics : undefined,
         questionCount: count,
         timePerQuestion: v1Timer ? v1TimePerQuestion : 0,
+        transitionMode: v1TransitionMode,
         customChallenges: finalCustomChallenges
       };
 
@@ -2684,6 +2686,28 @@ export default function App() {
 
   const handleRoomTimeout = async () => {
     if (!room?.id) return;
+    if (room.transitionMode === 'ASYNC') {
+      // In ASYNC mode: player timed out on their individual question
+      try {
+        fetch('/api/1v1', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'submit-answer',
+            roomId: room.id,
+            playerId: playerUsername || playerName,
+            questionIndex: currentChallengeIndex,
+            isCorrect: false,
+            timestamp: Date.now()
+          })
+        }).catch(err => console.error('Error submitting ASYNC timeout answer:', err));
+        moveToNextQuestion();
+      } catch (err) {
+        console.error('Error in ASYNC timeout:', err);
+      }
+      return;
+    }
+
     try {
       const res = await fetch('/api/1v1', {
         method: 'POST',
@@ -2764,32 +2788,39 @@ export default function App() {
 
             setView('challenge');
           } else if (view === 'challenge' && data.status === 'PLAYING') {
-            // Check if server advanced to next question
-            if (data.currentQuestionIndex !== undefined && data.currentQuestionIndex > currentChallengeIndex) {
-              setCurrentChallengeIndex(data.currentQuestionIndex);
-              setHasAnsweredCurrentQuestion(false);
-              setSkillsFeedback(false);
-              setSelectedOption(null);
-              setMatchedIds(new Set());
-              setSurahFeedbackData(null);
-              const roomTime = (data.timePerQuestion && data.timePerQuestion > 0) ? data.timePerQuestion : 0;
-              setSpeedTimeLeft(roomTime);
-
-              const nextQ = challenges[data.currentQuestionIndex] || data.challenges?.[data.currentQuestionIndex];
-              if (nextQ) {
-                const mode = nextQ.type === 'SURAH' ? 'surah' : (nextQ.type === 'STANDARD' || nextQ.type === 'AUDIO') ? 'audio' : 'complete';
-                setSkillsType(mode);
-              }
+            if (data.transitionMode === 'ASYNC') {
+              // In ASYNC mode, keep room data updated without overriding player's local question position
+              setRoom(data);
             } else {
-              // Check if user's answer is recorded
-              const myPId = String(data.participants?.find((p: any) => p.name === playerName || p.username === playerUsername)?.id);
-              if (data.currentAnswers && myPId && data.currentAnswers[myPId] && !hasAnsweredCurrentQuestion) {
-                setHasAnsweredCurrentQuestion(true);
-                setSkillsFeedback(true);
+              // In SYNC mode: Check if server advanced to next question
+              if (data.currentQuestionIndex !== undefined && data.currentQuestionIndex > currentChallengeIndex) {
+                setCurrentChallengeIndex(data.currentQuestionIndex);
+                setHasAnsweredCurrentQuestion(false);
+                setSkillsFeedback(false);
+                setSelectedOption(null);
+                setMatchedIds(new Set());
+                setSurahFeedbackData(null);
+                const roomTime = (data.timePerQuestion && data.timePerQuestion > 0) ? data.timePerQuestion : 0;
+                setSpeedTimeLeft(roomTime);
+
+                const nextQ = challenges[data.currentQuestionIndex] || data.challenges?.[data.currentQuestionIndex];
+                if (nextQ) {
+                  const mode = nextQ.type === 'SURAH' ? 'surah' : (nextQ.type === 'STANDARD' || nextQ.type === 'AUDIO') ? 'audio' : 'complete';
+                  setSkillsType(mode);
+                }
+              } else {
+                // Check if user's answer is recorded
+                const myPId = String(data.participants?.find((p: any) => p.name === playerName || p.username === playerUsername)?.id);
+                if (data.currentAnswers && myPId && data.currentAnswers[myPId] && !hasAnsweredCurrentQuestion) {
+                  setHasAnsweredCurrentQuestion(true);
+                  setSkillsFeedback(true);
+                }
               }
+              setRoom(data);
             }
+          } else {
+            setRoom(data);
           }
-          setRoom(data);
         } else {
           console.error('Polling API Error:', data.message || 'Unknown error');
         }
@@ -3282,6 +3313,34 @@ export default function App() {
       }
 
       if (room?.id) {
+        if (room.transitionMode === 'ASYNC') {
+          fetch('/api/1v1', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'submit-answer',
+              roomId: room.id,
+              playerId: playerUsername || playerName,
+              questionIndex: currentChallengeIndex,
+              isCorrect,
+              timestamp: Date.now()
+            })
+          }).then(res => res.json()).then(data => {
+            if (data && data.status) {
+              setRoom(data);
+              if (data.status === 'FINISHED') {
+                setView('group_game');
+              }
+            }
+          }).catch(err => console.error('Error submitting ASYNC room answer:', err));
+
+          const advanceDelay = isCorrect ? 900 : 1500;
+          setTimeout(() => {
+            moveToNextQuestion();
+          }, advanceDelay);
+          return;
+        }
+
         setHasAnsweredCurrentQuestion(true);
         fetch('/api/1v1', {
           method: 'POST',
@@ -3425,6 +3484,34 @@ export default function App() {
 
     // 4. Auto-advance in single-player, or submit in multiplayer
     if (room?.id) {
+      if (room.transitionMode === 'ASYNC') {
+        fetch('/api/1v1', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'submit-answer',
+            roomId: room.id,
+            playerId: playerUsername || playerName,
+            questionIndex: currentChallengeIndex,
+            isCorrect: isFullyCorrect,
+            timestamp: Date.now()
+          })
+        }).then(res => res.json()).then(data => {
+          if (data && data.status) {
+            setRoom(data);
+            if (data.status === 'FINISHED') {
+              setView('group_game');
+            }
+          }
+        }).catch(err => console.error('Error submitting room surah answer:', err));
+
+        const advanceDelay = isFullyCorrect ? 900 : 1800;
+        setTimeout(() => {
+          moveToNextQuestion();
+        }, advanceDelay);
+        return;
+      }
+
       setHasAnsweredCurrentQuestion(true);
       fetch('/api/1v1', {
         method: 'POST',
@@ -5247,6 +5334,67 @@ ${versesList}
                           </div>
                         </div>
 
+                        {/* 5. طريقة الانتقال بين الأسئلة (Question Transition Mode) */}
+                        <div className="p-4 bg-slate-50 border-2 border-slate-200/80 rounded-2xl shadow-xs space-y-3 text-right">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="text-base">🔄</span>
+                              <span className="text-xs font-black text-slate-800">طريقة الانتقال بين الأسئلة</span>
+                            </div>
+                            <span className="text-[10px] font-black text-slate-600 bg-white px-2.5 py-0.5 rounded-full border border-slate-200">
+                              {v1TransitionMode === 'SYNC' ? 'متزامن (سؤال بسؤال)' : 'فردي (سباق حر)'}
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                            {/* Option 1: SYNC */}
+                            <button
+                              type="button"
+                              onClick={() => setV1TransitionMode('SYNC')}
+                              className={`p-3.5 rounded-xl border-2 text-right transition-all cursor-pointer flex flex-col justify-between gap-2 ${
+                                v1TransitionMode === 'SYNC'
+                                  ? 'border-orange-500 bg-orange-50/70 shadow-xs ring-2 ring-orange-500/20'
+                                  : 'border-slate-200 bg-white hover:border-slate-300'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className={`text-xs font-black ${v1TransitionMode === 'SYNC' ? 'text-orange-900' : 'text-slate-800'}`}>
+                                  متزامن - انتظار الجميع ⏳
+                                </span>
+                                <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${v1TransitionMode === 'SYNC' ? 'border-orange-500 bg-orange-500' : 'border-slate-300'}`}>
+                                  {v1TransitionMode === 'SYNC' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                                </div>
+                              </div>
+                              <p className="text-[11px] text-slate-500 font-bold leading-relaxed">
+                                ينتقل جميع اللاعبين معاً سؤالاً بسؤال عند إجابة الجميع أو انتهاء المؤقت.
+                              </p>
+                            </button>
+
+                            {/* Option 2: ASYNC */}
+                            <button
+                              type="button"
+                              onClick={() => setV1TransitionMode('ASYNC')}
+                              className={`p-3.5 rounded-xl border-2 text-right transition-all cursor-pointer flex flex-col justify-between gap-2 ${
+                                v1TransitionMode === 'ASYNC'
+                                  ? 'border-orange-500 bg-orange-50/70 shadow-xs ring-2 ring-orange-500/20'
+                                  : 'border-slate-200 bg-white hover:border-slate-300'
+                              }`}
+                            >
+                              <div className="flex items-center justify-between">
+                                <span className={`text-xs font-black ${v1TransitionMode === 'ASYNC' ? 'text-orange-900' : 'text-slate-800'}`}>
+                                  تلقائي فردي 🚀
+                                </span>
+                                <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${v1TransitionMode === 'ASYNC' ? 'border-orange-500 bg-orange-500' : 'border-slate-300'}`}>
+                                  {v1TransitionMode === 'ASYNC' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                                </div>
+                              </div>
+                              <p className="text-[11px] text-slate-500 font-bold leading-relaxed">
+                                ينتقل كل لاعب فور إجابته دون انتظار البقية، في سباق سرعة ودقة مستقل.
+                              </p>
+                            </button>
+                          </div>
+                        </div>
+
                         <div className="pt-4 space-y-3">
                           <button
                             onClick={handleCreateV1}
@@ -5607,16 +5755,33 @@ ${versesList}
                             <Trophy className="w-14 h-14 md:w-16 md:h-16 text-brand-gold mx-auto mb-4 drop-shadow-md" />
                             <h2 className="text-2xl md:text-3xl font-black text-brand-emerald mb-3">اكتمل السباق!</h2>
 
-                            <div className="max-w-md mx-auto space-y-2.5 mb-8 text-right">
+                            <div className="max-w-lg mx-auto space-y-3 mb-8 text-right">
                               {(room?.participants || [])
-                                .map((p: any) => ({
-                                  ...p,
-                                  finishTime: room?.playersProgress?.[p.id]?.finishTime,
-                                  score: room?.playersProgress?.[p.id]?.score || 0,
-                                  speedBonusCount: room?.playersProgress?.[p.id]?.speedBonusCount || 0,
-                                  correctCount: room?.playersProgress?.[p.id]?.correctCount || 0,
-                                  isFinished: !!room?.playersProgress?.[p.id]?.finishTime
-                                }))
+                                .map((p: any) => {
+                                  const prog = room?.playersProgress?.[p.id] || {};
+                                  const totalQ = room?.questionCount || 1;
+                                  const correctCount = prog.correctCount || 0;
+                                  const accuracy = prog.accuracy ?? Math.round((correctCount / totalQ) * 100);
+                                  const score = prog.finalTotalScore ?? prog.score ?? 0;
+                                  const basePoints = prog.basePoints ?? (correctCount * 10);
+                                  const speedBonusCount = prog.speedBonusCount || 0;
+                                  const completionBonus = prog.completionBonus || 0;
+                                  const accuracyBonus = prog.accuracyBonus || 0;
+                                  const isFinished = !!prog.finishTime;
+
+                                  return {
+                                    ...p,
+                                    finishTime: prog.finishTime,
+                                    score,
+                                    basePoints,
+                                    speedBonusCount,
+                                    completionBonus,
+                                    accuracyBonus,
+                                    correctCount,
+                                    accuracy,
+                                    isFinished
+                                  };
+                                })
                                 .sort((a: any, b: any) => {
                                   if (b.score !== a.score) return b.score - a.score;
                                   return (a.finishTime || Infinity) - (b.finishTime || Infinity);
@@ -5627,27 +5792,61 @@ ${versesList}
                                     initial={{ opacity: 0, x: -20 }}
                                     animate={{ opacity: 1, x: 0 }}
                                     transition={{ delay: idx * 0.1 }}
-                                    className={`flex items-center gap-3 p-3 md:p-3.5 rounded-xl border ${idx === 0 ? 'bg-brand-gold/10 border-brand-gold shadow-md' : 'bg-white border-slate-100 shadow-xs'}`}
+                                    className={`flex flex-col gap-2 p-3.5 md:p-4 rounded-2xl border ${
+                                      idx === 0
+                                        ? 'bg-gradient-to-r from-amber-50 to-orange-50/60 border-amber-300 shadow-md ring-2 ring-amber-400/20'
+                                        : 'bg-white border-slate-200/80 shadow-xs'
+                                    }`}
                                   >
-                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black text-sm ${idx === 0 ? 'bg-brand-gold text-brand-emerald' : 'bg-slate-100 text-slate-400'}`}>
-                                      {idx + 1}
-                                    </div>
-                                    <div className="flex-1">
-                                      <div className="font-black text-slate-800 flex justify-between items-center text-sm">
-                                        <div className="flex flex-col items-start">
-                                          <span className="font-black">{p.name} {(p.name === playerName || (p.username && p.username === playerUsername)) && '(أنت)'}</span>
-                                          {!p.isFinished && <span className="text-[10px] text-slate-400 font-bold">جاري الحل...</span>}
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-2.5">
+                                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-black text-sm ${
+                                          idx === 0 ? 'bg-amber-500 text-white shadow-xs' : idx === 1 ? 'bg-slate-300 text-slate-700' : idx === 2 ? 'bg-amber-700 text-white' : 'bg-slate-100 text-slate-500'
+                                        }`}>
+                                          {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : idx + 1}
                                         </div>
-                                        <div className="flex items-center gap-2">
-                                          {p.speedBonusCount > 0 && (
-                                            <span className="text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-black flex items-center gap-0.5">
-                                              <Zap className="w-3 h-3 text-amber-500 fill-amber-500" />
-                                              <span>+{p.speedBonusCount} سرعة</span>
+                                        <div className="flex flex-col items-start">
+                                          <span className="font-black text-slate-800 text-sm">
+                                            {p.name} {(p.name === playerName || (p.username && p.username === playerUsername)) && '(أنت)'}
+                                          </span>
+                                          <div className="flex items-center gap-2 text-[10px] text-slate-400 font-bold">
+                                            <span>{p.correctCount}/{room?.questionCount || 0} صحيحة</span>
+                                            <span>•</span>
+                                            <span className={`font-black ${p.accuracy >= 90 ? 'text-emerald-600' : p.accuracy >= 70 ? 'text-amber-600' : 'text-slate-500'}`}>
+                                              دقة {p.accuracy}%
                                             </span>
-                                          )}
-                                          <span className="text-xs text-brand-gold font-black bg-brand-gold/10 px-2 py-0.5 rounded-lg">النقاط: {p.score}</span>
+                                          </div>
                                         </div>
                                       </div>
+
+                                      <div className="text-left flex flex-col items-end">
+                                        <span className="text-sm md:text-base text-brand-emerald font-black bg-brand-emerald/10 px-2.5 py-0.5 rounded-lg border border-brand-emerald/20">
+                                          {p.score} نقطة
+                                        </span>
+                                        <span className="text-[10px] text-slate-400 font-bold mt-0.5">
+                                          الأساسية: {p.basePoints}
+                                        </span>
+                                      </div>
+                                    </div>
+
+                                    {/* Bonus Badges Breakdown */}
+                                    <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-slate-100 text-[10px] font-black">
+                                      {p.speedBonusCount > 0 && (
+                                        <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded-md flex items-center gap-1 border border-amber-200">
+                                          <Zap className="w-3 h-3 text-amber-600 fill-amber-600" />
+                                          <span>+{p.speedBonusCount} بونص سرعة</span>
+                                        </span>
+                                      )}
+                                      {p.completionBonus > 0 && (
+                                        <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md flex items-center gap-1 border border-emerald-200">
+                                          <span>🏆 +{p.completionBonus} إنهاء أول مشروط (دقة &gt; 70%)</span>
+                                        </span>
+                                      )}
+                                      {p.accuracyBonus > 0 && (
+                                        <span className="bg-purple-100 text-purple-800 px-2 py-0.5 rounded-md flex items-center gap-1 border border-purple-200">
+                                          <span>🎯 +{p.accuracyBonus} تمكن فائق (دقة &gt; 90%)</span>
+                                        </span>
+                                      )}
                                     </div>
                                   </motion.div>
                                 ))}
@@ -5788,7 +5987,7 @@ ${versesList}
                     ) : (
                       <div className="max-w-2xl md:max-w-3xl lg:max-w-4xl mx-auto w-full px-2 md:px-4 pt-2 md:pt-4">
                         {/* Multiplayer Real-time Question Counter & Speed Bonus Indicator */}
-                        {room && (
+                        {room && room.transitionMode !== 'ASYNC' && (
                           <motion.div
                             initial={{ opacity: 0, y: -5 }}
                             animate={{ opacity: 1, y: 0 }}
@@ -5806,13 +6005,33 @@ ${versesList}
 
                             <div className="flex items-center gap-1.5 bg-amber-500/20 text-amber-300 px-3 py-1 rounded-xl border border-amber-400/30 text-[11px] font-black">
                               <Zap className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-                              <span>أول 3 إجابات صحيحة تنال بونص سرعة (+1) ⚡</span>
+                              <span>أول 4 إجابات صحيحة تنال بونص سرعة (+1) ⚡</span>
                             </div>
                           </motion.div>
                         )}
 
-                        {/* Multiplayer Waiting State after answering - Placed ABOVE the question */}
-                        {room && hasAnsweredCurrentQuestion && (
+                        {room && room.transitionMode === 'ASYNC' && (
+                          <motion.div
+                            initial={{ opacity: 0, y: -5 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="flex items-center justify-between gap-2.5 p-3 md:p-3.5 bg-linear-to-r from-slate-900/90 to-slate-800/90 text-white rounded-2xl border border-white/10 shadow-lg mb-4 text-xs font-bold"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm">🚀</span>
+                              <span className="text-white font-black text-xs md:text-sm">
+                                سباق فردي سريع (أجب بأقصى سرعة ودقة!)
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 bg-amber-500/20 text-amber-300 px-3 py-1 rounded-xl border border-amber-400/30 text-[11px] font-black">
+                              <Zap className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+                              <span>أول 4 إجابات صحيحة تنال بونص سرعة (+1) ⚡</span>
+                            </div>
+                          </motion.div>
+                        )}
+
+                        {/* Multiplayer Waiting State after answering - Placed ABOVE the question (Only in SYNC mode) */}
+                        {room && room.transitionMode !== 'ASYNC' && hasAnsweredCurrentQuestion && (
                           <motion.div
                             initial={{ opacity: 0, scale: 0.98, y: -6 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -8613,7 +8832,7 @@ ${versesList}
                         )}
 
                         {/* Multiplayer Real-time Question Counter & Speed Bonus Indicator */}
-                        {room && (
+                        {room && room.transitionMode !== 'ASYNC' && (
                           <motion.div
                             initial={{ opacity: 0, y: -5 }}
                             animate={{ opacity: 1, y: 0 }}
@@ -8631,13 +8850,33 @@ ${versesList}
 
                             <div className="flex items-center gap-1.5 bg-amber-500/20 text-amber-300 px-3 py-1 rounded-xl border border-amber-400/30 text-[11px] font-black">
                               <Zap className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-                              <span>أول 3 إجابات صحيحة تنال بونص سرعة (+1) ⚡</span>
+                              <span>أول 4 إجابات صحيحة تنال بونص سرعة (+1) ⚡</span>
                             </div>
                           </motion.div>
                         )}
 
-                        {/* Multiplayer Waiting State after answering - Placed ABOVE the question */}
-                        {room && hasAnsweredCurrentQuestion && (
+                        {room && room.transitionMode === 'ASYNC' && (
+                          <motion.div
+                            initial={{ opacity: 0, y: -5 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="flex items-center justify-between gap-2.5 p-3 md:p-3.5 bg-linear-to-r from-slate-900/90 to-slate-800/90 text-white rounded-2xl border border-white/10 shadow-lg mb-4 text-xs font-bold"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm">🚀</span>
+                              <span className="text-white font-black text-xs md:text-sm">
+                                سباق فردي سريع (أجب بأقصى سرعة ودقة!)
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 bg-amber-500/20 text-amber-300 px-3 py-1 rounded-xl border border-amber-400/30 text-[11px] font-black">
+                              <Zap className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+                              <span>أول 4 إجابات صحيحة تنال بونص سرعة (+1) ⚡</span>
+                            </div>
+                          </motion.div>
+                        )}
+
+                        {/* Multiplayer Waiting State after answering - Placed ABOVE the question (Only in SYNC mode) */}
+                        {room && room.transitionMode !== 'ASYNC' && hasAnsweredCurrentQuestion && (
                           <motion.div
                             initial={{ opacity: 0, scale: 0.98, y: -6 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -9157,6 +9396,7 @@ ${versesList}
               darkMode={librarySettings.darkMode}
             />
           )}
+      
 
           <PrivacyModal
             isOpen={showPrivacyModal}

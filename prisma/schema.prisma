@@ -88,6 +88,7 @@ model Room {
   questionCount   Int      @default(5)    // Number of questions in the challenge
   maxPlayers      Int      @default(2)    // Phase 1: Multiplayer Group Rooms
   gameMode        String   @default("STANDARD") // STANDARD, COMPLETION, SURAH
+  transitionMode  String   @default("SYNC")     // SYNC, ASYNC
   timePerQuestion Int      @default(20)   // Time in seconds
   currentQuestionIndex Int   @default(0)
   questionStartTime Float?   @default(0)
