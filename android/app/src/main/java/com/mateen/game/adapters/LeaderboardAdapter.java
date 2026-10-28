@@ -6,9 +6,27 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 import com.mateen.game.R;
+import com.mateen.game.controllers.TrophiesManager;
 import com.mateen.game.models.User;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class LeaderboardAdapter {
+
+    private List<User> userList = new ArrayList<>();
+
+    public void updateData(List<User> newUsers) {
+        if (newUsers != null) {
+            // فرز القائمة مزدوجاً: كؤوس أولاً، ثم نقاط كاسر تعادل
+            TrophiesManager.sortLeaderboard(newUsers);
+            this.userList = new ArrayList<>(newUsers);
+        }
+    }
+
+    public List<User> getUserList() {
+        return userList;
+    }
 
     public static void bindCosmeticsToViewHolder(User player, View itemView) {
         TextView tvName = itemView.findViewById(R.id.tvPlayerName);
@@ -39,4 +57,3 @@ public class LeaderboardAdapter {
         }
     }
 }
-

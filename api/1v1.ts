@@ -476,7 +476,41 @@ function finalizeRoomScores(room: any, playersProgress: Record<string, any>) {
 
   const winnerId = ranked.length > 0 ? ranked[0].id : null
 
+  // 5. Award trophies to Top 3 positions: 1st (+3), 2nd (+2), 3rd (+1)
+  const TROPHY_REWARDS = [3, 2, 1];
+  for (let i = 0; i < Math.min(3, ranked.length); i++) {
+    const pIdStr = String(ranked[i].id);
+    if (updatedProgress[pIdStr]) {
+      updatedProgress[pIdStr].trophiesAwarded = TROPHY_REWARDS[i];
+    }
+  }
+
   return { updatedProgress, winnerId }
+}
+
+async function applyRoomTrophies(tx: any, room: any, progress: Record<string, any>) {
+  const ranked = Object.entries(progress)
+    .map(([id, p]: [string, any]) => ({
+      id: parseInt(id),
+      score: p.finalTotalScore || p.score || 0,
+      finishTime: p.finishTime || Infinity
+    }))
+    .filter(p => !isNaN(p.id) && p.id > 0)
+    .sort((a, b) => b.score - a.score || a.finishTime - b.finishTime);
+
+  const rewards = [3, 2, 1];
+  for (let i = 0; i < Math.min(3, ranked.length); i++) {
+    const targetId = ranked[i].id;
+    const cups = rewards[i];
+    try {
+      await tx.player.update({
+        where: { id: targetId },
+        data: { cups: { increment: cups } }
+      });
+    } catch (e) {
+      console.error(`Failed to award ${cups} trophies to player ${targetId}:`, e);
+    }
+  }
 }
 
 function evaluateQuestionScores(
@@ -574,6 +608,8 @@ async function advanceRoomToNextQuestionTx(tx: any, room: any, currentAnswers: R
     const finalized = finalizeRoomScores(room, finalProgress)
     finalProgress = finalized.updatedProgress
     winnerId = finalized.winnerId
+
+    await applyRoomTrophies(tx, room, finalProgress)
   }
 
   const updatedRoom = await tx.room.update({
@@ -755,6 +791,10 @@ async function handleSubmitAnswer(req: VercelRequest, res: VercelResponse) {
           Object.values(playersProgress).every((p: any) => p.finishTime)
 
         const { updatedProgress, winnerId } = finalizeRoomScores(room, playersProgress)
+
+        if (allFinished) {
+          await applyRoomTrophies(tx, room, updatedProgress)
+        }
 
         await tx.room.update({
           where: { id: room.id },
