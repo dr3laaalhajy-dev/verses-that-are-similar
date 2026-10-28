@@ -1387,7 +1387,7 @@ export default function App() {
   const [pageTurnDirection, setPageTurnDirection] = useState<'next' | 'prev'>('next');
   const [selectedHadith, setSelectedHadith] = useState<Hadith | null>(null);
 
-  const [librarySettings, setLibrarySettings] = useState(() => {
+  const [librarySettings, setLibrarySettings] = useState<{ darkMode: boolean; [key: string]: any }>(() => {
     try {
       const saved = localStorage.getItem('quran_mushaf_settings');
       if (saved) return JSON.parse(saved);
@@ -4925,7 +4925,7 @@ ${versesList}
 
                 {/* Dark Mode / Light Mode Toggle Button */}
                 <button
-                  onClick={() => setLibrarySettings(prev => ({ ...prev, darkMode: !prev.darkMode }))}
+                  onClick={() => setLibrarySettings((prev: any) => ({ ...prev, darkMode: !prev.darkMode }))}
                   className={`flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-1.5 rounded-xl transition-all text-xs sm:text-sm font-bold shadow-md hover:scale-105 active:scale-95 ${
                     librarySettings.darkMode
                       ? 'bg-amber-400/25 text-amber-300 border border-amber-400/40 hover:bg-amber-400/35'
