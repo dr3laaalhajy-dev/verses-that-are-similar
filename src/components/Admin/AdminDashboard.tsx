@@ -3204,12 +3204,15 @@ export default function AdminDashboard({
                         </p>
                       </div>
 
-                      {/* Switch Pill */}
-                      <div className={`w-12 h-7 rounded-full p-1 transition-colors ${
-                        versionControlData.isForceUpdate ? 'bg-rose-500' : 'bg-slate-300'
-                      }`}>
-                        <div className={`w-5 h-5 rounded-full bg-white shadow-sm transition-transform ${
-                          versionControlData.isForceUpdate ? 'translate-x-0' : 'translate-x-5'
+                      {/* Switch Pill (Isolated with dir="ltr" to prevent RTL thumb truncation/clipping) */}
+                      <div 
+                        dir="ltr"
+                        className={`w-12 h-7 rounded-full p-1 flex items-center transition-colors shrink-0 ${
+                          versionControlData.isForceUpdate ? 'bg-rose-500' : 'bg-slate-300'
+                        }`}
+                      >
+                        <div className={`w-5 h-5 rounded-full bg-white shadow-md transition-transform duration-200 ${
+                          versionControlData.isForceUpdate ? 'translate-x-5' : 'translate-x-0'
                         }`} />
                       </div>
                     </div>

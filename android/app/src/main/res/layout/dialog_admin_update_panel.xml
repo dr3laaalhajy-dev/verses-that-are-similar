@@ -1,0 +1,250 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#F8FAFC"
+    android:fillViewport="true"
+    android:layoutDirection="rtl">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:clipChildren="false"
+        android:clipToPadding="false"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <!-- Header Card -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_bottom_sheet_update"
+            android:elevation="2dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:padding="16dp"
+            android:layout_marginBottom="16dp">
+
+            <ImageView
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:contentDescription="شعار التحديث"
+                android:src="@drawable/ic_update_rocket" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="12dp"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="لوحة تحكم تحديثات التطبيق 🚀"
+                    android:textColor="#0F172A"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="خاص بالمؤسس (Firebase Version Control)"
+                    android:textColor="#64748B"
+                    android:textSize="11.5sp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Form Card Container -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_update_notes"
+            android:clipChildren="false"
+            android:clipToPadding="false"
+            android:orientation="vertical"
+            android:padding="18dp"
+            android:layout_marginBottom="16dp">
+
+            <!-- 1. Version Code -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="رقم الإصدار الأحدث (Version Code):"
+                android:textColor="#1E293B"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="6dp" />
+
+            <EditText
+                android:id="@+id/etVersionCode"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:background="@drawable/bg_version_badge"
+                android:hint="مثال: 2 أو 3 أو 10"
+                android:inputType="number"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:textColor="#0F172A"
+                android:textSize="14sp"
+                android:layout_marginBottom="14dp" />
+
+            <!-- 2. Force Update Switch Container (Fixed Thumb/Track Alignment) -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="نوع التحديث:"
+                android:textColor="#1E293B"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="6dp" />
+
+            <!-- Parent Container: clipChildren & clipToPadding set to false -->
+            <LinearLayout
+                android:id="@+id/layoutSwitchContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_version_badge"
+                android:clipChildren="false"
+                android:clipToPadding="false"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="14dp"
+                android:paddingTop="10dp"
+                android:paddingEnd="14dp"
+                android:paddingBottom="10dp"
+                android:layout_marginBottom="14dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/tvSwitchStatusTitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="تحديث إجباري (إلزامي)"
+                        android:textColor="#0F172A"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="يمنع إغلاق التنبيه حتى يقوم المستخدم بالتحديث"
+                        android:textColor="#64748B"
+                        android:textSize="11sp" />
+                </LinearLayout>
+
+                <!-- 
+                     MaterialSwitch: Recommended modern component
+                     - layout_width/height = wrap_content
+                     - splitTrack = false (prevents thumb clipping / gap)
+                     - showText = false (prevents text clipping inside track)
+                -->
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switchForceUpdate"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_vertical"
+                    android:checked="false"
+                    android:paddingStart="6dp"
+                    android:paddingEnd="6dp"
+                    android:splitTrack="false"
+                    app:showText="false" />
+            </LinearLayout>
+
+            <!-- 3. Update Notes Multi-line -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="ما الجديد في هذا الإصدار (Update Notes):"
+                android:textColor="#1E293B"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="6dp" />
+
+            <EditText
+                android:id="@+id/etUpdateNotes"
+                android:layout_width="match_parent"
+                android:layout_height="110dp"
+                android:background="@drawable/bg_version_badge"
+                android:gravity="top|start"
+                android:hint="اكتب هنا التغييرات والمميزات الجديدة ليراها المستخدم..."
+                android:inputType="textMultiLine"
+                android:lineSpacingExtra="3dp"
+                android:padding="12dp"
+                android:textColor="#0F172A"
+                android:textSize="13sp"
+                android:layout_marginBottom="14dp" />
+
+            <!-- 4. Google Play Link -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="رابط متجر Google Play:"
+                android:textColor="#1E293B"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="6dp" />
+
+            <EditText
+                android:id="@+id/etPlayStoreLink"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:background="@drawable/bg_version_badge"
+                android:hint="https://play.google.com/store/apps/details?id=..."
+                android:inputType="textUri"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:textColor="#0F172A"
+                android:textSize="13sp"
+                android:layout_marginBottom="14dp" />
+
+            <!-- 5. APK Direct Link -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="رابط تحميل ملف APK المباشر:"
+                android:textColor="#1E293B"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="6dp" />
+
+            <EditText
+                android:id="@+id/etApkLink"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:background="@drawable/bg_version_badge"
+                android:hint="https://github.com/.../Mutashabihat.apk"
+                android:inputType="textUri"
+                android:paddingStart="14dp"
+                android:paddingEnd="14dp"
+                android:textColor="#0F172A"
+                android:textSize="13sp"
+                android:layout_marginBottom="14dp" />
+
+            <!-- Publish Button -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnPublishUpdate"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:text="نشر التحديث في Firebase 🚀"
+                android:textColor="#FFFFFF"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                app:backgroundTint="#059669"
+                app:cornerRadius="16dp"
+                app:icon="@drawable/ic_update_rocket"
+                app:iconGravity="textStart"
+                app:iconPadding="10dp"
+                app:iconSize="22dp" />
+
+        </LinearLayout>
+    </LinearLayout>
+
+</ScrollView>
