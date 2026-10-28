@@ -298,18 +298,20 @@ const AudioChallengeUI = ({ targetVerses, matchedIds, isListening, onToggleListe
             <p className="mb-4 text-slate-600 text-xs md:text-sm font-medium">أتقنت جميع المتشابهات في هذا الموضع ببراعة بارك الله فيك.</p>
 
             <div className="flex flex-col sm:flex-row gap-2.5 justify-center">
-              <button
-                onClick={() => {
-                  const firstVerse = targetVerses[0];
-                  if (firstVerse) {
-                    onViewTafsir(firstVerse.surah_number, firstVerse.verse_number, firstVerse.text);
-                  }
-                }}
-                className="px-5 py-2.5 bg-emerald-50 text-emerald-700 rounded-xl font-bold text-xs md:text-sm hover:bg-emerald-100 transition-all border border-emerald-100 flex items-center justify-center gap-1.5"
-              >
-                <BookOpen className="w-4 h-4" />
-                <span>عرض التفسير</span>
-              </button>
+              {challengeMode !== 'daily' && (
+                <button
+                  onClick={() => {
+                    const firstVerse = targetVerses[0];
+                    if (firstVerse) {
+                      onViewTafsir(firstVerse.surah_number, firstVerse.verse_number, firstVerse.text);
+                    }
+                  }}
+                  className="px-5 py-2.5 bg-emerald-50 text-emerald-700 rounded-xl font-bold text-xs md:text-sm hover:bg-emerald-100 transition-all border border-emerald-100 flex items-center justify-center gap-1.5"
+                >
+                  <BookOpen className="w-4 h-4" />
+                  <span>عرض التفسير</span>
+                </button>
+              )}
 
               {challengeMode === 'daily' ? (
                 <button
@@ -465,18 +467,20 @@ const SurahChallengeUI = ({ verseText, inputs, onInputChange, onSubmit, feedback
           <p className="mb-4 text-slate-600 text-xs md:text-sm font-medium leading-relaxed">أحسنت القول، إجابتك صحيحة وموفقة.</p>
 
           <div className="flex flex-col sm:flex-row gap-2.5 justify-center">
-            <button
-              onClick={() => {
-                const firstVerse = currentChallenge?.verses?.[0];
-                if (firstVerse) {
-                  onViewTafsir(firstVerse.surah_number, firstVerse.verse_number, firstVerse.text);
-                }
-              }}
-              className="px-5 py-2.5 bg-emerald-50 text-emerald-700 rounded-xl font-bold text-xs md:text-sm hover:bg-emerald-100 transition-all border border-emerald-100 flex items-center justify-center gap-1.5"
-            >
-              <BookOpen className="w-4 h-4" />
-              <span>عرض التفسير</span>
-            </button>
+            {challengeMode !== 'daily' && (
+              <button
+                onClick={() => {
+                  const firstVerse = currentChallenge?.verses?.[0];
+                  if (firstVerse) {
+                    onViewTafsir(firstVerse.surah_number, firstVerse.verse_number, firstVerse.text);
+                  }
+                }}
+                className="px-5 py-2.5 bg-emerald-50 text-emerald-700 rounded-xl font-bold text-xs md:text-sm hover:bg-emerald-100 transition-all border border-emerald-100 flex items-center justify-center gap-1.5"
+              >
+                <BookOpen className="w-4 h-4" />
+                <span>عرض التفسير</span>
+              </button>
+            )}
 
             {challengeMode === 'daily' ? (
               <button
@@ -620,18 +624,20 @@ const CompleteChallengeUI = ({ verseText, options, selectedOption, onOptionSelec
           <p className="mb-6 text-slate-600 text-sm md:text-base font-medium leading-relaxed">أحسنت التوقع، إجابة صحيحة بارك الله فيك.</p>
 
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <button
-              onClick={() => {
-                const firstVerse = currentChallenge?.verses?.[0];
-                if (firstVerse) {
-                  onViewTafsir(firstVerse.surah_number, firstVerse.verse_number, firstVerse.text);
-                }
-              }}
-              className="px-6 py-3 bg-emerald-50 text-emerald-700 rounded-xl font-bold text-sm md:text-base hover:bg-emerald-100 transition-all border border-emerald-100 flex items-center justify-center gap-2"
-            >
-              <BookOpen className="w-5 h-5" />
-              <span>عرض التفسير</span>
-            </button>
+            {challengeMode !== 'daily' && (
+              <button
+                onClick={() => {
+                  const firstVerse = currentChallenge?.verses?.[0];
+                  if (firstVerse) {
+                    onViewTafsir(firstVerse.surah_number, firstVerse.verse_number, firstVerse.text);
+                  }
+                }}
+                className="px-6 py-3 bg-emerald-50 text-emerald-700 rounded-xl font-bold text-sm md:text-base hover:bg-emerald-100 transition-all border border-emerald-100 flex items-center justify-center gap-2"
+              >
+                <BookOpen className="w-5 h-5" />
+                <span>عرض التفسير</span>
+              </button>
+            )}
 
             {challengeMode === 'daily' ? (
               <button
