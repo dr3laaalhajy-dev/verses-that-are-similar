@@ -1220,6 +1220,37 @@ export default function App() {
     fetchSettings();
   }, [fetchSettings]);
 
+  // App Version Control & Update Alert state
+  const [appUpdateInfo, setAppUpdateInfo] = useState<{
+    latestVersionCode: number;
+    updateNotes: string;
+    isForceUpdate: boolean;
+    playStoreLink: string;
+    apkLink: string;
+  } | null>(null);
+  const [isUpdateModalDismissed, setIsUpdateModalDismissed] = useState(false);
+
+  const fetchVersionControl = useCallback(async () => {
+    try {
+      const res = await fetch('/api/version-control');
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.latestVersionCode) {
+          const currentCode = 1; // Current build version code
+          if (data.latestVersionCode > currentCode) {
+            setAppUpdateInfo(data);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error checking version control:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchVersionControl();
+  }, [fetchVersionControl]);
+
   const getInitialChallenges = (): any[] => {
     try {
       const saved = localStorage.getItem('cached_challenges');
@@ -10386,6 +10417,65 @@ ${versesList}
             topicQuestionCounts={islamicTopicQuestionCounts}
             onUpdateTopicCount={(topic, count) => setIslamicTopicQuestionCounts(prev => ({ ...prev, [topic]: count }))}
           />
+
+          {/* App Update Alert Modal */}
+          {appUpdateInfo && (!isUpdateModalDismissed || appUpdateInfo.isForceUpdate) && (
+            <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm" dir="rtl">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                className="bg-white max-w-sm w-full p-6 md:p-8 rounded-[2.5rem] shadow-2xl border border-white/20 text-center space-y-4"
+              >
+                <div className="w-16 h-16 rounded-3xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-3xl mx-auto shadow-inner">
+                  🚀
+                </div>
+                <span className="inline-block px-3 py-1 rounded-full text-xs font-black bg-emerald-100 text-emerald-800 border border-emerald-200">
+                  إصدار جديد متوفر v{appUpdateInfo.latestVersionCode}
+                </span>
+                <h3 className="text-xl font-black text-slate-800">تحديث جديد متاح 🚀</h3>
+                <div className="max-h-48 overflow-y-auto p-4 rounded-2xl bg-slate-50 border border-slate-100 text-right space-y-1">
+                  <p className="text-xs text-slate-400 font-bold">ما الجديد في هذا التحديث:</p>
+                  <p className="text-xs md:text-sm text-slate-700 font-bold whitespace-pre-wrap leading-relaxed">
+                    {appUpdateInfo.updateNotes || 'تحسينات عامة على الأداء وثبات اللعبة والتحديات.'}
+                  </p>
+                </div>
+
+                <div className="space-y-2 pt-2">
+                  {appUpdateInfo.playStoreLink && (
+                    <button
+                      type="button"
+                      onClick={() => window.open(appUpdateInfo.playStoreLink, '_blank')}
+                      className="w-full py-3 bg-brand-emerald text-white rounded-2xl font-black text-xs md:text-sm shadow-md hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95"
+                    >
+                      <span>تحديث من Google Play 🛍️</span>
+                    </button>
+                  )}
+                  {appUpdateInfo.apkLink && (
+                    <button
+                      type="button"
+                      onClick={() => window.open(appUpdateInfo.apkLink, '_blank')}
+                      className="w-full py-2.5 bg-slate-100 text-slate-700 rounded-2xl font-black text-xs border border-slate-200 hover:bg-slate-200 transition-all cursor-pointer active:scale-95"
+                    >
+                      <span>تحميل ملف APK خارجي 📥</span>
+                    </button>
+                  )}
+                  {!appUpdateInfo.isForceUpdate ? (
+                    <button
+                      type="button"
+                      onClick={() => setIsUpdateModalDismissed(true)}
+                      className="w-full py-2 text-slate-400 hover:text-slate-600 text-xs font-bold cursor-pointer"
+                    >
+                      لاحقاً، ذكرني لاحقاً
+                    </button>
+                  ) : (
+                    <p className="text-[11px] text-rose-500 font-black pt-1">
+                      ⚠️ هذا التحديث ضروري لمواصلة استخدام التطبيق.
+                    </p>
+                  )}
+                </div>
+              </motion.div>
+            </div>
+          )}
 
           {/* Private Room Password Dialog */}
           <AnimatePresence>

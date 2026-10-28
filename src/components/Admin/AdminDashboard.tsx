@@ -6,7 +6,7 @@ import {
   Hash, List, ChevronDown, ChevronUp, Users, Shield, UserPlus, Key, Loader2, Home,
   Crown, Lock, KeyRound, Copy, Check, User, Menu, LogOut, UserX, UserCheck,
   Trophy, Star, RefreshCw, Eye, EyeOff, ShieldCheck, CheckCircle2, XCircle,
-  Smartphone, Mail, ExternalLink, Clock, CheckCircle, Video, Play
+  Smartphone, Mail, ExternalLink, Clock, CheckCircle, Video, Play, Rocket
 } from 'lucide-react';
 import { searchGroupedAyahsByStart, GroupedAyah } from '../../services/QuranRepository';
 import { ALL_QURAN_SURAHS, getJuzsForSurah, formatJuzsDescription, JUZ_NAMES_AR } from '../../services/JuzRepository';
@@ -624,7 +624,78 @@ export default function AdminDashboard({
   const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [admins, setAdmins] = useState<Admin[]>([]);
   const [inviteCodes, setInviteCodes] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<'STANDARD' | 'COMPLETION' | 'SURAH' | 'videos' | 'admins' | 'users' | 'testers'>('STANDARD');
+  const [activeTab, setActiveTab] = useState<'STANDARD' | 'COMPLETION' | 'SURAH' | 'videos' | 'admins' | 'users' | 'testers' | 'app_update'>('STANDARD');
+  
+  // App Version Control state
+  const [versionControlData, setVersionControlData] = useState<{
+    latestVersionCode: number;
+    updateNotes: string;
+    isForceUpdate: boolean;
+    playStoreLink: string;
+    apkLink: string;
+    updatedAt?: number;
+  }>({
+    latestVersionCode: 1,
+    updateNotes: '',
+    isForceUpdate: false,
+    playStoreLink: 'https://play.google.com/store/apps/details?id=com.mateen.game',
+    apkLink: 'https://github.com/dr3laaalhajy-dev/verses-that-are-similar/releases/download/v1.0.0/Mutashabihat.apk'
+  });
+  const [isPublishingUpdate, setIsPublishingUpdate] = useState(false);
+  const [publishSuccessMessage, setPublishSuccessMessage] = useState<string | null>(null);
+  const [publishErrorMessage, setPublishErrorMessage] = useState<string | null>(null);
+  const [isPreviewUpdateModalOpen, setIsPreviewUpdateModalOpen] = useState(false);
+
+  const fetchVersionControl = useCallback(async () => {
+    try {
+      const res = await fetch('/api/version-control');
+      if (res.ok) {
+        const data = await res.json();
+        if (data) {
+          setVersionControlData({
+            latestVersionCode: Number(data.latestVersionCode) || 1,
+            updateNotes: data.updateNotes || '',
+            isForceUpdate: Boolean(data.isForceUpdate),
+            playStoreLink: data.playStoreLink || 'https://play.google.com/store/apps/details?id=com.mateen.game',
+            apkLink: data.apkLink || 'https://github.com/dr3laaalhajy-dev/verses-that-are-similar/releases/download/v1.0.0/Mutashabihat.apk',
+            updatedAt: data.updatedAt
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching version control:', err);
+    }
+  }, []);
+
+  const handlePublishAppUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!token) return;
+    setIsPublishingUpdate(true);
+    setPublishSuccessMessage(null);
+    setPublishErrorMessage(null);
+
+    try {
+      const res = await fetch('/api/version-control', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(versionControlData)
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setPublishSuccessMessage('تم نشر التحديث وحفظ بيانات الإصدار بنجاح في Firebase والنظام 🚀');
+        fetchVersionControl();
+      } else {
+        setPublishErrorMessage(data.message || 'فشل نشر التحديث');
+      }
+    } catch (err: any) {
+      setPublishErrorMessage('حدث خطأ في الاتصال: ' + err.message);
+    } finally {
+      setIsPublishingUpdate(false);
+    }
+  };
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -1656,7 +1727,7 @@ export default function AdminDashboard({
     setLevel('');
     setVerses([]);
     setSuggestions([]);
-    setType(activeTab === 'admins' || activeTab === 'users' || activeTab === 'testers' || activeTab === 'videos' ? 'STANDARD' : activeTab);
+    setType(activeTab === 'admins' || activeTab === 'users' || activeTab === 'testers' || activeTab === 'videos' || activeTab === 'app_update' ? 'STANDARD' : activeTab);
     setAudioUrl('');
     setOptions(['', '', '', '']);
     setCorrectIndex(null);
@@ -1746,7 +1817,7 @@ export default function AdminDashboard({
             <div>
               <h1 className="text-xs font-black text-slate-800 leading-tight">لوحة التحكم</h1>
               <span className="text-[10px] text-brand-emerald font-bold">
-                {activeTab === 'STANDARD' ? 'المتشابهات' : activeTab === 'COMPLETION' ? 'تكملة الآية' : activeTab === 'SURAH' ? 'اسم السورة' : activeTab === 'videos' ? 'المكتبة المرئية' : activeTab === 'users' ? 'إدارة المستخدمين' : activeTab === 'testers' ? 'طلبات Google Play' : 'المشرفين'}
+                {activeTab === 'STANDARD' ? 'المتشابهات' : activeTab === 'COMPLETION' ? 'تكملة الآية' : activeTab === 'SURAH' ? 'اسم السورة' : activeTab === 'videos' ? 'المكتبة المرئية' : activeTab === 'users' ? 'إدارة المستخدمين' : activeTab === 'testers' ? 'طلبات Google Play' : activeTab === 'app_update' ? 'نظام تحديث التطبيق 🚀' : 'المشرفين'}
               </span>
             </div>
           </div>
@@ -2049,6 +2120,34 @@ export default function AdminDashboard({
                         {testersList.length}
                       </span>
                     ) : null}
+                  </button>
+                )}
+
+                {/* نظام تحديث التطبيق وإصداراته */}
+                {(isCurrentUserFounder || isCurrentUserCoFounder) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      resetForm();
+                      setActiveTab('app_update');
+                      setIsMobileSidebarOpen(false);
+                      fetchVersionControl();
+                    }}
+                    className={`w-full flex items-center justify-between p-3 rounded-2xl text-xs md:text-sm font-black transition-all ${
+                      activeTab === 'app_update'
+                        ? 'bg-brand-emerald text-white shadow-lg shadow-brand-emerald/20'
+                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Rocket className="w-4 h-4 text-emerald-500" />
+                      <span>تحديثات التطبيق 🚀</span>
+                    </div>
+                    {versionControlData.isForceUpdate && (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full font-black bg-rose-500 text-white">
+                        إجباري
+                      </span>
+                    )}
                   </button>
                 )}
               </div>
@@ -3013,6 +3112,255 @@ export default function AdminDashboard({
               <Shield className="w-12 h-12 text-slate-300 mx-auto mb-3" />
               <p className="text-slate-600 font-black text-base">ليس لديك صلاحية للوصول إلى قسم تجربة Google Play</p>
               <p className="text-slate-400 font-bold text-xs mt-1">هذا القسم متاح للمؤسس ومساعد المؤسس فقط</p>
+            </div>
+          )
+        ) : activeTab === 'app_update' ? (
+          (isCurrentUserFounder || isCurrentUserCoFounder) ? (
+            <div className="space-y-6">
+              {/* Header Card */}
+              <div className="bg-white p-6 md:p-8 rounded-[2.5rem] border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-5">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-brand-emerald to-emerald-600 text-white flex items-center justify-center shadow-md shadow-brand-emerald/20 shrink-0">
+                    <Rocket className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="text-lg md:text-xl font-black text-slate-800">نظام إدارة ونشر تحديثات التطبيق (App Update System)</h3>
+                      <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 font-black border border-amber-200">
+                        خاص بالمؤسس 👑
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-400 font-bold mt-0.5">
+                      التحكم في إرسال التحديثات لجميع مستخدمي التطبيق وحفظها في Firebase Realtime Database
+                    </p>
+                  </div>
+                </div>
+
+                {versionControlData.updatedAt && (
+                  <div className="text-left md:text-right text-[11px] text-slate-400 font-bold bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-100">
+                    آخر تحديث منشور: {new Date(versionControlData.updatedAt).toLocaleDateString('ar-EG')} - {new Date(versionControlData.updatedAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
+                  </div>
+                )}
+              </div>
+
+              {/* Status Banner Messages */}
+              {publishSuccessMessage && (
+                <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl flex items-center gap-3 font-bold text-sm shadow-xs animate-in fade-in">
+                  <CheckCircle className="w-5 h-5 text-emerald-600 shrink-0" />
+                  <span>{publishSuccessMessage}</span>
+                </div>
+              )}
+
+              {publishErrorMessage && (
+                <div className="p-4 bg-rose-50 border border-rose-200 text-rose-800 rounded-2xl flex items-center gap-3 font-bold text-sm shadow-xs animate-in fade-in">
+                  <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+                  <span>{publishErrorMessage}</span>
+                </div>
+              )}
+
+              {/* Update Form Card */}
+              <form onSubmit={handlePublishAppUpdate} className="bg-white p-6 md:p-8 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Version Code Input */}
+                  <div className="space-y-2">
+                    <label className="block text-xs md:text-sm font-black text-slate-800">
+                      رقم الإصدار الجديد (Version Code) <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      required
+                      value={versionControlData.latestVersionCode}
+                      onChange={(e) => setVersionControlData({ ...versionControlData, latestVersionCode: parseInt(e.target.value, 10) || 1 })}
+                      className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:border-brand-emerald focus:ring-2 focus:ring-brand-emerald/10 outline-hidden font-bold text-slate-800 text-sm transition-all"
+                      placeholder="مثال: 2 أو 3 أو 10"
+                    />
+                    <p className="text-[11px] text-slate-400 font-bold">
+                      يجب أن يكون رقماً صحيحاً تصاعدياً. إذا كان رقم إصدار جهاز المستخدم أقل من هذا الرقم سيظهر له التنبيه فوراً.
+                    </p>
+                  </div>
+
+                  {/* Force Update Toggle Switch */}
+                  <div className="space-y-2">
+                    <label className="block text-xs md:text-sm font-black text-slate-800">
+                      نوع التحديث (إجباري أم اختياري)
+                    </label>
+                    <div 
+                      onClick={() => setVersionControlData({ ...versionControlData, isForceUpdate: !versionControlData.isForceUpdate })}
+                      className={`p-3 rounded-2xl border flex items-center justify-between cursor-pointer transition-all select-none ${
+                        versionControlData.isForceUpdate 
+                          ? 'bg-rose-50 border-rose-200 text-rose-900' 
+                          : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                      }`}
+                    >
+                      <div>
+                        <div className="font-black text-sm flex items-center gap-2">
+                          <span>{versionControlData.isForceUpdate ? '🔴 تحديث إجباري (إلزامي)' : '🟢 تحديث اختياري'}</span>
+                        </div>
+                        <p className="text-[11px] opacity-80 font-bold mt-0.5">
+                          {versionControlData.isForceUpdate 
+                            ? 'يمنع المستخدم من إغلاق التنبيه حتى يقوم بالتحديث' 
+                            : 'يتيح للمستخدم النقر على "لاحقاً" والاستمرار باللعب'}
+                        </p>
+                      </div>
+
+                      {/* Switch Pill */}
+                      <div className={`w-12 h-7 rounded-full p-1 transition-colors ${
+                        versionControlData.isForceUpdate ? 'bg-rose-500' : 'bg-slate-300'
+                      }`}>
+                        <div className={`w-5 h-5 rounded-full bg-white shadow-sm transition-transform ${
+                          versionControlData.isForceUpdate ? 'translate-x-0' : 'translate-x-5'
+                        }`} />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Update Notes Multi-line */}
+                <div className="space-y-2">
+                  <label className="block text-xs md:text-sm font-black text-slate-800">
+                    نص التحديث ("ما الجديد في هذا الإصدار؟") <span className="text-rose-500">*</span>
+                  </label>
+                  <textarea
+                    rows={5}
+                    required
+                    value={versionControlData.updateNotes}
+                    onChange={(e) => setVersionControlData({ ...versionControlData, updateNotes: e.target.value })}
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:border-brand-emerald focus:ring-2 focus:ring-brand-emerald/10 outline-hidden font-bold text-slate-800 text-sm transition-all leading-relaxed"
+                    placeholder="مثال:&#10;• ميزة جديدة: نظام التفاعلات الحية أثناء التحدي الجماعي&#10;• تحسين سرعة المزامنة والانتقال بين الأسئلة&#10;• نظام الكؤوس للمراكز الثلاثة الأولى"
+                  />
+                  <p className="text-[11px] text-slate-400 font-bold">
+                    سيظهر هذا النص في نافذة التنبيه المنبثقة ليقرأ المستخدم تفاصيل المميزات والتحسينات الجديدة.
+                  </p>
+                </div>
+
+                {/* Google Play & APK Links */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Google Play Link */}
+                  <div className="space-y-2">
+                    <label className="block text-xs md:text-sm font-black text-slate-800">
+                      رابط التطبيق على متجر Google Play
+                    </label>
+                    <input
+                      type="url"
+                      value={versionControlData.playStoreLink}
+                      onChange={(e) => setVersionControlData({ ...versionControlData, playStoreLink: e.target.value })}
+                      className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:border-brand-emerald focus:ring-2 focus:ring-brand-emerald/10 outline-hidden font-bold text-slate-800 text-sm transition-all"
+                      placeholder="https://play.google.com/store/apps/details?id=..."
+                    />
+                  </div>
+
+                  {/* External APK Link */}
+                  <div className="space-y-2">
+                    <label className="block text-xs md:text-sm font-black text-slate-800">
+                      رابط التحميل المباشر لملف الـ APK (الخارجي)
+                    </label>
+                    <input
+                      type="url"
+                      value={versionControlData.apkLink}
+                      onChange={(e) => setVersionControlData({ ...versionControlData, apkLink: e.target.value })}
+                      className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:border-brand-emerald focus:ring-2 focus:ring-brand-emerald/10 outline-hidden font-bold text-slate-800 text-sm transition-all"
+                      placeholder="https://github.com/.../Mutashabihat.apk"
+                    />
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsPreviewUpdateModalOpen(true)}
+                    className="w-full sm:w-auto px-6 py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl font-black text-xs md:text-sm transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+                  >
+                    <Eye className="w-4 h-4" />
+                    <span>معاينة نافذة التنبيه للمستخدم</span>
+                  </button>
+
+                  <button
+                    type="submit"
+                    disabled={isPublishingUpdate}
+                    className="w-full sm:w-auto px-8 py-3.5 bg-gradient-to-r from-brand-emerald to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white rounded-2xl font-black text-xs md:text-sm shadow-lg shadow-brand-emerald/25 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-98 disabled:opacity-50"
+                  >
+                    {isPublishingUpdate ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>جاري نشر التحديث في Firebase...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Rocket className="w-4 h-4" />
+                        <span>نشر التحديث الآن 🚀</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+
+              {/* Preview Modal for Founder */}
+              {isPreviewUpdateModalOpen && (
+                <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+                  <div className="bg-white max-w-sm w-full p-6 md:p-8 rounded-[2.5rem] shadow-2xl border border-white/20 text-center space-y-4 animate-in fade-in zoom-in-95">
+                    <div className="w-16 h-16 rounded-3xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-3xl mx-auto shadow-inner">
+                      🚀
+                    </div>
+                    <span className="inline-block px-3 py-1 rounded-full text-xs font-black bg-emerald-100 text-emerald-800 border border-emerald-200">
+                      إصدار جديد متوفر v{versionControlData.latestVersionCode}
+                    </span>
+                    <h3 className="text-xl font-black text-slate-800">تحديث جديد متاح 🚀</h3>
+                    <div className="max-h-48 overflow-y-auto p-4 rounded-2xl bg-slate-50 border border-slate-100 text-right space-y-1">
+                      <p className="text-xs text-slate-400 font-bold">ما الجديد في هذا التحديث:</p>
+                      <p className="text-xs md:text-sm text-slate-700 font-bold whitespace-pre-wrap leading-relaxed">
+                        {versionControlData.updateNotes || 'تحسينات عامة على الأداء وثبات اللعبة.'}
+                      </p>
+                    </div>
+
+                    <div className="space-y-2 pt-2">
+                      {versionControlData.playStoreLink && (
+                        <button
+                          type="button"
+                          className="w-full py-3 bg-brand-emerald text-white rounded-2xl font-black text-xs md:text-sm shadow-md hover:bg-emerald-700 transition-all flex items-center justify-center gap-2"
+                        >
+                          <span>تحديث من Google Play 🛍️</span>
+                        </button>
+                      )}
+                      {versionControlData.apkLink && (
+                        <button
+                          type="button"
+                          className="w-full py-2.5 bg-slate-100 text-slate-700 rounded-2xl font-black text-xs border border-slate-200 hover:bg-slate-200 transition-all"
+                        >
+                          <span>تحميل ملف APK خارجي 📥</span>
+                        </button>
+                      )}
+                      {!versionControlData.isForceUpdate ? (
+                        <button
+                          type="button"
+                          onClick={() => setIsPreviewUpdateModalOpen(false)}
+                          className="w-full py-2 text-slate-400 hover:text-slate-600 text-xs font-bold"
+                        >
+                          لاحقاً، إغلاق المعاينة
+                        </button>
+                      ) : (
+                        <p className="text-[11px] text-rose-500 font-black pt-1">
+                          ⚠️ التحديث إجباري: لن يتمكن المستخدم من إغلاق النافذة.
+                          <button
+                            type="button"
+                            onClick={() => setIsPreviewUpdateModalOpen(false)}
+                            className="block mx-auto text-slate-400 hover:underline mt-1 text-[10px]"
+                          >
+                            (إغلاق المعاينة كمسؤول)
+                          </button>
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="py-20 text-center bg-white rounded-3xl border border-dashed border-slate-200 p-8 shadow-xs">
+              <Shield className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+              <p className="text-slate-600 font-black text-base">ليس لديك صلاحية للوصول إلى نظام تحديثات التطبيق</p>
+              <p className="text-slate-400 font-bold text-xs mt-1">هذا القسم متاح للمؤسس فقط</p>
             </div>
           )
         ) : activeTab !== 'admins' ? (
