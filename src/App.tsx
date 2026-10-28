@@ -2778,6 +2778,7 @@ export default function App() {
   };
 
   const isAdvancingRef = useRef(false);
+  const notifiedWithdrawnPlayersRef = useRef<Set<string>>(new Set());
 
   // Requirement 4: Reset UI State immediately on question transition
   const resetQuestionUIState = useCallback((newIndex: number, currentRoomData?: any) => {
@@ -2925,6 +2926,7 @@ export default function App() {
 
           // Initial start from waiting room
           if (view === 'group_waiting' && data.status === 'PLAYING') {
+            notifiedWithdrawnPlayersRef.current.clear();
             const mapped = (data.challenges || []).map((q: any) => ({ ...q, verseText: q.verseText || q.keyword || q.text }));
             const firstQ = mapped[0];
             const roomMode = firstQ?.type === 'SURAH' ? 'surah' : (firstQ?.type === 'STANDARD' || firstQ?.type === 'AUDIO') ? 'audio' : 'complete';
@@ -2947,6 +2949,21 @@ export default function App() {
 
             setView('challenge');
           } else if (view === 'challenge' && data.status === 'PLAYING') {
+            // Withdrawal Notification: Check if any participant has left/resigned and notify remaining players
+            const participantsList = data.participants || [];
+            participantsList.forEach((p: any) => {
+              const pIdStr = String(p.id);
+              const pProgress = data.playersProgress ? data.playersProgress[pIdStr] : null;
+              const isWithdrawn = Boolean(p.hasLeft || (pProgress && pProgress.hasLeft) || p.isResigned || (pProgress && pProgress.isResigned) || p.isOnline === false);
+
+              if (isWithdrawn && !notifiedWithdrawnPlayersRef.current.has(pIdStr)) {
+                notifiedWithdrawnPlayersRef.current.add(pIdStr);
+                if (p.name !== playerName && p.username !== playerUsername) {
+                  toast.error(`🚪 انسحب ${p.name || 'أحد المتسابقين'} من التحدي`);
+                }
+              }
+            });
+
             if (data.transitionMode === 'ASYNC') {
               // In ASYNC mode, keep room data updated without overriding player's local question position
               setRoom(data);

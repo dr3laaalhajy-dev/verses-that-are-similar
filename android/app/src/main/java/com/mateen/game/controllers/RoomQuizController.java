@@ -4,8 +4,19 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.graphics.Color;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
+import android.view.Gravity;
 import android.view.View;
+import android.view.ViewGroup;
+import android.widget.FrameLayout;
+import android.widget.LinearLayout;
+import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 
@@ -21,16 +32,19 @@ import com.mateen.game.MainActivity;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * متحكم شاشة التحدي الجماعي (Room/Quiz Activity Controller):
- * 1. معالجة زر الانسحاب (Withdrawal) مع تنظيف مرجع الغرفة النشطة (activeRoomId) والتوجيه بعد اكتمال التحديث السحابي.
- * 2. التحقق من شرط التزامن (checkIfAllAnswered) بالاعتماد على اللاعبين النشطين فقط.
- * 3. مشغل إعادة الفحص الفوري (Immediate Trigger) عند تغير حالة أي لاعب إلى hasLeft = true.
- * 4. إدارة شريط "تحدي جاري الآن" في MainActivity وإخفاؤه تلقائياً إذا كان hasLeft == true.
- * 5. معالجة زر التخطي (Skip) وفق نمط الغرفة (Sync vs Async).
+ * 1. ميزة "إشعار انسحاب اللاعب" (Withdrawal Notification) لباقي اللاعبين بتصميم برتقالي أنيق مع تتبع محلي لمنع التكرار.
+ * 2. معالجة زر الانسحاب (Withdrawal) وتنظيف مرجع الغرفة النشطة (activeRoomId).
+ * 3. التحقق من شرط التزامن (checkIfAllAnswered) بالاعتماد على اللاعبين النشطين فقط.
+ * 4. مشغل إعادة الفحص الفوري (Immediate Trigger) عند تغير حالة أي لاعب إلى hasLeft = true.
+ * 5. إدارة شريط "تحدي جاري الآن" في MainActivity وإخفاؤه تلقائياً إذا كان hasLeft == true.
+ * 6. معالجة زر التخطي (Skip) وفق نمط الغرفة (Sync vs Async).
  */
 public class RoomQuizController {
 
@@ -38,6 +52,9 @@ public class RoomQuizController {
     public static final String PREFS_NAME = "MateenGamePrefs";
     public static final String KEY_ACTIVE_ROOM_ID = "activeRoomId";
     public static final String KEY_CURRENT_ROOM_ID = "currentRoomId";
+
+    // قائمة تتبع محلية (Local Tracking) لمنع تكرار الإشعار
+    private static final Set<String> defaultNotifiedPlayers = new HashSet<>();
 
     public interface RoomQuizNavigationCallback {
         void moveToNextQuestion();
@@ -101,29 +118,204 @@ public class RoomQuizController {
     }
 
     // =========================================================================
-    // 1. برمجة زر الانسحاب (Withdraw Action) وتنظيف مرجع الغرفة النشطة
+    // 1. ميزة إشعار انسحاب اللاعب (Withdrawal Notification & Listener)
     // =========================================================================
 
     /**
-     * تنفيذ الانسحاب من التحدي الجماعي:
-     * 1. حفظ النقاط المكتسبة في رصيد المستخدم الكلي (Users Node).
-     * 2. تنظيف مرجع الغرفة النشطة (activeRoomId / currentRoomId) من الـ User Node والـ SharedPreferences.
-     * 3. تحديث مسار اللاعب في الغرفة (hasLeft = true, isOnline = false).
-     * 4. تنفيذ مباشر (Immediate Execution): الانتظار حتى اكتمال التحديث عبر Tasks.whenAllComplete
-     *    قبل إطلاق Intent العودة إلى MainActivity لتفادي قراءة بيانات قديمة.
+     * ربط مستمع اللاعبين في الغرفة لرصد الانسحاب وإظهار إشعار فوري لباقي اللاعبين:
+     * 1. تتبع الإشعارات السابقة عبر notifiedWithdrawnPlayers.
+     * 2. التحقق من hasLeft == true أو isOnline == false.
+     * 3. إظهار إشعار مخصص وأنيق بعبارة: "انسحب [الاسم] من التحدي 🚪".
+     * 4. استدعاء checkIfAllAnswered فوراً لمزامنة انتقال باقي اللاعبين دون توقف.
      *
-     * @param activity النشاط الحالي (Activity)
-     * @param roomId معرف الغرفة الحالية
-     * @param userId معرف اللاعب
-     * @param earnedPoints النقاط التي جمعها في التحدي الحالي
+     * @param activity النشاط الحالي (RoomActivity)
+     * @param roomId معرف الغرفة
+     * @param currentUserId معرف اللاعب الحالي (حتى لا يظهر إشعار للاعب عن نفسه)
+     * @param notifiedWithdrawnPlayers قائمة التتبع المحلية لمنع التكرار
+     * @param callback معالج أحداث التزامن
+     * @return كائن ValueEventListener لحفظه وإلغائه في onDestroy
      */
+    public static ValueEventListener attachRoomPlayersListener(
+            @NonNull final Activity activity,
+            @NonNull final String roomId,
+            final String currentUserId,
+            @NonNull final Set<String> notifiedWithdrawnPlayers,
+            final OnRoomSyncCallback callback
+    ) {
+        DatabaseReference roomRef = FirebaseDatabase.getInstance()
+                .getReference("rooms")
+                .child(roomId);
+
+        ValueEventListener listener = new ValueEventListener() {
+            @Override
+            public void onDataChange(@NonNull DataSnapshot snapshot) {
+                if (!snapshot.exists()) return;
+
+                Integer curQVal = snapshot.child("currentQuestionIndex").getValue(Integer.class);
+                int currentQ = curQVal != null ? curQVal : 0;
+
+                boolean someoneJustWithdrew = false;
+                DataSnapshot playersSnap = snapshot.child("players");
+
+                // المرور (Loop) على بيانات اللاعبين
+                for (DataSnapshot pSnap : playersSnap.getChildren()) {
+                    String pId = pSnap.getKey();
+                    if (pId == null) continue;
+
+                    Boolean hasLeft = pSnap.child("hasLeft").getValue(Boolean.class);
+                    Boolean isOnline = pSnap.child("isOnline").getValue(Boolean.class);
+
+                    // تحقق من حالة اللاعب: هل انسحب أو غادر؟
+                    boolean isWithdrawn = Boolean.TRUE.equals(hasLeft) || Boolean.FALSE.equals(isOnline);
+
+                    // شرط الإشعار:
+                    // 1. اللاعب منسحب
+                    // 2. معرّف هذا اللاعب غير موجود في قائمة notifiedWithdrawnPlayers
+                    if (isWithdrawn && !notifiedWithdrawnPlayers.contains(pId)) {
+                        // إضافة فورية لمنع التكرار مع أي تحديثات لاحقة
+                        notifiedWithdrawnPlayers.add(pId);
+
+                        // إظهار الإشعار فقط إذا لم يكن هذا اللاعب هو المستخدم نفسه
+                        if (currentUserId == null || !currentUserId.equals(pId)) {
+                            String pName = pSnap.child("name").getValue(String.class);
+                            if (pName == null || pName.trim().isEmpty()) {
+                                pName = "أحد المتسابقين";
+                            }
+
+                            // تصميم الإشعار (Custom UI Notification)
+                            showWithdrawalNotification(activity, pName);
+                        }
+
+                        someoneJustWithdrew = true;
+                    }
+                }
+
+                // استدعاء فوري لفحص التزامن والانتقال للسؤال التالي إذا لزم الأمر
+                if (someoneJustWithdrew) {
+                    Log.i(TAG, "Withdrawal detected. Running immediate sync check.");
+                    checkIfAllAnswered(snapshot, roomId, currentQ, callback);
+                    return;
+                }
+
+                checkIfAllAnswered(snapshot, roomId, currentQ, callback);
+            }
+
+            @Override
+            public void onCancelled(@NonNull DatabaseError error) {
+                Log.e(TAG, "Players listener cancelled: " + error.getMessage());
+            }
+        };
+
+        roomRef.addValueEventListener(listener);
+        return listener;
+    }
+
+    /**
+     * إظهار إشعار انسحاب مخصص (Custom In-App Banner) بتصميم كهرماني/برتقالي أنيق
+     * مع لوجو الخروج (🚪) بدلاً من الـ Toast الافتراضي الرمادي.
+     *
+     * @param activity النشاط الحالي
+     * @param playerName اسم اللاعب المنسحب
+     */
+    public static void showWithdrawalNotification(@NonNull final Activity activity, final String playerName) {
+        if (activity.isFinishing() || activity.isDestroyed()) return;
+
+        activity.runOnUiThread(() -> {
+            try {
+                View decorView = activity.getWindow().getDecorView();
+                if (decorView instanceof ViewGroup) {
+                    final ViewGroup rootView = (ViewGroup) decorView;
+
+                    final LinearLayout banner = new LinearLayout(activity);
+                    banner.setOrientation(LinearLayout.HORIZONTAL);
+                    banner.setGravity(Gravity.CENTER_VERTICAL);
+                    banner.setLayoutDirection(View.LAYOUT_DIRECTION_RTL);
+
+                    int padH = dpToPx(activity, 16);
+                    int padV = dpToPx(activity, 10);
+                    banner.setPadding(padH, padV, padH, padV);
+
+                    // خلفية برتقالية كهرمانية دافئة مع زوايا دائرية وحدود خفيفة وظل
+                    GradientDrawable bg = new GradientDrawable();
+                    bg.setColor(Color.parseColor("#9A3412")); // Amber-800 فخم
+                    bg.setCornerRadius(dpToPx(activity, 24));
+                    bg.setStroke(dpToPx(activity, 1.5f), Color.parseColor("#FDBA74")); // Amber-300
+                    banner.setBackground(bg);
+                    banner.setElevation(dpToPx(activity, 10));
+
+                    // أيقونة الخروج
+                    TextView iconView = new TextView(activity);
+                    iconView.setText("🚪");
+                    iconView.setTextSize(16);
+                    iconView.setPadding(0, 0, dpToPx(activity, 8), 0);
+                    banner.addView(iconView);
+
+                    // نص الرسالة
+                    TextView msgView = new TextView(activity);
+                    msgView.setText("انسحب " + playerName + " من التحدي");
+                    msgView.setTextColor(Color.parseColor("#FFFBEB"));
+                    msgView.setTextSize(13.5f);
+                    msgView.setTypeface(Typeface.DEFAULT_BOLD);
+                    banner.addView(msgView);
+
+                    // إعداد تموضع الإشعار في الجزء العلوي بتوسيط أفقي
+                    FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+                            FrameLayout.LayoutParams.WRAP_CONTENT,
+                            FrameLayout.LayoutParams.WRAP_CONTENT
+                    );
+                    params.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
+                    params.topMargin = dpToPx(activity, 52);
+                    banner.setLayoutParams(params);
+
+                    // حركة ظهور سلسة (Fade-in + Slide-down)
+                    banner.setAlpha(0f);
+                    banner.setTranslationY(-dpToPx(activity, 35));
+                    rootView.addView(banner);
+
+                    banner.animate()
+                            .alpha(1f)
+                            .translationY(0)
+                            .setDuration(260)
+                            .start();
+
+                    // إخفاء تلقائي بعد 3.5 ثوانٍ بحركة انسيابية
+                    new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                        if (banner.getParent() != null) {
+                            banner.animate()
+                                    .alpha(0f)
+                                    .translationY(-dpToPx(activity, 35))
+                                    .setDuration(260)
+                                    .withEndAction(() -> rootView.removeView(banner))
+                                    .start();
+                        }
+                    }, 3500);
+
+                    return;
+                }
+            } catch (Exception e) {
+                Log.w(TAG, "Floating banner fallback to styled Toast", e);
+            }
+
+            // خيار احتياطي (Custom Toast)
+            Toast toast = Toast.makeText(activity, "🚪 انسحب " + playerName + " من التحدي", Toast.LENGTH_SHORT);
+            toast.show();
+        });
+    }
+
+    private static int dpToPx(Context context, float dp) {
+        return (int) (dp * context.getResources().getDisplayMetrics().density + 0.5f);
+    }
+
+    // =========================================================================
+    // 2. برمجة زر الانسحاب (Withdraw Action) وتنظيف مرجع الغرفة النشطة
+    // =========================================================================
+
     public static void handleWithdrawal(
             @NonNull final Activity activity,
             final String roomId,
             final String userId,
             final int earnedPoints
     ) {
-        // أ) تنظيف فوري ومحلي لمرجع الغرفة من SharedPreferences
         clearLocalActiveRoomId(activity);
 
         if (userId == null || userId.isEmpty()) {
@@ -134,7 +326,6 @@ public class RoomQuizController {
         DatabaseReference db = FirebaseDatabase.getInstance().getReference();
         List<Task<Void>> pendingTasks = new ArrayList<>();
 
-        // ب) تحديث مستند المستخدم (User Node): إضافة النقاط + حذف/تصفير activeRoomId و currentRoomId
         DatabaseReference userRef = db.child("users").child(userId);
         Map<String, Object> userUpdates = new HashMap<>();
         if (earnedPoints > 0) {
@@ -146,7 +337,6 @@ public class RoomQuizController {
         Task<Void> userUpdateTask = userRef.updateChildren(userUpdates);
         pendingTasks.add(userUpdateTask);
 
-        // ج) الذهاب إلى مسار اللاعب داخل الغرفة وتحديث حالته: hasLeft = true و isOnline = false
         if (roomId != null && !roomId.isEmpty()) {
             DatabaseReference playerRoomRef = db.child("rooms")
                     .child(roomId)
@@ -162,16 +352,11 @@ public class RoomQuizController {
             pendingTasks.add(roomUpdateTask);
         }
 
-        // د) التنفيذ المباشر الموثوق (Immediate Execution):
-        // الانتظار حتى اكتمال مهام التحديث لضمان وصول التعديل للسيرفر قبل تشغيل MainActivity
         Tasks.whenAllComplete(pendingTasks).addOnCompleteListener(activity, task -> {
             navigateDirectlyToMain(activity);
         });
     }
 
-    /**
-     * مسح معرف الغرفة النشطة من SharedPreferences المحلية
-     */
     public static void clearLocalActiveRoomId(@NonNull Context context) {
         SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         prefs.edit()
@@ -180,9 +365,6 @@ public class RoomQuizController {
                 .apply();
     }
 
-    /**
-     * حفظ معرف الغرفة النشطة محلياً عند الانضمام أو الإنشاء
-     */
     public static void saveLocalActiveRoomId(@NonNull Context context, String roomId) {
         SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         prefs.edit()
@@ -191,9 +373,6 @@ public class RoomQuizController {
                 .apply();
     }
 
-    /**
-     * الانتقال المباشر والآمن إلى MainActivity وتنظيف المكدس
-     */
     private static void navigateDirectlyToMain(@NonNull Activity activity) {
         Intent intent = new Intent(activity, MainActivity.class);
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -202,21 +381,9 @@ public class RoomQuizController {
     }
 
     // =========================================================================
-    // 2. تحديث منطق التحقق في الشاشة الرئيسية (MainActivity Logic) للشريط البرتقالي
+    // 3. تحديث منطق التحقق في الشاشة الرئيسية (MainActivity Logic)
     // =========================================================================
 
-    /**
-     * التحقق من الشريط البرتقالي (Active Challenge Banner) في MainActivity:
-     * 1. يتحقق هل للمستخدم activeRoomId.
-     * 2. يقرأ بيانات الغرفة، ويتحقق من مسار هذا اللاعب تحديداً داخل الغرفة.
-     * 3. إذا كان hasLeft == true لهذا اللاعب في هذه الغرفة (أو انتهت الغرفة):
-     *    يتم إخفاء الشريط تماماً (View.GONE) ومسح المرجع القديم.
-     * 4. إذا كانت الغرفة ما زالت جارية واللاعب لم ينسحب: يظهر الشريط (View.VISIBLE).
-     *
-     * @param context سياق التطبيق
-     * @param bannerView شريط التحدي البرتقالي في الواجهة
-     * @param userId معرف اللاعب
-     */
     public static void checkAndManageActiveChallengeBanner(
             @NonNull final Context context,
             @NonNull final View bannerView,
@@ -227,7 +394,6 @@ public class RoomQuizController {
             return;
         }
 
-        // قراءة activeRoomId من التفضيلات المحلية أولاً كفحص سريع
         SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         final String localRoomId = prefs.getString(KEY_ACTIVE_ROOM_ID, null);
 
@@ -242,7 +408,6 @@ public class RoomQuizController {
                     activeRoomId = localRoomId;
                 }
 
-                // شرط 1: إذا لم يوجد activeRoomId -> إخفاء الشريط فوراً
                 if (activeRoomId == null || activeRoomId.isEmpty()) {
                     bannerView.setVisibility(View.GONE);
                     return;
@@ -251,24 +416,20 @@ public class RoomQuizController {
                 final String finalRoomId = activeRoomId;
                 DatabaseReference roomRef = db.child("rooms").child(finalRoomId);
 
-                // شرط 2: قراءة بيانات تلك الغرفة تحديداً والتحقق من مسار هذا اللاعب
                 roomRef.addListenerForSingleValueEvent(new ValueEventListener() {
                     @Override
                     public void onDataChange(@NonNull DataSnapshot roomSnapshot) {
                         if (!roomSnapshot.exists()) {
-                            // الغرفة حُذفت أو غير موجودة
                             hideBannerAndClean(context, bannerView, userId);
                             return;
                         }
 
                         String status = roomSnapshot.child("status").getValue(String.class);
                         if (!"PLAYING".equalsIgnoreCase(status) && !"WAITING".equalsIgnoreCase(status)) {
-                            // التحدي انتهى أو ألغي
                             hideBannerAndClean(context, bannerView, userId);
                             return;
                         }
 
-                        // التحقق الدقيق من مسار اللاعب داخل الغرفة
                         DataSnapshot playerSnap = roomSnapshot.child("players").child(userId);
                         if (!playerSnap.exists()) {
                             hideBannerAndClean(context, bannerView, userId);
@@ -276,16 +437,11 @@ public class RoomQuizController {
                         }
 
                         Boolean hasLeft = playerSnap.child("hasLeft").getValue(Boolean.class);
-                        Boolean isOnline = playerSnap.child("isOnline").getValue(Boolean.class);
-
-                        // شرط 3: إذا كان hasLeft == true لهذا اللاعب -> إخفاء الشريط فوراً ومسح المرجع
                         if (Boolean.TRUE.equals(hasLeft)) {
-                            Log.d(TAG, "Player has already left room " + finalRoomId + ". Hiding active challenge banner.");
                             hideBannerAndClean(context, bannerView, userId);
                             return;
                         }
 
-                        // اللاعب ما زال مشاركاً نشطاً في تحدي قيد التشغيل -> إظهار الشريط
                         bannerView.setVisibility(View.VISIBLE);
                     }
 
@@ -317,7 +473,7 @@ public class RoomQuizController {
     }
 
     // =========================================================================
-    // 3. إصلاح شرط التزامن (Sync Logic & checkIfAllAnswered)
+    // 4. إصلاح شرط التزامن (Sync Logic & checkIfAllAnswered)
     // =========================================================================
 
     public static boolean checkIfAllAnswered(
@@ -339,7 +495,6 @@ public class RoomQuizController {
             Boolean hasLeft = pSnap.child("hasLeft").getValue(Boolean.class);
             Boolean isOnline = pSnap.child("isOnline").getValue(Boolean.class);
 
-            // اللاعب النشط: لم ينسحب (hasLeft != true) ومتصل (isOnline != false)
             boolean isActive = (hasLeft == null || !hasLeft) && (isOnline == null || isOnline);
 
             if (isActive) {
@@ -357,17 +512,13 @@ public class RoomQuizController {
             callback.onActivePlayersCountChanged(activePlayersCount);
         }
 
-        // في حال انسحب جميع اللاعبين: إنهاء الغرفة
         if (activePlayersCount == 0) {
-            Log.d(TAG, "No active players remaining. Marking room as finished.");
             finishRoom(roomId);
             if (callback != null) callback.onRoomFinished();
             return false;
         }
 
-        // الشرط الأساسي: هل الإجابات المقدمة من اللاعبين النشطين تغطي جميع النشطين؟
         if (activeAnswersCount >= activePlayersCount) {
-            Log.d(TAG, "All active players answered (" + activeAnswersCount + "/" + activePlayersCount + "). Advancing question.");
             advanceToNextQuestion(roomId, currentQuestionIndex + 1);
             if (callback != null) {
                 callback.onAllAnswered(currentQuestionIndex + 1);
@@ -388,7 +539,7 @@ public class RoomQuizController {
         Map<String, Object> updates = new HashMap<>();
         updates.put("currentQuestionIndex", nextQuestionIndex);
         updates.put("questionStartTime", ServerValue.TIMESTAMP);
-        updates.put("currentAnswers", null); // تصفير إجابات السؤال الجديد
+        updates.put("currentAnswers", null);
 
         roomRef.updateChildren(updates);
     }
@@ -399,63 +550,6 @@ public class RoomQuizController {
                 .getReference("rooms")
                 .child(roomId);
         roomRef.child("status").setValue("FINISHED");
-    }
-
-    // =========================================================================
-    // 4. مشغل إعادة الفحص الفوري (Immediate Check Trigger)
-    // =========================================================================
-
-    public static ValueEventListener attachRoomSyncListener(
-            final String roomId,
-            final OnRoomSyncCallback callback
-    ) {
-        DatabaseReference roomRef = FirebaseDatabase.getInstance()
-                .getReference("rooms")
-                .child(roomId);
-
-        ValueEventListener listener = new ValueEventListener() {
-            private final Map<String, Boolean> knownLeaveStates = new HashMap<>();
-
-            @Override
-            public void onDataChange(@NonNull DataSnapshot snapshot) {
-                if (!snapshot.exists()) return;
-
-                Integer curQVal = snapshot.child("currentQuestionIndex").getValue(Integer.class);
-                int currentQ = curQVal != null ? curQVal : 0;
-
-                boolean someoneJustLeft = false;
-                DataSnapshot playersSnap = snapshot.child("players");
-                for (DataSnapshot pSnap : playersSnap.getChildren()) {
-                    String pId = pSnap.getKey();
-                    if (pId == null) continue;
-
-                    Boolean hasLeft = pSnap.child("hasLeft").getValue(Boolean.class);
-                    boolean isLeft = Boolean.TRUE.equals(hasLeft);
-
-                    Boolean prevStatus = knownLeaveStates.get(pId);
-                    if (isLeft && (prevStatus == null || !prevStatus)) {
-                        someoneJustLeft = true;
-                    }
-                    knownLeaveStates.put(pId, isLeft);
-                }
-
-                if (someoneJustLeft) {
-                    Log.i(TAG, "Immediate Check Trigger: Player withdrawal detected. Calling checkIfAllAnswered immediately!");
-                    checkIfAllAnswered(snapshot, roomId, currentQ, callback);
-                    return;
-                }
-
-                checkIfAllAnswered(snapshot, roomId, currentQ, callback);
-            }
-
-            @Override
-            public void onCancelled(@NonNull DatabaseError error) {
-                Log.e(TAG, "Room sync listener cancelled: " + error.getMessage());
-            }
-        };
-
-        roomRef.addValueEventListener(listener);
-        return listener;
     }
 
     // =========================================================================
