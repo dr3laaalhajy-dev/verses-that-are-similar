@@ -23,3 +23,4 @@ public class LiveReaction {
     public String getEmoji() { return emoji; }
     public long getTimestamp() { return timestamp; }
 }
+

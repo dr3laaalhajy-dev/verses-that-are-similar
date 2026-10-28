@@ -61,3 +61,4 @@ public class User implements Serializable {
     public String getEquippedTitle() { return equippedTitle; }
     public void setEquippedTitle(String equippedTitle) { this.equippedTitle = equippedTitle; }
 }
+

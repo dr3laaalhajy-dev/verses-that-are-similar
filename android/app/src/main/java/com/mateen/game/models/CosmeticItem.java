@@ -30,3 +30,4 @@ public class CosmeticItem {
     public int getPrice() { return price; }
     public String getValue() { return value; }
 }
+

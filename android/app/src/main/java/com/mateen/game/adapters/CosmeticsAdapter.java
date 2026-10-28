@@ -125,3 +125,4 @@ public class CosmeticsAdapter extends RecyclerView.Adapter<CosmeticsAdapter.View
         }
     }
 }
+

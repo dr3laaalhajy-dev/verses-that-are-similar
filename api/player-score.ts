@@ -162,7 +162,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // 3. Streak handling:
     const explicitStreak = req.body.streakCount !== undefined ? Number(req.body.streakCount) : (req.body.streak !== undefined ? Number(req.body.streak) : null);
     if (explicitStreak !== null && !isNaN(explicitStreak)) {
-      updateData.streak = Math.max(player.streak || 0, explicitStreak);
+      updateData.streak = Math.max((player as any).streak || 0, explicitStreak);
     }
 
     if (seerahCompleted !== undefined) updateData.seerahCompleted = Boolean(seerahCompleted);
