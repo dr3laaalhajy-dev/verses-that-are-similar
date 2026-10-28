@@ -43,6 +43,7 @@ import { islamicCategoriesList } from './data/islamicCategories';
 import DailyAyah from './components/DailyAyah';
 import { renderQuranText } from './utils/quranUtils';
 import { calculateStreakInfo, StreakInfo } from './utils/streakManager';
+import { LeaderboardUser, compareLeaderboardUsers, calculateHiddenRankingScore } from './utils/leaderboardRanking';
 import { StreakModal } from './components/StreakModal';
 import { generateCompletionChallenges } from './services/challengeGenerator';
 import SettingsView from './components/Settings/SettingsView';
@@ -1309,9 +1310,10 @@ export default function App() {
   const currentStyle = achievementStyles[safeAchievement];
   const isElite = safeAchievement !== 'none';
 
-  const [leaderboard, setLeaderboard] = useState<{ name: string, cups: number, points: number }[]>(() => {
+  const [leaderboard, setLeaderboard] = useState<LeaderboardUser[]>(() => {
     try {
-      return JSON.parse(localStorage.getItem('quran_leaderboard') || '[]');
+      const saved = JSON.parse(localStorage.getItem('quran_leaderboard') || '[]');
+      return Array.isArray(saved) ? saved.sort(compareLeaderboardUsers) : [];
     } catch {
       return [];
     }
@@ -2305,6 +2307,10 @@ export default function App() {
         name: playerName,
         score: newTotalPoints,
         totalPoints: newTotalPoints,
+        streak: newStreak,
+        streakCount: newStreak,
+        totalCups: cups,
+        trophiesCount: cups,
         seerahCompleted: hasSeerah,
         generalCompleted: hasGeneral,
         activeFrame: effectiveFrame
@@ -3965,6 +3971,9 @@ export default function App() {
               score: totalPoints,
               totalPoints: totalPoints,
               totalCups: cups,
+              trophiesCount: cups,
+              streak: streak,
+              streakCount: streak,
               seerahCompleted: hasSeerah,
               generalCompleted: hasGeneral,
               activeFrame: effectiveFrame
@@ -3985,6 +3994,13 @@ export default function App() {
                 setTotalPoints(prev => {
                   const best = Math.max(prev, pData.points);
                   localStorage.setItem('quran_total_points', best.toString());
+                  return best;
+                });
+              }
+              if (typeof pData.streak === 'number' && pData.streak > 0) {
+                setStreak(prev => {
+                  const best = Math.max(prev, pData.streak);
+                  localStorage.setItem('quran_streak', best.toString());
                   return best;
                 });
               }
@@ -4013,12 +4029,24 @@ export default function App() {
       const data = await response.json();
       if (data.leaderboard && Array.isArray(data.leaderboard)) {
         const seenNames = new Set<string>();
-        const unique = data.leaderboard.filter((p: any) => {
-          const norm = (p.name || '').trim().toLowerCase();
-          if (!norm || seenNames.has(norm)) return false;
-          seenNames.add(norm);
-          return true;
-        });
+        const unique: LeaderboardUser[] = data.leaderboard
+          .filter((p: any) => {
+            const norm = (p.name || '').trim().toLowerCase();
+            if (!norm || seenNames.has(norm)) return false;
+            seenNames.add(norm);
+            return true;
+          })
+          .map((p: any) => ({
+            ...p,
+            totalPoints: p.totalPoints ?? p.points ?? 0,
+            trophiesCount: p.trophiesCount ?? p.cups ?? 0,
+            streakCount: p.streakCount ?? p.streak ?? 0,
+            points: p.totalPoints ?? p.points ?? 0,
+            cups: p.trophiesCount ?? p.cups ?? 0,
+            streak: p.streakCount ?? p.streak ?? 0
+          }))
+          .sort(compareLeaderboardUsers);
+
         setLeaderboard(unique);
         localStorage.setItem('quran_leaderboard', JSON.stringify(unique));
 
@@ -4042,7 +4070,7 @@ export default function App() {
           }
         }
 
-        // Synchronize cups and points from leaderboard for current player
+        // Synchronize cups, points, and streak from leaderboard for current player
         const myEntry = unique.find((p: any) => {
           if (playerUsername && p.username && p.username.replace(/^@+/, '').toLowerCase() === playerUsername.replace(/^@+/, '').toLowerCase()) return true;
           if (playerName && p.name && p.name.trim().toLowerCase() === playerName.trim().toLowerCase()) return true;
@@ -4050,18 +4078,28 @@ export default function App() {
         });
 
         if (myEntry) {
-          if (typeof myEntry.cups === 'number' && myEntry.cups > 0) {
+          const myCups = myEntry.trophiesCount ?? myEntry.cups;
+          if (typeof myCups === 'number' && myCups > 0) {
             setCups(prev => {
-              const best = Math.max(prev, myEntry.cups);
+              const best = Math.max(prev, myCups);
               localStorage.setItem('quran_total_cups', best.toString());
               localStorage.setItem('quran_cups', best.toString());
               return best;
             });
           }
-          if (typeof myEntry.points === 'number' && myEntry.points > 0) {
+          const myPts = myEntry.totalPoints ?? myEntry.points;
+          if (typeof myPts === 'number' && myPts > 0) {
             setTotalPoints(prev => {
-              const best = Math.max(prev, myEntry.points);
+              const best = Math.max(prev, myPts);
               localStorage.setItem('quran_total_points', best.toString());
+              return best;
+            });
+          }
+          const myStreak = myEntry.streakCount ?? myEntry.streak;
+          if (typeof myStreak === 'number' && myStreak > 0) {
+            setStreak(prev => {
+              const best = Math.max(prev, myStreak);
+              localStorage.setItem('quran_streak', best.toString());
               return best;
             });
           }
@@ -4072,7 +4110,7 @@ export default function App() {
     } finally {
       setIsSyncing(false);
     }
-  }, [playerName, playerUsername, cups, totalPoints, completedChallengeIds, activeFrame, userCertificates]);
+  }, [playerName, playerUsername, cups, totalPoints, streak, completedChallengeIds, activeFrame, userCertificates]);
 
   useEffect(() => {
     localStorage.setItem('quran_total_points', totalPoints.toString());
@@ -5114,6 +5152,23 @@ ${versesList}
                         <Users className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                         <span>عدد المستخدمين: <strong className="text-slate-900 dark:text-slate-100 font-black">{totalUsersCount || leaderboard.length}</strong> مستخدم</span>
                       </div>
+
+                      {/* 3 Metrics Legend: Star ⭐️, Trophy 🏆, Streak 🔥 */}
+                      <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                        <span className="flex items-center gap-1 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-md border border-amber-200/60 dark:border-amber-800/60 text-amber-800 dark:text-amber-200">
+                          <span>⭐️</span>
+                          <span>النقاط</span>
+                        </span>
+                        <span className="flex items-center gap-1 bg-yellow-50 dark:bg-yellow-950/40 px-2 py-0.5 rounded-md border border-yellow-200/60 dark:border-yellow-800/60 text-yellow-800 dark:text-yellow-200">
+                          <span>🏆</span>
+                          <span>الكؤوس</span>
+                        </span>
+                        <span className="flex items-center gap-1 bg-orange-50 dark:bg-orange-950/40 px-2 py-0.5 rounded-md border border-orange-200/60 dark:border-orange-800/60 text-orange-800 dark:text-orange-200">
+                          <span>🔥</span>
+                          <span>الشعلات</span>
+                        </span>
+                      </div>
+
                       {playerName && (
                         <div className="text-[11px] font-bold text-emerald-800 dark:text-emerald-200 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 px-2.5 py-1 rounded-lg flex items-center gap-1.5 flex-wrap">
                           <span>حسابك: <strong className="font-black text-slate-900 dark:text-white">{playerName}</strong></span>
@@ -5149,6 +5204,10 @@ ${versesList}
                           const isCurrentPlayer = (playerName && player.name)
                             ? player.name.trim().toLowerCase() === playerName.trim().toLowerCase()
                             : false;
+
+                          const playerTotalPoints = player.totalPoints ?? player.points ?? 0;
+                          const playerTrophies = player.trophiesCount ?? player.cups ?? 0;
+                          const playerStreak = player.streakCount ?? player.streak ?? (isCurrentPlayer ? streak : 0);
 
                           // INDIVIDUAL PLAYER ACHIEVEMENT LOGIC (Global visibility)
                           const getPlayerAchievement = (p: any) => {
@@ -5258,31 +5317,51 @@ ${versesList}
                                       </span>
                                     )}
                                   </div>
-                                  <div className="flex items-center gap-2 mt-0.5">
-                                    <span className="text-[10px] sm:text-[11px] font-bold text-slate-400">
-                                      {player.points} نقطة
-                                    </span>
-                                    {player.username && (
-                                      <span className="text-[10px] text-slate-300 font-medium hidden sm:inline">
-                                        @{player.username.replace(/^@+/, '')}
-                                      </span>
-                                    )}
-                                  </div>
+                                  {player.username && (
+                                    <div className="text-[10px] text-slate-400 font-medium truncate mt-0.5">
+                                      @{player.username.replace(/^@+/, '')}
+                                    </div>
+                                  )}
                                 </div>
                               </div>
 
-                              {/* Cups Counter Pill */}
-                              <div className="shrink-0 flex items-center pr-1.5">
-                                <div className={`flex items-center gap-1 px-2.5 py-1 sm:px-3 sm:py-1 rounded-xl border transition-all ${
-                                  isRank1
-                                    ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-amber-950 border-amber-400 shadow-xs'
-                                    : 'bg-amber-50 text-amber-900 border-amber-200/80'
-                                }`}>
-                                  <Trophy className={`w-3 h-3 sm:w-3.5 sm:h-3.5 ${isRank1 ? 'text-amber-950 fill-amber-950' : 'text-amber-600'}`} />
-                                  <span className={`font-black text-xs sm:text-sm tabular-nums ${isRank1 ? 'text-amber-950' : 'text-amber-900'}`}>
-                                    {player.cups}
+                              {/* The 3 Real Metrics: Stars/Points ⭐️, Trophies 🏆, Streaks 🔥 */}
+                              <div className="shrink-0 flex items-center gap-1 sm:gap-2 pr-1">
+                                {/* 1. Total Points (⭐️) */}
+                                <div
+                                  title="النقاط الإجمالية"
+                                  className="flex items-center gap-1 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg sm:rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-800/60 text-amber-800 dark:text-amber-200 shadow-xs"
+                                >
+                                  <span className="text-xs sm:text-sm leading-none">⭐️</span>
+                                  <span className="font-black text-xs sm:text-sm tabular-nums">
+                                    {playerTotalPoints}
                                   </span>
-                                  <span className="text-[9px] font-bold opacity-75 hidden sm:inline">كأس</span>
+                                </div>
+
+                                {/* 2. Trophies Count (🏆) */}
+                                <div
+                                  title="عدد الكؤوس من التحديات الجماعية"
+                                  className={`flex items-center gap-1 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg sm:rounded-xl border transition-all shadow-xs ${
+                                    isRank1
+                                      ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-amber-950 border-amber-400 font-black'
+                                      : 'bg-yellow-50 dark:bg-yellow-950/40 border border-yellow-200/80 dark:border-yellow-800/60 text-yellow-800 dark:text-yellow-200'
+                                  }`}
+                                >
+                                  <span className="text-xs sm:text-sm leading-none">🏆</span>
+                                  <span className="font-black text-xs sm:text-sm tabular-nums">
+                                    {playerTrophies}
+                                  </span>
+                                </div>
+
+                                {/* 3. Streak Count (🔥) */}
+                                <div
+                                  title="عدد الشعلات / أيام الدخول المتتالية"
+                                  className="flex items-center gap-1 px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg sm:rounded-xl bg-orange-50 dark:bg-orange-950/40 border border-orange-200/80 dark:border-orange-800/60 text-orange-800 dark:text-orange-200 shadow-xs"
+                                >
+                                  <span className="text-xs sm:text-sm leading-none">🔥</span>
+                                  <span className="font-black text-xs sm:text-sm tabular-nums">
+                                    {playerStreak}
+                                  </span>
                                 </div>
                               </div>
                             </motion.div>

@@ -140,7 +140,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // 2. Cups handling:
     const addedCups = req.body.cups !== undefined ? Number(req.body.cups) : 0;
-    const explicitTotalCups = req.body.totalCups !== undefined ? Number(req.body.totalCups) : null;
+    const explicitTotalCups = req.body.totalCups !== undefined ? Number(req.body.totalCups) : (req.body.trophiesCount !== undefined ? Number(req.body.trophiesCount) : null);
 
     let isNewChallenge = false;
     if (challengeId !== undefined && challengeId !== null) {
@@ -157,6 +157,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       updateData.cups = { increment: 1 };
     } else if (explicitTotalCups !== null && !isNaN(explicitTotalCups)) {
       updateData.cups = Math.max(player.cups || 0, explicitTotalCups);
+    }
+
+    // 3. Streak handling:
+    const explicitStreak = req.body.streakCount !== undefined ? Number(req.body.streakCount) : (req.body.streak !== undefined ? Number(req.body.streak) : null);
+    if (explicitStreak !== null && !isNaN(explicitStreak)) {
+      updateData.streak = Math.max(player.streak || 0, explicitStreak);
     }
 
     if (seerahCompleted !== undefined) updateData.seerahCompleted = Boolean(seerahCompleted);

@@ -57,6 +57,7 @@ model Player {
   usernameChangedAt     DateTime?
   points                Int      @default(0)
   cups                  Int      @default(0)
+  streak                Int      @default(0)
   completedChallengeIds Json     @default("[]")
   seerahCompleted       Boolean  @default(false)
   generalCompleted      Boolean  @default(false)
