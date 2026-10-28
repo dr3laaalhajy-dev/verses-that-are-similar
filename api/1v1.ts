@@ -1140,9 +1140,9 @@ async function handleResign(req: VercelRequest, res: VercelResponse) {
 }
 
 async function handleReaction(req: VercelRequest, res: VercelResponse) {
-  const { roomId, playerId, playerName, emoji } = req.body || {}
-  if (!roomId || !emoji) {
-    return res.status(400).json({ error: 'Missing roomId or emoji' })
+  const { roomId, playerId, playerName, emoji, type, textLine1, textLine2 } = req.body || {}
+  if (!roomId || (!emoji && !type)) {
+    return res.status(400).json({ error: 'Missing roomId or reaction payload' })
   }
 
   try {
@@ -1152,7 +1152,10 @@ async function handleReaction(req: VercelRequest, res: VercelResponse) {
     const reactionData = {
       senderId: String(playerId || ''),
       senderName: String(playerName || 'متسابق'),
-      emoji: String(emoji),
+      emoji: emoji ? String(emoji) : '',
+      type: type ? String(type) : 'emoji',
+      textLine1: textLine1 ? String(textLine1) : '',
+      textLine2: textLine2 ? String(textLine2) : '',
       timestamp: Date.now()
     }
 
