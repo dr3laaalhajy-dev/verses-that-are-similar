@@ -1,0 +1,168 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_bottom_sheet_update"
+    android:orientation="vertical"
+    android:paddingStart="24dp"
+    android:paddingTop="12dp"
+    android:paddingEnd="24dp"
+    android:paddingBottom="28dp"
+    android:gravity="center_horizontal"
+    android:layoutDirection="rtl">
+
+    <!-- Top Drag Handle -->
+    <View
+        android:id="@+id/viewDragHandle"
+        android:layout_width="48dp"
+        android:layout_height="5dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginBottom="16dp"
+        android:background="#CBD5E1" />
+
+    <!-- Top Rocket Illustration -->
+    <ImageView
+        android:id="@+id/ivUpdateRocket"
+        android:layout_width="72dp"
+        android:layout_height="72dp"
+        android:layout_marginBottom="12dp"
+        android:contentDescription="شعار التحديث"
+        android:src="@drawable/ic_update_rocket" />
+
+    <!-- New Version Badge -->
+    <TextView
+        android:id="@+id/tvUpdateVersionBadge"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_version_badge"
+        android:paddingStart="14dp"
+        android:paddingTop="4dp"
+        android:paddingEnd="14dp"
+        android:paddingBottom="4dp"
+        android:text="إصدار جديد متوفر v2.0"
+        android:textColor="#059669"
+        android:textSize="12sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="8dp" />
+
+    <!-- Dialog Title -->
+    <TextView
+        android:id="@+id/tvUpdateTitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="تحديث جديد متاح 🚀"
+        android:textColor="#0F172A"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="12dp" />
+
+    <!-- Scrollable Update Notes Container -->
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:maxHeight="160dp"
+        android:layout_marginBottom="16dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_update_notes"
+            android:orientation="vertical"
+            android:padding="14dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="ما الجديد في هذا التحديث:"
+                android:textColor="#475569"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="6dp" />
+
+            <TextView
+                android:id="@+id/tvUpdateNotes"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:lineSpacingExtra="3dp"
+                android:textColor="#1E293B"
+                android:textSize="13sp"
+                tools:text="• ميزة جديدة: نظام التفاعلات الحية أثناء التحدي الجماعي\n• تحسين استقرار المزامنة وسرعة التنقل\n• إضافة كؤوس الفوز للمراكز الثلاثة الأولى" />
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+
+    <!-- Buttons Container -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center">
+
+        <!-- Primary Button: Google Play -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnGooglePlay"
+            android:layout_width="match_parent"
+            android:layout_height="52dp"
+            android:text="تحديث من Google Play"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            app:backgroundTint="#059669"
+            app:cornerRadius="16dp"
+            app:icon="@drawable/ic_google_play"
+            app:iconGravity="textStart"
+            app:iconPadding="10dp"
+            app:iconSize="22dp"
+            app:iconTint="@null"
+            android:layout_marginBottom="8dp" />
+
+        <!-- Secondary Outlined Button: Direct APK -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnApkDownload"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:text="تحميل APK مباشر"
+            android:textColor="#059669"
+            android:textSize="13.5sp"
+            android:textStyle="bold"
+            app:cornerRadius="16dp"
+            app:strokeColor="#059669"
+            app:strokeWidth="1.5dp"
+            app:icon="@drawable/ic_apk_download"
+            app:iconGravity="textStart"
+            app:iconPadding="10dp"
+            app:iconSize="20dp"
+            app:iconTint="#059669"
+            android:layout_marginBottom="4dp" />
+
+        <!-- Force Update Warning Notice -->
+        <TextView
+            android:id="@+id/tvForceNotice"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="⚠️ هذا التحديث ضروري لمواصلة استخدام التطبيق."
+            android:textColor="#EF4444"
+            android:textSize="11.5sp"
+            android:textStyle="bold"
+            android:visibility="gone"
+            android:paddingTop="4dp"
+            tools:visibility="visible" />
+
+        <!-- Later Dismiss Button (Only for optional updates) -->
+        <TextView
+            android:id="@+id/btnLater"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="لاحقاً، ذكرني لاحقاً"
+            android:textColor="#94A3B8"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:padding="8dp"
+            android:clickable="true"
+            android:focusable="true" />
+    </LinearLayout>
+
+</LinearLayout>

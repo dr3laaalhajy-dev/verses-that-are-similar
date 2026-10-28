@@ -81,3 +81,4 @@ public class AppVersionControl implements Serializable {
         this.updatedAt = updatedAt;
     }
 }
+
