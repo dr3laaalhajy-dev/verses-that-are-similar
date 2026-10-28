@@ -35,3 +35,4 @@ public class LeaderboardComparator implements Comparator<User> {
                 .thenComparing(Comparator.comparingInt(User::getTotalPoints).reversed());
     }
 }
+

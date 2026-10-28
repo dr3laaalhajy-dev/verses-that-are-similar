@@ -4034,7 +4034,7 @@ export default function App() {
   };
 
   const handleSkip = () => {
-    if (challengeMode === 'daily') return;
+    if (challengeMode === 'daily' || hasAnsweredCurrentQuestion) return;
 
     // Count as mistake as requested
     const currentQuestion = currentChallenge;
@@ -4058,6 +4058,65 @@ export default function App() {
       }]);
     }
 
+    // 1. Room Multiplayer Handling
+    if (room?.id) {
+      if (room.transitionMode === 'ASYNC') {
+        // ASYNC MODE: submit answer as incorrect and advance locally immediately
+        fetch('/api/1v1', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'submit-answer',
+            roomId: room.id,
+            playerId: playerUsername || playerName,
+            questionIndex: currentChallengeIndex,
+            isCorrect: false,
+            timestamp: Date.now()
+          })
+        }).then(res => res.json()).then(data => {
+          if (data && data.status) {
+            setRoom(data);
+            if (data.status === 'FINISHED') {
+              setView('group_game');
+            }
+          }
+        }).catch(err => console.error('Error submitting ASYNC skip:', err));
+
+        moveToNextQuestion();
+        return;
+      }
+
+      // SYNC MODE (SYNCHRONOUS):
+      // A. Submit answer as incorrect (0 points) to server
+      setHasAnsweredCurrentQuestion(true);
+      setSkillsFeedback(true);
+      fetch('/api/1v1', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'submit-answer',
+          roomId: room.id,
+          playerId: playerUsername || playerName,
+          questionIndex: room.currentQuestionIndex ?? currentChallengeIndex,
+          isCorrect: false,
+          timestamp: Date.now()
+        })
+      }).then(res => res.json()).then(data => {
+        if (data && data.status) {
+          setRoom(data);
+          if (data.status === 'FINISHED') {
+            setView('group_game');
+          } else if (data.currentQuestionIndex !== undefined && data.currentQuestionIndex > currentChallengeIndex) {
+            resetQuestionUIState(data.currentQuestionIndex, data);
+          }
+        }
+      }).catch(err => console.error('Error submitting SYNC skip:', err));
+
+      // B. Do NOT call moveToNextQuestion() locally; wait for room sync / listener
+      return;
+    }
+
+    // Normal Single-player mode:
     moveToNextQuestion();
   };
 
