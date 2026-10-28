@@ -660,13 +660,6 @@ async function handlePoll(req: VercelRequest, res: VercelResponse) {
   }
 }
 
-    const fullRoom = await getFullRoom(roomId as string)
-    return res.status(200).json(fullRoom)
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message })
-  }
-}
-
 async function handleStart(req: VercelRequest, res: VercelResponse) {
   const { roomId } = req.body
   try {
