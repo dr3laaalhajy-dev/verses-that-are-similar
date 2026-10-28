@@ -9233,7 +9233,7 @@ ${versesList}
                                 <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
                               </span>
                               <span className="text-white font-black text-xs md:text-sm">
-                                أجاب {room.answeredCount ?? 0} من {room.totalParticipants ?? room.participants?.length ?? 1} لاعبين
+                                أجاب {room.answeredCount ?? 0} من {room.onlineParticipantsCount ?? room.totalParticipants ?? room.participants?.length ?? 1} لاعبين
                               </span>
                             </div>
 
@@ -9251,7 +9251,6 @@ ${versesList}
                             className="flex items-center justify-between gap-2.5 p-3 md:p-3.5 bg-linear-to-r from-slate-900/90 to-slate-800/90 text-white rounded-2xl border border-white/10 shadow-lg mb-4 text-xs font-bold"
                           >
                             <div className="flex items-center gap-2">
-  
                               <span className="text-sm">🚀</span>
                               <span className="text-white font-black text-xs md:text-sm">
                                 سباق فردي سريع (أجب بأقصى سرعة ودقة!)

@@ -533,7 +533,29 @@ function evaluateQuestionScores(
 
 async function advanceRoomToNextQuestionTx(tx: any, room: any, currentAnswers: Record<string, any>) {
   const playersProgress = (room.playersProgress as any) || {}
-  const updatedProgress = evaluateQuestionScores(playersProgress, currentAnswers)
+  const now = Date.now()
+
+  // Requirement 3: Default Wrong Answer for all registered participants without an answer
+  // (including disconnected/offline players) so their records remain synchronized.
+  const completeAnswers: Record<string, any> = { ...currentAnswers }
+  for (const [pIdStr, pData] of Object.entries(playersProgress)) {
+    if (!completeAnswers[pIdStr]) {
+      completeAnswers[pIdStr] = {
+        playerId: parseInt(pIdStr),
+        name: (pData as any)?.name || 'متسابق',
+        isCorrect: false,
+        timestamp: now,
+        questionIndex: room.currentQuestionIndex || 0,
+        isDefaulted: true
+      }
+    }
+    // Update playerCurrentQuestionIndex so when they reconnect, they resume on the new question
+    if (pData) {
+      (pData as any).playerCurrentQuestionIndex = (room.currentQuestionIndex || 0) + 1
+    }
+  }
+
+  const updatedProgress = evaluateQuestionScores(playersProgress, completeAnswers)
 
   const nextIndex = (room.currentQuestionIndex || 0) + 1
   const isFinished = nextIndex >= room.questionCount
@@ -542,8 +564,7 @@ async function advanceRoomToNextQuestionTx(tx: any, room: any, currentAnswers: R
   let winnerId = room.winnerId
 
   if (isFinished) {
-    const now = Date.now()
-    for (const [pIdStr, ans] of Object.entries(currentAnswers)) {
+    for (const [pIdStr, ans] of Object.entries(completeAnswers)) {
       if (finalProgress[pIdStr]) {
         finalProgress[pIdStr].finishTime = Number(ans?.timestamp) || now
         finalProgress[pIdStr].progress = 100
@@ -995,18 +1016,39 @@ async function handlePresence(req: VercelRequest, res: VercelResponse) {
     // Rooms are only cancelled when the host explicitly clicks "إلغاء الغرفة"
     // or when the 10-minute TTL expires while in WAITING status.
 
-    // In SYNC mode: If an ordinary player goes offline during PLAYING,
-    // advance question if all remaining online players have answered
+    // Requirement 2 & 4: Disconnection Trigger in SYNC mode
+    // When any player disconnects (isOnline === false), immediately check whether all REMAINING
+    // online players have already submitted their answers. If so, advance question immediately!
+    // This forces timer cancellation and transitions the question without delay.
     if (!onlineStatus && room.status === 'PLAYING' && (room as any).transitionMode !== 'ASYNC') {
+      const curQ = room.currentQuestionIndex || 0
       const currentAnswers = (room.currentAnswers as any) || {}
-      const onlinePlayers = Object.entries(playersProgress).filter(([id, p]: [string, any]) => {
-        if (currentAnswers[id]) return true
-        return p.isOnline !== false
+
+      // Remaining online players (excluding the player who just went offline)
+      const remainingOnlinePlayers = Object.entries(playersProgress).filter(([id, p]: [string, any]) => {
+        return id !== pIdStr && p && p.isOnline !== false
       })
-      const answeredCount = Object.keys(currentAnswers).length
-      if (answeredCount >= onlinePlayers.length && onlinePlayers.length > 0) {
-        const advancedRoom = await advanceRoomToNextQuestion(room, currentAnswers)
-        return res.status(200).json(advancedRoom)
+
+      // Check if all remaining online players have answered current question
+      const allRemainingAnswered = remainingOnlinePlayers.length > 0 && remainingOnlinePlayers.every(([id]) => {
+        const a = currentAnswers[id]
+        return a && (a.questionIndex === undefined || a.questionIndex === curQ)
+      })
+
+      if (allRemainingAnswered) {
+        await prisma.$transaction(async (tx) => {
+          const freshRoom = await tx.room.findUnique({ where: { id: room.id } })
+          if (freshRoom && freshRoom.status === 'PLAYING' && freshRoom.currentQuestionIndex === curQ) {
+            const freshProgress = (freshRoom.playersProgress as any) || {}
+            if (freshProgress[pIdStr]) {
+              freshProgress[pIdStr].isOnline = false
+              freshProgress[pIdStr].lastSeen = Date.now()
+            }
+            await advanceRoomToNextQuestionTx(tx, { ...freshRoom, playersProgress: freshProgress }, (freshRoom.currentAnswers as any) || {})
+          }
+        })
+        const fullRoom = await getFullRoom(room.id)
+        return res.status(200).json(fullRoom)
       }
     }
 
