@@ -2980,8 +2980,9 @@ export default function App() {
 
               if (isHost && !isAdvancingRef.current) {
                 const participants = data.participants || [];
-                const onlineParticipants = participants.filter((p: any) => p.isOnline !== false);
-                const onlineCount = onlineParticipants.length;
+                // Active players: exclude those who left (hasLeft) or resigned (isResigned) or went offline (isOnline === false)
+                const activeParticipants = participants.filter((p: any) => p.isOnline !== false && !p.hasLeft && !p.isResigned);
+                const activeCount = activeParticipants.length;
                 const currentAnswers = data.currentAnswers || {};
 
                 // Filter answers for active question
@@ -2989,13 +2990,13 @@ export default function App() {
                   return ans && (ans.questionIndex === undefined || ans.questionIndex === data.currentQuestionIndex);
                 });
 
-                // Condition: all online participants have answered
-                const allOnlineAnswered = onlineCount > 0 && (
-                  validAnswers.length >= onlineCount ||
-                  onlineParticipants.every((p: any) => Boolean(currentAnswers[String(p.id)]))
+                // Condition: all active participants have answered
+                const allActiveAnswered = activeCount > 0 && (
+                  validAnswers.length >= activeCount ||
+                  activeParticipants.every((p: any) => Boolean(currentAnswers[String(p.id)]))
                 );
 
-                if (allOnlineAnswered) {
+                if (allActiveAnswered) {
                   isAdvancingRef.current = true;
                   fetch('/api/1v1', {
                     method: 'POST',
@@ -3248,7 +3249,7 @@ export default function App() {
       console.error('Group resign error:', err);
     }
     setSessionCorrect(0);
-    setView('group_game');
+    setView('home');
     setIsResignModalOpen(false);
   };
   // Speed & Multiplayer Timer

@@ -1146,26 +1146,69 @@ async function handleResign(req: VercelRequest, res: VercelResponse) {
       playersProgress[player.id] = { name: player.name }
     }
 
+    const currentScore = playersProgress[player.id].score || 0
+    // 1. حفظ نقاط اللاعب الحالية التي جمعها في التحدي وإضافتها إلى رصيده الكلي في قاعدة البيانات
+    if (currentScore > 0) {
+      await prisma.player.update({
+        where: { id: player.id },
+        data: { points: { increment: currentScore } }
+      }).catch(err => console.error('Error saving resigned player points:', err))
+    }
+
+    // 2. تحديث حالة اللاعب داخل الغرفة: hasLeft = true و isOnline = false
     playersProgress[player.id].progress = 100
-    playersProgress[player.id].score = 0
     playersProgress[player.id].finishTime = Date.now()
     playersProgress[player.id].isResigned = true
+    playersProgress[player.id].hasLeft = true
+    playersProgress[player.id].isOnline = false
 
     const updateData: any = { playersProgress }
 
-    // If everyone finished or resigned, set room status to FINISHED
-    const allFinished = Object.values(playersProgress).every((p: any) => !!p.finishTime)
-    if (allFinished) {
+    // 3. فحص اللاعبين النشطين (Active Players):
+    const remainingActivePlayers = Object.entries(playersProgress).filter(([id, p]: [string, any]) => {
+      return id !== String(player.id) && p && !p.hasLeft && p.isOnline !== false && !p.isResigned
+    })
+
+    // إذا لم يتبق أي لاعب نشط، ننهي الغرفة
+    if (remainingActivePlayers.length === 0) {
       updateData.status = 'FINISHED'
     }
 
-    // Set winnerId to the player with the highest score
+    // تحديد الفائز من بين اللاعبين
     const finishedPlayers = Object.entries(playersProgress)
       .map(([id, p]: [string, any]) => ({ id: parseInt(id), score: p.score || 0, finishTime: p.finishTime }))
       .sort((a, b) => b.score - a.score || (a.finishTime || 0) - (b.finishTime || 0))
 
     if (finishedPlayers.length > 0) {
       updateData.winnerId = finishedPlayers[0].id
+    }
+
+    // 4. مشغل إعادة الفحص الفوري (Immediate Check Trigger):
+    // في وضع التزامن SYNC: إذا كان باقي اللاعبين النشطين قد أجابوا بالفعل على السؤال الحالي،
+    // ننتقل فوراً للسؤال التالي دون أي تأخير ولا نتركهم معلقين ينتظرون المنسحب!
+    if (room.status === 'PLAYING' && (room as any).transitionMode !== 'ASYNC' && remainingActivePlayers.length > 0) {
+      const curQ = room.currentQuestionIndex || 0
+      const curAnswers: Record<string, any> = (room.currentAnswers as any) || {}
+
+      const allRemainingAnswered = remainingActivePlayers.every(([id]) => {
+        const a = curAnswers[id]
+        return a && (a.questionIndex === undefined || a.questionIndex === curQ)
+      })
+
+      if (allRemainingAnswered) {
+        await prisma.$transaction(async (tx) => {
+          await tx.room.update({
+            where: { id: String(roomId) },
+            data: updateData
+          })
+          const freshRoom = await tx.room.findUnique({ where: { id: String(roomId) } })
+          if (freshRoom && freshRoom.status === 'PLAYING') {
+            await advanceRoomToNextQuestionTx(tx, freshRoom, curAnswers)
+          }
+        })
+        const fullRoom = await getFullRoom(String(roomId))
+        return res.status(200).json(fullRoom)
+      }
     }
 
     await prisma.room.update({
