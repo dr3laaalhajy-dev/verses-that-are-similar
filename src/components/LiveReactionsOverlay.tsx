@@ -94,9 +94,9 @@ export const REACTION_ACTIONS: ReactionActionDef[] = [
 ];
 
 interface LiveReactionsOverlayProps {
-  roomId?: string;
-  playerId?: string;
-  playerName?: string;
+  roomId?: string | null;
+  playerId?: string | null;
+  playerName?: string | null;
   incomingReaction?: {
     type?: ReactionType;
     emoji?: string;

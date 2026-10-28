@@ -5291,10 +5291,10 @@ ${versesList}
                   <AlertCircle className="w-8 h-8" />
                 </div>
                 <h3 className="text-2xl font-black text-slate-800 mb-4">
-                  {import.meta.env.PROD ? 'عذراً، حدث خطأ في الاتصال بالخادم' : 'تعذر الاتصال بقاعدة البيانات'}
+                  {(import.meta as any).env?.PROD ? 'عذراً، حدث خطأ في الاتصال بالخادم' : 'تعذر الاتصال بقاعدة البيانات'}
                 </h3>
                 <p className="text-slate-500 font-bold mb-8 max-w-md mx-auto">
-                  {import.meta.env.PROD ? (
+                  {(import.meta as any).env?.PROD ? (
                     'يرجى التأكد من اتصالك بالإنترنت والمحاولة مرة أخرى لاحقاً'
                   ) : (
                     <>
@@ -5312,7 +5312,7 @@ ${versesList}
                     {challengesLoading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <RotateCcw className="w-5 h-5" />}
                     إعادة المحاولة
                   </button>
-                  {import.meta.env.PROD && (
+                  {(import.meta as any).env?.PROD && (
                     <button
                       onClick={() => window.location.reload()}
                       className="px-10 py-4 bg-white text-slate-600 border border-slate-200 rounded-2xl font-black shadow-sm hover:bg-slate-50 transition-all"
@@ -6239,9 +6239,9 @@ ${versesList}
 
                     {/* Live Reactions Bar & Floating Animations Overlay */}
                     <LiveReactionsOverlay
-                      roomId={room?.id}
-                      playerId={playerUsername || playerName}
-                      playerName={playerName}
+                      roomId={room?.id || undefined}
+                      playerId={playerUsername || playerName || undefined}
+                      playerName={playerName || undefined}
                       incomingReaction={room?.lastReaction || room?.playersProgress?.__lastReaction}
                     />
                   </motion.div>
@@ -6904,8 +6904,8 @@ ${versesList}
                         {room && (
                           <LiveReactionsOverlay
                             roomId={room.id}
-                            playerId={playerUsername || playerName}
-                            playerName={playerName}
+                            playerId={playerUsername || playerName || undefined}
+                            playerName={playerName || undefined}
                             incomingReaction={room.lastReaction || room.playersProgress?.__lastReaction}
                           />
                         )}
@@ -9898,8 +9898,8 @@ ${versesList}
                         {room && (
                           <LiveReactionsOverlay
                             roomId={room.id}
-                            playerId={playerUsername || playerName}
-                            playerName={playerName}
+                            playerId={playerUsername || playerName || undefined}
+                            playerName={playerName || undefined}
                             incomingReaction={room.lastReaction || room.playersProgress?.__lastReaction}
                           />
                         )}
