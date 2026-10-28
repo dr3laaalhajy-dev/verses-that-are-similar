@@ -152,9 +152,9 @@ export const QuranZoomViewer: React.FC<QuranZoomViewerProps> = ({
         const touch = e.changedTouches[0];
         const dx = touch.clientX - dragStartRef.current.x;
         const dy = touch.clientY - dragStartRef.current.y;
-        const swipeThreshold = 45;
+        const swipeThreshold = 50;
 
-        if (Math.abs(dx) > swipeThreshold && Math.abs(dx) > Math.abs(dy) * 1.5) {
+        if (Math.abs(dx) > swipeThreshold && Math.abs(dx) > Math.abs(dy) * 2.0) {
           if (dx > 0) {
             // Swipe right -> Next page in Arabic RTL
             if (pageNumber < 604) onPageTurn?.('next');
@@ -258,8 +258,10 @@ export const QuranZoomViewer: React.FC<QuranZoomViewerProps> = ({
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onWheel={handleWheel}
-      className={`relative w-full h-full flex items-center justify-center overflow-hidden select-none touch-none ${
-        isZoomed ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'
+      className={`relative w-full h-full flex items-center justify-center select-none ${
+        isFullscreen
+          ? (isZoomed ? 'touch-none overflow-hidden cursor-grab active:cursor-grabbing' : 'touch-pan-y overflow-hidden cursor-default')
+          : (isZoomed ? 'touch-none overflow-hidden cursor-grab active:cursor-grabbing' : 'touch-pan-y overflow-visible cursor-default')
       }`}
     >
       {/* Zoomable Image Wrapper */}
@@ -278,7 +280,7 @@ export const QuranZoomViewer: React.FC<QuranZoomViewerProps> = ({
             className={`block pointer-events-none select-none transition-filter duration-300 ${
               isFullscreen
                 ? 'w-auto h-auto max-h-[100dvh] max-w-full object-contain drop-shadow-2xl'
-                : 'w-auto h-auto max-h-[85vh] max-w-full object-contain shadow-none md:shadow-xl rounded-none md:rounded-2xl'
+                : 'w-full sm:w-auto h-auto max-h-[75vh] sm:max-h-[85vh] max-w-full object-contain shadow-none md:shadow-xl rounded-none md:rounded-2xl'
             }`}
             style={{
               filter: darkMode

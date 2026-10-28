@@ -324,7 +324,7 @@ const DailyAyah: React.FC = () => {
               initial={{ scale: 0.9, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              className="bg-white rounded-[2rem] md:rounded-[3.5rem] p-6 md:p-10 max-w-2xl w-full shadow-2xl relative overflow-hidden text-center islamic-watermark border border-emerald-100"
+              className="bg-white rounded-[2rem] md:rounded-[3.5rem] p-6 md:p-10 max-w-2xl w-full shadow-2xl relative overflow-hidden text-center islamic-watermark border border-emerald-100 max-h-[90vh] overflow-y-auto"
             >
               <div className="relative z-10">
                 <button

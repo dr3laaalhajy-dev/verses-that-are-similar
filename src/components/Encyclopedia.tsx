@@ -63,7 +63,7 @@ const Encyclopedia: React.FC<EncyclopediaProps> = ({ onBack, darkMode = false })
   const embedUrl = `https://api.quranpedia.net/embed?surah=${selectedSurahId}&ayah=${selectedAyahNumber}&type=${activeType}&theme=${darkMode ? 'dark' : 'light'}&primary=064e3b`;
 
   return (
-    <div className={`flex flex-col min-h-screen overflow-hidden font-inter pb-36 sm:pb-48 transition-colors ${
+    <div className={`flex flex-col min-h-screen overflow-y-auto font-inter pb-36 sm:pb-48 transition-colors ${
       darkMode ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'
     }`} dir="rtl">
       {/* Top Navigation Bar */}
@@ -233,7 +233,7 @@ const Encyclopedia: React.FC<EncyclopediaProps> = ({ onBack, darkMode = false })
         </div>
 
         {/* The Embedded Iframe Container */}
-        <div className={`relative w-full rounded-2xl md:rounded-3xl border overflow-hidden shadow-lg transition-colors min-h-[620px] md:min-h-[750px] ${
+        <div className={`relative w-full rounded-2xl md:rounded-3xl border overflow-hidden shadow-lg transition-colors min-h-[480px] sm:min-h-[620px] md:min-h-[750px] ${
           darkMode ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200/90'
         }`}>
           {/* Loading Indicator */}
@@ -251,7 +251,7 @@ const Encyclopedia: React.FC<EncyclopediaProps> = ({ onBack, darkMode = false })
             key={embedUrl}
             src={embedUrl}
             title={`موسوعة المتشابهات - سورة ${currentSurah.name} آية ${selectedAyahNumber}`}
-            className="w-full h-[620px] md:h-[750px] border-none"
+            className="w-full h-[480px] sm:h-[620px] md:h-[750px] border-none"
             onLoad={() => setIsLoadingIframe(false)}
             allow="fullscreen"
           />

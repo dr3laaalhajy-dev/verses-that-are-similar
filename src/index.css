@@ -21,12 +21,14 @@
 @layer base {
   html, body, #root {
     min-height: 100vh;
+    min-height: 100dvh;
     margin: 0;
     padding: 0;
   }
 
   html, body {
     overflow-x: clip;
+    -webkit-overflow-scrolling: touch;
   }
   
   body {
@@ -35,6 +37,7 @@
       radial-gradient(circle at 0% 0%, rgba(6, 78, 59, 0.03) 0%, transparent 50%),
       radial-gradient(circle at 100% 100%, rgba(212, 175, 55, 0.05) 0%, transparent 50%);
     -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
   }
 }
 

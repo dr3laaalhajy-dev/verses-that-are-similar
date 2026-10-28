@@ -30,7 +30,7 @@ const QiraatReader: React.FC<QiraatReaderProps> = ({ qiraatId, initialSurahId = 
   }, [searchTerm]);
 
   return (
-    <div className="flex flex-col h-screen bg-slate-50 overflow-hidden font-inter" dir="rtl">
+    <div className="flex flex-col min-h-screen h-[100dvh] bg-slate-50 overflow-y-auto font-inter" dir="rtl">
       {/* Header */}
       <motion.header
         initial={{ y: -50 }}
@@ -63,7 +63,7 @@ const QiraatReader: React.FC<QiraatReaderProps> = ({ qiraatId, initialSurahId = 
         </div>
       </motion.header>
 
-      <div className="flex flex-1 overflow-hidden relative">
+      <div className="flex flex-1 overflow-y-auto relative">
         {/* Sidebar Index (Desktop) */}
         <aside className="w-80 hidden lg:flex flex-col bg-white border-l border-slate-200 overflow-hidden">
           <div className="p-4 border-b border-slate-100 bg-slate-50/50">
@@ -99,14 +99,14 @@ const QiraatReader: React.FC<QiraatReaderProps> = ({ qiraatId, initialSurahId = 
         </aside>
 
         {/* Content Area */}
-        <main className="flex-1 overflow-y-auto bg-white/40 custom-scrollbar p-4 pt-20 md:p-12 md:pt-16">
-          <div className="max-w-4xl mx-auto space-y-8 md:space-y-12">
-            <div className="text-center space-y-6">
-              <h2 className="text-4xl md:text-6xl font-black text-slate-800 font-quran">{surahData?.name}</h2>
-              <div className="h-1 w-24 bg-emerald-500 mx-auto rounded-full" />
+        <main className="flex-1 overflow-y-auto bg-white/40 custom-scrollbar p-3 pt-12 sm:p-6 sm:pt-16 md:p-12 md:pt-16 w-full">
+          <div className="max-w-4xl mx-auto space-y-6 md:space-y-12">
+            <div className="text-center space-y-4 md:space-y-6">
+              <h2 className="text-3xl sm:text-4xl md:text-6xl font-black text-slate-800 font-quran">{surahData?.name}</h2>
+              <div className="h-1 w-20 md:w-24 bg-emerald-500 mx-auto rounded-full" />
             </div>
 
-            <div className="glass bg-white p-8 md:p-16 rounded-[2rem] md:rounded-[3.5rem] border border-slate-100 shadow-premium relative text-right" dir="rtl">
+            <div className="glass bg-white p-4 sm:p-8 md:p-16 rounded-2xl sm:rounded-[2rem] md:rounded-[3.5rem] border border-slate-100 shadow-premium relative text-right w-full" dir="rtl">
               <div 
                 className="quran-text font-quran leading-[1.8] text-slate-800"
                 style={{ fontSize: `${fontSize}px` }}
