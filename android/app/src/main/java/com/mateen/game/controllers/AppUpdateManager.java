@@ -38,6 +38,26 @@ public class AppUpdateManager {
     private static final String TAG = "AppUpdateManager";
     public static final String FIREBASE_PATH_VERSION_CONTROL = "app_settings/version_control";
 
+    private static BottomSheetDialog activeDialog = null;
+    private static boolean isActiveDialogForce = false;
+
+    /**
+     * إغلاق نافذة التحديث المعروضة لحظياً (Real-time Dismiss)
+     */
+    public static void dismissActiveDialog(boolean ignoreForce) {
+        if (activeDialog != null && activeDialog.isShowing()) {
+            if (ignoreForce || !isActiveDialogForce) {
+                Log.i(TAG, "Dismissing active update BottomSheetDialog in real-time");
+                try {
+                    activeDialog.dismiss();
+                } catch (Exception e) {
+                    Log.e(TAG, "Error dismissing activeDialog", e);
+                }
+                activeDialog = null;
+            }
+        }
+    }
+
     public interface OnPublishCallback {
         void onSuccess();
         void onFailure(Exception e);
@@ -93,6 +113,23 @@ public class AppUpdateManager {
             @Override
             public void onDataChange(@NonNull DataSnapshot snapshot) {
                 if (activity.isFinishing() || activity.isDestroyed() || !snapshot.exists()) return;
+
+                // 1. الفحص الاستباقي: هل تنبيه التحديث نشط في السيرفر؟
+                boolean isUpdateActive = true;
+                if (snapshot.hasChild("isUpdateActive")) {
+                    Boolean activeVal = snapshot.child("isUpdateActive").getValue(Boolean.class);
+                    if (activeVal != null) {
+                        isUpdateActive = activeVal;
+                    }
+                }
+
+                // التفاعل اللحظي: إذا تم إيقاف التنبيه وكان معروضاً، نغلقه فوراً وننهي الدالة
+                if (!isUpdateActive) {
+                    Log.i(TAG, "isUpdateActive is false. Dismissing any visible update alert in real-time.");
+                    dismissActiveDialog(false);
+                    if (customListener != null) customListener.onNoUpdate();
+                    return;
+                }
 
                 AppVersionControl updateInfo = snapshot.getValue(AppVersionControl.class);
                 if (updateInfo == null) {
@@ -245,6 +282,15 @@ public class AppUpdateManager {
                         btnApkDownload.setVisibility(View.GONE);
                     }
                 }
+
+                // تسجيل النافذة المعروضة لتتبع الإغلاق اللحظي (Real-time Dismiss)
+                activeDialog = bottomSheetDialog;
+                isActiveDialogForce = isForce;
+                bottomSheetDialog.setOnDismissListener(dialog -> {
+                    if (activeDialog == dialog) {
+                        activeDialog = null;
+                    }
+                });
 
                 bottomSheetDialog.show();
 

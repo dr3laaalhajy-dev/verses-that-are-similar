@@ -9,6 +9,7 @@ export interface VersionControlData {
   latestVersionCode?: number
   updateNotes: string
   isForceUpdate: boolean
+  isUpdateActive: boolean
   playStoreLink: string
   apkLink: string
   updatedAt: number
@@ -20,6 +21,7 @@ let memoryVersionControl: VersionControlData = {
   latestVersionCode: 1,
   updateNotes: 'تحسينات عامة على الأداء وثبات التحديات الجماعية والمزامنة الحية.',
   isForceUpdate: false,
+  isUpdateActive: true,
   playStoreLink: 'https://play.google.com/store/apps/details?id=com.mateen.game',
   apkLink: 'https://github.com/dr3laaalhajy-dev/verses-that-are-similar/releases/download/v1.0.0/Mutashabihat.apk',
   updatedAt: Date.now()
@@ -63,19 +65,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       latestVersionCode,
       updateNotes,
       isForceUpdate,
+      isUpdateActive,
       playStoreLink,
       apkLink
     } = req.body
 
-    const parsedCode = Number(latestAndroidVersionCode || latestVersionCode) || 1
+    const parsedCode = Number(latestAndroidVersionCode || latestVersionCode || memoryVersionControl.latestAndroidVersionCode) || 1
+    const activeState = isUpdateActive !== undefined ? Boolean(isUpdateActive) : (memoryVersionControl.isUpdateActive !== false)
 
     const parsedData: VersionControlData = {
       latestAndroidVersionCode: parsedCode,
       latestVersionCode: parsedCode,
-      updateNotes: String(updateNotes || '').trim(),
-      isForceUpdate: Boolean(isForceUpdate),
-      playStoreLink: String(playStoreLink || 'https://play.google.com/store/apps/details?id=com.mateen.game').trim(),
-      apkLink: String(apkLink || 'https://github.com/dr3laaalhajy-dev/verses-that-are-similar/releases/download/v1.0.0/Mutashabihat.apk').trim(),
+      updateNotes: String(updateNotes !== undefined ? updateNotes : memoryVersionControl.updateNotes).trim(),
+      isForceUpdate: isForceUpdate !== undefined ? Boolean(isForceUpdate) : memoryVersionControl.isForceUpdate,
+      isUpdateActive: activeState,
+      playStoreLink: String(playStoreLink || memoryVersionControl.playStoreLink).trim(),
+      apkLink: String(apkLink || memoryVersionControl.apkLink).trim(),
       updatedAt: Date.now()
     }
 

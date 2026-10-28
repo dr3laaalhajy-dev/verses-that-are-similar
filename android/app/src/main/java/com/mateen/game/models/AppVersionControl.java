@@ -10,6 +10,7 @@ public class AppVersionControl implements Serializable {
     private int latestAndroidVersionCode;
     private String updateNotes;
     private boolean isForceUpdate;
+    private boolean isUpdateActive = true;
     private String playStoreLink;
     private String apkLink;
     private long updatedAt;
@@ -28,9 +29,18 @@ public class AppVersionControl implements Serializable {
         this.latestAndroidVersionCode = latestAndroidVersionCode;
         this.updateNotes = updateNotes;
         this.isForceUpdate = isForceUpdate;
+        this.isUpdateActive = true;
         this.playStoreLink = playStoreLink;
         this.apkLink = apkLink;
         this.updatedAt = System.currentTimeMillis();
+    }
+
+    public boolean isUpdateActive() {
+        return isUpdateActive;
+    }
+
+    public void setUpdateActive(boolean updateActive) {
+        isUpdateActive = updateActive;
     }
 
     public int getLatestAndroidVersionCode() {

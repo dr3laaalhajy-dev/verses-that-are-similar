@@ -91,7 +91,68 @@
                 android:textSize="14sp"
                 android:layout_marginBottom="14dp" />
 
-            <!-- 2. Force Update Switch Container (Fixed Thumb/Track Alignment) -->
+            <!-- 2. Alert Active Switch Container (Enable / Disable Alert) -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="حالة ظهور تنبيه التحديث للمستخدمين:"
+                android:textColor="#1E293B"
+                android:textSize="13sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="6dp" />
+
+            <LinearLayout
+                android:id="@+id/layoutAlertActiveContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_version_badge"
+                android:clipChildren="false"
+                android:clipToPadding="false"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingStart="14dp"
+                android:paddingTop="10dp"
+                android:paddingEnd="14dp"
+                android:paddingBottom="10dp"
+                android:layout_marginBottom="14dp">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/tvAlertActiveTitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="تفعيل ظهور نافذة التحديث"
+                        android:textColor="#0F172A"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/tvAlertActiveSubtitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="إلغاء التفعيل يخفي النافذة فوراً عن شاشات المستخدمين"
+                        android:textColor="#64748B"
+                        android:textSize="11sp" />
+                </LinearLayout>
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switchAlertActive"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_vertical"
+                    android:checked="true"
+                    android:paddingStart="6dp"
+                    android:paddingEnd="6dp"
+                    android:splitTrack="false"
+                    app:showText="false" />
+            </LinearLayout>
+
+            <!-- 3. Force Update Switch Container (Fixed Thumb/Track Alignment) -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"

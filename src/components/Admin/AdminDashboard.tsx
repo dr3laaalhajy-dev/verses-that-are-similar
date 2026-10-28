@@ -632,6 +632,7 @@ export default function AdminDashboard({
     latestVersionCode?: number;
     updateNotes: string;
     isForceUpdate: boolean;
+    isUpdateActive: boolean;
     playStoreLink: string;
     apkLink: string;
     updatedAt?: number;
@@ -640,6 +641,7 @@ export default function AdminDashboard({
     latestVersionCode: 1,
     updateNotes: '',
     isForceUpdate: false,
+    isUpdateActive: true,
     playStoreLink: 'https://play.google.com/store/apps/details?id=com.mateen.game',
     apkLink: 'https://github.com/dr3laaalhajy-dev/verses-that-are-similar/releases/download/v1.0.0/Mutashabihat.apk'
   });
@@ -660,6 +662,7 @@ export default function AdminDashboard({
             latestVersionCode: code,
             updateNotes: data.updateNotes || '',
             isForceUpdate: Boolean(data.isForceUpdate),
+            isUpdateActive: data.isUpdateActive !== false,
             playStoreLink: data.playStoreLink || 'https://play.google.com/store/apps/details?id=com.mateen.game',
             apkLink: data.apkLink || 'https://github.com/dr3laaalhajy-dev/verses-that-are-similar/releases/download/v1.0.0/Mutashabihat.apk',
             updatedAt: data.updatedAt
@@ -671,6 +674,39 @@ export default function AdminDashboard({
     }
   }, []);
 
+  const handleToggleUpdateActive = async (newActiveState: boolean) => {
+    if (!token) return;
+    setIsPublishingUpdate(true);
+    setPublishSuccessMessage(null);
+    setPublishErrorMessage(null);
+
+    try {
+      const payload = {
+        ...versionControlData,
+        isUpdateActive: newActiveState
+      };
+      const res = await fetch('/api/version-control', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setVersionControlData(prev => ({ ...prev, isUpdateActive: newActiveState }));
+        setPublishSuccessMessage(newActiveState ? 'تم تفعيل ظهور نافذة التحديث للمستخدمين بنجاح 🟢' : 'تم إيقاف وإلغاء ظهور نافذة التحديث للمستخدمين فوراً 🛑');
+      } else {
+        setPublishErrorMessage(data.message || 'فشل تحديث حالة التنبيه');
+      }
+    } catch (err: any) {
+      setPublishErrorMessage('حدث خطأ في الاتصال: ' + err.message);
+    } finally {
+      setIsPublishingUpdate(false);
+    }
+  };
+
   const handlePublishAppUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!token) return;
@@ -679,17 +715,21 @@ export default function AdminDashboard({
     setPublishErrorMessage(null);
 
     try {
+      const payload = {
+        ...versionControlData,
+        isUpdateActive: true // إعادة التفعيل التلقائي عند نشر إصدار جديد
+      };
       const res = await fetch('/api/version-control', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify(versionControlData)
+        body: JSON.stringify(payload)
       });
       const data = await res.json();
       if (res.ok) {
-        setPublishSuccessMessage('تم نشر التحديث وحفظ بيانات الإصدار بنجاح في Firebase والنظام 🚀');
+        setPublishSuccessMessage('تم نشر التحديث وتفعيل نافذة التنبيه بنجاح في Firebase 🚀');
         fetchVersionControl();
       } else {
         setPublishErrorMessage(data.message || 'فشل نشر التحديث');
@@ -3161,6 +3201,60 @@ export default function AdminDashboard({
                   <span>{publishErrorMessage}</span>
                 </div>
               )}
+
+              {/* Alert Active Toggle Control Card (Instant Disable/Enable) */}
+              <div className="bg-white p-5 md:p-6 rounded-[2rem] border border-slate-200 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-3.5">
+                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-inner ${
+                    versionControlData.isUpdateActive ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'
+                  }`}>
+                    {versionControlData.isUpdateActive ? (
+                      <CheckCircle className="w-6 h-6" />
+                    ) : (
+                      <AlertCircle className="w-6 h-6" />
+                    )}
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-black text-slate-800 text-sm md:text-base">حالة ظهور تنبيه التحديث للمستخدمين:</span>
+                      <span className={`text-[11px] font-black px-3 py-0.5 rounded-full ${
+                        versionControlData.isUpdateActive 
+                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
+                          : 'bg-rose-100 text-rose-800 border border-rose-200'
+                      }`}>
+                        {versionControlData.isUpdateActive ? '🟢 التنبيه نشط ويظهر للمستخدمين' : '🛑 التنبيه معطل ومخفي عن الجميع'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-400 font-bold mt-1 leading-relaxed">
+                      {versionControlData.isUpdateActive 
+                        ? 'تظهر نافذة BottomSheet التحديث فوراً لأي مستخدم يملك إصداراً أقل من الرقم المنشور.' 
+                        : 'تم إيقاف النافذة بالكامل؛ لن تظهر لأي مستخدم وستختفي فوراً من شاشات المستخدمين المفتوحة أمامهم.'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="w-full sm:w-auto shrink-0">
+                  {versionControlData.isUpdateActive ? (
+                    <button
+                      type="button"
+                      disabled={isPublishingUpdate}
+                      onClick={() => handleToggleUpdateActive(false)}
+                      className="w-full sm:w-auto px-6 py-3 bg-rose-500 hover:bg-rose-600 text-white rounded-2xl font-black text-xs md:text-sm shadow-md shadow-rose-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 disabled:opacity-50"
+                    >
+                      <span>إيقاف ظهور نافذة التحديث 🛑</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={isPublishingUpdate}
+                      onClick={() => handleToggleUpdateActive(true)}
+                      className="w-full sm:w-auto px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black text-xs md:text-sm shadow-md shadow-emerald-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 disabled:opacity-50"
+                    >
+                      <span>تفعيل ظهور نافذة التحديث 🟢</span>
+                    </button>
+                  )}
+                </div>
+              </div>
 
               {/* Update Form Card */}
               <form onSubmit={handlePublishAppUpdate} className="bg-white p-6 md:p-8 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-6">

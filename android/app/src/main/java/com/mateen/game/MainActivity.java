@@ -66,6 +66,22 @@ public class MainActivity extends BridgeActivity {
             public void onDataChange(@NonNull DataSnapshot snapshot) {
                 if (isFinishing() || isDestroyed() || !snapshot.exists()) return;
 
+                // 1. الشرط الاستباقي في السطر الأول: فحص isUpdateActive
+                boolean isUpdateActive = true;
+                if (snapshot.hasChild("isUpdateActive")) {
+                    Boolean activeVal = snapshot.child("isUpdateActive").getValue(Boolean.class);
+                    if (activeVal != null) {
+                        isUpdateActive = activeVal;
+                    }
+                }
+
+                // التفاعل اللحظي (Real-time Dismiss): إذا أصبحت false، يتم استدعاء dialog.dismiss() فوراً وإنهاء الدالة
+                if (!isUpdateActive) {
+                    Log.i(TAG, "Update alert is disabled by admin (isUpdateActive=false). Dismissing dialog if visible.");
+                    AppUpdateManager.dismissActiveDialog(false);
+                    return;
+                }
+
                 AppVersionControl updateInfo = snapshot.getValue(AppVersionControl.class);
                 if (updateInfo == null) return;
 
