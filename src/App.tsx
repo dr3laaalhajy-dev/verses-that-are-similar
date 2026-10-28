@@ -190,7 +190,7 @@ export const getSpeedQuestionDuration = (challenge: any): number => {
   return 15; // متوسط (medium) default
 };
 
-const SkillsChallengeHeader = ({ index, total, mode, title, verseText, totalPoints: pts, onSkip, isComplete, level }: any) => (
+const SkillsChallengeHeader = ({ index, total, mode, title, verseText, totalPoints: pts, onSkip, isComplete, level, isDaily, onFinishDaily }: any) => (
   <div className="flex justify-between items-start gap-2 mb-2 md:mb-4 relative z-10 w-full">
     <div className="flex items-center gap-2 md:gap-3 min-w-0 pt-0.5">
       <div className="w-7 h-7 md:w-11 md:h-11 bg-brand-gold/10 rounded-lg md:rounded-xl flex items-center justify-center text-brand-gold shrink-0">
@@ -231,6 +231,15 @@ const SkillsChallengeHeader = ({ index, total, mode, title, verseText, totalPoin
         <div className="w-px h-3.5 md:h-4 bg-slate-200" />
         <span className="text-xs md:text-base font-black text-brand-gold tabular-nums">{pts || 0} نقطة</span>
       </div>
+      {isDaily && isComplete && onFinishDaily && (
+        <button
+          onClick={onFinishDaily}
+          className="bg-linear-to-r from-amber-400 via-brand-gold to-amber-500 hover:brightness-105 text-brand-emerald font-black transition-all flex items-center gap-1.5 text-xs md:text-sm px-3.5 py-1.5 rounded-xl shadow-md active:scale-95 cursor-pointer animate-pulse border border-white/60"
+        >
+          <Trophy className="w-4 h-4 text-brand-emerald" />
+          <span>إنهاء التحدي اليومي</span>
+        </button>
+      )}
       {onSkip && !isComplete && (
         <button
           onClick={onSkip}
@@ -513,8 +522,39 @@ const SurahChallengeUI = ({ verseText, inputs, onInputChange, onSubmit, feedback
   </div>
 );
 
-const CompleteChallengeUI = ({ verseText, options, selectedOption, onOptionSelect, onConfirm, feedback, onSkip, isComplete, challengeMode, saveScore, KEYWORD, score, setDailyCompleted, updateStatsAfterWin, handlePromptNextChallenge, onViewTafsir, currentChallenge, onFinishDaily, correctText }: any) => (
+const CompleteChallengeUI = ({ verseText, options, selectedOption, onOptionSelect, onConfirm, feedback, onSkip, isComplete, challengeMode, saveScore, KEYWORD, score, setDailyCompleted, updateStatsAfterWin, handlePromptNextChallenge, onViewTafsir, currentChallenge, onFinishDaily, correctText }: any) => {
+  const handleFinishDailyAction = () => {
+    saveScore(KEYWORD, score);
+    const todayStr = new Date().toISOString().split('T')[0];
+    localStorage.setItem('quran_daily_completed', todayStr);
+    setDailyCompleted(true);
+    updateStatsAfterWin();
+    if (onFinishDaily) onFinishDaily();
+  };
+
+  return (
   <div className="flex flex-col items-center gap-2 md:gap-4 w-full max-w-xl md:max-w-3xl lg:max-w-4xl mx-auto">
+    {/* زر إنهاء التحدي اليومي في الأعلى عند إتمام التحدي بنجاح */}
+    <AnimatePresence>
+      {isComplete && challengeMode === 'daily' && (
+        <motion.div
+          initial={{ opacity: 0, y: -15, scale: 0.95 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: -10 }}
+          className="w-full mb-2"
+        >
+          <button
+            onClick={handleFinishDailyAction}
+            className="w-full py-3.5 md:py-4 px-6 bg-linear-to-r from-amber-400 via-brand-gold to-amber-500 text-brand-emerald rounded-2xl md:rounded-3xl font-black text-base md:text-lg hover:brightness-105 transition-all shadow-xl active:scale-98 flex items-center justify-center gap-2.5 border-2 border-white cursor-pointer"
+          >
+            <Trophy className="w-5 h-5 md:w-6 md:h-6 text-brand-emerald animate-bounce" />
+            <span>إنهاء التحدي اليومي</span>
+            <CheckCircle className="w-5 h-5 md:w-6 md:h-6 text-brand-emerald" />
+          </button>
+        </motion.div>
+      )}
+    </AnimatePresence>
+
     <div className="glass p-3.5 md:p-8 lg:p-10 rounded-2xl md:rounded-3xl w-full text-center border-white/80 shadow-lg relative overflow-hidden">
       <div className="absolute top-0 inset-x-0 h-1 bg-linear-to-r from-transparent via-brand-emerald/30 to-transparent" />
       <div className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-bold text-brand-emerald leading-loose quran-text mb-3.5 md:mb-7 px-2 md:px-4">
@@ -641,17 +681,11 @@ const CompleteChallengeUI = ({ verseText, options, selectedOption, onOptionSelec
 
             {challengeMode === 'daily' ? (
               <button
-                onClick={() => {
-                  saveScore(KEYWORD, score);
-                  const todayStr = new Date().toISOString().split('T')[0];
-                  localStorage.setItem('quran_daily_completed', todayStr);
-                  setDailyCompleted(true);
-                  updateStatsAfterWin();
-                  if (onFinishDaily) onFinishDaily();
-                }}
-                className="px-6 py-3 bg-brand-gold text-brand-emerald rounded-xl font-bold text-sm md:text-base hover:bg-white transition-all shadow-lg"
+                onClick={handleFinishDailyAction}
+                className="px-6 py-3 bg-brand-gold text-brand-emerald rounded-xl font-black text-sm md:text-base hover:bg-white transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer"
               >
-                إنهاء التحدي اليومي
+                <Trophy className="w-5 h-5 text-brand-emerald" />
+                <span>إنهاء التحدي اليومي</span>
               </button>
             ) : (
               <button
@@ -669,7 +703,8 @@ const CompleteChallengeUI = ({ verseText, options, selectedOption, onOptionSelec
       )}
     </AnimatePresence>
   </div>
-);
+  );
+};
 
 const VerseCard = memo(({ verse, keyword, isMatched, index, keywordWordCount, wordStates }: VerseCardProps) => {
   const [copied, setCopied] = useState(false);
@@ -2092,6 +2127,7 @@ export default function App() {
     return Math.abs(daysSinceEpoch) % pool.length;
   }, [completionChallenges, challenges]);
 
+  const [dailyChallengeOffset, setDailyChallengeOffset] = useState<number>(0);
   const [allTargetVerses, setAllTargetVerses] = useState<Verse[]>([]);
   const [matchedIds, setMatchedIds] = useState<Set<string>>(new Set());
   const [wordStates, setWordStates] = useState<Record<string, Record<number, 'correct' | 'skipped'>>>({});
@@ -2116,14 +2152,13 @@ export default function App() {
       return challenges[currentChallengeIndex];
     }
     if (challengeMode === 'daily') {
-      if (completionChallenges.length > 0) {
-        return completionChallenges[dailyChallengeIndex % completionChallenges.length];
-      }
-      return challenges[dailyChallengeIndex] || null;
+      const pool = completionChallenges.length > 0 ? completionChallenges : challenges;
+      if (pool.length === 0) return null;
+      return pool[(dailyChallengeIndex + dailyChallengeOffset) % pool.length];
     }
     if (challenges.length === 0) return null;
     return challenges[currentChallengeIndex];
-  }, [view, challenges, room?.challenges, challengeMode, dailyChallengeIndex, currentChallengeIndex, completionChallenges]);
+  }, [view, challenges, room?.challenges, challengeMode, dailyChallengeIndex, dailyChallengeOffset, currentChallengeIndex, completionChallenges]);
 
   const KEYWORD = currentChallenge?.verseText || currentChallenge?.text || currentChallenge?.keyword || '';
 
@@ -3301,6 +3336,7 @@ export default function App() {
 
   const handleStartDaily = () => {
     if (dailyCompleted) return;
+    setDailyChallengeOffset(0);
     setChallengeMode('daily');
     setSkillsType('complete');
     setSelectedOption(null);
@@ -3600,6 +3636,8 @@ export default function App() {
           setTimeout(() => {
             setSkillsFeedback(false);
             setSelectedOption(null);
+            setDailyChallengeOffset(prev => prev + 1);
+            toast.error('إجابة غير صحيحة! تم استبدال السؤال بتحدٍ جديد، حاول مجدداً', { duration: 3000 });
           }, 1200);
           return;
         }
@@ -3763,6 +3801,20 @@ export default function App() {
       totalPossible: correctSurahs.length,
       isFullyCorrect
     }]);
+
+    if (challengeMode === 'daily') {
+      if (isFullyCorrect) {
+        setSkillsFeedback(false);
+      } else {
+        setTimeout(() => {
+          setSkillsFeedback(false);
+          setSurahFeedbackData(null);
+          setDailyChallengeOffset(prev => prev + 1);
+          toast.error('إجابة غير صحيحة! تم استبدال السؤال بتحدٍ جديد، حاول مجدداً', { duration: 3000 });
+        }, 1200);
+      }
+      return;
+    }
 
     // 4. Auto-advance in single-player, or submit in multiplayer
     if (room?.id) {
@@ -9296,7 +9348,7 @@ ${versesList}
                         )}
 
                         <SkillsChallengeHeader
-                          index={challengeMode === 'daily' ? dailyChallengeIndex : (view === 'challenge' ? currentChallengeIndex : sessionCurrentIndex)}
+                          index={challengeMode === 'daily' ? 0 : (view === 'challenge' ? currentChallengeIndex : sessionCurrentIndex)}
                           total={challengeMode === 'daily' ? 1 : (challenges.length > 50 ? 20 : Math.max(challenges.length, 1))}
                           mode={challengeMode === 'daily' ? 'complete' : skillsType}
                           title={challengeMode === 'daily' ? 'التحدي اليومي: إكمال الآية' : (room?.gameMode === 'ISLAMIC' || v1GameModes.includes('islamic') ? 'تحدي معلومات إسلامية' : undefined)}
@@ -9305,6 +9357,16 @@ ${versesList}
                           onSkip={challengeMode !== 'daily' ? handleSkip : undefined}
                           isComplete={isComplete}
                           level={currentChallenge?.level}
+                          isDaily={challengeMode === 'daily'}
+                          onFinishDaily={() => {
+                            saveScore(KEYWORD, score);
+                            const todayStr = new Date().toISOString().split('T')[0];
+                            localStorage.setItem('quran_daily_completed', todayStr);
+                            setDailyCompleted(true);
+                            updateStatsAfterWin();
+                            setChallengeMode('normal');
+                            setView('home');
+                          }}
                         />
                         {skillsType === 'audio' && challengeMode !== 'daily' ? (
                           <AudioChallengeUI
