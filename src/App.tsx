@@ -3098,10 +3098,24 @@ export default function App() {
         const pIdParam = encodeURIComponent(playerUsername || playerName || '');
         const res = await fetch(`/api/1v1?action=check-active&playerId=${pIdParam}`);
         const data = await res.json();
-        if (res.ok && data && data.id && data.status === 'PLAYING') {
+        if (res.ok && data && data.id && (data.status === 'PLAYING' || data.status === 'WAITING')) {
+          // التحقق الدقيق من مسار هذا اللاعب تحديداً داخل الغرفة
+          const pId = String(data.participants?.find((p: any) => p.name === playerName || p.username === playerUsername)?.id);
+          const pProgress = data.playersProgress ? data.playersProgress[pId] : null;
+          
+          // إذا كان اللاعب قد انسحب (hasLeft = true أو isResigned = true) أو أنهى، يتم إخفاء الشريط تماماً وتنظيف المرجع
+          if (pProgress && (pProgress.hasLeft || pProgress.isResigned || pProgress.finishTime)) {
+            setActiveRunningRoom(null);
+            localStorage.removeItem('activeRoomId');
+            localStorage.removeItem('currentRoomId');
+            return;
+          }
+          
           setActiveRunningRoom(data);
         } else {
           setActiveRunningRoom(null);
+          localStorage.removeItem('activeRoomId');
+          localStorage.removeItem('currentRoomId');
         }
       } catch (err) {
         console.error('Error checking active room:', err);
@@ -3233,6 +3247,9 @@ export default function App() {
 
   const handleResignGroupChallenge = async () => {
     if (!room?.id || (!playerUsername && !playerName)) return;
+    setActiveRunningRoom(null);
+    localStorage.removeItem('activeRoomId');
+    localStorage.removeItem('currentRoomId');
     try {
       const res = await fetch('/api/1v1', {
         method: 'POST',
@@ -3249,6 +3266,7 @@ export default function App() {
       console.error('Group resign error:', err);
     }
     setSessionCorrect(0);
+    setActiveRunningRoom(null);
     setView('home');
     setIsResignModalOpen(false);
   };

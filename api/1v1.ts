@@ -1005,13 +1005,20 @@ async function handleCheckActive(req: VercelRequest, res: VercelResponse) {
 
     const pIdStr = String(player.id)
     const activeRoom = rooms.find(r => {
+      const progress = (r.playersProgress as any) || {}
+      const pData = progress[pIdStr]
+
+      // إذا كان اللاعب قد انسحب (hasLeft أو isResigned) أو أنهى التحدي في هذه الغرفة، يتم استبعادها فوراً
+      if (pData && (pData.hasLeft || pData.isResigned || pData.finishTime)) {
+        return false
+      }
+
       if (r.player1Id === player.id) {
         return true
       }
-      const progress = (r.playersProgress as any) || {}
-      if (progress[pIdStr]) {
-        // Only active if player hasn't finished yet
-        return !progress[pIdStr].finishTime
+
+      if (pData) {
+        return !pData.finishTime && !pData.hasLeft && !pData.isResigned
       }
       return false
     })
