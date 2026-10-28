@@ -5296,12 +5296,12 @@ ${versesList}
                     key="group_create"
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    className="max-w-xl mx-auto py-6 md:py-8 px-4"
+                    className="w-full max-w-2xl mx-auto py-4 sm:py-6 md:py-8 px-3 sm:px-4 min-h-screen overflow-y-auto pb-32 sm:pb-36"
                   >
-                    <div className="glass p-6 md:p-8 rounded-3xl border-orange-100 shadow-xl">
-                      <h2 className="text-xl md:text-2xl font-black text-slate-800 mb-6 text-center">إعدادات التحدي الجماعي</h2>
+                    <div className="glass p-4 sm:p-6 md:p-8 rounded-3xl border-orange-100 shadow-xl space-y-5 sm:space-y-6">
+                      <h2 className="text-lg sm:text-xl md:text-2xl font-black text-slate-800 text-center">إعدادات التحدي الجماعي</h2>
 
-                      <div className="space-y-6">
+                      <div className="space-y-5 sm:space-y-6">
                         {/* 1. اسم الغرفة */}
                         <div className="text-right">
                           <label className="block text-xs font-black text-slate-600 mb-2">
@@ -5313,7 +5313,7 @@ ${versesList}
                             value={v1RoomName}
                             onChange={(e) => setV1RoomName(e.target.value)}
                             placeholder="اكتب اسماً مميزاً للغرفة (مثال: سباق الحفاظ، تحدي الأصدقاء)"
-                            className="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 focus:border-orange-500 focus:outline-none bg-white text-slate-800 font-bold text-sm text-right transition-all shadow-xs"
+                            className="w-full px-4 py-3 sm:py-3.5 rounded-2xl border-2 border-slate-100 focus:border-orange-500 focus:outline-none bg-white text-slate-800 font-bold text-sm text-right transition-all shadow-xs"
                           />
                         </div>
 
@@ -5322,11 +5322,11 @@ ${versesList}
                           <label className="block text-xs font-black text-slate-600 mb-2">
                             نوع الغرفة (الخصوصية)
                           </label>
-                          <div className="grid grid-cols-2 gap-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
                             <button
                               type="button"
                               onClick={() => setV1IsPrivate(false)}
-                              className={`p-3.5 rounded-2xl border-2 transition-all flex items-center justify-center gap-2.5 cursor-pointer ${
+                              className={`p-3.5 sm:p-4 rounded-2xl border-2 transition-all flex items-center justify-center gap-2.5 cursor-pointer ${
                                 !v1IsPrivate
                                   ? 'border-brand-emerald bg-brand-emerald/10 text-brand-emerald shadow-sm'
                                   : 'border-slate-100 bg-white text-slate-500 hover:border-slate-200'
@@ -5342,7 +5342,7 @@ ${versesList}
                             <button
                               type="button"
                               onClick={() => setV1IsPrivate(true)}
-                              className={`p-3.5 rounded-2xl border-2 transition-all flex items-center justify-center gap-2.5 cursor-pointer ${
+                              className={`p-3.5 sm:p-4 rounded-2xl border-2 transition-all flex items-center justify-center gap-2.5 cursor-pointer ${
                                 v1IsPrivate
                                   ? 'border-orange-500 bg-orange-50 text-orange-600 shadow-sm'
                                   : 'border-slate-100 bg-white text-slate-500 hover:border-slate-200'
@@ -5363,7 +5363,7 @@ ${versesList}
                             initial={{ opacity: 0, height: 0, y: -6 }}
                             animate={{ opacity: 1, height: 'auto', y: 0 }}
                             exit={{ opacity: 0, height: 0, y: -6 }}
-                            className="bg-orange-50/70 border border-orange-200 p-4 rounded-2xl space-y-2 text-right"
+                            className="bg-orange-50/70 border border-orange-200 p-3.5 sm:p-4 rounded-2xl space-y-2 text-right"
                           >
                             <div className="flex items-center justify-between">
                               <label className="text-xs font-black text-orange-900 flex items-center gap-1.5">
@@ -5373,7 +5373,7 @@ ${versesList}
                               <button
                                 type="button"
                                 onClick={() => setShowPasswordText(!showPasswordText)}
-                                className="text-[11px] font-bold text-orange-600 hover:text-orange-700 flex items-center gap-1"
+                                className="text-[11px] font-bold text-orange-600 hover:text-orange-700 flex items-center gap-1 cursor-pointer"
                               >
                                 {showPasswordText ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                                 <span>{showPasswordText ? 'إخفاء' : 'إظهار'}</span>
@@ -5386,7 +5386,7 @@ ${versesList}
                               onChange={(e) => setV1RoomPassword(e.target.value)}
                               placeholder="أدخل كلمة مرور الغرفة ليتمكن أصدقاؤك من الانضمام"
                               required
-                              className="w-full px-4 py-2.5 rounded-xl border-2 border-orange-200 focus:border-orange-500 focus:outline-none bg-white text-slate-800 font-bold text-sm text-right"
+                              className="w-full px-4 py-3 rounded-xl border-2 border-orange-200 focus:border-orange-500 focus:outline-none bg-white text-slate-800 font-bold text-sm text-right"
                             />
                             <p className="text-[10px] text-orange-700/80 font-bold">
                               🔒 لن يتمكن أي متسابق من الدخول للغرفة إلا بعد إدخال هذه الكلمة.
@@ -5404,7 +5404,7 @@ ${versesList}
                             </span>
                           </div>
 
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3.5">
                             {[
                               { id: 'audio', label: 'التحدي الصوتي', icon: Mic, color: 'emerald', bg: 'bg-brand-emerald/10', desc: 'تحدى نفسك بقراءة بداية الآيات', hidden: systemSettings.hideAudioChallenge },
                               { id: 'complete', label: 'تحدي إكمال الآية', icon: CheckCircle, color: 'blue', bg: 'bg-blue-600/10', desc: 'توقع الكلمات المفقودة في الآية', hidden: systemSettings.hideCompletionChallenge },
@@ -5420,7 +5420,7 @@ ${versesList}
                               return (
                                 <div
                                   key={mode.id}
-                                  className={`p-3 md:p-3.5 rounded-2xl border-2 transition-all flex flex-col justify-between relative overflow-hidden ${
+                                  className={`p-3.5 sm:p-4 rounded-2xl border-2 transition-all flex flex-col justify-between relative overflow-hidden ${
                                     isSelected
                                       ? `border-brand-emerald bg-brand-emerald/5 shadow-md`
                                       : 'border-slate-100 hover:border-slate-200 bg-white text-slate-500'
@@ -5487,7 +5487,7 @@ ${versesList}
                                           }));
                                         }}
                                         placeholder="عدد الأسئلة"
-                                        className={`w-full px-2.5 py-1.5 rounded-xl border-2 font-black text-xs text-center bg-white shadow-xs transition-all focus:outline-none ${
+                                        className={`w-full px-2.5 py-2 rounded-xl border-2 font-black text-xs text-center bg-white shadow-xs transition-all focus:outline-none ${
                                           isExceeded || currentVal === 0
                                             ? 'border-red-400 text-red-600 bg-red-50/40 focus:border-red-500'
                                             : 'border-slate-200 focus:border-brand-emerald text-slate-800'
@@ -5521,7 +5521,7 @@ ${versesList}
                                       <button
                                         type="button"
                                         onClick={() => setShowIslamicConfigModal(true)}
-                                        className="w-full py-1 text-[10px] font-black bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors shadow-xs cursor-pointer"
+                                        className="w-full py-1.5 text-[10px] font-black bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors shadow-xs cursor-pointer"
                                       >
                                         تخصيص الأسئلة ⚙️
                                       </button>
@@ -5537,7 +5537,7 @@ ${versesList}
                             <motion.div
                               initial={{ opacity: 0, y: -5 }}
                               animate={{ opacity: 1, y: 0 }}
-                              className="mt-3.5 p-3.5 bg-amber-50/80 rounded-2xl border border-amber-200 flex items-center justify-between text-right gap-3"
+                              className="mt-3.5 p-3.5 bg-amber-50/80 rounded-2xl border border-amber-200 flex flex-col sm:flex-row items-stretch sm:items-center justify-between text-right gap-3"
                             >
                               <div className="flex items-center gap-2.5 min-w-0">
                                 <div className="w-8 h-8 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0">
@@ -5562,7 +5562,7 @@ ${versesList}
                               <button
                                 type="button"
                                 onClick={() => setShowIslamicConfigModal(true)}
-                                className="px-3 py-1.5 bg-white text-amber-800 text-xs font-black rounded-xl border border-amber-300 shadow-xs hover:bg-amber-100 transition-all shrink-0 cursor-pointer"
+                                className="px-3.5 py-2 bg-white text-amber-800 text-xs font-black rounded-xl border border-amber-300 shadow-xs hover:bg-amber-100 transition-all shrink-0 cursor-pointer text-center"
                               >
                                 تخصيص الأسئلة ⚙️
                               </button>
@@ -5570,9 +5570,9 @@ ${versesList}
                           )}
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5 pt-1">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 md:gap-5 pt-1">
                           {/* 3. إجمالي عدد الأسئلة التلقائي (Reactive Total Counter) */}
-                          <div className="md:col-span-1 text-right flex flex-col justify-between p-3.5 bg-slate-50 border-2 border-slate-200/80 rounded-2xl shadow-xs">
+                          <div className="text-right flex flex-col justify-between p-3.5 sm:p-4 bg-slate-50 border-2 border-slate-200/80 rounded-2xl shadow-xs">
                             <div className="flex items-center justify-between mb-1">
                               <span className="text-xs font-black text-slate-700">إجمالي عدد الأسئلة</span>
                               <span className="text-[10px] font-black text-brand-emerald bg-brand-emerald/10 px-2 py-0.5 rounded-full border border-brand-emerald/20">
@@ -5615,7 +5615,7 @@ ${versesList}
                           </div>
 
                           {/* 4. المؤقت - إدخال حر بالثواني */}
-                          <div className="md:col-span-1 text-right">
+                          <div className="text-right p-3.5 sm:p-4 bg-slate-50 border-2 border-slate-200/80 rounded-2xl shadow-xs">
                             <div className="flex items-center justify-between mb-2">
                               <label className="text-xs font-black text-slate-600">الوقت لكل سؤال</label>
                               <button
@@ -5658,7 +5658,7 @@ ${versesList}
                         </div>
 
                         {/* 5. طريقة الانتقال بين الأسئلة (Question Transition Mode) */}
-                        <div className="p-4 bg-slate-50 border-2 border-slate-200/80 rounded-2xl shadow-xs space-y-3 text-right">
+                        <div className="p-3.5 sm:p-4 bg-slate-50 border-2 border-slate-200/80 rounded-2xl shadow-xs space-y-3 text-right">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
                               <span className="text-base">🔄</span>
@@ -5674,7 +5674,7 @@ ${versesList}
                             <button
                               type="button"
                               onClick={() => setV1TransitionMode('SYNC')}
-                              className={`p-3.5 rounded-xl border-2 text-right transition-all cursor-pointer flex flex-col justify-between gap-2 ${
+                              className={`p-3.5 sm:p-4 rounded-xl border-2 text-right transition-all cursor-pointer flex flex-col justify-between gap-2 ${
                                 v1TransitionMode === 'SYNC'
                                   ? 'border-orange-500 bg-orange-50/70 shadow-xs ring-2 ring-orange-500/20'
                                   : 'border-slate-200 bg-white hover:border-slate-300'
@@ -5697,7 +5697,7 @@ ${versesList}
                             <button
                               type="button"
                               onClick={() => setV1TransitionMode('ASYNC')}
-                              className={`p-3.5 rounded-xl border-2 text-right transition-all cursor-pointer flex flex-col justify-between gap-2 ${
+                              className={`p-3.5 sm:p-4 rounded-xl border-2 text-right transition-all cursor-pointer flex flex-col justify-between gap-2 ${
                                 v1TransitionMode === 'ASYNC'
                                   ? 'border-orange-500 bg-orange-50/70 shadow-xs ring-2 ring-orange-500/20'
                                   : 'border-slate-200 bg-white hover:border-slate-300'
@@ -5738,7 +5738,7 @@ ${versesList}
 
                           <button
                             onClick={() => setView('group_join')}
-                            className="w-full py-2 text-slate-400 font-bold hover:text-slate-600 transition-colors text-xs md:text-sm cursor-pointer"
+                            className="w-full py-2.5 text-slate-400 font-bold hover:text-slate-600 transition-colors text-xs md:text-sm cursor-pointer"
                           >
                             رجوع لقائمة الغرف
                           </button>
@@ -5752,29 +5752,29 @@ ${versesList}
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0 }}
-                    className="max-w-lg mx-auto py-6 md:py-8 px-4"
+                    className="w-full max-w-lg mx-auto py-4 sm:py-6 md:py-8 px-3 sm:px-4 min-h-screen pb-36 sm:pb-40"
                   >
-                    <div className="glass p-6 md:p-8 rounded-3xl border-orange-100 shadow-xl text-center">
-                      <div className="flex items-center justify-center gap-3 mb-6">
-                        <div className="w-12 h-12 bg-orange-500 text-white rounded-xl flex items-center justify-center shadow-md animate-pulse">
-                          <Users className="w-6 h-6" />
+                    <div className="glass p-4 sm:p-6 md:p-8 rounded-3xl border-orange-100 shadow-xl text-center relative flex flex-col">
+                      <div className="flex items-center justify-center gap-2.5 sm:gap-3 mb-4 sm:mb-6">
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 bg-orange-500 text-white rounded-xl flex items-center justify-center shadow-md animate-pulse shrink-0">
+                          <Users className="w-5 h-5 sm:w-6 sm:h-6" />
                         </div>
                         <div className="text-right">
-                          <h2 className="text-xl md:text-2xl font-black text-slate-800">قاعة الانتظار</h2>
-                          <p className="text-slate-400 font-bold text-xs md:text-sm">انتظار انضمام بقية المتسابقين...</p>
+                          <h2 className="text-lg sm:text-2xl font-black text-slate-800">قاعة الانتظار</h2>
+                          <p className="text-slate-400 font-bold text-xs sm:text-sm">انتظار انضمام بقية المتسابقين...</p>
                         </div>
                       </div>
 
-                      <div className="bg-slate-50 p-4 md:p-5 rounded-2xl mb-6 border border-slate-100 shadow-inner text-right space-y-2.5">
+                      <div className="bg-slate-50 p-3.5 sm:p-5 rounded-2xl mb-4 sm:mb-6 border border-slate-100 shadow-inner text-right space-y-2">
                         <div className="flex items-center justify-between">
-                          <span className="text-sm md:text-base font-black text-slate-800">{room?.name || 'غرفة التحدي'}</span>
+                          <span className="text-sm md:text-base font-black text-slate-800 truncate">{room?.name || 'غرفة التحدي'}</span>
                           {room?.isPrivate ? (
-                            <span className="px-2.5 py-0.5 bg-amber-500/10 text-amber-600 rounded-full text-xs font-black flex items-center gap-1 border border-amber-500/20">
+                            <span className="px-2.5 py-0.5 bg-amber-500/10 text-amber-600 rounded-full text-xs font-black flex items-center gap-1 border border-amber-500/20 shrink-0">
                               <Lock className="w-3 h-3" />
                               <span>غرفة خاصة</span>
                             </span>
                           ) : (
-                            <span className="px-2.5 py-0.5 bg-emerald-500/10 text-emerald-600 rounded-full text-xs font-black flex items-center gap-1 border border-emerald-500/20">
+                            <span className="px-2.5 py-0.5 bg-emerald-500/10 text-emerald-600 rounded-full text-xs font-black flex items-center gap-1 border border-emerald-500/20 shrink-0">
                               <Globe className="w-3 h-3" />
                               <span>غرفة عامة</span>
                             </span>
@@ -5809,85 +5809,88 @@ ${versesList}
                           <span className="text-xs md:text-sm font-black text-slate-800">المتسابقون ({room?.participants?.length || 1})</span>
                           <span className="flex h-2 w-2 rounded-full bg-orange-500 animate-ping" />
                         </div>
-                        <div className="grid grid-cols-1 gap-2.5">
+                        <div className="grid grid-cols-2 gap-2 sm:gap-2.5">
                           {(room?.participants || []).map((p: any, i: number) => (
                             <motion.div
-                              initial={{ opacity: 0, x: -20 }}
+                              initial={{ opacity: 0, x: -10 }}
                               animate={{ opacity: 1, x: 0 }}
                               key={p?.id || i}
-                              className="flex items-center gap-3 p-3 bg-white rounded-xl border border-slate-100 shadow-xs"
+                              className="flex items-center gap-2 sm:gap-2.5 p-2.5 sm:p-3 bg-white rounded-xl border border-slate-100 shadow-xs min-w-0"
                             >
-                              <div className="w-8 h-8 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center font-black text-xs">
+                              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center font-black text-xs shrink-0">
                                 {i + 1}
                               </div>
-                              <span className="font-bold text-slate-700 text-sm">{p?.name || 'لاعب'}</span>
-                              {p?.id === room?.player1Id && <span className="mr-auto px-2.5 py-0.5 bg-orange-500 text-white text-[9px] font-black rounded-md uppercase">المنشئ</span>}
+                              <span className="font-bold text-slate-700 text-xs sm:text-sm truncate min-w-0 flex-1 text-right">{p?.name || 'لاعب'}</span>
+                              {p?.id === room?.player1Id && <span className="px-1.5 py-0.5 bg-orange-500 text-white text-[9px] font-black rounded shrink-0">المنشئ</span>}
                             </motion.div>
                           ))}
                         </div>
                       </div>
 
-                      {(
-                        room?.player1?.name === playerName ||
-                        (room?.player1?.username && playerUsername && room.player1.username.toLowerCase() === playerUsername.toLowerCase()) ||
-                        (room?.hostName && playerName && room.hostName === playerName) ||
-                        (room?.hostUsername && playerUsername && room.hostUsername.toLowerCase() === playerUsername.toLowerCase())
-                      ) ? (
-                        <div className="space-y-3">
-                          <button
-                            onClick={handleStartRoomV1}
-                            disabled={v1IsStartingRoom || (room?.participants?.length || 0) < 2}
-                            className={`w-full py-3.5 text-white rounded-2xl font-black text-base md:text-lg shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer ${(room?.participants?.length || 0) < 2
-                              ? 'bg-slate-400 opacity-50 cursor-not-allowed'
-                              : v1IsStartingRoom ? 'bg-orange-400' : 'bg-brand-emerald hover:bg-brand-emerald/90'
-                              }`}
-                          >
-                            {v1IsStartingRoom && <Loader2 className="w-5 h-5 animate-spin" />}
-                            {v1IsStartingRoom ? 'جاري التحميل...' : 'ابدأ التحدي الآن'}
-                          </button>
+                      {/* Fixed / Sticky Action Controls at bottom */}
+                      <div className="sticky bottom-2 sm:bottom-4 z-30 pt-3 pb-1 w-full bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-slate-100 dark:border-slate-800 rounded-2xl shadow-xl p-2.5 sm:p-3.5 space-y-2 mt-4">
+                        {(
+                          room?.player1?.name === playerName ||
+                          (room?.player1?.username && playerUsername && room.player1.username.toLowerCase() === playerUsername.toLowerCase()) ||
+                          (room?.hostName && playerName && room.hostName === playerName) ||
+                          (room?.hostUsername && playerUsername && room.hostUsername.toLowerCase() === playerUsername.toLowerCase())
+                        ) ? (
+                          <div className="space-y-2 sm:space-y-2.5">
+                            <button
+                              onClick={handleStartRoomV1}
+                              disabled={v1IsStartingRoom || (room?.participants?.length || 0) < 2}
+                              className={`w-full py-3 sm:py-3.5 text-white rounded-xl sm:rounded-2xl font-black text-sm sm:text-base shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer ${(room?.participants?.length || 0) < 2
+                                ? 'bg-slate-400 opacity-50 cursor-not-allowed'
+                                : v1IsStartingRoom ? 'bg-orange-400' : 'bg-brand-emerald hover:bg-brand-emerald/90'
+                                }`}
+                            >
+                              {v1IsStartingRoom && <Loader2 className="w-5 h-5 animate-spin" />}
+                              {v1IsStartingRoom ? 'جاري التحميل...' : 'ابدأ التحدي الآن'}
+                            </button>
 
+                            <button
+                              type="button"
+                              onClick={handleCancelRoomByHost}
+                              className="w-full py-2.5 sm:py-3 rounded-xl sm:rounded-2xl font-black text-xs sm:text-sm text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
+                            >
+                              <Trash2 className="w-4 h-4 text-red-500" />
+                              <span>إلغاء الغرفة وحذفها ✕</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setView('group_join')}
+                              className="w-full py-2 rounded-xl font-bold text-xs text-slate-500 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                            >
+                              <ArrowRight className="w-4 h-4" />
+                              <span>العودة لقائمة الغرف (ستظل الغرفة متاحة)</span>
+                            </button>
+                          </div>
+                        ) : (
                           <button
                             type="button"
-                            onClick={handleCancelRoomByHost}
-                            className="w-full py-3 rounded-2xl font-black text-xs md:text-sm text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
+                            onClick={() => {
+                              if (room?.id) {
+                                fetch('/api/1v1', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({
+                                    action: 'presence',
+                                    roomId: room.id,
+                                    playerId: playerUsername || playerName,
+                                    isOnline: false
+                                  })
+                                }).catch(() => {});
+                              }
+                              setRoom(null);
+                              setView('group_join');
+                            }}
+                            className="w-full py-3 rounded-xl sm:rounded-2xl font-black text-xs sm:text-sm text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all cursor-pointer"
                           >
-                            <Trash2 className="w-4 h-4 text-red-500" />
-                            <span>إلغاء الغرفة وحذفها ✕</span>
+                            مغادرة قاعة الانتظار
                           </button>
-
-                          <button
-                            type="button"
-                            onClick={() => setView('group_join')}
-                            className="w-full py-2.5 rounded-2xl font-bold text-xs text-slate-500 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-                          >
-                            <ArrowRight className="w-4 h-4" />
-                            <span>العودة لقائمة الغرف (ستظل الغرفة متاحة)</span>
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (room?.id) {
-                              fetch('/api/1v1', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                  action: 'presence',
-                                  roomId: room.id,
-                                  playerId: playerUsername || playerName,
-                                  isOnline: false
-                                })
-                              }).catch(() => {});
-                            }
-                            setRoom(null);
-                            setView('group_join');
-                          }}
-                          className="mt-6 text-slate-400 font-bold hover:text-slate-600 text-xs md:text-sm cursor-pointer"
-                        >
-                          مغادرة قاعة الانتظار
-                        </button>
-                      )}
+                        )}
+                      </div>
                     </div>
                   </motion.div>
                 ) : view === 'group_join' ? (
@@ -5896,27 +5899,27 @@ ${versesList}
                     initial={{ opacity: 0, y: 15 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, scale: 0.98 }}
-                    className="max-w-2xl mx-auto py-6 md:py-8 px-4 space-y-6"
+                    className="w-full max-w-2xl mx-auto py-4 sm:py-6 md:py-8 px-3 sm:px-4 space-y-4 sm:space-y-6 pb-28 sm:pb-32"
                   >
                     {/* Header with Back and Refresh */}
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-2">
                       <button
                         onClick={() => setView('home')}
-                        className="p-2.5 rounded-xl bg-white/60 hover:bg-white transition-all text-slate-500 font-bold flex items-center gap-2 text-xs md:text-sm border border-slate-100 shadow-xs cursor-pointer"
+                        className="p-2 sm:p-2.5 rounded-xl bg-white/60 hover:bg-white transition-all text-slate-500 font-bold flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm border border-slate-100 shadow-xs cursor-pointer"
                       >
                         <ArrowRight className="w-4 h-4" />
                         <span>الرئيسية</span>
                       </button>
 
                       <div className="text-center">
-                        <h2 className="text-xl md:text-2xl font-black text-slate-800">التحدي الجماعي</h2>
-                        <p className="text-slate-400 font-bold text-xs">قائمة الغرف المتاحة للتحدي المباشر</p>
+                        <h2 className="text-lg sm:text-2xl font-black text-slate-800">التحدي الجماعي</h2>
+                        <p className="text-slate-400 font-bold text-[11px] sm:text-xs">قائمة الغرف المتاحة للتحدي المباشر</p>
                       </div>
 
                       <button
                         onClick={() => fetchAvailableRooms(true)}
                         disabled={isLoadingRooms}
-                        className="p-2.5 rounded-xl bg-white/60 hover:bg-white transition-all text-slate-600 font-bold flex items-center gap-1.5 text-xs md:text-sm border border-slate-100 shadow-xs cursor-pointer disabled:opacity-60"
+                        className="p-2 sm:p-2.5 rounded-xl bg-white/60 hover:bg-white transition-all text-slate-600 font-bold flex items-center gap-1.5 text-xs sm:text-sm border border-slate-100 shadow-xs cursor-pointer disabled:opacity-60"
                         title="تحديث قائمة الغرف"
                       >
                         <RefreshCw className={`w-4 h-4 ${isLoadingRooms ? 'animate-spin text-orange-500' : ''}`} />
@@ -5929,9 +5932,9 @@ ${versesList}
                       whileHover={{ scale: 1.01 }}
                       whileTap={{ scale: 0.98 }}
                       onClick={() => setView('group_create')}
-                      className="w-full p-4 md:p-5 bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 text-white rounded-3xl font-black shadow-lg shadow-orange-500/25 flex items-center justify-between cursor-pointer border border-white/20 transition-all group"
+                      className="w-full p-4 md:p-5 bg-gradient-to-r from-orange-500 via-amber-500 to-orange-600 text-white rounded-3xl font-black shadow-lg shadow-orange-500/25 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4 cursor-pointer border border-white/20 transition-all group"
                     >
-                      <div className="flex items-center gap-3.5">
+                      <div className="flex items-center gap-3 sm:gap-3.5 text-right">
                         <div className="w-11 h-11 md:w-12 md:h-12 rounded-2xl bg-white/20 backdrop-blur-xs flex items-center justify-center shadow-inner group-hover:rotate-6 transition-transform shrink-0">
                           <Plus className="w-6 h-6 text-white stroke-[2.5]" />
                         </div>
@@ -5940,10 +5943,10 @@ ${versesList}
                             <span>إنشاء غرفة تحدي جديدة</span>
                             <span className="text-[10px] bg-white/25 px-2 py-0.5 rounded-full font-bold">مضيف 👑</span>
                           </div>
-                          <p className="text-white/80 font-bold text-xs mt-0.5">خصص المهارات، عدد الأسئلة والمؤقت ثم نافس أصدقاءك</p>
+                          <p className="text-white/80 font-bold text-[11px] sm:text-xs mt-0.5">خصص المهارات، عدد الأسئلة والمؤقت ثم نافس أصدقاءك</p>
                         </div>
                       </div>
-                      <div className="px-4 py-2 bg-white text-orange-600 rounded-2xl font-black text-xs md:text-sm shadow-sm shrink-0 flex items-center gap-1.5 group-hover:bg-orange-50 transition-colors">
+                      <div className="w-full sm:w-auto px-4 py-2.5 bg-white text-orange-600 rounded-2xl font-black text-xs md:text-sm shadow-sm shrink-0 flex items-center justify-center gap-1.5 group-hover:bg-orange-50 transition-colors">
                         <Zap className="w-4 h-4 fill-orange-500" />
                         <span>أنشئ الآن</span>
                       </div>
@@ -6021,14 +6024,14 @@ ${versesList}
                                     handleJoinV1(r.id);
                                   }
                                 }}
-                                className={`glass p-4 md:p-5 rounded-2xl border transition-all shadow-xs hover:shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-4 cursor-pointer group ${
+                                className={`glass p-3.5 sm:p-5 rounded-2xl border transition-all shadow-xs hover:shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 cursor-pointer group ${
                                   isMyRoom
                                     ? 'border-orange-400 bg-orange-50/40 hover:border-orange-500 shadow-orange-500/10 ring-1 ring-orange-300/50'
                                     : 'border-slate-100 hover:border-orange-300'
                                 }`}
                               >
-                                <div className="text-right space-y-2">
-                                  <div className="flex items-center gap-2 justify-end sm:justify-start">
+                                <div className="text-right space-y-2 w-full sm:w-auto">
+                                  <div className="flex flex-wrap items-center gap-2 justify-start">
                                     {isMyRoom && (
                                       <span className="px-2.5 py-0.5 bg-orange-500 text-white rounded-full text-[11px] font-black flex items-center gap-1 shadow-xs animate-pulse">
                                         <span>غرفتك (أنت المضيف) 👑</span>
@@ -6050,7 +6053,7 @@ ${versesList}
                                     </h3>
                                   </div>
 
-                                  <div className="flex flex-wrap items-center gap-2 text-[10px] md:text-xs text-slate-500 font-bold justify-end sm:justify-start">
+                                  <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 text-[10px] md:text-xs text-slate-500 font-bold justify-start">
                                     <span className="bg-slate-100 px-2 py-0.5 rounded-md text-slate-600">
                                       المنشئ: {isMyRoom ? 'أنت 👑' : (r.hostName || 'متسابق')}
                                     </span>
@@ -6074,7 +6077,7 @@ ${versesList}
                                   </div>
                                 </div>
 
-                                <div className="flex items-center gap-2 justify-end">
+                                <div className="w-full sm:w-auto pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100 flex items-center gap-2 justify-end">
                                   <button
                                     type="button"
                                     onClick={(e) => {
@@ -6093,7 +6096,7 @@ ${versesList}
                                       }
                                     }}
                                     disabled={isJoiningRoom}
-                                    className={`w-full sm:w-auto px-5 py-2.5 rounded-xl font-black text-xs md:text-sm transition-all shadow-sm active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 ${
+                                    className={`w-full sm:w-auto px-5 py-3 sm:py-2.5 rounded-xl font-black text-xs md:text-sm transition-all shadow-sm active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 ${
                                       isMyRoom
                                         ? 'bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white shadow-orange-500/25 ring-2 ring-orange-400/40'
                                         : r.isPrivate
@@ -6126,17 +6129,17 @@ ${versesList}
                       )}
                     </div>
 
-                    {/* Floating Action Button (FAB) on mobile */}
+                    {/* Floating Action Button (FAB) on mobile anchored bottom right with safe area */}
                     <motion.button
                       initial={{ scale: 0 }}
                       animate={{ scale: 1 }}
                       whileTap={{ scale: 0.9 }}
                       onClick={() => setView('group_create')}
-                      className="fixed bottom-6 left-6 z-40 sm:hidden p-3.5 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-full shadow-2xl shadow-orange-500/50 flex items-center gap-2 font-black cursor-pointer border-2 border-white"
+                      className="fixed bottom-20 right-4 sm:bottom-24 sm:right-6 z-40 sm:hidden px-4 py-3 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-full shadow-2xl shadow-orange-500/50 flex items-center gap-2 font-black cursor-pointer border-2 border-white active:scale-95 transition-transform"
                       title="إنشاء غرفة جديدة"
                     >
                       <Plus className="w-5 h-5 stroke-[2.5]" />
-                      <span className="text-xs">غرفة جديدة</span>
+                      <span className="text-xs">إنشاء غرفة</span>
                     </motion.button>
                   </motion.div>
                 ) : view === 'group_game' ? (
