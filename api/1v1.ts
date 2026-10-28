@@ -102,6 +102,7 @@ async function getFullRoom(roomId: string) {
 
   return { 
     ...room, 
+    lastReaction: (room as any).lastReaction || progress.__lastReaction || null,
     transitionMode: (room as any).transitionMode || 'SYNC',
     currentQuestionIndex: room.currentQuestionIndex || 0,
     questionStartTime: Number(room.questionStartTime) || 0,
@@ -1252,12 +1253,13 @@ async function handleReaction(req: VercelRequest, res: VercelResponse) {
     const playersProgress: any = (room.playersProgress as any) || {}
     playersProgress.__lastReaction = reactionData
 
+    const updateData: any = {
+      playersProgress
+    }
+
     await prisma.room.update({
       where: { id: String(roomId) },
-      data: {
-        lastReaction: reactionData,
-        playersProgress
-      }
+      data: updateData
     })
 
     return res.status(200).json({ success: true, reaction: reactionData })
