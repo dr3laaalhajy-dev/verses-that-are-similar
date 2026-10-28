@@ -68,11 +68,11 @@
             android:padding="18dp"
             android:layout_marginBottom="16dp">
 
-            <!-- 1. Version Code -->
+            <!-- 1. Android Version Code -->
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="رقم الإصدار الأحدث (Version Code):"
+                android:text="رقم إصدار الأندرويد الأحدث (latestAndroidVersionCode):"
                 android:textColor="#1E293B"
                 android:textSize="13sp"
                 android:textStyle="bold"

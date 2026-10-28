@@ -23,6 +23,7 @@ import com.google.firebase.database.DatabaseError;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.database.ValueEventListener;
+import com.mateen.game.BuildConfig;
 import com.mateen.game.R;
 import com.mateen.game.models.AppVersionControl;
 
@@ -63,7 +64,7 @@ public class AppUpdateManager {
 
         versionRef.setValue(versionControl)
                 .addOnSuccessListener(aVoid -> {
-                    Log.i(TAG, "App update published successfully: v" + versionControl.getLatestVersionCode());
+                    Log.i(TAG, "Android app update published successfully: v" + versionControl.getLatestAndroidVersionCode());
                     if (callback != null) callback.onSuccess();
                 })
                 .addOnFailureListener(e -> {
@@ -99,12 +100,23 @@ public class AppUpdateManager {
                     return;
                 }
 
-                long currentVersionCode = getInstalledVersionCode(activity);
-                long latestVersionCode = updateInfo.getLatestVersionCode();
+                // 1. قراءة latestAndroidVersionCode المخصص لنظام أندرويد
+                long latestAndroidVersionCode = 0;
+                if (snapshot.hasChild("latestAndroidVersionCode")) {
+                    Object val = snapshot.child("latestAndroidVersionCode").getValue();
+                    if (val instanceof Number) {
+                        latestAndroidVersionCode = ((Number) val).longValue();
+                    }
+                } else {
+                    latestAndroidVersionCode = updateInfo.getLatestAndroidVersionCode();
+                }
+
+                // 2. المقارنة مع BuildConfig.VERSION_CODE الحصري ببيئة أندرويد
+                long installedVersionCode = BuildConfig.VERSION_CODE;
 
                 // شرط التحديث: إذا كان رقم قاعدة البيانات أكبر من رقم التطبيق المثبت
-                if (latestVersionCode > currentVersionCode) {
-                    Log.i(TAG, "Update detected: server_v=" + latestVersionCode + " > local_v=" + currentVersionCode);
+                if (latestAndroidVersionCode > installedVersionCode) {
+                    Log.i(TAG, "Android update detected: server_v=" + latestAndroidVersionCode + " > local_v=" + installedVersionCode);
                     if (customListener != null) {
                         customListener.onUpdateAvailable(updateInfo, updateInfo.isForceUpdate());
                     } else {
@@ -191,7 +203,7 @@ public class AppUpdateManager {
 
                 // ج) تعيين النصوص القادمة من Firebase
                 if (tvVersionBadge != null) {
-                    tvVersionBadge.setText("إصدار جديد متوفر v" + updateInfo.getLatestVersionCode());
+                    tvVersionBadge.setText("إصدار جديد متوفر v" + updateInfo.getLatestAndroidVersionCode());
                 }
                 if (tvUpdateTitle != null) {
                     tvUpdateTitle.setText("تحديث جديد متاح 🚀");

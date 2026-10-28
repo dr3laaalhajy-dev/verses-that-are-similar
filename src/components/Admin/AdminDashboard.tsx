@@ -628,13 +628,15 @@ export default function AdminDashboard({
   
   // App Version Control state
   const [versionControlData, setVersionControlData] = useState<{
-    latestVersionCode: number;
+    latestAndroidVersionCode: number;
+    latestVersionCode?: number;
     updateNotes: string;
     isForceUpdate: boolean;
     playStoreLink: string;
     apkLink: string;
     updatedAt?: number;
   }>({
+    latestAndroidVersionCode: 1,
     latestVersionCode: 1,
     updateNotes: '',
     isForceUpdate: false,
@@ -652,8 +654,10 @@ export default function AdminDashboard({
       if (res.ok) {
         const data = await res.json();
         if (data) {
+          const code = Number(data.latestAndroidVersionCode || data.latestVersionCode) || 1;
           setVersionControlData({
-            latestVersionCode: Number(data.latestVersionCode) || 1,
+            latestAndroidVersionCode: code,
+            latestVersionCode: code,
             updateNotes: data.updateNotes || '',
             isForceUpdate: Boolean(data.isForceUpdate),
             playStoreLink: data.playStoreLink || 'https://play.google.com/store/apps/details?id=com.mateen.game',
@@ -3164,19 +3168,22 @@ export default function AdminDashboard({
                   {/* Version Code Input */}
                   <div className="space-y-2">
                     <label className="block text-xs md:text-sm font-black text-slate-800">
-                      رقم الإصدار الجديد (Version Code) <span className="text-rose-500">*</span>
+                      رقم إصدار الأندرويد الأحدث (latestAndroidVersionCode) <span className="text-rose-500">*</span>
                     </label>
                     <input
                       type="number"
                       min={1}
                       required
-                      value={versionControlData.latestVersionCode}
-                      onChange={(e) => setVersionControlData({ ...versionControlData, latestVersionCode: parseInt(e.target.value, 10) || 1 })}
+                      value={versionControlData.latestAndroidVersionCode}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value, 10) || 1;
+                        setVersionControlData({ ...versionControlData, latestAndroidVersionCode: val, latestVersionCode: val });
+                      }}
                       className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:border-brand-emerald focus:ring-2 focus:ring-brand-emerald/10 outline-hidden font-bold text-slate-800 text-sm transition-all"
                       placeholder="مثال: 2 أو 3 أو 10"
                     />
                     <p className="text-[11px] text-slate-400 font-bold">
-                      يجب أن يكون رقماً صحيحاً تصاعدياً. إذا كان رقم إصدار جهاز المستخدم أقل من هذا الرقم سيظهر له التنبيه فوراً.
+                      يتم مقارنته حصرياً مع BuildConfig.VERSION_CODE في تطبيق الأندرويد، ولا يؤثر إطلاقاً على مستخدمي الويب.
                     </p>
                   </div>
 
@@ -3337,7 +3344,7 @@ export default function AdminDashboard({
                     <div>
                       <span className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-black bg-gradient-to-r from-emerald-50 to-teal-50 text-emerald-800 border border-emerald-200/80 shadow-xs">
                         <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-                        إصدار جديد متوفر v{versionControlData.latestVersionCode}
+                        إصدار جديد متوفر v{versionControlData.latestAndroidVersionCode}
                       </span>
                     </div>
 

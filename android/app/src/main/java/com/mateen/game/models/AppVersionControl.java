@@ -3,11 +3,11 @@ package com.mateen.game.models;
 import java.io.Serializable;
 
 /**
- * نموذج التحكم في إصدارات وتحديثات التطبيق (App Version Control Model)
+ * نموذج التحكم في إصدارات وتحديثات تطبيق الأندرويد (Android App Version Control Model)
  * مسار Firebase: app_settings/version_control
  */
 public class AppVersionControl implements Serializable {
-    private int latestVersionCode;
+    private int latestAndroidVersionCode;
     private String updateNotes;
     private boolean isForceUpdate;
     private String playStoreLink;
@@ -19,13 +19,13 @@ public class AppVersionControl implements Serializable {
     }
 
     public AppVersionControl(
-            int latestVersionCode,
+            int latestAndroidVersionCode,
             String updateNotes,
             boolean isForceUpdate,
             String playStoreLink,
             String apkLink
     ) {
-        this.latestVersionCode = latestVersionCode;
+        this.latestAndroidVersionCode = latestAndroidVersionCode;
         this.updateNotes = updateNotes;
         this.isForceUpdate = isForceUpdate;
         this.playStoreLink = playStoreLink;
@@ -33,12 +33,23 @@ public class AppVersionControl implements Serializable {
         this.updatedAt = System.currentTimeMillis();
     }
 
+    public int getLatestAndroidVersionCode() {
+        return latestAndroidVersionCode;
+    }
+
+    public void setLatestAndroidVersionCode(int latestAndroidVersionCode) {
+        this.latestAndroidVersionCode = latestAndroidVersionCode;
+    }
+
+    // توافقية إضافية مع latestVersionCode القديم إن وُجد
     public int getLatestVersionCode() {
-        return latestVersionCode;
+        return latestAndroidVersionCode;
     }
 
     public void setLatestVersionCode(int latestVersionCode) {
-        this.latestVersionCode = latestVersionCode;
+        if (this.latestAndroidVersionCode == 0) {
+            this.latestAndroidVersionCode = latestVersionCode;
+        }
     }
 
     public String getUpdateNotes() {

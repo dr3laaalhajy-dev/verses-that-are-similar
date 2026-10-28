@@ -5,7 +5,8 @@ import { prisma } from './_lib/prisma.js'
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
 
 export interface VersionControlData {
-  latestVersionCode: number
+  latestAndroidVersionCode: number
+  latestVersionCode?: number
   updateNotes: string
   isForceUpdate: boolean
   playStoreLink: string
@@ -15,6 +16,7 @@ export interface VersionControlData {
 
 // Default fallback data
 let memoryVersionControl: VersionControlData = {
+  latestAndroidVersionCode: 1,
   latestVersionCode: 1,
   updateNotes: 'تحسينات عامة على الأداء وثبات التحديات الجماعية والمزامنة الحية.',
   isForceUpdate: false,
@@ -57,6 +59,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const {
+      latestAndroidVersionCode,
       latestVersionCode,
       updateNotes,
       isForceUpdate,
@@ -64,8 +67,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       apkLink
     } = req.body
 
+    const parsedCode = Number(latestAndroidVersionCode || latestVersionCode) || 1
+
     const parsedData: VersionControlData = {
-      latestVersionCode: Number(latestVersionCode) || 1,
+      latestAndroidVersionCode: parsedCode,
+      latestVersionCode: parsedCode,
       updateNotes: String(updateNotes || '').trim(),
       isForceUpdate: Boolean(isForceUpdate),
       playStoreLink: String(playStoreLink || 'https://play.google.com/store/apps/details?id=com.mateen.game').trim(),
