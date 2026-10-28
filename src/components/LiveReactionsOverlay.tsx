@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export interface FloatingReactionInstance {
@@ -35,16 +36,23 @@ export const LiveReactionsOverlay: React.FC<LiveReactionsOverlayProps> = ({
   const [floatingReactions, setFloatingReactions] = useState<FloatingReactionInstance[]>([]);
   const [lastHandledTime, setLastHandledTime] = useState<number>(0);
 
-  // Trigger floating reaction on incoming reaction from room
+  // Trigger floating reaction on incoming reaction from room (from other players)
   useEffect(() => {
-    if (incomingReaction && incomingReaction.timestamp > lastHandledTime) {
+    if (!incomingReaction || !incomingReaction.timestamp) return;
+
+    if (incomingReaction.timestamp > lastHandledTime) {
       setLastHandledTime(incomingReaction.timestamp);
-      triggerFloatingReaction(incomingReaction.emoji, incomingReaction.senderName || 'متسابق');
+
+      // Avoid duplicating if sender already saw it locally
+      const isMyReaction = incomingReaction.senderId && (incomingReaction.senderId === playerId || incomingReaction.senderId === playerName);
+      if (!isMyReaction) {
+        triggerFloatingReaction(incomingReaction.emoji, incomingReaction.senderName || 'متسابق');
+      }
     }
-  }, [incomingReaction, lastHandledTime]);
+  }, [incomingReaction, lastHandledTime, playerId, playerName]);
 
   const triggerFloatingReaction = (emoji: string, senderName: string) => {
-    const id = Math.random().toString(36).substring(2, 9);
+    const id = Math.random().toString(36).substring(2, 9) + Date.now();
     const startX = 20 + Math.random() * 60; // 20% to 80%
 
     setFloatingReactions(prev => [...prev.slice(-15), { id, emoji, senderName, startX }]);
@@ -56,12 +64,14 @@ export const LiveReactionsOverlay: React.FC<LiveReactionsOverlayProps> = ({
   };
 
   const handleEmojiClick = async (emoji: string) => {
+    // 1. Immediately show floating bubble for the sender
     triggerFloatingReaction(emoji, playerName || 'أنت');
 
     if (onSendReaction) {
       onSendReaction(emoji);
     }
 
+    // 2. Broadcast to room participants via server
     if (roomId) {
       try {
         await fetch('/api/1v1', {
@@ -81,10 +91,9 @@ export const LiveReactionsOverlay: React.FC<LiveReactionsOverlayProps> = ({
     }
   };
 
-  return (
-    <>
-      {/* Floating Animated Emojis Overlay */}
-      <div className="fixed inset-0 pointer-events-none z-50 overflow-hidden">
+  const portalContent = typeof document !== 'undefined' && floatingReactions.length > 0 ? (
+    createPortal(
+      <div className="fixed inset-0 pointer-events-none z-[99999] overflow-hidden">
         <AnimatePresence>
           {floatingReactions.map(reaction => (
             <motion.div
@@ -92,48 +101,58 @@ export const LiveReactionsOverlay: React.FC<LiveReactionsOverlayProps> = ({
               initial={{
                 opacity: 0,
                 scale: 0.5,
-                y: '100vh',
-                x: `${reaction.startX}vw`
+                y: 0,
+                x: 0
               }}
               animate={{
-                opacity: [0, 1, 1, 0],
-                scale: [0.5, 1.2, 1, 0.9],
-                y: ['80vh', '60vh', '40vh', '20vh'],
-                x: [
-                  `${reaction.startX}vw`,
-                  `${reaction.startX + 4}vw`,
-                  `${reaction.startX - 4}vw`,
-                  `${reaction.startX + 2}vw`
-                ]
+                opacity: [0, 1, 1, 1, 0],
+                scale: [0.5, 1.25, 1, 1, 0.85],
+                y: [0, -120, -280, -450, -650],
+                x: [0, 20, -20, 15, 0]
               }}
+              exit={{ opacity: 0, scale: 0.5 }}
               transition={{
-                duration: 2.2,
+                duration: 2.4,
                 ease: 'easeOut',
-                times: [0, 0.15, 0.7, 1]
+                times: [0, 0.15, 0.45, 0.75, 1]
               }}
-              className="absolute flex flex-col items-center justify-center filter drop-shadow-lg"
+              style={{
+                position: 'absolute',
+                bottom: '85px',
+                left: `${reaction.startX}%`,
+                transform: 'translateX(-50%)'
+              }}
+              className="flex flex-col items-center justify-center filter drop-shadow-xl"
             >
-              <span className="text-3xl sm:text-4xl select-none leading-none">
+              <span className="text-4xl sm:text-5xl select-none leading-none">
                 {reaction.emoji}
               </span>
-              <span className="text-[10px] sm:text-xs font-black text-white bg-slate-900/75 px-2 py-0.5 rounded-full mt-1 border border-white/20 whitespace-nowrap shadow-xs">
+              <span className="text-[11px] sm:text-xs font-black text-white bg-slate-900/85 px-2.5 py-0.5 rounded-full mt-1.5 border border-white/25 whitespace-nowrap shadow-md">
                 {reaction.senderName}
               </span>
             </motion.div>
           ))}
         </AnimatePresence>
-      </div>
+      </div>,
+      document.body
+    )
+  ) : null;
+
+  return (
+    <>
+      {/* Portal: Floating Animated Emojis Overlay on document.body */}
+      {portalContent}
 
       {/* Bottom Horizontal Reactions Bar */}
       {showBar && (
-        <div className="flex items-center justify-center gap-1.5 sm:gap-2 px-3 py-1.5 rounded-full bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border border-slate-200 dark:border-slate-800 shadow-lg pointer-events-auto w-fit mx-auto">
+        <div className="flex items-center justify-center gap-1.5 sm:gap-2 px-3 py-1.5 rounded-full bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border border-slate-200 dark:border-slate-800 shadow-lg pointer-events-auto w-fit mx-auto my-2">
           {REACTION_EMOJIS.map(emoji => (
             <motion.button
               key={emoji}
               whileHover={{ scale: 1.25 }}
               whileTap={{ scale: 0.9 }}
               onClick={() => handleEmojiClick(emoji)}
-              className="w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center text-lg sm:text-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer select-none"
+              className="w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-xl sm:text-2xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer select-none active:scale-90"
               title="إرسال تفاعل لحظي"
             >
               {emoji}

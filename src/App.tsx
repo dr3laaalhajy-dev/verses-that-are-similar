@@ -6147,7 +6147,7 @@ ${versesList}
                       roomId={room?.id}
                       playerId={playerUsername || playerName}
                       playerName={playerName}
-                      incomingReaction={room?.playersProgress?.__lastReaction}
+                      incomingReaction={room?.lastReaction || room?.playersProgress?.__lastReaction}
                     />
                   </motion.div>
                 ) : view === 'group_join' ? (
@@ -6811,7 +6811,7 @@ ${versesList}
                             roomId={room.id}
                             playerId={playerUsername || playerName}
                             playerName={playerName}
-                            incomingReaction={room.playersProgress?.__lastReaction}
+                            incomingReaction={room.lastReaction || room.playersProgress?.__lastReaction}
                           />
                         )}
                       </div>
@@ -9805,7 +9805,7 @@ ${versesList}
                             roomId={room.id}
                             playerId={playerUsername || playerName}
                             playerName={playerName}
-                            incomingReaction={room.playersProgress?.__lastReaction}
+                            incomingReaction={room.lastReaction || room.playersProgress?.__lastReaction}
                           />
                         )}
 
