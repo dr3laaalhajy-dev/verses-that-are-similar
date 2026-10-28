@@ -87,6 +87,16 @@ export const LiveReactionsOverlay: React.FC<LiveReactionsOverlayProps> = ({
 }) => {
   const [floatingReactions, setFloatingReactions] = useState<FloatingReactionInstance[]>([]);
   const [lastHandledTime, setLastHandledTime] = useState<number>(0);
+  const [cooldownSeconds, setCooldownSeconds] = useState<number>(0);
+
+  // Cooldown countdown timer (10-second limit between reactions)
+  useEffect(() => {
+    if (cooldownSeconds <= 0) return;
+    const interval = setInterval(() => {
+      setCooldownSeconds(prev => Math.max(0, prev - 1));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [cooldownSeconds]);
 
   // Trigger floating reaction on incoming reaction from room (from other players)
   useEffect(() => {
@@ -139,6 +149,9 @@ export const LiveReactionsOverlay: React.FC<LiveReactionsOverlayProps> = ({
   };
 
   const handleSendAction = async (action: IslamicActionDef) => {
+    if (cooldownSeconds > 0) return;
+    setCooldownSeconds(10); // Start 10s cooldown timer
+
     // 1. Immediately trigger on sender screen
     triggerReactionInstance({
       type: action.type,
@@ -174,6 +187,9 @@ export const LiveReactionsOverlay: React.FC<LiveReactionsOverlayProps> = ({
   };
 
   const handleSendEmoji = async (emoji: string) => {
+    if (cooldownSeconds > 0) return;
+    setCooldownSeconds(10); // Start 10s cooldown timer
+
     // 1. Immediately trigger on sender screen
     triggerReactionInstance({
       type: 'emoji',
@@ -359,17 +375,30 @@ export const LiveReactionsOverlay: React.FC<LiveReactionsOverlayProps> = ({
 
       {/* Bottom Horizontal Reactions Bar */}
       {showBar && (
-        <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2 px-3 py-2 rounded-2xl sm:rounded-full bg-slate-900/90 dark:bg-slate-950/95 backdrop-blur-md border border-slate-700/80 shadow-2xl pointer-events-auto max-w-full mx-auto my-2.5">
+        <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2 px-3 py-2 rounded-2xl sm:rounded-full bg-slate-900/90 dark:bg-slate-950/95 backdrop-blur-md border border-slate-700/80 shadow-2xl pointer-events-auto max-w-full mx-auto my-2.5 transition-all">
+          {/* 10-Second Cooldown Indicator Pill */}
+          {cooldownSeconds > 0 && (
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-amber-500/20 text-amber-300 border border-amber-400/40 text-xs font-black animate-pulse select-none">
+              <span>⏳</span>
+              <span>متاح بعد {cooldownSeconds}ث</span>
+            </div>
+          )}
+
           {/* 3 Premium Islamic Action Buttons */}
           <div className="flex items-center gap-1.5 sm:gap-2">
             {ISLAMIC_ACTIONS.map(action => (
               <motion.button
                 key={action.id}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
+                whileHover={cooldownSeconds > 0 ? {} : { scale: 1.05 }}
+                whileTap={cooldownSeconds > 0 ? {} : { scale: 0.95 }}
+                disabled={cooldownSeconds > 0}
                 onClick={() => handleSendAction(action)}
-                className={`flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs sm:text-sm font-black transition-all cursor-pointer shadow-xs ${action.badgeBg}`}
-                title={action.title}
+                className={`flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs sm:text-sm font-black transition-all shadow-xs ${
+                  cooldownSeconds > 0
+                    ? 'opacity-40 cursor-not-allowed bg-slate-800 text-slate-400 border-slate-700'
+                    : `${action.badgeBg} cursor-pointer`
+                }`}
+                title={cooldownSeconds > 0 ? `يرجى الانتظار ${cooldownSeconds} ثوانٍ` : action.title}
               >
                 <span>{action.icon}</span>
                 <span className="whitespace-nowrap" style={{ fontFamily: "'Aref Ruqaa', 'Amiri', serif" }}>
@@ -387,11 +416,16 @@ export const LiveReactionsOverlay: React.FC<LiveReactionsOverlayProps> = ({
             {QUICK_EMOJIS.map(emoji => (
               <motion.button
                 key={emoji}
-                whileHover={{ scale: 1.25 }}
-                whileTap={{ scale: 0.9 }}
+                whileHover={cooldownSeconds > 0 ? {} : { scale: 1.25 }}
+                whileTap={cooldownSeconds > 0 ? {} : { scale: 0.9 }}
+                disabled={cooldownSeconds > 0}
                 onClick={() => handleSendEmoji(emoji)}
-                className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center text-lg sm:text-xl hover:bg-white/10 text-white transition-colors cursor-pointer select-none active:scale-90"
-                title="إرسال تفاعل"
+                className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center text-lg sm:text-xl transition-colors select-none ${
+                  cooldownSeconds > 0
+                    ? 'opacity-40 cursor-not-allowed text-slate-500'
+                    : 'hover:bg-white/10 text-white cursor-pointer active:scale-90'
+                }`}
+                title={cooldownSeconds > 0 ? `يرجى الانتظار ${cooldownSeconds} ثوانٍ` : 'إرسال تفاعل'}
               >
                 {emoji}
               </motion.button>

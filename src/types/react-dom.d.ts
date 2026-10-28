@@ -29,3 +29,4 @@ declare module 'react-dom/client' {
   export function createRoot(container: Element | DocumentFragment, options?: any): Root;
   export function hydrateRoot(container: Element | DocumentFragment, initialChildren: React.ReactNode, options?: any): Root;
 }
+
