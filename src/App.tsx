@@ -5,7 +5,7 @@ import {
   ListFilter, Sun, Moon, Calendar, Settings, Copy, Check, Lightbulb, ChevronDown, User, Users, Quote,
   ArrowRight, ArrowLeft, Zap, Lock, AlertCircle, Hash, XCircle, Eye, EyeOff, List, Loader2, Flame, ZoomIn, ZoomOut, Maximize2, LogOut,
   Info, HelpCircle, AtSign, Key, LogIn, UserPlus, Smartphone, Download, Share2, Mail, ExternalLink, Send,
-  Clock, RefreshCw, Globe, Plus, Gamepad2, Trash2, Play
+  Clock, RefreshCw, Globe, Plus, Gamepad2, Trash2, Play, ShoppingBag
 } from 'lucide-react';
 import Dashboard from './components/Dashboard';
 import CertificateGenerator from './components/CertificateGenerator';
@@ -45,6 +45,8 @@ import { renderQuranText } from './utils/quranUtils';
 import { calculateStreakInfo, StreakInfo } from './utils/streakManager';
 import { LeaderboardUser, compareLeaderboardUsers, calculateHiddenRankingScore } from './utils/leaderboardRanking';
 import { StreakModal } from './components/StreakModal';
+import { CosmeticStoreModal } from './components/CosmeticStoreModal';
+import { LiveReactionsOverlay } from './components/LiveReactionsOverlay';
 import { generateCompletionChallenges } from './services/challengeGenerator';
 import SettingsView from './components/Settings/SettingsView';
 import IslamicOccasionsModal from './components/IslamicOccasionsModal';
@@ -523,7 +525,7 @@ const SurahChallengeUI = ({ verseText, inputs, onInputChange, onSubmit, feedback
   </div>
 );
 
-const CompleteChallengeUI = ({ verseText, options, selectedOption, onOptionSelect, onConfirm, feedback, onSkip, isComplete, challengeMode, saveScore, KEYWORD, score, setDailyCompleted, updateStatsAfterWin, handlePromptNextChallenge, onViewTafsir, currentChallenge, onFinishDaily, correctText }: any) => {
+const CompleteChallengeUI = ({ verseText, options, selectedOption, onOptionSelect, onConfirm, feedback, onSkip, isComplete, challengeMode, saveScore, KEYWORD, score, setDailyCompleted, updateStatsAfterWin, handlePromptNextChallenge, onViewTafsir, currentChallenge, onFinishDaily, correctText, eliminatedIndices }: any) => {
   const handleFinishDailyAction = () => {
     saveScore(KEYWORD, score);
     const todayStr = new Date().toISOString().split('T')[0];
@@ -564,6 +566,16 @@ const CompleteChallengeUI = ({ verseText, options, selectedOption, onOptionSelec
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 md:gap-4 w-full">
         {options.map((opt: any, idx: number) => {
+          const isEliminated = Array.isArray(eliminatedIndices) && eliminatedIndices.includes(idx);
+          if (isEliminated) {
+            return (
+              <div
+                key={opt?.id || idx}
+                className="opacity-0 pointer-events-none p-3.5 md:p-4 rounded-xl border border-transparent select-none"
+              />
+            );
+          }
+
           const rawSelectedText = selectedOption ? (typeof selectedOption === 'object' ? selectedOption.text : selectedOption) : null;
           const isSelected = selectedOption === opt || (rawSelectedText !== null && rawSelectedText === opt.text);
           const isOptionCorrect = !!opt.isCorrect || (correctText && superNormalizeArabic(opt.text) === superNormalizeArabic(correctText));
@@ -1329,6 +1341,34 @@ export default function App() {
   });
 
   const [isSyncing, setIsSyncing] = useState(false);
+
+  // Power-ups state (Freeze Time 🧊 & 50/50 ✂️)
+  const [freezeTimeCount, setFreezeTimeCount] = useState<number>(() => {
+    return Number(localStorage.getItem('quran_freeze_count') ?? 3);
+  });
+  const [deleteTwoCount, setDeleteTwoCount] = useState<number>(() => {
+    return Number(localStorage.getItem('quran_delete_two_count') ?? 3);
+  });
+  const [isFreezeActive, setIsFreezeActive] = useState(false);
+  const [freezeSecondsLeft, setFreezeSecondsLeft] = useState(0);
+  const [isPowerUpUsedThisQuestion, setIsPowerUpUsedThisQuestion] = useState(false);
+  const [eliminatedOptionIndices, setEliminatedOptionIndices] = useState<number[]>([]);
+
+  // Cosmetics Store State
+  const [showCosmeticStore, setShowCosmeticStore] = useState(false);
+  const [ownedCosmetics, setOwnedCosmetics] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('quran_owned_cosmetics') || '[]');
+    } catch {
+      return [];
+    }
+  });
+  const [equippedNameColor, setEquippedNameColor] = useState<string | null>(() => {
+    return localStorage.getItem('quran_equipped_name_color') || null;
+  });
+  const [equippedTitle, setEquippedTitle] = useState<string | null>(() => {
+    return localStorage.getItem('quran_equipped_title') || null;
+  });
   const [selectedSurahId, setSelectedSurahId] = useState<number | null>(null);
   const [selectedAdhkarCategoryId, setSelectedAdhkarCategoryId] = useState<string | null>(null);
   const [adhkarProgress, setAdhkarProgress] = useState<Record<string, number>>({});
@@ -3219,7 +3259,7 @@ export default function App() {
       ? (view === 'challenge' && hasRoomTimer && !isComplete && room.status === 'PLAYING')
       : ((view === 'speed_challenge' || (view === 'challenge' && isSpeedMode)) && !isSpeedGameOver && !isComplete && !skillsFeedback);
 
-    if (isActive) {
+    if (isActive && !isFreezeActive) {
       interval = setInterval(() => {
         setSpeedTimeLeft((prev) => {
           if (prev <= 1) {
@@ -3238,7 +3278,91 @@ export default function App() {
       }, 1000);
     }
     return () => clearInterval(interval);
-  }, [view, isSpeedGameOver, isComplete, isSpeedMode, stopListening, skillsFeedback, room?.timePerQuestion, room?.id, room?.status, currentChallengeIndex]);
+  }, [view, isSpeedGameOver, isComplete, isSpeedMode, stopListening, skillsFeedback, isFreezeActive, room?.timePerQuestion, room?.id, room?.status, currentChallengeIndex]);
+
+  // Freeze Time local 10-second countdown
+  useEffect(() => {
+    if (!isFreezeActive || freezeSecondsLeft <= 0) return;
+    const timer = setInterval(() => {
+      setFreezeSecondsLeft((prev) => {
+        if (prev <= 1) {
+          setIsFreezeActive(false);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [isFreezeActive, freezeSecondsLeft]);
+
+  // Reset power-ups usage and freeze when advancing to a new question
+  useEffect(() => {
+    setIsFreezeActive(false);
+    setFreezeSecondsLeft(0);
+    setIsPowerUpUsedThisQuestion(false);
+    setEliminatedOptionIndices([]);
+  }, [currentChallengeIndex, currentChallenge?.id]);
+
+  const handleExecuteFreezeTime = () => {
+    if (isPowerUpUsedThisQuestion) {
+      toast.error('يمكنك استخدام مساعدة واحدة فقط في هذا السؤال');
+      return;
+    }
+    if (freezeTimeCount <= 0) {
+      toast.error('رصيدك من تجميد الوقت نفد!');
+      return;
+    }
+    setFreezeTimeCount(prev => {
+      const next = Math.max(0, prev - 1);
+      localStorage.setItem('quran_freeze_count', next.toString());
+      return next;
+    });
+    setIsFreezeActive(true);
+    setFreezeSecondsLeft(10);
+    setIsPowerUpUsedThisQuestion(true);
+    toast.success('تم تجميد الوقت لمدة 10 ثوانٍ! 🧊');
+  };
+
+  const handleExecuteDeleteTwo = () => {
+    if (isPowerUpUsedThisQuestion) {
+      toast.error('يمكنك استخدام مساعدة واحدة فقط في هذا السؤال');
+      return;
+    }
+    if (deleteTwoCount <= 0) {
+      toast.error('رصيدك من حذف الإجابات نفد!');
+      return;
+    }
+    const currentOpts = skillsOptions || currentChallenge?.options || [];
+    if (!Array.isArray(currentOpts) || currentOpts.length <= 2) {
+      toast.error('لا يمكن حذف إجابات لهذا السؤال');
+      return;
+    }
+
+    const rawCorrect = currentChallenge?.correctText || skillsCorrectAnswer || "";
+    let correctIdx = -1;
+    currentOpts.forEach((o: any, idx: number) => {
+      if (o.isCorrect || (rawCorrect && superNormalizeArabic(typeof o === 'object' ? o.text : o) === superNormalizeArabic(rawCorrect))) {
+        correctIdx = idx;
+      }
+    });
+
+    const wrongIndices: number[] = [];
+    currentOpts.forEach((_, idx) => {
+      if (idx !== correctIdx) wrongIndices.push(idx);
+    });
+
+    wrongIndices.sort(() => Math.random() - 0.5);
+    const toEliminate = wrongIndices.slice(0, 2);
+
+    setEliminatedOptionIndices(toEliminate);
+    setDeleteTwoCount(prev => {
+      const next = Math.max(0, prev - 1);
+      localStorage.setItem('quran_delete_two_count', next.toString());
+      return next;
+    });
+    setIsPowerUpUsedThisQuestion(true);
+    toast.success('تم حذف إجابتين خاطئتين! ✂️');
+  };
 
   // Reset Speed timer on each match
   useEffect(() => {
@@ -5136,6 +5260,15 @@ ${versesList}
 
                       <div className="flex items-center gap-2">
                         <button
+                          onClick={() => setShowCosmeticStore(true)}
+                          title="متجر التميز والمظهر"
+                          className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-black text-xs transition-all shadow-xs active:scale-95 cursor-pointer flex items-center gap-1.5"
+                        >
+                          <ShoppingBag className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline">متجر التميز</span>
+                          <span className="sm:hidden">المتجر</span>
+                        </button>
+                        <button
                           onClick={() => syncLeaderboard()}
                           disabled={isSyncing}
                           title="تحديث القائمة"
@@ -5304,13 +5437,21 @@ ${versesList}
                                 {/* Name & Stats */}
                                 <div className="text-right min-w-0">
                                   <div className="flex items-center gap-1.5 flex-wrap">
-                                    <span className={`font-black text-xs sm:text-sm leading-tight truncate ${
-                                      isPlayerElite
-                                        ? `text-transparent bg-clip-text bg-gradient-to-r ${style.textColor}`
-                                        : 'text-slate-800 dark:text-slate-100'
-                                    }`}>
+                                    <span
+                                      className={`font-black text-xs sm:text-sm leading-tight truncate ${
+                                        isPlayerElite && !(isCurrentPlayer ? equippedNameColor : player.equippedNameColor)
+                                          ? `text-transparent bg-clip-text bg-gradient-to-r ${style.textColor}`
+                                          : 'text-slate-800 dark:text-slate-100'
+                                      }`}
+                                      style={(isCurrentPlayer ? equippedNameColor : player.equippedNameColor) ? { color: (isCurrentPlayer ? equippedNameColor : player.equippedNameColor) } : undefined}
+                                    >
                                       {player.name}
                                     </span>
+                                    {(isCurrentPlayer ? (equippedTitle || player.equippedTitle) : player.equippedTitle) && (
+                                      <span className="text-[9px] font-black px-1.5 py-0.2 rounded-md bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-300/60 dark:border-amber-700/60">
+                                        {isCurrentPlayer ? (equippedTitle || player.equippedTitle) : player.equippedTitle}
+                                      </span>
+                                    )}
                                     {isCurrentPlayer && (
                                       <span className="text-[9px] font-black px-1.5 py-0.2 rounded-md bg-emerald-600 text-white shadow-xs">
                                         أنت
@@ -5834,13 +5975,23 @@ ${versesList}
                     className="w-full max-w-lg mx-auto py-4 sm:py-6 md:py-8 px-3 sm:px-4 min-h-screen pb-36 sm:pb-40"
                   >
                     <div className="glass p-4 sm:p-6 md:p-8 rounded-3xl border-orange-100 shadow-xl text-center relative flex flex-col">
-                      <div className="flex items-center justify-center gap-2.5 sm:gap-3 mb-4 sm:mb-6">
-                        <div className="w-10 h-10 sm:w-12 sm:h-12 bg-orange-500 text-white rounded-xl flex items-center justify-center shadow-md animate-pulse shrink-0">
-                          <Users className="w-5 h-5 sm:w-6 sm:h-6" />
-                        </div>
-                        <div className="text-right">
-                          <h2 className="text-lg sm:text-2xl font-black text-slate-800">قاعة الانتظار</h2>
-                          <p className="text-slate-400 font-bold text-xs sm:text-sm">انتظار انضمام بقية المتسابقين...</p>
+                      <div className="flex items-center justify-between mb-4 sm:mb-6">
+                        <button
+                          type="button"
+                          onClick={() => setShowCosmeticStore(true)}
+                          className="px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-black text-xs transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <ShoppingBag className="w-3.5 h-3.5" />
+                          <span>متجر التميز</span>
+                        </button>
+                        <div className="flex items-center gap-2.5 sm:gap-3">
+                          <div className="text-right">
+                            <h2 className="text-lg sm:text-2xl font-black text-slate-800">قاعة الانتظار</h2>
+                            <p className="text-slate-400 font-bold text-xs sm:text-sm">انتظار انضمام بقية المتسابقين...</p>
+                          </div>
+                          <div className="w-10 h-10 sm:w-12 sm:h-12 bg-orange-500 text-white rounded-xl flex items-center justify-center shadow-md animate-pulse shrink-0">
+                            <Users className="w-5 h-5 sm:w-6 sm:h-6" />
+                          </div>
                         </div>
                       </div>
 
@@ -5889,20 +6040,39 @@ ${versesList}
                           <span className="flex h-2 w-2 rounded-full bg-orange-500 animate-ping" />
                         </div>
                         <div className="grid grid-cols-2 gap-2 sm:gap-2.5">
-                          {(room?.participants || []).map((p: any, i: number) => (
-                            <motion.div
-                              initial={{ opacity: 0, x: -10 }}
-                              animate={{ opacity: 1, x: 0 }}
-                              key={p?.id || i}
-                              className="flex items-center gap-2 sm:gap-2.5 p-2.5 sm:p-3 bg-white rounded-xl border border-slate-100 shadow-xs min-w-0"
-                            >
-                              <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center font-black text-xs shrink-0">
-                                {i + 1}
-                              </div>
-                              <span className="font-bold text-slate-700 text-xs sm:text-sm truncate min-w-0 flex-1 text-right">{p?.name || 'لاعب'}</span>
-                              {p?.id === room?.player1Id && <span className="px-1.5 py-0.5 bg-orange-500 text-white text-[9px] font-black rounded shrink-0">المنشئ</span>}
-                            </motion.div>
-                          ))}
+                          {(room?.participants || []).map((p: any, i: number) => {
+                            const isMe = p?.id === (playerUsername || playerName) || p?.name === playerName;
+                            const titleToDisplay = isMe ? (equippedTitle || p?.equippedTitle) : p?.equippedTitle;
+                            const nameColorToDisplay = isMe ? (equippedNameColor || p?.equippedNameColor) : p?.equippedNameColor;
+                            return (
+                              <motion.div
+                                initial={{ opacity: 0, x: -10 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                key={p?.id || i}
+                                className="flex items-center gap-2 sm:gap-2.5 p-2.5 sm:p-3 bg-white rounded-xl border border-slate-100 shadow-xs min-w-0"
+                              >
+                                <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center font-black text-xs shrink-0">
+                                  {i + 1}
+                                </div>
+                                <div className="flex-1 min-w-0 text-right">
+                                  <div className="flex items-center gap-1.5 justify-end">
+                                    {titleToDisplay && (
+                                      <span className="text-[9px] font-black px-1.5 py-0.2 rounded-md bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-300/60 dark:border-amber-700/60 shrink-0">
+                                        {titleToDisplay}
+                                      </span>
+                                    )}
+                                    <span
+                                      className="font-bold text-slate-700 text-xs sm:text-sm truncate"
+                                      style={nameColorToDisplay ? { color: nameColorToDisplay } : undefined}
+                                    >
+                                      {p?.name || 'لاعب'}
+                                    </span>
+                                  </div>
+                                </div>
+                                {p?.id === room?.player1Id && <span className="px-1.5 py-0.5 bg-orange-500 text-white text-[9px] font-black rounded shrink-0">المنشئ</span>}
+                              </motion.div>
+                            );
+                          })}
                         </div>
                       </div>
 
@@ -5971,6 +6141,14 @@ ${versesList}
                         )}
                       </div>
                     </div>
+
+                    {/* Live Reactions Bar & Floating Animations Overlay */}
+                    <LiveReactionsOverlay
+                      roomId={room?.id}
+                      playerId={playerUsername || playerName}
+                      playerName={playerName}
+                      incomingReaction={room?.playersProgress?.__lastReaction}
+                    />
                   </motion.div>
                 ) : view === 'group_join' ? (
                   <motion.div
@@ -6541,6 +6719,48 @@ ${versesList}
                           </motion.div>
                         )}
 
+                        {/* Tactical Power-ups HUD (🧊 Freeze Time & ✂️ Delete Two) */}
+                        <div className="flex items-center justify-center gap-2.5 sm:gap-4 my-2 sm:my-3">
+                          <button
+                            type="button"
+                            onClick={handleExecuteFreezeTime}
+                            disabled={freezeTimeCount <= 0 || isPowerUpUsedThisQuestion || isFreezeActive || hasAnsweredCurrentQuestion}
+                            title="تجميد الوقت لمدة 10 ثوانٍ"
+                            className={`flex items-center gap-2 px-3 py-1.5 sm:px-4 sm:py-2 rounded-2xl border text-xs sm:text-sm font-black shadow-xs transition-all active:scale-95 cursor-pointer ${
+                              isFreezeActive
+                                ? 'bg-cyan-100 text-cyan-800 border-cyan-400 ring-2 ring-cyan-300 animate-pulse'
+                                : freezeTimeCount > 0 && !isPowerUpUsedThisQuestion && !hasAnsweredCurrentQuestion
+                                ? 'bg-white hover:bg-cyan-50 text-cyan-700 border-cyan-200 hover:border-cyan-400'
+                                : 'bg-slate-100 text-slate-400 border-slate-200 opacity-60 cursor-not-allowed'
+                            }`}
+                          >
+                            <span className="text-base leading-none">🧊</span>
+                            <span>تجميد الوقت</span>
+                            <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${freezeTimeCount > 0 ? 'bg-cyan-500 text-white' : 'bg-slate-300 text-slate-600'}`}>
+                              {freezeTimeCount}
+                            </span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={handleExecuteDeleteTwo}
+                            disabled={deleteTwoCount <= 0 || isPowerUpUsedThisQuestion || hasAnsweredCurrentQuestion || eliminatedOptionIndices.length > 0}
+                            title="حذف إجابتين خاطئتين"
+                            className={`flex items-center gap-2 px-3 py-1.5 sm:px-4 sm:py-2 rounded-2xl border text-xs sm:text-sm font-black shadow-xs transition-all active:scale-95 cursor-pointer ${
+                              eliminatedOptionIndices.length > 0
+                                ? 'bg-amber-100 text-amber-800 border-amber-300'
+                                : deleteTwoCount > 0 && !isPowerUpUsedThisQuestion && !hasAnsweredCurrentQuestion
+                                ? 'bg-white hover:bg-amber-50 text-amber-700 border-amber-200 hover:border-amber-400'
+                                : 'bg-slate-100 text-slate-400 border-slate-200 opacity-60 cursor-not-allowed'
+                            }`}
+                          >
+                            <span className="text-base leading-none">✂️</span>
+                            <span>حذف إجابتين (50/50)</span>
+                            <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${deleteTwoCount > 0 ? 'bg-amber-500 text-white' : 'bg-slate-300 text-slate-600'}`}>
+                              {deleteTwoCount}
+                            </span>
+                          </button>
+                        </div>
                         <SkillsChallengeHeader
                           mode={skillsType}
                           verseText={KEYWORD}
@@ -6581,6 +6801,17 @@ ${versesList}
                             feedback={skillsFeedback}
                             correctText={skillsCorrectAnswer || currentChallenge?.correctText}
                             currentChallenge={currentChallenge}
+                            eliminatedIndices={eliminatedOptionIndices}
+                          />
+                        )}
+
+                        {/* Live Reactions in Group Game */}
+                        {room && (
+                          <LiveReactionsOverlay
+                            roomId={room.id}
+                            playerId={playerUsername || playerName}
+                            playerName={playerName}
+                            incomingReaction={room.playersProgress?.__lastReaction}
                           />
                         )}
                       </div>
@@ -9333,18 +9564,20 @@ ${versesList}
                           <div className="flex justify-center mb-2 sticky top-2 z-50">
                             <motion.div
                               animate={{
-                                scale: speedTimeLeft <= 5 ? [1, 1.05, 1] : 1,
-                                backgroundColor: speedTimeLeft <= 5 ? '#fee2e2' : '#ffffff'
+                                scale: isFreezeActive ? 1.05 : speedTimeLeft <= 5 ? [1, 1.05, 1] : 1,
+                                backgroundColor: isFreezeActive ? '#e0f2fe' : speedTimeLeft <= 5 ? '#fee2e2' : '#ffffff'
                               }}
-                              transition={{ repeat: speedTimeLeft <= 5 ? Infinity : 0, duration: 0.5 }}
-                              className={`glass px-3.5 md:px-4 py-1 rounded-full shadow-md border flex items-center gap-2 ${speedTimeLeft <= 5 ? 'border-red-500' : 'border-brand-emerald/20'}`}
+                              transition={{ repeat: speedTimeLeft <= 5 && !isFreezeActive ? Infinity : 0, duration: 0.5 }}
+                              className={`glass px-3.5 md:px-4 py-1 rounded-full shadow-md border flex items-center gap-2 ${
+                                isFreezeActive ? 'border-cyan-400 ring-2 ring-cyan-300' : speedTimeLeft <= 5 ? 'border-red-500' : 'border-brand-emerald/20'
+                              }`}
                             >
-                              <div className={`p-1 rounded-lg ${speedTimeLeft <= 5 ? 'bg-red-500 text-white' : 'bg-brand-emerald text-white'}`}>
-                                <Zap className="w-3.5 h-3.5" />
+                              <div className={`p-1 rounded-lg ${isFreezeActive ? 'bg-cyan-500 text-white' : speedTimeLeft <= 5 ? 'bg-red-500 text-white' : 'bg-brand-emerald text-white'}`}>
+                                {isFreezeActive ? <span className="text-xs">🧊</span> : <Zap className="w-3.5 h-3.5" />}
                               </div>
                               <div className="text-right flex items-center gap-1.5">
-                                <span className={`text-xs md:text-sm font-black tabular-nums ${speedTimeLeft <= 5 ? 'text-red-600' : 'text-slate-800'}`}>
-                                  {speedTimeLeft} ثانية
+                                <span className={`text-xs md:text-sm font-black tabular-nums ${isFreezeActive ? 'text-cyan-700' : speedTimeLeft <= 5 ? 'text-red-600' : 'text-slate-800'}`}>
+                                  {isFreezeActive ? `مجمّد! (${freezeSecondsLeft}ث)` : `${speedTimeLeft} ثانية`}
                                 </span>
                                 {isSpeedMode && currentChallenge?.level && (
                                   <span className={`text-[10px] md:text-xs font-bold px-1.5 py-0.5 rounded-full ${
@@ -9431,6 +9664,48 @@ ${versesList}
                           </motion.div>
                         )}
 
+                        {/* Tactical Power-ups HUD (🧊 Freeze Time & ✂️ Delete Two) */}
+                        <div className="flex items-center justify-center gap-2.5 sm:gap-4 my-2 sm:my-3">
+                          <button
+                            type="button"
+                            onClick={handleExecuteFreezeTime}
+                            disabled={freezeTimeCount <= 0 || isPowerUpUsedThisQuestion || isFreezeActive || hasAnsweredCurrentQuestion}
+                            title="تجميد الوقت لمدة 10 ثوانٍ"
+                            className={`flex items-center gap-2 px-3 py-1.5 sm:px-4 sm:py-2 rounded-2xl border text-xs sm:text-sm font-black shadow-xs transition-all active:scale-95 cursor-pointer ${
+                              isFreezeActive
+                                ? 'bg-cyan-100 text-cyan-800 border-cyan-400 ring-2 ring-cyan-300 animate-pulse'
+                                : freezeTimeCount > 0 && !isPowerUpUsedThisQuestion && !hasAnsweredCurrentQuestion
+                                ? 'bg-white hover:bg-cyan-50 text-cyan-700 border-cyan-200 hover:border-cyan-400'
+                                : 'bg-slate-100 text-slate-400 border-slate-200 opacity-60 cursor-not-allowed'
+                            }`}
+                          >
+                            <span className="text-base leading-none">🧊</span>
+                            <span>تجميد الوقت</span>
+                            <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${freezeTimeCount > 0 ? 'bg-cyan-500 text-white' : 'bg-slate-300 text-slate-600'}`}>
+                              {freezeTimeCount}
+                            </span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={handleExecuteDeleteTwo}
+                            disabled={deleteTwoCount <= 0 || isPowerUpUsedThisQuestion || hasAnsweredCurrentQuestion || eliminatedOptionIndices.length > 0}
+                            title="حذف إجابتين خاطئتين"
+                            className={`flex items-center gap-2 px-3 py-1.5 sm:px-4 sm:py-2 rounded-2xl border text-xs sm:text-sm font-black shadow-xs transition-all active:scale-95 cursor-pointer ${
+                              eliminatedOptionIndices.length > 0
+                                ? 'bg-amber-100 text-amber-800 border-amber-300'
+                                : deleteTwoCount > 0 && !isPowerUpUsedThisQuestion && !hasAnsweredCurrentQuestion
+                                ? 'bg-white hover:bg-amber-50 text-amber-700 border-amber-200 hover:border-amber-400'
+                                : 'bg-slate-100 text-slate-400 border-slate-200 opacity-60 cursor-not-allowed'
+                            }`}
+                          >
+                            <span className="text-base leading-none">✂️</span>
+                            <span>حذف إجابتين (50/50)</span>
+                            <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${deleteTwoCount > 0 ? 'bg-amber-500 text-white' : 'bg-slate-300 text-slate-600'}`}>
+                              {deleteTwoCount}
+                            </span>
+                          </button>
+                        </div>
                         <SkillsChallengeHeader
                           index={challengeMode === 'daily' ? 0 : (view === 'challenge' ? currentChallengeIndex : sessionCurrentIndex)}
                           total={challengeMode === 'daily' ? 1 : (challenges.length > 50 ? 20 : Math.max(challenges.length, 1))}
@@ -9516,10 +9791,21 @@ ${versesList}
                             handlePromptNextChallenge={handlePromptNextChallenge}
                             onViewTafsir={handleOpenTafsir}
                             currentChallenge={currentChallenge}
+                            eliminatedIndices={eliminatedOptionIndices}
                             onFinishDaily={() => {
                               setChallengeMode('normal');
                               setView('home');
                             }}
+                          />
+                        )}
+
+                        {/* Live Reactions in Challenge / Room Game */}
+                        {room && (
+                          <LiveReactionsOverlay
+                            roomId={room.id}
+                            playerId={playerUsername || playerName}
+                            playerName={playerName}
+                            incomingReaction={room.playersProgress?.__lastReaction}
                           />
                         )}
 
@@ -9901,6 +10187,43 @@ ${versesList}
             onStartChallenge={() => {
               setIsStreakModalOpen(false);
               handleStartDaily();
+            }}
+          />
+
+          <CosmeticStoreModal
+            isOpen={showCosmeticStore}
+            onClose={() => setShowCosmeticStore(false)}
+            totalPoints={totalPoints}
+            setTotalPoints={setTotalPoints}
+            streakCount={streak}
+            setStreakCount={setStreak}
+            ownedCosmetics={ownedCosmetics}
+            setOwnedCosmetics={setOwnedCosmetics}
+            equippedBorder={activeFrame}
+            setEquippedBorder={setActiveFrame}
+            equippedNameColor={equippedNameColor}
+            setEquippedNameColor={setEquippedNameColor}
+            equippedTitle={equippedTitle}
+            setEquippedTitle={setEquippedTitle}
+            onSaveToServer={() => {
+              if (playerName) {
+                fetch('/api/player-score', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    name: playerName,
+                    username: playerUsername,
+                    equippedNameColor,
+                    equippedTitle,
+                    activeFrame,
+                    ownedCosmetics,
+                    powerUps: {
+                      freezeTime: freezeTimeCount,
+                      deleteTwo: deleteTwoCount
+                    }
+                  })
+                }).catch(() => {});
+              }
             }}
           />
 

@@ -63,6 +63,10 @@ model Player {
   generalCompleted      Boolean  @default(false)
   quranCompleted        Boolean  @default(false)
   activeFrame           String?
+  equippedTitle         String?
+  equippedNameColor     String?
+  ownedCosmetics        Json     @default("[]")
+  powerUps              Json     @default("{\"freezeTime\": 3, \"deleteTwo\": 3}")
   isBlocked             Boolean  @default(false)
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt

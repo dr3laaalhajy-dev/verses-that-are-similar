@@ -169,6 +169,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (generalCompleted !== undefined) updateData.generalCompleted = Boolean(generalCompleted);
     if (quranCompleted !== undefined) updateData.quranCompleted = Boolean(quranCompleted);
     if (activeFrame !== undefined) updateData.activeFrame = activeFrame ? String(activeFrame) : null;
+    if (req.body.equippedTitle !== undefined) updateData.equippedTitle = req.body.equippedTitle ? String(req.body.equippedTitle) : null;
+    if (req.body.equippedNameColor !== undefined) updateData.equippedNameColor = req.body.equippedNameColor ? String(req.body.equippedNameColor) : null;
+    if (req.body.ownedCosmetics !== undefined && Array.isArray(req.body.ownedCosmetics)) updateData.ownedCosmetics = req.body.ownedCosmetics;
+    if (req.body.powerUps !== undefined && typeof req.body.powerUps === 'object') updateData.powerUps = req.body.powerUps;
 
     if (Object.keys(updateData).length > 0) {
       const updatedPlayer = await prisma.player.update({

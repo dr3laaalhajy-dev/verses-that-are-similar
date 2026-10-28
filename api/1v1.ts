@@ -19,6 +19,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     case 'presence': return handlePresence(req, res)
     case 'cancel-room': return handleCancelRoom(req, res)
     case 'resign': return handleResign(req, res)
+    case 'reaction': return handleReaction(req, res)
     default:
       return res.status(400).json({ message: 'Invalid action' })
   }
@@ -1134,6 +1135,36 @@ async function handleResign(req: VercelRequest, res: VercelResponse) {
     const fullRoom = await getFullRoom(String(roomId))
     return res.status(200).json(fullRoom)
   } catch (err: any) {
+    return res.status(500).json({ error: err.message })
+  }
+}
+
+async function handleReaction(req: VercelRequest, res: VercelResponse) {
+  const { roomId, playerId, playerName, emoji } = req.body || {}
+  if (!roomId || !emoji) {
+    return res.status(400).json({ error: 'Missing roomId or emoji' })
+  }
+
+  try {
+    const room = await prisma.room.findUnique({ where: { id: String(roomId) } })
+    if (!room) return res.status(404).json({ error: 'Room not found' })
+
+    const playersProgress: any = (room.playersProgress as any) || {}
+    playersProgress.__lastReaction = {
+      senderId: String(playerId || ''),
+      senderName: String(playerName || 'متسابق'),
+      emoji: String(emoji),
+      timestamp: Date.now()
+    }
+
+    await prisma.room.update({
+      where: { id: String(roomId) },
+      data: { playersProgress }
+    })
+
+    return res.status(200).json({ success: true, reaction: playersProgress.__lastReaction })
+  } catch (err: any) {
+    console.error('Reaction error:', err)
     return res.status(500).json({ error: err.message })
   }
 }

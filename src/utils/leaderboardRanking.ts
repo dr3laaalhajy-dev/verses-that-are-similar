@@ -26,6 +26,8 @@ export interface LeaderboardUser {
   cups?: number;
   streak?: number;
   activeFrame?: string | null;
+  equippedTitle?: string | null;
+  equippedNameColor?: string | null;
   seerahCompleted?: boolean;
   generalCompleted?: boolean;
   quranCompleted?: boolean;
@@ -82,3 +84,4 @@ export function compareLeaderboardUsers(a: Partial<LeaderboardUser>, b: Partial<
   // 4. Tie-breaker 3: totalPoints descending
   return bPoints - aPoints;
 }
+

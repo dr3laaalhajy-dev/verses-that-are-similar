@@ -22,7 +22,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         seerahCompleted: true,
         generalCompleted: true,
         quranCompleted: true,
-        activeFrame: true
+        activeFrame: true,
+        equippedTitle: true,
+        equippedNameColor: true
       } as any
     })
 
@@ -50,7 +52,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           seerahCompleted: player.seerahCompleted,
           generalCompleted: player.generalCompleted,
           quranCompleted: player.quranCompleted,
-          activeFrame: player.activeFrame
+          activeFrame: player.activeFrame,
+          equippedTitle: player.equippedTitle,
+          equippedNameColor: player.equippedNameColor
         })
       } else {
         const existing = playerMap.get(normalized)!
@@ -64,6 +68,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         existing.generalCompleted = existing.generalCompleted || player.generalCompleted
         if (player.activeFrame) {
           existing.activeFrame = player.activeFrame
+        }
+        if (player.equippedTitle) {
+          existing.equippedTitle = player.equippedTitle
+        }
+        if (player.equippedNameColor) {
+          existing.equippedNameColor = player.equippedNameColor
         }
         if (!existing.username && player.username) {
           existing.username = player.username
