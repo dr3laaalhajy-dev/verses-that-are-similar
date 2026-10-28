@@ -1,6 +1,7 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
+import fs from 'fs';
 import { defineConfig, loadEnv, Plugin } from 'vite';
 import dotenv from 'dotenv';
 
@@ -66,10 +67,18 @@ function apiServerPlugin(): Plugin {
           else if (pathname === '/api/settings') relativePath = 'api/settings.ts';
           else if (pathname === '/api/challenges') relativePath = 'api/challenges/index.ts';
           else if (pathname === '/api/testers') relativePath = 'api/testers.ts';
+          else if (pathname === '/api/version-control') relativePath = 'api/version-control.ts';
           else if (pathname.startsWith('/api/challenges/')) {
             const id = pathname.replace('/api/challenges/', '');
             req.query.id = id;
             relativePath = 'api/challenges/[id].ts';
+          } else {
+            const cleanPath = pathname.replace(/^\/api\//, '');
+            if (fs.existsSync(path.resolve(__dirname, `api/${cleanPath}.ts`))) {
+              relativePath = `api/${cleanPath}.ts`;
+            } else if (fs.existsSync(path.resolve(__dirname, `api/${cleanPath}/index.ts`))) {
+              relativePath = `api/${cleanPath}/index.ts`;
+            }
           }
 
           if (!relativePath) {
