@@ -3753,7 +3753,7 @@ export default function App() {
       if (isCorrect) {
         setSessionCorrect(prev => prev + 1);
 
-        const earnedPoints = 10;
+        const earnedPoints = 1; // نقطة واحدة (1) بدلاً من 10 نقاط
         setTotalPoints(prev => {
           const next = prev + earnedPoints;
           localStorage.setItem('quran_total_points', next.toString());
@@ -3936,7 +3936,7 @@ export default function App() {
     if (isFullyCorrect) {
       setSessionCorrect(prev => prev + 1);
 
-      const earnedPoints = 10;
+      const earnedPoints = 1; // نقطة واحدة (1) بدلاً من 10 نقاط
       setTotalPoints(prev => {
         const next = prev + earnedPoints;
         localStorage.setItem('quran_total_points', next.toString());
@@ -4412,7 +4412,7 @@ export default function App() {
       });
     }
 
-    const pointsToAdd = score > 0 ? score : 10;
+    const pointsToAdd = score > 0 ? score : 1;
     const newPoints = totalPoints + pointsToAdd;
     setTotalPoints(newPoints);
     localStorage.setItem('quran_total_points', newPoints.toString());
@@ -4717,7 +4717,7 @@ export default function App() {
         startListening();
       }, 400);
 
-      const pointsEarned = 10;
+      const pointsEarned = 1; // نقطة واحدة (1) بدلاً من 10 نقاط
       setScore(prev => prev + pointsEarned);
     }
   }, [transcript, targetVerses, matchedIds, KEYWORD, difficulty, wordStates, stopListening, resetTranscript, startListening, keywordWordCount, distinguishingWordCounts]);
@@ -6540,7 +6540,7 @@ ${versesList}
                                   const correctCount = prog.correctCount || 0;
                                   const accuracy = prog.accuracy ?? Math.round((correctCount / totalQ) * 100);
                                   const score = prog.finalTotalScore ?? prog.score ?? 0;
-                                  const basePoints = prog.basePoints ?? (correctCount * 10);
+                                  const basePoints = prog.basePoints ?? (correctCount * 1);
                                   const speedBonusCount = prog.speedBonusCount || 0;
                                   const completionBonus = prog.completionBonus || 0;
                                   const accuracyBonus = prog.accuracyBonus || 0;

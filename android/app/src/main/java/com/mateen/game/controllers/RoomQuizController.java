@@ -574,6 +574,46 @@ public class RoomQuizController {
         }
     }
 
+    // نقاط الإجابة الصحيحة في التحديات: 1 نقطة بدلاً من 10 نقاط
+    public static final int POINTS_PER_CORRECT_ANSWER = 1;
+
+    /**
+     * تسجيل إجابة اللاعب ومزامنتها لحظياً في Firebase:
+     * يمنح نقطة واحدة (1) فقط عند الإجابة الصحيحة بدلاً من 10 نقاط
+     * ويحدث رصيد اللاعب في الغرفة وحسابه الشخصي لتظهر لكل الأطراف المتصلة.
+     */
+    public static void submitPlayerAnswer(
+            @NonNull String roomId,
+            @NonNull String userId,
+            int questionIndex,
+            boolean isCorrect
+    ) {
+        if (roomId.isEmpty() || userId.isEmpty()) return;
+
+        final int pointsEarned = isCorrect ? POINTS_PER_CORRECT_ANSWER : 0;
+
+        DatabaseReference db = FirebaseDatabase.getInstance().getReference();
+        DatabaseReference roomRef = db.child("rooms").child(roomId);
+
+        Map<String, Object> answerData = new HashMap<>();
+        answerData.put("userId", userId);
+        answerData.put("questionIndex", questionIndex);
+        answerData.put("isCorrect", isCorrect);
+        answerData.put("points", pointsEarned); // نقطة واحدة (1) عند الإجابة الصحيحة
+        answerData.put("isSkipped", false);
+        answerData.put("timestamp", ServerValue.TIMESTAMP);
+
+        roomRef.child("currentAnswers").child(userId).setValue(answerData);
+
+        if (isCorrect) {
+            // تحديث نقاط اللاعب اللحظية داخل الغرفة لتظهر لجميع الأطراف المتصلة
+            roomRef.child("players").child(userId).child("score").setValue(ServerValue.increment(pointsEarned));
+
+            // تحديث رصيد اللاعب الإجمالي في حسابه الشخصي
+            db.child("users").child(userId).child("totalPoints").setValue(ServerValue.increment(pointsEarned));
+        }
+    }
+
     private static void submitAnswerToFirebase(
             String roomId,
             String userId,

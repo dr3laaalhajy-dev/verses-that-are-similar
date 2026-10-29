@@ -432,7 +432,7 @@ function finalizeRoomScores(room: any, playersProgress: Record<string, any>) {
   for (const [pIdStr, pData] of Object.entries(updatedProgress)) {
     const correctCount = typeof pData.correctCount === 'number' ? pData.correctCount : 0
     const speedBonusCount = typeof pData.speedBonusCount === 'number' ? pData.speedBonusCount : 0
-    const basePoints = correctCount * 10 // 10 points per correct answer
+    const basePoints = correctCount * 1 // 1 point per correct answer
     const accuracy = totalQuestions > 0 ? (correctCount / totalQuestions) : 0
     const accuracyBonus = accuracy > 0.90 ? 15 : 0 // Bonus +15 for >90% accuracy
 
@@ -542,9 +542,9 @@ function evaluateQuestionScores(
     let earnedSpeedBonus = false
 
     if (ans && ans.isCorrect) {
-      roundPoints += 10 // 10 base points per correct answer
+      roundPoints += 1 // 1 base point per correct answer (updated from 10)
       pData.correctCount += 1
-      pData.basePoints += 10
+      pData.basePoints += 1
 
       if (top4PlayerIds.has(numId)) {
         roundPoints += 1 // Speed bonus point (+1) for top 4 correct
@@ -761,7 +761,7 @@ async function handleSubmitAnswer(req: VercelRequest, res: VercelResponse) {
 
           if (Boolean(isCorrect)) {
             pData.correctCount = (pData.correctCount || 0) + 1
-            pData.basePoints = (pData.correctCount || 0) * 10
+            pData.basePoints = (pData.correctCount || 0) * 1
 
             const qCorrect = Object.values(currentAnswers[qKey])
               .filter((a: any) => a.isCorrect === true)
@@ -772,7 +772,7 @@ async function handleSubmitAnswer(req: VercelRequest, res: VercelResponse) {
               pData.speedBonusCount = (pData.speedBonusCount || 0) + 1
             }
           } else {
-            pData.basePoints = (pData.correctCount || 0) * 10
+            pData.basePoints = (pData.correctCount || 0) * 1
           }
 
           const qNum = Number(questionIndex)
