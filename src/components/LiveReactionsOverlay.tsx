@@ -195,15 +195,10 @@ export const LiveReactionsOverlay: React.FC<LiveReactionsOverlayProps> = ({
       .channel(`room_${roomId}`)
       .on(
         'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'reactions',
-          filter: `room_id=eq.${roomId}`
-        },
+        { event: 'INSERT', schema: 'public', table: 'reactions', filter: `room_id=eq.${roomId}` },
         (payload) => {
+          console.log("🔵 تم استقبال تفاعل جديد من السيرفر:", payload);
           try {
-            console.log('[Supabase Live Reactions] 🔔 تم استقبال تفاعل لحظي جديد (INSERT):', payload);
             const newRecord = payload.new as any;
             if (!newRecord) return;
 
@@ -219,20 +214,17 @@ export const LiveReactionsOverlay: React.FC<LiveReactionsOverlayProps> = ({
               icon: newRecord.emoji || details.icon
             });
           } catch (err) {
-            console.error('[Supabase Live Reactions] ❌ خطأ أثناء معالجة التفاعل الوارد:', err);
+            console.error("🔴 خطأ أثناء معالجة التفاعل الوارد:", err);
           }
         }
       )
       .subscribe((status, err) => {
-        if (err) {
-          console.error(`[Supabase Live Reactions] 🛑 خطأ في الاشتراك بالقناة room_${roomId}:`, err);
-        } else {
-          console.log(`[Supabase Live Reactions] 🟢 حالة اشتراك القناة room_${roomId}:`, status);
-        }
+        console.log("📡 حالة اتصال Supabase Realtime:", status);
+        if (err) console.error("🔴 خطأ في الاتصال بالقناة:", err);
       });
 
     return () => {
-      console.log(`[Supabase Live Reactions] 🔌 إلغاء الاشتراك من القناة room_${roomId}`);
+      console.log(`🔌 إلغاء الاشتراك من القناة room_${roomId}`);
       channel.unsubscribe();
     };
   }, [roomId]);
@@ -309,20 +301,18 @@ export const LiveReactionsOverlay: React.FC<LiveReactionsOverlayProps> = ({
           sender_name: mySenderName
         });
 
-        const { data, error } = await supabase.from('reactions').insert([
-          {
-            room_id: roomId,
-            reaction_type: action.type,
-            emoji: action.icon,
-            sender_id: mySenderId,
-            sender_name: mySenderName
-          }
-        ]).select();
+        const { data, error } = await supabase.from('reactions').insert([{
+          room_id: roomId,
+          reaction_type: action.type,
+          emoji: action.icon,
+          sender_id: mySenderId,
+          sender_name: mySenderName
+        }]).select();
 
         if (error) {
-          console.error('[Supabase Live Reactions] ❌ خطأ أثناء إدخال التفاعل في Supabase:', error);
+          console.error("🔴 خطأ في الإرسال إلى Supabase:", error);
         } else {
-          console.log('[Supabase Live Reactions] ✅ تم إدخال التفاعل بنجاح في Supabase:', data);
+          console.log("🟢 تم الإرسال بنجاح:", data);
         }
       } catch (err: any) {
         console.error('[Supabase Live Reactions] ❌ استثناء أثناء إدخال التفاعل:', err);
