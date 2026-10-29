@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -7,9 +7,7 @@ import {
   push,
   onChildAdded,
   off,
-  serverTimestamp,
-  query,
-  limitToLast
+  serverTimestamp
 } from '../services/firebase';
 
 export type ReactionType = 'hurry' | 'forgive' | 'knowledge' | 'royal' | 'crescent' | 'spirit';
@@ -189,83 +187,79 @@ export const LiveReactionsOverlay: React.FC<LiveReactionsOverlayProps> = ({
   showBar = true
 }) => {
   const [floatingReactions, setFloatingReactions] = useState<FloatingReactionInstance[]>([]);
-  const [lastHandledTime, setLastHandledTime] = useState<number>(0);
   const [cooldownSeconds, setCooldownSeconds] = useState<number>(0);
 
-  // 1. تفعيل الاستماع اللحظي (Firebase Listener): onChildAdded على المسار rooms/${roomId}/reactions
+  // 3. تصفية التفاعلات التاريخية (Ignore Old Data): حفظ لحظة فتح المكون (Mount Timestamp)
+  const mountTimeRef = useRef<number>(Date.now());
+
+  // 1 & 3 & 4. تفعيل الاستماع اللحظي (Firebase Listener) وطباعة الأخطاء وتصفية البيانات القديمة
   useEffect(() => {
-    if (!roomId || !database) return;
-
-    let isSubscribed = true;
-    const mountTime = Date.now();
-    const reactionsRef = ref(database, `rooms/${roomId}/reactions`);
-    const recentQuery = query(reactionsRef, limitToLast(30));
-
-    try {
-      onChildAdded(recentQuery, (snapshot) => {
-        if (!isSubscribed || !snapshot.exists()) return;
-        const data = snapshot.val();
-        if (!data) return;
-
-        // تجاهل التفاعلات القديمة جداً قبل فتح الشاشة
-        const rawTime = typeof data.timestamp === 'number' ? data.timestamp : mountTime;
-        if (rawTime < mountTime - 5000) return;
-
-        const senderId = String(data.senderId || '');
-        const myId = String(playerId || playerName || '');
-        // تفادي التكرار إذا كان التفاعل مرسلاً من نفس العميل خلال آخر ثانية
-        if (senderId && myId && senderId === myId && (Date.now() - rawTime < 1500)) {
-          return;
-        }
-
-        const rawType = data.reactionType || data.emoji || data.type;
-        const details = getReactionDetails(rawType, data.textLine1, data.textLine2);
-
-        triggerReactionInstance({
-          id: snapshot.key || Math.random().toString(36).substring(2, 9) + Date.now(),
-          type: details.type,
-          textLine1: details.textLine1,
-          textLine2: details.textLine2,
-          senderName: data.senderName || 'متسابق',
-          icon: details.icon
-        });
-      });
-    } catch (err) {
-      console.warn('Firebase reactions listener setup error:', err);
+    if (!roomId) {
+      console.warn('[Firebase Live Reactions] roomId مفقود، تعذر بدء الاستماع.');
+      return;
+    }
+    if (!database) {
+      console.error('[Firebase Live Reactions] Realtime Database غير مهيأة! تأكد من VITE_FIREBASE_DATABASE_URL في .env');
+      return;
     }
 
+    const mountTime = mountTimeRef.current;
+    console.log(`[Firebase Live Reactions] بدء الاستماع على rooms/${roomId}/reactions للمحاضرات بعد ${new Date(mountTime).toLocaleTimeString()}`);
+
+    const reactionsRef = ref(database, `rooms/${roomId}/reactions`);
+
+    // إعداد المستمع مع دالة التقاط الأخطاء (4. Error Logging)
+    const unsubscribe = onChildAdded(
+      reactionsRef,
+      (snapshot) => {
+        try {
+          if (!snapshot.exists()) return;
+          const data = snapshot.val();
+          if (!data) return;
+
+          console.log('[Firebase Live Reactions] تم استقبال تفاعل لحظي من Firebase:', snapshot.key, data);
+
+          // 3. تصفية التفاعلات التاريخية: قبول التفاعلات الحديثة فقط التي حدثت بعد لحظة فتح الشاشة
+          const reactionTime = typeof data.timestamp === 'number' ? data.timestamp : Date.now();
+          if (reactionTime < mountTime) {
+            console.log(`[Firebase Live Reactions] تم تجاهل تفاعل قديم (وقت التفاعل: ${reactionTime} < وقت الفتح: ${mountTime})`);
+            return;
+          }
+
+          const rawType = data.reactionType || data.emoji || data.type;
+          const details = getReactionDetails(rawType, data.textLine1, data.textLine2);
+
+          // إضافة التفاعل إلى الشاشة (يعمل لكل من المرسل والمستقبل عند عودة البيانات من Firebase)
+          triggerReactionInstance({
+            id: snapshot.key || Math.random().toString(36).substring(2, 9) + Date.now(),
+            type: details.type,
+            textLine1: details.textLine1,
+            textLine2: details.textLine2,
+            senderName: data.senderName || 'متسابق',
+            icon: details.icon
+          });
+        } catch (parseErr) {
+          console.error('[Firebase Live Reactions] خطأ أثناء معالجة التفاعل المستلم:', parseErr);
+        }
+      },
+      (error) => {
+        // 4. طباعة الأخطاء: فحص هل هناك Permission Denied أو مشكلة صلاحيات
+        console.error('[Firebase Live Reactions] خطأ في مستمع onChildAdded من Firebase:', error);
+        if (error?.message?.includes('permission_denied') || (error as any)?.code === 'PERMISSION_DENIED') {
+          console.error('[Firebase Live Reactions] 🛑 خطأ أذونات Firebase (PERMISSION_DENIED)! تأكد من صلاحيات القراءة (read: true) في قواعد Realtime Database Console.');
+        }
+      }
+    );
+
     return () => {
-      isSubscribed = false;
+      console.log(`[Firebase Live Reactions] إيقاف الاستماع على rooms/${roomId}/reactions`);
       try {
-        off(recentQuery);
+        off(reactionsRef);
       } catch (e) {
         // Safe unsubscribe
       }
     };
-  }, [roomId, playerId, playerName]);
-
-  // Fallback: الاستماع لأي تفاعل وارد عبر REST Props
-  useEffect(() => {
-    if (!incomingReaction || !incomingReaction.timestamp) return;
-
-    if (incomingReaction.timestamp > lastHandledTime) {
-      setLastHandledTime(incomingReaction.timestamp);
-
-      const isMyReaction = incomingReaction.senderId && (incomingReaction.senderId === playerId || incomingReaction.senderId === playerName);
-      if (!isMyReaction) {
-        const rawType = incomingReaction.reactionType || incomingReaction.type || incomingReaction.emoji;
-        const details = getReactionDetails(rawType, incomingReaction.textLine1, incomingReaction.textLine2);
-
-        triggerReactionInstance({
-          type: details.type,
-          textLine1: details.textLine1,
-          textLine2: details.textLine2,
-          senderName: incomingReaction.senderName || 'متسابق',
-          icon: details.icon
-        });
-      }
-    }
-  }, [incomingReaction, lastHandledTime, playerId, playerName]);
+  }, [roomId]);
 
   // Cooldown countdown timer (10-second limit between reactions)
   useEffect(() => {
@@ -276,7 +270,7 @@ export const LiveReactionsOverlay: React.FC<LiveReactionsOverlayProps> = ({
     return () => clearInterval(interval);
   }, [cooldownSeconds]);
 
-  // 2. إدارة دورة حياة التفاعل (Cleanup Timeout): حذف التفاعل بعد 3000 ملي ثانية (3 ثوانٍ)
+  // 2. إدارة دورة حياة التفاعل (Cleanup Timeout): حذف التفاعل من الـ State بعد 3000 ملي ثانية
   const triggerReactionInstance = (data: {
     id?: string;
     type: ReactionType;
@@ -301,28 +295,23 @@ export const LiveReactionsOverlay: React.FC<LiveReactionsOverlayProps> = ({
       }
     ]);
 
-    // Cleanup بعد 3 ثوانٍ حتى لا تتراكم التفاعلات على الشاشة
+    // Cleanup بعد 3 ثوانٍ
     setTimeout(() => {
       setFloatingReactions(prev => prev.filter(r => r.id !== id));
     }, 3000);
   };
 
-  // 4. إرسال التفاعلات من الويب عبر دالة push() إلى مسار rooms/${roomId}/reactions
+  // 1 & 4. إرسال التفاعلات: منع العرض المحلي الوهمي 100%، والاعتماد الحصري على رد Firebase
   const handleSendAction = async (action: ReactionActionDef) => {
     if (cooldownSeconds > 0) return;
-    setCooldownSeconds(10); // Start 10s cooldown timer
+    setCooldownSeconds(10); // بدء مؤقت التهدئة 10 ثوانٍ
 
     const mySenderId = String(playerId || playerName || 'web_user');
     const mySenderName = String(playerName || 'أنت');
 
-    // عرض فوري على شاشة المرسل محلياً
-    triggerReactionInstance({
-      type: action.type,
-      textLine1: action.textLine1,
-      textLine2: action.textLine2,
-      senderName: mySenderName,
-      icon: action.icon
-    });
+    // 🛑 1. تم إلغاء العرض المحلي الوهمي تماماً (Remove Optimistic UI):
+    // لا نستدعي triggerReactionInstance هنا أبداً!
+    // ستظهر الحركة على الشاشة فقط عندما يعود التفاعل من الـ Listener (onChildAdded).
 
     const payload = {
       action: 'reaction',
@@ -339,11 +328,15 @@ export const LiveReactionsOverlay: React.FC<LiveReactionsOverlayProps> = ({
 
     if (onSendReaction) onSendReaction(payload);
 
-    // إرسال مباشر إلى Firebase Realtime Database
+    // 4. إرسال التفاعل إلى Firebase مع طباعة الأخطاء (console.error)
     if (roomId && database) {
       try {
+        console.log(`[Firebase Live Reactions] إرسال التفاعل إلى rooms/${roomId}/reactions:`, {
+          type: action.type,
+          senderName: mySenderName
+        });
         const reactionsRef = ref(database, `rooms/${roomId}/reactions`);
-        await push(reactionsRef, {
+        const newRef = await push(reactionsRef, {
           reactionType: action.type,
           emoji: action.icon,
           senderId: mySenderId,
@@ -352,9 +345,16 @@ export const LiveReactionsOverlay: React.FC<LiveReactionsOverlayProps> = ({
           textLine2: action.textLine2,
           timestamp: serverTimestamp()
         });
-      } catch (fbErr) {
-        console.warn('Firebase push reaction error:', fbErr);
+        console.log('[Firebase Live Reactions] ✅ تم إرسال التفاعل بنجاح إلى Firebase بالمعرف:', newRef.key);
+      } catch (fbErr: any) {
+        console.error('[Firebase Live Reactions] ❌ فشل إرسال التفاعل إلى Firebase:', fbErr);
+        if (fbErr?.code === 'PERMISSION_DENIED' || String(fbErr).includes('permission_denied')) {
+          console.error('[Firebase Live Reactions] 🛑 خطأ PERMISSION_DENIED: قواعد حماية Firebase تمنع الكتابة (write) على rooms/' + roomId + '/reactions');
+        }
       }
+    } else {
+      if (!roomId) console.error('[Firebase Live Reactions] لم يتم الإرسال: roomId مفقود!');
+      if (!database) console.error('[Firebase Live Reactions] لم يتم الإرسال: كائن database غير مهيأ (تحقق من VITE_FIREBASE_DATABASE_URL)!');
     }
 
     // إرسال احتياطي عبر خادم Vercel REST API
@@ -366,12 +366,12 @@ export const LiveReactionsOverlay: React.FC<LiveReactionsOverlayProps> = ({
           body: JSON.stringify(payload)
         });
       } catch (err) {
-        console.warn('Reaction REST send fallback error:', err);
+        console.warn('[Firebase Live Reactions] REST Fallback error:', err);
       }
     }
   };
 
-  // 3. ضبط العرض والأنيميشن (UI & Z-Index: 50+ و pointer-events-none)
+  // ضبط العرض والأنيميشن (UI & Z-Index: 99999 و pointer-events-none)
   const portalContent = typeof document !== 'undefined' && floatingReactions.length > 0 ? (
     createPortal(
       <div
