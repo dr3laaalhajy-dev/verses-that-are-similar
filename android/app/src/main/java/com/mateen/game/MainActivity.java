@@ -1,6 +1,8 @@
 package com.mateen.game;
 
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
@@ -15,11 +17,30 @@ import com.google.firebase.database.ValueEventListener;
 import com.mateen.game.controllers.AppUpdateManager;
 import com.mateen.game.models.AppVersionControl;
 
+import org.json.JSONObject;
+
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
+
 public class MainActivity extends BridgeActivity {
 
     private static final String TAG = "MainActivity";
+    private static final String VERSION_CONTROL_API_URL = "https://mateen-quran.vercel.app/api/version-control";
+    private static final long UPDATE_POLL_INTERVAL_MS = 30000; // 30 seconds real-time poll
+
     private ValueEventListener updateListener;
     private DatabaseReference versionRef;
+
+    private final Handler updatePollHandler = new Handler(Looper.getMainLooper());
+    private final Runnable updatePollRunnable = new Runnable() {
+        @Override
+        public void run() {
+            checkUpdatesFromApi();
+            updatePollHandler.postDelayed(this, UPDATE_POLL_INTERVAL_MS);
+        }
+    };
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -33,13 +54,24 @@ public class MainActivity extends BridgeActivity {
     public void onResume() {
         super.onResume();
 
-        // إعادة التحقق عند استئناف التطبيق (مهم للتحديثات الإجبارية)
+        // فحص التحديثات فور عودة المستخدم للتطبيق
         listenForAndroidAppUpdates();
+
+        // بدء الفحص الدوري اللحظي لمزامنة إلغاء التنبيه (isUpdateActive=false)
+        updatePollHandler.removeCallbacks(updatePollRunnable);
+        updatePollHandler.postDelayed(updatePollRunnable, UPDATE_POLL_INTERVAL_MS);
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        updatePollHandler.removeCallbacks(updatePollRunnable);
     }
 
     @Override
     public void onDestroy() {
         super.onDestroy();
+        updatePollHandler.removeCallbacks(updatePollRunnable);
         try {
             if (versionRef != null && updateListener != null) {
                 versionRef.removeEventListener(updateListener);
@@ -65,15 +97,87 @@ public class MainActivity extends BridgeActivity {
     }
 
     /**
+     * فحص التحديثات عبر API الخادم المباشر (Vercel Backend /api/version-control)
+     * يضمن عمل نظام التحديثات لعميل الأندرويد بشكل موثوق وسريع
+     */
+    private void checkUpdatesFromApi() {
+        new Thread(() -> {
+            HttpURLConnection conn = null;
+            try {
+                URL url = new URL(VERSION_CONTROL_API_URL);
+                conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("GET");
+                conn.setConnectTimeout(8000);
+                conn.setReadTimeout(8000);
+                conn.setRequestProperty("Accept", "application/json");
+
+                int responseCode = conn.getResponseCode();
+                if (responseCode == 200) {
+                    BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                    StringBuilder sb = new StringBuilder();
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        sb.append(line);
+                    }
+                    reader.close();
+
+                    JSONObject json = new JSONObject(sb.toString());
+
+                    // 1. الشرط الاستباقي: فحص حالة التفعيل isUpdateActive
+                    boolean isUpdateActive = json.optBoolean("isUpdateActive", true);
+                    if (!isUpdateActive) {
+                        Log.i(TAG, "API Update check: isUpdateActive=false. Dismissing dialog if visible.");
+                        runOnUiThread(() -> AppUpdateManager.dismissActiveDialog(false));
+                        return;
+                    }
+
+                    // 2. قراءة latestAndroidVersionCode ومقارنتها مع BuildConfig.VERSION_CODE
+                    long latestAndroidVersionCode = json.optLong("latestAndroidVersionCode", 
+                            json.optLong("latestVersionCode", 0));
+                    long installedVersionCode = BuildConfig.VERSION_CODE;
+
+                    Log.d(TAG, "API Version Check: latest=" + latestAndroidVersionCode 
+                            + ", installed=" + installedVersionCode);
+
+                    if (latestAndroidVersionCode > installedVersionCode) {
+                        AppVersionControl updateInfo = new AppVersionControl();
+                        updateInfo.setLatestAndroidVersionCode((int) latestAndroidVersionCode);
+                        updateInfo.setLatestVersionCode((int) latestAndroidVersionCode);
+                        updateInfo.setUpdateNotes(json.optString("updateNotes", ""));
+                        updateInfo.setForceUpdate(json.optBoolean("isForceUpdate", false));
+                        updateInfo.setUpdateActive(isUpdateActive);
+                        updateInfo.setPlayStoreLink(json.optString("playStoreLink", ""));
+                        updateInfo.setApkLink(json.optString("apkLink", ""));
+
+                        runOnUiThread(() -> {
+                            if (!isFinishing() && !isDestroyed()) {
+                                AppUpdateManager.showUpdateBottomSheetDialog(MainActivity.this, updateInfo);
+                            }
+                        });
+                    }
+                }
+            } catch (Exception e) {
+                Log.w(TAG, "Failed to check updates from API: " + e.getMessage());
+            } finally {
+                if (conn != null) {
+                    conn.disconnect();
+                }
+            }
+        }).start();
+    }
+
+    /**
      * استماع حصري لتطبيق الأندرويد:
-     * يقرأ قيمة latestAndroidVersionCode من Firebase Realtime Database
-     * ويقارنها مع BuildConfig.VERSION_CODE الحصري بنظام أندرويد.
-     * إذا كان رقم قاعدة البيانات أكبر، يتم عرض BottomSheetDialog.
+     * 1. يستدعي API الخادم المباشر عبر HTTP.
+     * 2. يستمع لقناة Firebase Realtime Database كقناة فورية إضافية إن كانت مهيأة.
      */
     private void listenForAndroidAppUpdates() {
+        // فحص فوري عبر الخادم
+        checkUpdatesFromApi();
+
         try {
             if (!isFirebaseAvailable()) {
-                Log.w(TAG, "Firebase is not initialized. Skipping update check to prevent crash on startup.");
+                Log.d(TAG, "Firebase Realtime Database is not active. Using API polling channel.");
                 return;
             }
 
@@ -101,9 +205,9 @@ public class MainActivity extends BridgeActivity {
                         }
                     }
 
-                    // التفاعل اللحظي (Real-time Dismiss): إذا أصبحت false، يتم استدعاء dialog.dismiss() فوراً وإنهاء الدالة
+                    // التفاعل اللحظي (Real-time Dismiss): إذا أصبحت false، يتم استدعاء dialog.dismiss() فوراً
                     if (!isUpdateActive) {
-                        Log.i(TAG, "Update alert is disabled by admin (isUpdateActive=false). Dismissing dialog if visible.");
+                        Log.i(TAG, "Update alert disabled in Firebase (isUpdateActive=false). Dismissing dialog.");
                         AppUpdateManager.dismissActiveDialog(false);
                         return;
                     }
@@ -111,7 +215,6 @@ public class MainActivity extends BridgeActivity {
                     AppVersionControl updateInfo = snapshot.getValue(AppVersionControl.class);
                     if (updateInfo == null) return;
 
-                    // 1. قراءة latestAndroidVersionCode من مسار Firebase
                     long latestAndroidVersionCode = 0;
                     if (snapshot.hasChild("latestAndroidVersionCode")) {
                         Object val = snapshot.child("latestAndroidVersionCode").getValue();
@@ -122,13 +225,11 @@ public class MainActivity extends BridgeActivity {
                         latestAndroidVersionCode = updateInfo.getLatestAndroidVersionCode();
                     }
 
-                    // 2. المقارنة مع BuildConfig.VERSION_CODE الحصري ببيئة أندرويد
                     long installedVersionCode = BuildConfig.VERSION_CODE;
 
-                    Log.d(TAG, "Android Version Check: latestAndroidVersionCode=" 
+                    Log.d(TAG, "Firebase Version Check: latestAndroidVersionCode=" 
                             + latestAndroidVersionCode + ", BuildConfig.VERSION_CODE=" + installedVersionCode);
 
-                    // 3. إظهار BottomSheetDialog فقط إذا كان رقم قاعدة البيانات أكبر من رقم التطبيق المثبت
                     if (latestAndroidVersionCode > installedVersionCode) {
                         AppUpdateManager.showUpdateBottomSheetDialog(MainActivity.this, updateInfo);
                     }
@@ -136,13 +237,13 @@ public class MainActivity extends BridgeActivity {
 
                 @Override
                 public void onCancelled(@NonNull DatabaseError error) {
-                    Log.e(TAG, "Failed to read version control: " + error.getMessage());
+                    Log.e(TAG, "Failed to read Firebase version control: " + error.getMessage());
                 }
             };
 
             versionRef.addValueEventListener(updateListener);
         } catch (Exception e) {
-            Log.e(TAG, "Failed to initialize Firebase or listen for app updates: " + e.getMessage());
+            Log.e(TAG, "Failed to initialize Firebase version listener: " + e.getMessage());
         }
     }
 }

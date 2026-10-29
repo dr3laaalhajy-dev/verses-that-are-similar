@@ -116,6 +116,7 @@ model SystemSetting {
   hideCompletionChallenge Boolean  @default(false)
   hideSurahChallenge      Boolean  @default(false)
   hideIslamicVideos       Boolean  @default(false)
+  versionControl          Json?
   updatedAt               DateTime @updatedAt
 }
 

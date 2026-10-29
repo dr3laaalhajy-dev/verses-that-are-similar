@@ -225,9 +225,26 @@ public class AppUpdateManager {
     ) {
         activity.runOnUiThread(() -> {
             try {
+                if (activity.isFinishing() || activity.isDestroyed()) return;
+
+                if (activeDialog != null && activeDialog.isShowing()) {
+                    Log.d(TAG, "Update BottomSheetDialog is already displayed. Skipping duplicate.");
+                    return;
+                }
+
                 final BottomSheetDialog bottomSheetDialog = new BottomSheetDialog(activity);
                 View sheetView = LayoutInflater.from(activity).inflate(R.layout.dialog_update_bottom_sheet, null);
                 bottomSheetDialog.setContentView(sheetView);
+
+                // ضمان ظهور الزوايا الدائرية العلوية بتفريغ خلفية الحاوية الأم
+                bottomSheetDialog.setOnShowListener(dialog -> {
+                    try {
+                        android.widget.FrameLayout bottomSheet = bottomSheetDialog.findViewById(com.google.android.material.R.id.design_bottom_sheet);
+                        if (bottomSheet != null) {
+                            bottomSheet.setBackgroundResource(android.R.color.transparent);
+                        }
+                    } catch (Exception ignored) {}
+                });
 
                 final boolean isForce = updateInfo.isForceUpdate();
 
