@@ -1,14 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import {
-  database,
-  ref,
-  push,
-  onChildAdded,
-  off,
-  serverTimestamp
-} from '../services/firebase';
+import { supabase } from '../services/supabase';
 
 export type ReactionType = 'hurry' | 'forgive' | 'knowledge' | 'royal' | 'crescent' | 'spirit';
 
@@ -189,75 +182,58 @@ export const LiveReactionsOverlay: React.FC<LiveReactionsOverlayProps> = ({
   const [floatingReactions, setFloatingReactions] = useState<FloatingReactionInstance[]>([]);
   const [cooldownSeconds, setCooldownSeconds] = useState<number>(0);
 
-  // 3. تصفية التفاعلات التاريخية (Ignore Old Data): حفظ لحظة فتح المكون (Mount Timestamp)
-  const mountTimeRef = useRef<number>(Date.now());
-
-  // 1 & 3 & 4. تفعيل الاستماع اللحظي (Firebase Listener) وطباعة الأخطاء وتصفية البيانات القديمة
+  // 2. تعديل مكون الاستماع: Realtime Channels الخاصة بـ Supabase
   useEffect(() => {
     if (!roomId) {
-      console.warn('[Firebase Live Reactions] roomId مفقود، تعذر بدء الاستماع.');
-      return;
-    }
-    if (!database) {
-      console.error('[Firebase Live Reactions] Realtime Database غير مهيأة! تأكد من VITE_FIREBASE_DATABASE_URL في .env');
+      console.warn('[Supabase Live Reactions] roomId مفقود، تم تخطي الاشتراك.');
       return;
     }
 
-    const mountTime = mountTimeRef.current;
-    console.log(`[Firebase Live Reactions] بدء الاستماع على rooms/${roomId}/reactions للمحاضرات بعد ${new Date(mountTime).toLocaleTimeString()}`);
+    console.log(`[Supabase Live Reactions] بدء الاستماع على القناة اللحظية room_${roomId}...`);
 
-    const reactionsRef = ref(database, `rooms/${roomId}/reactions`);
+    const channel = supabase
+      .channel(`room_${roomId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'reactions',
+          filter: `room_id=eq.${roomId}`
+        },
+        (payload) => {
+          try {
+            console.log('[Supabase Live Reactions] 🔔 تم استقبال تفاعل لحظي جديد (INSERT):', payload);
+            const newRecord = payload.new as any;
+            if (!newRecord) return;
 
-    // إعداد المستمع مع دالة التقاط الأخطاء (4. Error Logging)
-    const unsubscribe = onChildAdded(
-      reactionsRef,
-      (snapshot) => {
-        try {
-          if (!snapshot.exists()) return;
-          const data = snapshot.val();
-          if (!data) return;
+            const rawType = newRecord.reaction_type || newRecord.emoji;
+            const details = getReactionDetails(rawType);
 
-          console.log('[Firebase Live Reactions] تم استقبال تفاعل لحظي من Firebase:', snapshot.key, data);
-
-          // 3. تصفية التفاعلات التاريخية: قبول التفاعلات الحديثة فقط التي حدثت بعد لحظة فتح الشاشة
-          const reactionTime = typeof data.timestamp === 'number' ? data.timestamp : Date.now();
-          if (reactionTime < mountTime) {
-            console.log(`[Firebase Live Reactions] تم تجاهل تفاعل قديم (وقت التفاعل: ${reactionTime} < وقت الفتح: ${mountTime})`);
-            return;
+            triggerReactionInstance({
+              id: newRecord.id || Math.random().toString(36).substring(2, 9) + Date.now(),
+              type: details.type,
+              textLine1: details.textLine1,
+              textLine2: details.textLine2,
+              senderName: newRecord.sender_name || 'متسابق',
+              icon: newRecord.emoji || details.icon
+            });
+          } catch (err) {
+            console.error('[Supabase Live Reactions] ❌ خطأ أثناء معالجة التفاعل الوارد:', err);
           }
-
-          const rawType = data.reactionType || data.emoji || data.type;
-          const details = getReactionDetails(rawType, data.textLine1, data.textLine2);
-
-          // إضافة التفاعل إلى الشاشة (يعمل لكل من المرسل والمستقبل عند عودة البيانات من Firebase)
-          triggerReactionInstance({
-            id: snapshot.key || Math.random().toString(36).substring(2, 9) + Date.now(),
-            type: details.type,
-            textLine1: details.textLine1,
-            textLine2: details.textLine2,
-            senderName: data.senderName || 'متسابق',
-            icon: details.icon
-          });
-        } catch (parseErr) {
-          console.error('[Firebase Live Reactions] خطأ أثناء معالجة التفاعل المستلم:', parseErr);
         }
-      },
-      (error) => {
-        // 4. طباعة الأخطاء: فحص هل هناك Permission Denied أو مشكلة صلاحيات
-        console.error('[Firebase Live Reactions] خطأ في مستمع onChildAdded من Firebase:', error);
-        if (error?.message?.includes('permission_denied') || (error as any)?.code === 'PERMISSION_DENIED') {
-          console.error('[Firebase Live Reactions] 🛑 خطأ أذونات Firebase (PERMISSION_DENIED)! تأكد من صلاحيات القراءة (read: true) في قواعد Realtime Database Console.');
+      )
+      .subscribe((status, err) => {
+        if (err) {
+          console.error(`[Supabase Live Reactions] 🛑 خطأ في الاشتراك بالقناة room_${roomId}:`, err);
+        } else {
+          console.log(`[Supabase Live Reactions] 🟢 حالة اشتراك القناة room_${roomId}:`, status);
         }
-      }
-    );
+      });
 
     return () => {
-      console.log(`[Firebase Live Reactions] إيقاف الاستماع على rooms/${roomId}/reactions`);
-      try {
-        off(reactionsRef);
-      } catch (e) {
-        // Safe unsubscribe
-      }
+      console.log(`[Supabase Live Reactions] 🔌 إلغاء الاشتراك من القناة room_${roomId}`);
+      channel.unsubscribe();
     };
   }, [roomId]);
 
@@ -270,7 +246,7 @@ export const LiveReactionsOverlay: React.FC<LiveReactionsOverlayProps> = ({
     return () => clearInterval(interval);
   }, [cooldownSeconds]);
 
-  // 2. إدارة دورة حياة التفاعل (Cleanup Timeout): حذف التفاعل من الـ State بعد 3000 ملي ثانية
+  // إدارة دورة حياة التفاعل (Cleanup Timeout): حذف التفاعل من الـ State بعد 3000 ملي ثانية
   const triggerReactionInstance = (data: {
     id?: string;
     type: ReactionType;
@@ -295,23 +271,19 @@ export const LiveReactionsOverlay: React.FC<LiveReactionsOverlayProps> = ({
       }
     ]);
 
-    // Cleanup بعد 3 ثوانٍ
+    // الاحتفاظ بنفس منطق الـ setTimeout (3 ثوانٍ) لحذف التفاعل من الشاشة
     setTimeout(() => {
       setFloatingReactions(prev => prev.filter(r => r.id !== id));
     }, 3000);
   };
 
-  // 1 & 4. إرسال التفاعلات: منع العرض المحلي الوهمي 100%، والاعتماد الحصري على رد Firebase
+  // 3. تعديل دالة الإرسال: طلب إدخال (Insert) إلى جدول reactions في Supabase
   const handleSendAction = async (action: ReactionActionDef) => {
     if (cooldownSeconds > 0) return;
     setCooldownSeconds(10); // بدء مؤقت التهدئة 10 ثوانٍ
 
     const mySenderId = String(playerId || playerName || 'web_user');
     const mySenderName = String(playerName || 'أنت');
-
-    // 🛑 1. تم إلغاء العرض المحلي الوهمي تماماً (Remove Optimistic UI):
-    // لا نستدعي triggerReactionInstance هنا أبداً!
-    // ستظهر الحركة على الشاشة فقط عندما يعود التفاعل من الـ Listener (onChildAdded).
 
     const payload = {
       action: 'reaction',
@@ -328,33 +300,35 @@ export const LiveReactionsOverlay: React.FC<LiveReactionsOverlayProps> = ({
 
     if (onSendReaction) onSendReaction(payload);
 
-    // 4. إرسال التفاعل إلى Firebase مع طباعة الأخطاء (console.error)
-    if (roomId && database) {
+    // إرسال التفاعل (Insert) إلى جدول reactions في Supabase
+    if (roomId) {
       try {
-        console.log(`[Firebase Live Reactions] إرسال التفاعل إلى rooms/${roomId}/reactions:`, {
-          type: action.type,
-          senderName: mySenderName
-        });
-        const reactionsRef = ref(database, `rooms/${roomId}/reactions`);
-        const newRef = await push(reactionsRef, {
-          reactionType: action.type,
+        console.log(`[Supabase Live Reactions] 🚀 إرسال التفاعل إلى جدول reactions للغرفة ${roomId}:`, {
+          reaction_type: action.type,
           emoji: action.icon,
-          senderId: mySenderId,
-          senderName: mySenderName,
-          textLine1: action.textLine1,
-          textLine2: action.textLine2,
-          timestamp: serverTimestamp()
+          sender_name: mySenderName
         });
-        console.log('[Firebase Live Reactions] ✅ تم إرسال التفاعل بنجاح إلى Firebase بالمعرف:', newRef.key);
-      } catch (fbErr: any) {
-        console.error('[Firebase Live Reactions] ❌ فشل إرسال التفاعل إلى Firebase:', fbErr);
-        if (fbErr?.code === 'PERMISSION_DENIED' || String(fbErr).includes('permission_denied')) {
-          console.error('[Firebase Live Reactions] 🛑 خطأ PERMISSION_DENIED: قواعد حماية Firebase تمنع الكتابة (write) على rooms/' + roomId + '/reactions');
+
+        const { data, error } = await supabase.from('reactions').insert([
+          {
+            room_id: roomId,
+            reaction_type: action.type,
+            emoji: action.icon,
+            sender_id: mySenderId,
+            sender_name: mySenderName
+          }
+        ]).select();
+
+        if (error) {
+          console.error('[Supabase Live Reactions] ❌ خطأ أثناء إدخال التفاعل في Supabase:', error);
+        } else {
+          console.log('[Supabase Live Reactions] ✅ تم إدخال التفاعل بنجاح في Supabase:', data);
         }
+      } catch (err: any) {
+        console.error('[Supabase Live Reactions] ❌ استثناء أثناء إدخال التفاعل:', err);
       }
     } else {
-      if (!roomId) console.error('[Firebase Live Reactions] لم يتم الإرسال: roomId مفقود!');
-      if (!database) console.error('[Firebase Live Reactions] لم يتم الإرسال: كائن database غير مهيأ (تحقق من VITE_FIREBASE_DATABASE_URL)!');
+      console.warn('[Supabase Live Reactions] لم يتم الإرسال: roomId مفقود!');
     }
 
     // إرسال احتياطي عبر خادم Vercel REST API
@@ -366,7 +340,7 @@ export const LiveReactionsOverlay: React.FC<LiveReactionsOverlayProps> = ({
           body: JSON.stringify(payload)
         });
       } catch (err) {
-        console.warn('[Firebase Live Reactions] REST Fallback error:', err);
+        console.warn('[Supabase Live Reactions] REST Fallback error:', err);
       }
     }
   };

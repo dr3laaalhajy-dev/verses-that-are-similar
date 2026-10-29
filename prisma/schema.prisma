@@ -129,4 +129,18 @@ model AppTester {
   updatedAt  DateTime? @updatedAt
 }
 
+model Reaction {
+  id            String   @id @default(uuid())
+  room_id       String
+  reaction_type String
+  emoji         String
+  sender_id     String
+  sender_name   String
+  created_at    DateTime @default(now())
+
+  @@index([room_id])
+  @@map("reactions")
+}
+
+
 
