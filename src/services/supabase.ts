@@ -9,7 +9,7 @@ const supabaseAnonKey =
     (import.meta.env?.VITE_SUPABASE_ANON_KEY ||
       import.meta.env?.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
       import.meta.env?.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY)) ||
-  'sb_publishable_1cax-8DlGIbIxuqSMYxP6Q_VResi3RQ';
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhleHhib3BmdmJ1bGlha3VmZWpqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMyMzA1MjYsImV4cCI6MjEwODgwNjUyNn0.-JG3tJo4PJrxtaHI9MC9fXQKR1AZ60GY5b-OJOFNSZo';
 
 if (!supabaseUrl || !supabaseAnonKey) {
   console.warn(
