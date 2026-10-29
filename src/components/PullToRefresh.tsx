@@ -54,19 +54,14 @@ export const PullToRefresh: React.FC<PullToRefreshProps> = ({ children, onRefres
           if (onRefresh) {
             await onRefresh();
           } else {
-            // Default: reload page while maintaining current view in sessionStorage
-            setTimeout(() => {
-              window.location.reload();
-            }, 350);
-            return;
+            // محاكاة تأخير خفيف للتحديث في الخلفية دون إعادة تحميل الصفحة نهائياً
+            await new Promise(resolve => setTimeout(resolve, 600));
           }
         } catch (err) {
-          console.error('Refresh error:', err);
+          console.error('Background refresh error:', err);
         } finally {
-          setTimeout(() => {
-            setIsRefreshing(false);
-            setPullDistance(0);
-          }, 400);
+          setIsRefreshing(false);
+          setPullDistance(0);
         }
       } else {
         setPullDistance(0);
@@ -95,9 +90,9 @@ export const PullToRefresh: React.FC<PullToRefreshProps> = ({ children, onRefres
           <motion.div
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
+            exit={{ opacity: 0, y: -20, transition: { duration: 0.2 } }}
             style={{ height: `${pullDistance}px` }}
-            className="w-full flex items-center justify-center overflow-hidden transition-all duration-75 pointer-events-none select-none z-40"
+            className="w-full flex items-center justify-center overflow-hidden transition-all duration-150 pointer-events-none select-none z-40"
           >
             <div className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-brand-emerald text-brand-gold border border-brand-gold/40 shadow-xl backdrop-blur-md">
               <RotateCw
@@ -119,7 +114,15 @@ export const PullToRefresh: React.FC<PullToRefreshProps> = ({ children, onRefres
         )}
       </AnimatePresence>
 
-      {children}
+      {/* Children: Keep UI visible at all times to prevent blank screens or white flashes */}
+      <div 
+        className="transition-transform duration-200 ease-out"
+        style={{
+          transform: isRefreshing ? 'translateY(6px)' : pullDistance > 0 ? `translateY(${pullDistance * 0.2}px)` : 'none'
+        }}
+      >
+        {children}
+      </div>
     </div>
   );
 };

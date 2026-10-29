@@ -2421,6 +2421,23 @@ export default function App() {
     }
   }, [view, fetchAvailableRooms]);
 
+  // تحديث البيانات في الخلفية عند السحب للتحديث (Background Pull to Refresh)
+  const handlePullToRefresh = useCallback(async () => {
+    try {
+      const tasks: Promise<any>[] = [
+        fetchSettings(),
+        fetchChallenges(),
+        fetchCompletionChallenges()
+      ];
+      if (view === 'group_join') {
+        tasks.push(fetchAvailableRooms());
+      }
+      await Promise.allSettled(tasks);
+    } catch (err) {
+      console.warn('PullToRefresh background error:', err);
+    }
+  }, [fetchSettings, fetchChallenges, fetchCompletionChallenges, fetchAvailableRooms, view]);
+
   const fetchAvailableSkillCounts = useCallback(async () => {
     const audioLocal = allChallenges.filter(c => {
       const t = (c.type || '').toUpperCase();
@@ -5273,14 +5290,14 @@ ${versesList}
           </AnimatePresence>
 
           {/* Main Content*/}
-          <PullToRefresh>
+          <PullToRefresh onRefresh={handlePullToRefresh}>
             <main className={`overflow-y-auto w-full ${view === 'mushaf'
               ? (isPageModeActive ? 'max-w-[96rem] px-0 sm:px-2 md:px-4 pt-1 sm:pt-2 md:pt-3 min-h-screen' : 'max-w-6xl px-3 sm:px-6 pt-1 sm:pt-2 md:pt-3 min-h-screen')
               : (view === 'challenge' || view === 'speed_challenge' || view === 'islamic_quiz' || view === 'group_game' || view === 'skills_count_selection' || view === 'skills_menu' || view === 'speed_menu')
                 ? 'max-w-4xl px-3 sm:px-4 pt-1 sm:pt-2 md:pt-3 pb-8 md:pb-12 min-h-screen'
                 : 'max-w-6xl px-3 sm:px-6 pt-4 sm:pt-6 md:pt-10 pb-20 min-h-screen'
             } mx-auto relative z-10`}>
-            {challengesLoading ? (
+            {challengesLoading && challenges.length === 0 ? (
 
               <div className="flex flex-col items-center justify-center py-40">
                 <div className="w-12 h-12 border-4 border-brand-emerald border-t-transparent rounded-full animate-spin mb-6" />
