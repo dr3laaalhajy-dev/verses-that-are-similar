@@ -21,7 +21,11 @@ public class User implements Serializable {
     private List<String> ownedCosmetics = new ArrayList<>();
     private String equippedBorder;     // معرف الإطار المجهز (مثال: "border_gold")
     private String equippedNameColor;  // لون الاسم المجهز كـ Hex (مثال: "#FFD700")
-    private String equippedTitle;      // اللقب الشرفي المجهز (مثال: "بطل العقيدة")
+    
+    // اللقب الشرفي المجهز / المختار (Title / Selected Title / Equipped Title)
+    private String equippedTitle;      // اللقب الشرفي المجهز
+    private String selectedTitle;      // اللقب المختار (مطابقة لتسميات Firebase / UserModel)
+    private String title;              // مسمى اللقب العام
 
     public User() {
         powerUps.put("freezeTime", 3);
@@ -58,7 +62,46 @@ public class User implements Serializable {
     public String getEquippedNameColor() { return equippedNameColor; }
     public void setEquippedNameColor(String equippedNameColor) { this.equippedNameColor = equippedNameColor; }
 
-    public String getEquippedTitle() { return equippedTitle; }
-    public void setEquippedTitle(String equippedTitle) { this.equippedTitle = equippedTitle; }
-}
+    // =========================================================================
+    // Getters & Setters for Player Titles (دوال قراءة وتعيين الألقاب بجميع التسميات)
+    // =========================================================================
 
+    public String getEquippedTitle() {
+        if (equippedTitle != null && !equippedTitle.trim().isEmpty()) return equippedTitle;
+        if (selectedTitle != null && !selectedTitle.trim().isEmpty()) return selectedTitle;
+        if (title != null && !title.trim().isEmpty()) return title;
+        return null;
+    }
+
+    public void setEquippedTitle(String equippedTitle) {
+        this.equippedTitle = equippedTitle;
+        if (this.selectedTitle == null) this.selectedTitle = equippedTitle;
+        if (this.title == null) this.title = equippedTitle;
+    }
+
+    public String getSelectedTitle() {
+        if (selectedTitle != null && !selectedTitle.trim().isEmpty()) return selectedTitle;
+        if (equippedTitle != null && !equippedTitle.trim().isEmpty()) return equippedTitle;
+        if (title != null && !title.trim().isEmpty()) return title;
+        return null;
+    }
+
+    public void setSelectedTitle(String selectedTitle) {
+        this.selectedTitle = selectedTitle;
+        if (this.equippedTitle == null) this.equippedTitle = selectedTitle;
+        if (this.title == null) this.title = selectedTitle;
+    }
+
+    public String getTitle() {
+        if (title != null && !title.trim().isEmpty()) return title;
+        if (selectedTitle != null && !selectedTitle.trim().isEmpty()) return selectedTitle;
+        if (equippedTitle != null && !equippedTitle.trim().isEmpty()) return equippedTitle;
+        return null;
+    }
+
+    public void setTitle(String title) {
+        this.title = title;
+        if (this.selectedTitle == null) this.selectedTitle = title;
+        if (this.equippedTitle == null) this.equippedTitle = title;
+    }
+}

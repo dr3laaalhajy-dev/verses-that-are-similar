@@ -27,6 +27,8 @@ export interface LeaderboardUser {
   streak?: number;
   activeFrame?: string | null;
   equippedTitle?: string | null;
+  selectedTitle?: string | null;
+  title?: string | null;
   equippedNameColor?: string | null;
   seerahCompleted?: boolean;
   generalCompleted?: boolean;

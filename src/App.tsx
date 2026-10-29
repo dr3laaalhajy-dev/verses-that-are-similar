@@ -5560,9 +5560,9 @@ ${versesList}
                                     >
                                       {player.name}
                                     </span>
-                                    {(isCurrentPlayer ? (equippedTitle || player.equippedTitle) : player.equippedTitle) && (
+                                    {(isCurrentPlayer ? (equippedTitle || player.equippedTitle || player.selectedTitle || player.title) : (player.equippedTitle || player.selectedTitle || player.title)) && (
                                       <span className="text-[9px] font-black px-1.5 py-0.2 rounded-md bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-300/60 dark:border-amber-700/60">
-                                        {isCurrentPlayer ? (equippedTitle || player.equippedTitle) : player.equippedTitle}
+                                        {isCurrentPlayer ? (equippedTitle || player.equippedTitle || player.selectedTitle || player.title) : (player.equippedTitle || player.selectedTitle || player.title)}
                                       </span>
                                     )}
                                     {isCurrentPlayer && (

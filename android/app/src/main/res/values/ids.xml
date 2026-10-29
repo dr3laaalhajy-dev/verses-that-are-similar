@@ -3,4 +3,9 @@
     <item name="tvPlayerName" type="id" />
     <item name="tvPlayerTitle" type="id" />
     <item name="ivBorderOverlay" type="id" />
+    <item name="tvRank" type="id" />
+    <item name="tvPoints" type="id" />
+    <item name="tvTrophies" type="id" />
+    <item name="tvPlayerUsername" type="id" />
+    <item name="ivPlayerAvatar" type="id" />
 </resources>
