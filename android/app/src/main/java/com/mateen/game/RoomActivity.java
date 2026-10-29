@@ -158,3 +158,4 @@ public class RoomActivity extends AppCompatActivity {
         RoomQuizController.handlePlayerExit(this, roomId, userId, currentQuestionIndex);
     }
 }
+

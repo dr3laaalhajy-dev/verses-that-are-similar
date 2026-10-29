@@ -6685,6 +6685,16 @@ ${versesList}
                         </div>
                       )}
                     </AnimatePresence>
+
+                    {/* Live Reactions in Group Game Results / Waiting Screen */}
+                    {room && (
+                      <LiveReactionsOverlay
+                        roomId={room.id}
+                        playerId={playerUsername || playerName || undefined}
+                        playerName={playerName || undefined}
+                        incomingReaction={room.lastReaction || room.playersProgress?.__lastReaction}
+                      />
+                    )}
                   </motion.div>
                 ) : view === 'speed_challenge' ? (
                   <motion.div

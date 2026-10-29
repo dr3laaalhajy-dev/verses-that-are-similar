@@ -1,6 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import {
+  database,
+  ref,
+  push,
+  onChildAdded,
+  off,
+  serverTimestamp,
+  query,
+  limitToLast
+} from '../services/firebase';
 
 export type ReactionType = 'hurry' | 'forgive' | 'knowledge' | 'royal' | 'crescent' | 'spirit';
 
@@ -10,7 +20,8 @@ export interface FloatingReactionInstance {
   textLine1: string;
   textLine2: string;
   senderName: string;
-  startX: number; // percentage (25% to 75%)
+  startX: number; // percentage (20% to 80%)
+  icon?: string;
 }
 
 export interface ReactionActionDef {
@@ -25,7 +36,7 @@ export interface ReactionActionDef {
 }
 
 export const REACTION_ACTIONS: ReactionActionDef[] = [
-  // 1. استعجال (من selected_gameplay_reactions.html)
+  // 1. استعجال (أسرع بارك الله فيك)
   {
     id: 'act_hurry',
     type: 'hurry',
@@ -36,7 +47,7 @@ export const REACTION_ACTIONS: ReactionActionDef[] = [
     color: '#ef4444',
     badgeBg: 'bg-red-500/10 text-red-300 border-red-500/40 hover:bg-red-500/20'
   },
-  // 2. مواساة / عتاب لطيف (من selected_gameplay_reactions.html)
+  // 2. مواساة / عتاب لطيف (سامحك الله)
   {
     id: 'act_forgive',
     type: 'forgive',
@@ -47,7 +58,7 @@ export const REACTION_ACTIONS: ReactionActionDef[] = [
     color: '#94a3b8',
     badgeBg: 'bg-slate-500/15 text-slate-300 border-slate-500/40 hover:bg-slate-500/25'
   },
-  // 3. تشجيع علمي (من selected_gameplay_reactions.html)
+  // 3. تشجيع علمي (زادك الله علماً)
   {
     id: 'act_knowledge',
     type: 'knowledge',
@@ -58,7 +69,7 @@ export const REACTION_ACTIONS: ReactionActionDef[] = [
     color: '#38bdf8',
     badgeBg: 'bg-sky-500/10 text-sky-300 border-sky-400/40 hover:bg-sky-500/20'
   },
-  // 4. الظهور الملكي الذهبي (من premium_islamic_reactions.html)
+  // 4. الظهور الملكي الذهبي (ما شاء الله تبارك الله)
   {
     id: 'act_royal',
     type: 'royal',
@@ -69,7 +80,7 @@ export const REACTION_ACTIONS: ReactionActionDef[] = [
     color: '#D4AF37',
     badgeBg: 'bg-amber-500/10 text-amber-300 border-amber-400/40 hover:bg-amber-500/20'
   },
-  // 5. صعود الهلال المضيء (من premium_islamic_reactions.html)
+  // 5. صعود الهلال المضيء (أحسن الله إليك)
   {
     id: 'act_crescent',
     type: 'crescent',
@@ -80,7 +91,7 @@ export const REACTION_ACTIONS: ReactionActionDef[] = [
     color: '#10b981',
     badgeBg: 'bg-emerald-500/10 text-emerald-300 border-emerald-400/40 hover:bg-emerald-500/20'
   },
-  // 6. النبض الروحاني (من premium_islamic_reactions.html)
+  // 6. النبض الروحاني (جزاك الله خيراً)
   {
     id: 'act_spirit',
     type: 'spirit',
@@ -93,12 +104,71 @@ export const REACTION_ACTIONS: ReactionActionDef[] = [
   }
 ];
 
+export function getReactionDetails(rawTypeOrEmoji?: string, customLine1?: string, customLine2?: string) {
+  const val = String(rawTypeOrEmoji || '').trim().toLowerCase();
+
+  if (val === 'hurry' || val === '⏳' || val.includes('أسرع') || val.includes('اسرع')) {
+    return {
+      type: 'hurry' as ReactionType,
+      textLine1: customLine1 || 'أسرع',
+      textLine2: customLine2 || 'بارك الله فيك',
+      icon: '⏳',
+      color: '#ef4444'
+    };
+  }
+  if (val === 'forgive' || val === '🍂' || val.includes('سامحك')) {
+    return {
+      type: 'forgive' as ReactionType,
+      textLine1: customLine1 || 'سامحك',
+      textLine2: customLine2 || 'الله',
+      icon: '🍂',
+      color: '#94a3b8'
+    };
+  }
+  if (val === 'knowledge' || val === '📖' || val.includes('زادك') || val.includes('علم')) {
+    return {
+      type: 'knowledge' as ReactionType,
+      textLine1: customLine1 || 'زادك الله',
+      textLine2: customLine2 || 'علماً',
+      icon: '📖',
+      color: '#38bdf8'
+    };
+  }
+  if (val === 'crescent' || val === '🌙' || val.includes('أحسن') || val.includes('احسن')) {
+    return {
+      type: 'crescent' as ReactionType,
+      textLine1: customLine1 || 'أحسن الله',
+      textLine2: customLine2 || 'إليك',
+      icon: '🌙',
+      color: '#10b981'
+    };
+  }
+  if (val === 'spirit' || val === '💫' || val.includes('جزاك')) {
+    return {
+      type: 'spirit' as ReactionType,
+      textLine1: customLine1 || 'جزاك الله',
+      textLine2: customLine2 || 'خيراً',
+      icon: '💫',
+      color: '#06b6d4'
+    };
+  }
+  // Default to royal (ما شاء الله تبارك الله)
+  return {
+    type: 'royal' as ReactionType,
+    textLine1: customLine1 || 'ما شاء الله',
+    textLine2: customLine2 || 'تبارك الله',
+    icon: '✨',
+    color: '#D4AF37'
+  };
+}
+
 interface LiveReactionsOverlayProps {
   roomId?: string | null;
   playerId?: string | null;
   playerName?: string | null;
   incomingReaction?: {
     type?: ReactionType;
+    reactionType?: string;
     emoji?: string;
     textLine1?: string;
     textLine2?: string;
@@ -122,6 +192,81 @@ export const LiveReactionsOverlay: React.FC<LiveReactionsOverlayProps> = ({
   const [lastHandledTime, setLastHandledTime] = useState<number>(0);
   const [cooldownSeconds, setCooldownSeconds] = useState<number>(0);
 
+  // 1. تفعيل الاستماع اللحظي (Firebase Listener): onChildAdded على المسار rooms/${roomId}/reactions
+  useEffect(() => {
+    if (!roomId || !database) return;
+
+    let isSubscribed = true;
+    const mountTime = Date.now();
+    const reactionsRef = ref(database, `rooms/${roomId}/reactions`);
+    const recentQuery = query(reactionsRef, limitToLast(30));
+
+    try {
+      onChildAdded(recentQuery, (snapshot) => {
+        if (!isSubscribed || !snapshot.exists()) return;
+        const data = snapshot.val();
+        if (!data) return;
+
+        // تجاهل التفاعلات القديمة جداً قبل فتح الشاشة
+        const rawTime = typeof data.timestamp === 'number' ? data.timestamp : mountTime;
+        if (rawTime < mountTime - 5000) return;
+
+        const senderId = String(data.senderId || '');
+        const myId = String(playerId || playerName || '');
+        // تفادي التكرار إذا كان التفاعل مرسلاً من نفس العميل خلال آخر ثانية
+        if (senderId && myId && senderId === myId && (Date.now() - rawTime < 1500)) {
+          return;
+        }
+
+        const rawType = data.reactionType || data.emoji || data.type;
+        const details = getReactionDetails(rawType, data.textLine1, data.textLine2);
+
+        triggerReactionInstance({
+          id: snapshot.key || Math.random().toString(36).substring(2, 9) + Date.now(),
+          type: details.type,
+          textLine1: details.textLine1,
+          textLine2: details.textLine2,
+          senderName: data.senderName || 'متسابق',
+          icon: details.icon
+        });
+      });
+    } catch (err) {
+      console.warn('Firebase reactions listener setup error:', err);
+    }
+
+    return () => {
+      isSubscribed = false;
+      try {
+        off(recentQuery);
+      } catch (e) {
+        // Safe unsubscribe
+      }
+    };
+  }, [roomId, playerId, playerName]);
+
+  // Fallback: الاستماع لأي تفاعل وارد عبر REST Props
+  useEffect(() => {
+    if (!incomingReaction || !incomingReaction.timestamp) return;
+
+    if (incomingReaction.timestamp > lastHandledTime) {
+      setLastHandledTime(incomingReaction.timestamp);
+
+      const isMyReaction = incomingReaction.senderId && (incomingReaction.senderId === playerId || incomingReaction.senderId === playerName);
+      if (!isMyReaction) {
+        const rawType = incomingReaction.reactionType || incomingReaction.type || incomingReaction.emoji;
+        const details = getReactionDetails(rawType, incomingReaction.textLine1, incomingReaction.textLine2);
+
+        triggerReactionInstance({
+          type: details.type,
+          textLine1: details.textLine1,
+          textLine2: details.textLine2,
+          senderName: incomingReaction.senderName || 'متسابق',
+          icon: details.icon
+        });
+      }
+    }
+  }, [incomingReaction, lastHandledTime, playerId, playerName]);
+
   // Cooldown countdown timer (10-second limit between reactions)
   useEffect(() => {
     if (cooldownSeconds <= 0) return;
@@ -131,78 +276,88 @@ export const LiveReactionsOverlay: React.FC<LiveReactionsOverlayProps> = ({
     return () => clearInterval(interval);
   }, [cooldownSeconds]);
 
-  // Trigger floating reaction on incoming reaction from room (from other players)
-  useEffect(() => {
-    if (!incomingReaction || !incomingReaction.timestamp) return;
-
-    if (incomingReaction.timestamp > lastHandledTime) {
-      setLastHandledTime(incomingReaction.timestamp);
-
-      // Avoid duplicating if sender already saw it locally
-      const isMyReaction = incomingReaction.senderId && (incomingReaction.senderId === playerId || incomingReaction.senderId === playerName);
-      if (!isMyReaction) {
-        triggerReactionInstance({
-          type: (incomingReaction.type as ReactionType) || 'royal',
-          textLine1: incomingReaction.textLine1 || '',
-          textLine2: incomingReaction.textLine2 || '',
-          senderName: incomingReaction.senderName || 'متسابق'
-        });
-      }
-    }
-  }, [incomingReaction, lastHandledTime, playerId, playerName]);
-
+  // 2. إدارة دورة حياة التفاعل (Cleanup Timeout): حذف التفاعل بعد 3000 ملي ثانية (3 ثوانٍ)
   const triggerReactionInstance = (data: {
+    id?: string;
     type: ReactionType;
     textLine1: string;
     textLine2: string;
     senderName: string;
+    icon?: string;
   }) => {
-    const id = Math.random().toString(36).substring(2, 9) + Date.now();
-    const startX = 25 + Math.random() * 50; // 25% to 75%
+    const id = data.id || Math.random().toString(36).substring(2, 9) + Date.now();
+    const startX = 20 + Math.random() * 60; // 20% to 80%
 
     setFloatingReactions(prev => [
-      ...prev.slice(-10),
+      ...prev.slice(-12),
       {
         id,
         type: data.type,
         textLine1: data.textLine1,
         textLine2: data.textLine2,
         senderName: data.senderName,
-        startX
+        startX,
+        icon: data.icon
       }
     ]);
 
-    // Auto remove after animation completes (3 seconds)
+    // Cleanup بعد 3 ثوانٍ حتى لا تتراكم التفاعلات على الشاشة
     setTimeout(() => {
       setFloatingReactions(prev => prev.filter(r => r.id !== id));
     }, 3000);
   };
 
+  // 4. إرسال التفاعلات من الويب عبر دالة push() إلى مسار rooms/${roomId}/reactions
   const handleSendAction = async (action: ReactionActionDef) => {
     if (cooldownSeconds > 0) return;
     setCooldownSeconds(10); // Start 10s cooldown timer
 
-    // 1. Immediately trigger on sender screen
+    const mySenderId = String(playerId || playerName || 'web_user');
+    const mySenderName = String(playerName || 'أنت');
+
+    // عرض فوري على شاشة المرسل محلياً
     triggerReactionInstance({
       type: action.type,
       textLine1: action.textLine1,
       textLine2: action.textLine2,
-      senderName: playerName || 'أنت'
+      senderName: mySenderName,
+      icon: action.icon
     });
 
     const payload = {
       action: 'reaction',
       roomId,
-      playerId: playerId || playerName,
-      playerName: playerName || 'متسابق',
+      playerId: mySenderId,
+      playerName: mySenderName,
       type: action.type,
+      reactionType: action.type,
+      emoji: action.icon,
       textLine1: action.textLine1,
-      textLine2: action.textLine2
+      textLine2: action.textLine2,
+      timestamp: Date.now()
     };
 
     if (onSendReaction) onSendReaction(payload);
 
-    // 2. Broadcast to room
+    // إرسال مباشر إلى Firebase Realtime Database
+    if (roomId && database) {
+      try {
+        const reactionsRef = ref(database, `rooms/${roomId}/reactions`);
+        await push(reactionsRef, {
+          reactionType: action.type,
+          emoji: action.icon,
+          senderId: mySenderId,
+          senderName: mySenderName,
+          textLine1: action.textLine1,
+          textLine2: action.textLine2,
+          timestamp: serverTimestamp()
+        });
+      } catch (fbErr) {
+        console.warn('Firebase push reaction error:', fbErr);
+      }
+    }
+
+    // إرسال احتياطي عبر خادم Vercel REST API
     if (roomId) {
       try {
         await fetch('/api/1v1', {
@@ -211,49 +366,54 @@ export const LiveReactionsOverlay: React.FC<LiveReactionsOverlayProps> = ({
           body: JSON.stringify(payload)
         });
       } catch (err) {
-        console.warn('Reaction send error:', err);
+        console.warn('Reaction REST send fallback error:', err);
       }
     }
   };
 
+  // 3. ضبط العرض والأنيميشن (UI & Z-Index: 50+ و pointer-events-none)
   const portalContent = typeof document !== 'undefined' && floatingReactions.length > 0 ? (
     createPortal(
-      <div className="fixed inset-0 pointer-events-none z-[99999] overflow-hidden">
+      <div
+        className="fixed inset-0 pointer-events-none z-[99999] overflow-hidden select-none"
+        style={{ zIndex: 99999, pointerEvents: 'none' }}
+      >
         <AnimatePresence>
           {floatingReactions.map(reaction => (
             <motion.div
               key={reaction.id}
               initial={{
                 opacity: 0,
-                scale: 0.6,
+                scale: 0.5,
                 y: 0,
                 x: 0,
                 filter: 'blur(3px)'
               }}
               animate={{
                 opacity: [0, 1, 1, 1, 0],
-                scale: [0.6, 1.15, 1, 1, 0.9],
-                y: [0, -140, -300, -480, -680],
+                scale: [0.5, 1.15, 1, 1, 0.85],
+                y: [0, -120, -280, -460, -650],
                 x: [0, 15, -15, 10, 0],
                 filter: ['blur(3px)', 'blur(0px)', 'blur(0px)', 'blur(0px)', 'blur(2px)']
               }}
-              exit={{ opacity: 0, scale: 0.5 }}
+              exit={{ opacity: 0, scale: 0.4 }}
               transition={{
-                duration: 2.8,
+                duration: 2.9,
                 ease: 'easeOut',
-                times: [0, 0.15, 0.45, 0.75, 1]
+                times: [0, 0.12, 0.45, 0.75, 1]
               }}
               style={{
                 position: 'absolute',
-                bottom: '90px',
+                bottom: '100px',
                 left: `${reaction.startX}%`,
-                transform: 'translateX(-50%)'
+                transform: 'translateX(-50%)',
+                pointerEvents: 'none'
               }}
-              className="flex flex-col items-center justify-center filter drop-shadow-2xl"
+              className="flex flex-col items-center justify-center filter drop-shadow-2xl pointer-events-none select-none"
             >
-              {/* 1. استعجال (أسرع بارك الله فيك) - اهتزاز وساعة رملية دوارة */}
+              {/* 1. استعجال (أسرع بارك الله فيك) - اهتزاز وساعة رملية دوارة وتوهج أحمر */}
               {reaction.type === 'hurry' && (
-                <div className="relative flex flex-col items-center justify-center p-6 sm:p-8">
+                <div className="relative flex flex-col items-center justify-center p-6 sm:p-8 pointer-events-none">
                   <motion.div
                     animate={{
                       rotate: [0, 0, 180, 180, 180],
@@ -262,7 +422,7 @@ export const LiveReactionsOverlay: React.FC<LiveReactionsOverlayProps> = ({
                     }}
                     transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
                     className="absolute text-4xl sm:text-5xl pointer-events-none select-none"
-                    style={{ filter: 'drop-shadow(0 0 15px #ef4444)' }}
+                    style={{ filter: 'drop-shadow(0 0 16px #ef4444)' }}
                   >
                     ⏳
                   </motion.div>
@@ -285,7 +445,7 @@ export const LiveReactionsOverlay: React.FC<LiveReactionsOverlayProps> = ({
 
               {/* 2. مواساة / عتاب لطيف (سامحك الله) - ورقة خريفية متساقطة وتلاشٍ هادئ */}
               {reaction.type === 'forgive' && (
-                <div className="relative flex flex-col items-center justify-center p-6 sm:p-8">
+                <div className="relative flex flex-col items-center justify-center p-6 sm:p-8 pointer-events-none">
                   <motion.div
                     animate={{
                       x: [-20, 20, -10],
@@ -315,9 +475,9 @@ export const LiveReactionsOverlay: React.FC<LiveReactionsOverlayProps> = ({
                 </div>
               )}
 
-              {/* 3. تشجيع علمي (زادك الله علماً) - كتاب منير مشع */}
+              {/* 3. تشجيع علمي (زادك الله علماً) - كتاب منير مشع بلون سماوي */}
               {reaction.type === 'knowledge' && (
-                <div className="relative flex flex-col items-center justify-center p-6 sm:p-8">
+                <div className="relative flex flex-col items-center justify-center p-6 sm:p-8 pointer-events-none">
                   <motion.div
                     animate={{
                       y: [10, -25, -25, -40],
@@ -349,7 +509,7 @@ export const LiveReactionsOverlay: React.FC<LiveReactionsOverlayProps> = ({
 
               {/* 4. الزخرفة الذهبية الملكية (ما شاء الله تبارك الله) */}
               {reaction.type === 'royal' && (
-                <div className="relative flex flex-col items-center justify-center p-6 sm:p-8">
+                <div className="relative flex flex-col items-center justify-center p-6 sm:p-8 pointer-events-none">
                   <motion.div
                     animate={{ rotate: 360 }}
                     transition={{ duration: 4, repeat: Infinity, ease: 'linear' }}
@@ -377,7 +537,7 @@ export const LiveReactionsOverlay: React.FC<LiveReactionsOverlayProps> = ({
 
               {/* 5. صعود الهلال المضيء (أحسن الله إليك) */}
               {reaction.type === 'crescent' && (
-                <div className="relative flex flex-col items-center justify-center p-6 sm:p-8">
+                <div className="relative flex flex-col items-center justify-center p-6 sm:p-8 pointer-events-none">
                   <motion.div
                     animate={{
                       rotate: [-20, 20, -20],
@@ -409,7 +569,7 @@ export const LiveReactionsOverlay: React.FC<LiveReactionsOverlayProps> = ({
 
               {/* 6. النبض الروحاني (جزاك الله خيراً) */}
               {reaction.type === 'spirit' && (
-                <div className="relative flex flex-col items-center justify-center p-6 sm:p-8">
+                <div className="relative flex flex-col items-center justify-center p-6 sm:p-8 pointer-events-none">
                   <motion.div
                     animate={{ scale: [0.6, 1.8], opacity: [0.8, 0] }}
                     transition={{ duration: 1.8, repeat: Infinity, ease: 'easeOut' }}
