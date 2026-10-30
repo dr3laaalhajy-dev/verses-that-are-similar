@@ -1,7 +1,9 @@
 // Top-level build file where you can add configuration options common to all sub-projects/modules.
+java.util.Locale.setDefault(java.util.Locale.US)
+System.setProperty("user.language", "en")
+System.setProperty("user.country", "US")
 
 buildscript {
-    
     repositories {
         google()
         mavenCentral()
@@ -22,6 +24,21 @@ allprojects {
         google()
         mavenCentral()
     }
+    java.util.Locale.setDefault(java.util.Locale.US)
+    System.setProperty("user.language", "en")
+    System.setProperty("user.country", "US")
+}
+
+gradle.taskGraph.whenReady {
+    java.util.Locale.setDefault(java.util.Locale.US)
+    System.setProperty("user.language", "en")
+    System.setProperty("user.country", "US")
+}
+
+gradle.taskGraph.beforeTask {
+    java.util.Locale.setDefault(java.util.Locale.US)
+    System.setProperty("user.language", "en")
+    System.setProperty("user.country", "US")
 }
 
 task clean(type: Delete) {
