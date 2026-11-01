@@ -53,6 +53,8 @@ import IslamicOccasionsModal from './components/IslamicOccasionsModal';
 import { AppDownloadModal } from './components/AppDownloadModal';
 import { GooglePlayTesterModal, GooglePlayButton, GooglePlayLogo } from './components/GooglePlayTesterModal';
 import { PrivacyModal } from './components/PrivacyModal';
+import WhoAmIGame from './components/WhoAmIGame';
+import { WhoAmIInfoAlert } from './components/WhoAmISettings';
 import { defaultChallenges } from './data/defaultChallenges';
 import { PullToRefresh } from './components/PullToRefresh';
 import {
@@ -1427,7 +1429,7 @@ export default function App() {
   const [isJoiningRoom, setIsJoiningRoom] = useState(false);
   const [v1Error, setV1Error] = useState<string | null>(null);
   const [v1Polling, setV1Polling] = useState(false);
-  const [v1GameModes, setV1GameModes] = useState<('audio' | 'complete' | 'surah' | 'islamic')[]>(() => {
+  const [v1GameModes, setV1GameModes] = useState<('audio' | 'complete' | 'surah' | 'islamic' | 'who_am_i')[]>(() => {
     try {
       const saved = localStorage.getItem('cached_system_settings');
       if (saved) {
@@ -1440,6 +1442,8 @@ export default function App() {
     } catch {}
     return ['complete'];
   });
+  const [whoAmIQuestionCount, setWhoAmIQuestionCount] = useState<number>(10);
+  const [whoAmICategory, setWhoAmICategory] = useState<string>('الصحابة');
   const [islamicRoomCategories, setIslamicRoomCategories] = useState<string[]>(['akida']);
   const [islamicRoomLevels, setIslamicRoomLevels] = useState<(1 | 2 | 3)[]>([1]);
   const [islamicRoomTopics, setIslamicRoomTopics] = useState<string[]>(['all']);
@@ -2500,6 +2504,9 @@ export default function App() {
 
   const totalConfiguredQuestions = useMemo(() => {
     let sum = 0;
+    if (v1GameModes.includes('who_am_i')) {
+      return Math.max(1, whoAmIQuestionCount || 10);
+    }
     if (v1GameModes.includes('audio') && !systemSettings.hideAudioChallenge) {
       sum += Math.max(0, Number(skillQuestionCounts.audio) || 0);
     }
@@ -2519,9 +2526,12 @@ export default function App() {
       }
     }
     return sum;
-  }, [v1GameModes, skillQuestionCounts, islamicRoomTopics, islamicTopicQuestionCounts, systemSettings]);
+  }, [v1GameModes, skillQuestionCounts, islamicRoomTopics, islamicTopicQuestionCounts, systemSettings, whoAmIQuestionCount]);
 
   const hasCountValidationErrors = useMemo(() => {
+    if (v1GameModes.includes('who_am_i')) {
+      return (whoAmIQuestionCount || 0) <= 0;
+    }
     for (const skill of ['audio', 'complete', 'surah'] as const) {
       const isHidden = 
         (skill === 'audio' && systemSettings.hideAudioChallenge) ||
@@ -2641,6 +2651,47 @@ export default function App() {
     setIsCreatingRoom(true);
     setV1Error(null);
     try {
+      if (v1GameModes.includes('who_am_i')) {
+        const count = Math.max(1, whoAmIQuestionCount || 10);
+        const requestBody = {
+          action: 'create',
+          player1Id: playerUsername || playerName,
+          player1Name: playerName,
+          name: v1RoomName.trim() || 'تحدي من أنا؟',
+          isPrivate: v1IsPrivate,
+          password: v1IsPrivate ? v1RoomPassword.trim() : null,
+          gameMode: 'WHO_AM_I',
+          gameModes: ['WHO_AM_I'],
+          categories: [whoAmICategory],
+          category: whoAmICategory,
+          questionCount: count,
+          timePerQuestion: 40,
+          transitionMode: 'SYNC',
+          customChallenges: Array.from({ length: count }, (_, i) => ({
+            id: i + 1,
+            type: 'WHO_AM_I',
+            keyword: 'من أنا؟',
+            text: 'من أنا؟'
+          }))
+        };
+
+        const res = await fetch('/api/1v1', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody)
+        });
+        const data = await res.json();
+        if (res.ok) {
+          setRoom(data);
+          setView('group_waiting');
+        } else {
+          const errorMsg = data.message || 'فشل إنشاء الغرفة';
+          setV1Error(errorMsg);
+          toast.error(errorMsg);
+        }
+        return;
+      }
+
       const effectiveGameModes = v1GameModes.filter(m => {
         if (m === 'audio' && systemSettings.hideAudioChallenge) return false;
         if (m === 'complete' && systemSettings.hideCompletionChallenge) return false;
@@ -2764,6 +2815,12 @@ export default function App() {
       });
       const data = await res.json();
       if (res.ok) {
+        if (data.gameMode === 'WHO_AM_I' || room.gameMode === 'WHO_AM_I') {
+          setRoom(data);
+          setView('group_game');
+          return;
+        }
+
         // Initialize Game State
         const mapped = (data.challenges || []).map((q: any) => ({ ...q, verseText: q.verseText || q.keyword || q.text }));
         setChallenges(mapped);
@@ -2945,6 +3002,11 @@ export default function App() {
           // Initial start from waiting room
           if (view === 'group_waiting' && data.status === 'PLAYING') {
             notifiedWithdrawnPlayersRef.current.clear();
+            if (data.gameMode === 'WHO_AM_I' || room?.gameMode === 'WHO_AM_I') {
+              setRoom(data);
+              setView('group_game');
+              return;
+            }
             const mapped = (data.challenges || []).map((q: any) => ({ ...q, verseText: q.verseText || q.keyword || q.text }));
             const firstQ = mapped[0];
             const roomMode = firstQ?.type === 'SURAH' ? 'surah' : (firstQ?.type === 'STANDARD' || firstQ?.type === 'AUDIO') ? 'audio' : 'complete';
@@ -5737,33 +5799,56 @@ ${versesList}
                             </span>
                           </div>
 
-                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3.5">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-3.5">
                             {[
                               { id: 'audio', label: 'التحدي الصوتي', icon: Mic, color: 'emerald', bg: 'bg-brand-emerald/10', desc: 'تحدى نفسك بقراءة بداية الآيات', hidden: systemSettings.hideAudioChallenge },
                               { id: 'complete', label: 'تحدي إكمال الآية', icon: CheckCircle, color: 'blue', bg: 'bg-blue-600/10', desc: 'توقع الكلمات المفقودة في الآية', hidden: systemSettings.hideCompletionChallenge },
                               { id: 'surah', label: 'تحديد اسم السورة', icon: BookOpen, color: 'purple', bg: 'bg-purple-600/10', desc: 'تعرف على اسم السورة من الآية', hidden: systemSettings.hideSurahChallenge },
-                              { id: 'islamic', label: 'تحدي معلومات إسلامية', icon: Sparkles, color: 'amber', bg: 'bg-amber-500/10', desc: 'أسئلة في العقيدة، الفقه، والتفسير', hidden: false }
+                              { id: 'islamic', label: 'تحدي معلومات إسلامية', icon: Sparkles, color: 'amber', bg: 'bg-amber-500/10', desc: 'أسئلة في العقيدة، الفقه، والتفسير', hidden: false },
+                              { id: 'who_am_i', label: 'من أنا؟ (الصحابة)', icon: HelpCircle, color: 'indigo', bg: 'bg-indigo-600/10', desc: 'تحدي الصحابة بنظام التلميحات المتدرجة والـ VAR', hidden: false }
                             ].filter(m => !m.hidden).map(mode => {
                               const isSelected = v1GameModes.includes(mode.id as any);
                               const skillKey = mode.id as 'audio' | 'complete' | 'surah';
-                              const maxAvail = availableSkillCounts[skillKey] || 0;
-                              const currentVal = skillQuestionCounts[skillKey] || 0;
-                              const isExceeded = isSelected && mode.id !== 'islamic' && maxAvail > 0 && currentVal > maxAvail;
+                              const maxAvail = mode.id === 'who_am_i' ? 10 : (availableSkillCounts[skillKey] || 0);
+                              const currentVal = mode.id === 'who_am_i' ? whoAmIQuestionCount : (skillQuestionCounts[skillKey] || 0);
+                              const isExceeded = isSelected && mode.id !== 'islamic' && mode.id !== 'who_am_i' && maxAvail > 0 && currentVal > maxAvail;
 
                               return (
                                 <div
                                   key={mode.id}
                                   className={`p-3.5 sm:p-4 rounded-2xl border-2 transition-all flex flex-col justify-between relative overflow-hidden ${
                                     isSelected
-                                      ? `border-brand-emerald bg-brand-emerald/5 shadow-md`
+                                      ? (mode.id === 'who_am_i' ? 'border-indigo-600 bg-indigo-50/60 shadow-md' : 'border-brand-emerald bg-brand-emerald/5 shadow-md')
                                       : 'border-slate-100 hover:border-slate-200 bg-white text-slate-500'
                                   }`}
                                 >
                                   {/* Clickable Header for Multi-select Toggle */}
                                   <div
                                     onClick={() => {
+                                      if (mode.id === 'who_am_i') {
+                                        if (isSelected) {
+                                          setV1GameModes(['complete']);
+                                        } else {
+                                          // الاستبعاد المتبادل: اختيار "من أنا؟" يفرغ المهارات الأخرى
+                                          setV1GameModes(['who_am_i']);
+                                        }
+                                        return;
+                                      }
+
+                                      // إذا كان "من أنا؟" محدداً وتم اختيار مهارة أخرى، يتم إلغاء "من أنا؟"
+                                      if (v1GameModes.includes('who_am_i')) {
+                                        setV1GameModes([mode.id as any]);
+                                        if (mode.id !== 'islamic' && (skillQuestionCounts[mode.id as 'audio' | 'complete' | 'surah'] || 0) <= 0) {
+                                          setSkillQuestionCounts(prev => ({ ...prev, [mode.id]: 5 }));
+                                        }
+                                        if (mode.id === 'islamic') {
+                                          setShowIslamicConfigModal(true);
+                                        }
+                                        return;
+                                      }
+
                                       if (isSelected) {
-                                        const activeNonHidden = v1GameModes.filter(m => !(m === 'audio' && systemSettings.hideAudioChallenge) && !(m === 'complete' && systemSettings.hideCompletionChallenge) && !(m === 'surah' && systemSettings.hideSurahChallenge));
+                                        const activeNonHidden = v1GameModes.filter(m => !(m === 'audio' && systemSettings.hideAudioChallenge) && !(m === 'complete' && systemSettings.hideCompletionChallenge) && !(m === 'surah' && systemSettings.hideSurahChallenge) && m !== 'who_am_i');
                                         if (activeNonHidden.length <= 1) {
                                           toast.error('يجب اختيار مهارة واحدة على الأقل');
                                           return;
@@ -5782,11 +5867,13 @@ ${versesList}
                                     className="flex flex-col items-center text-center gap-1.5 cursor-pointer select-none"
                                   >
                                     <div className={`w-10 h-10 md:w-11 md:h-11 rounded-xl flex items-center justify-center mb-0.5 shadow-sm ${
-                                      isSelected ? `bg-brand-emerald text-white shadow-brand-emerald/20` : 'bg-slate-50 text-slate-400'
+                                      isSelected 
+                                        ? (mode.id === 'who_am_i' ? 'bg-indigo-600 text-white shadow-indigo-600/20' : 'bg-brand-emerald text-white shadow-brand-emerald/20')
+                                        : 'bg-slate-50 text-slate-400'
                                     }`}>
                                       <mode.icon className="w-5 h-5 md:w-5.5 md:h-5.5" />
                                     </div>
-                                    <div className={`text-xs md:text-sm font-black ${isSelected ? `text-brand-emerald` : 'text-slate-700'}`}>
+                                    <div className={`text-xs md:text-sm font-black ${isSelected ? (mode.id === 'who_am_i' ? 'text-indigo-700' : 'text-brand-emerald') : 'text-slate-700'}`}>
                                       {mode.label}
                                     </div>
                                     <div className="text-[9px] md:text-[10px] text-slate-400 font-bold leading-tight line-clamp-2">
@@ -5794,14 +5881,14 @@ ${versesList}
                                     </div>
                                     {/* Checkbox indicator */}
                                     <div className={`absolute top-2.5 right-2.5 w-4 h-4 rounded-md flex items-center justify-center transition-all ${
-                                      isSelected ? 'bg-brand-emerald text-white shadow-xs' : 'border border-slate-300 bg-white'
+                                      isSelected ? (mode.id === 'who_am_i' ? 'bg-indigo-600 text-white shadow-xs' : 'bg-brand-emerald text-white shadow-xs') : 'border border-slate-300 bg-white'
                                     }`}>
                                       {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
                                     </div>
                                   </div>
 
                                   {/* Dynamic Numeric Input for Selected Skill */}
-                                  {isSelected && mode.id !== 'islamic' && (
+                                  {isSelected && mode.id !== 'islamic' && mode.id !== 'who_am_i' && (
                                     <div className="mt-2.5 pt-2 border-t border-brand-emerald/20 flex flex-col gap-1 w-full text-right">
                                       <div className="flex items-center justify-between text-[10px] font-black">
                                         <span className="text-slate-600">عدد الأسئلة:</span>
@@ -5836,6 +5923,31 @@ ${versesList}
                                           أدخل 1 على الأقل
                                         </span>
                                       )}
+                                    </div>
+                                  )}
+
+                                  {/* Dynamic Numeric Input for Who Am I */}
+                                  {isSelected && mode.id === 'who_am_i' && (
+                                    <div className="mt-2.5 pt-2 border-t border-indigo-200 flex flex-col gap-1 w-full text-right">
+                                      <div className="flex items-center justify-between text-[10px] font-black">
+                                        <span className="text-indigo-900">عدد الأسئلة:</span>
+                                        <span className="text-indigo-600 font-bold">المتاح: 10</span>
+                                      </div>
+                                      <input
+                                        type="number"
+                                        min={1}
+                                        max={10}
+                                        value={whoAmIQuestionCount || ''}
+                                        onChange={(e) => {
+                                          const val = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
+                                          setWhoAmIQuestionCount(isNaN(val) ? 0 : Math.max(1, Math.min(10, val)));
+                                        }}
+                                        placeholder="عدد الأسئلة"
+                                        className="w-full px-2.5 py-2 rounded-xl border-2 border-indigo-200 focus:border-indigo-500 font-black text-xs text-center bg-white shadow-xs focus:outline-none text-slate-800"
+                                      />
+                                      <span className="text-[9px] text-indigo-700 font-bold text-center leading-tight">
+                                        الفئة المخصصة: الصحابة رضوان الله عليهم
+                                      </span>
                                     </div>
                                   )}
 
@@ -5903,153 +6015,178 @@ ${versesList}
                           )}
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 md:gap-5 pt-1">
-                          {/* 3. إجمالي عدد الأسئلة التلقائي (Reactive Total Counter) */}
-                          <div className="text-right flex flex-col justify-between p-3.5 sm:p-4 bg-slate-50 border-2 border-slate-200/80 rounded-2xl shadow-xs">
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="text-xs font-black text-slate-700">إجمالي عدد الأسئلة</span>
-                              <span className="text-[10px] font-black text-brand-emerald bg-brand-emerald/10 px-2 py-0.5 rounded-full border border-brand-emerald/20">
-                                عداد تلقائي ⚡
-                              </span>
-                            </div>
-                            <div className="flex items-baseline gap-2 my-1">
-                              <span className={`text-2xl font-black ${hasCountValidationErrors || totalConfiguredQuestions === 0 ? 'text-red-600' : 'text-slate-800'}`}>
-                                {totalConfiguredQuestions}
-                              </span>
-                              <span className="text-xs font-black text-slate-400">سؤال في الغرفة</span>
-                            </div>
-                            {/* Breakdown */}
-                            <div className="flex flex-wrap items-center gap-1 text-[10px] font-bold text-slate-500">
-                              {v1GameModes.includes('audio') && !systemSettings.hideAudioChallenge && (
-                                <span className="bg-white px-2 py-0.5 rounded-md border border-slate-200">صوتي: {skillQuestionCounts.audio || 0}</span>
-                              )}
-                              {v1GameModes.includes('complete') && !systemSettings.hideCompletionChallenge && (
-                                <span className="bg-white px-2 py-0.5 rounded-md border border-slate-200">إكمال: {skillQuestionCounts.complete || 0}</span>
-                              )}
-                              {v1GameModes.includes('surah') && !systemSettings.hideSurahChallenge && (
-                                <span className="bg-white px-2 py-0.5 rounded-md border border-slate-200">سورة: {skillQuestionCounts.surah || 0}</span>
-                              )}
-                              {v1GameModes.includes('islamic') && (
-                                <span className="bg-amber-100/70 text-amber-900 px-2 py-0.5 rounded-md border border-amber-200">
-                                  إسلامية: {islamicRoomTopics.includes('all') ? (islamicTopicQuestionCounts['all'] || 0) : islamicRoomTopics.reduce((s, t) => s + (islamicTopicQuestionCounts[t] || 0), 0)}
+                        {v1GameModes.includes('who_am_i') ? (
+                          <div className="space-y-4 pt-1">
+                            {/* 3. إجمالي عدد الأسئلة لتحدي من أنا؟ */}
+                            <div className="text-right flex flex-col justify-between p-3.5 sm:p-4 bg-slate-50 border-2 border-indigo-100 rounded-2xl shadow-xs">
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="text-xs font-black text-slate-700">إجمالي عدد الأسئلة</span>
+                                <span className="text-[10px] font-black text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-200">
+                                  تحدي من أنا؟ (الصحابة) 🕵️
                                 </span>
-                              )}
-                            </div>
-                            {totalConfiguredQuestions === 0 && (
-                              <p className="text-[10px] font-black text-red-500 mt-1.5">
-                                ⚠️ يرجى تحديد عدد الأسئلة لمهارة واحدة على الأقل
-                              </p>
-                            )}
-                            {hasCountValidationErrors && totalConfiguredQuestions > 0 && (
-                              <p className="text-[10px] font-black text-red-500 mt-1.5">
-                                ⚠️ هناك مهارات أو مواضيع تتجاوز العدد الأقصى المتاح من الأسئلة
-                              </p>
-                            )}
-                          </div>
-
-                          {/* 4. المؤقت - إدخال حر بالثواني */}
-                          <div className="text-right p-3.5 sm:p-4 bg-slate-50 border-2 border-slate-200/80 rounded-2xl shadow-xs">
-                            <div className="flex items-center justify-between mb-2">
-                              <label className="text-xs font-black text-slate-600">الوقت لكل سؤال</label>
-                              <button
-                                type="button"
-                                onClick={() => setV1Timer(!v1Timer)}
-                                className={`text-[10px] font-black px-2.5 py-0.5 rounded-full transition-all cursor-pointer ${
-                                  v1Timer ? 'bg-orange-100 text-orange-600' : 'bg-slate-100 text-slate-400'
-                                }`}
-                              >
-                                {v1Timer ? 'المؤقت مفعل ⚡' : 'المؤقت معطل'}
-                              </button>
-                            </div>
-                            <div className="relative flex items-center">
-                              <input
-                                type="number"
-                                min={0}
-                                max={300}
-                                disabled={!v1Timer}
-                                value={v1Timer ? (v1TimePerQuestion || '') : ''}
-                                onChange={(e) => {
-                                  const val = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
-                                  setV1TimePerQuestion(isNaN(val) ? 0 : Math.max(0, Math.min(300, val)));
-                                }}
-                                placeholder={v1Timer ? 'اكتب الثواني (مثال: 20)' : 'المؤقت معطل (0)'}
-                                className={`w-full pl-14 pr-4 py-3 rounded-2xl border-2 font-black text-sm text-right shadow-xs transition-all ${
-                                  v1Timer
-                                    ? 'border-orange-300 bg-white text-slate-800 focus:border-orange-500 focus:outline-none'
-                                    : 'border-slate-100 bg-slate-50 text-slate-300 cursor-not-allowed'
-                                }`}
-                              />
-                              <span className="absolute left-3.5 text-xs font-black text-slate-400 pointer-events-none">
-                                {v1Timer ? 'ثانية' : ''}
-                              </span>
-                            </div>
-                            <div className="flex justify-between items-center mt-1 text-[10px] text-slate-400 font-bold px-1">
-                              <span>{v1Timer ? 'الوقت بالثواني المتاح لكل سؤال' : 'انقر على الزر لتفعيل المؤقت'}</span>
-                              {v1Timer && <span>(مثال: 15، 30، 60)</span>}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* 5. طريقة الانتقال بين الأسئلة (Question Transition Mode) */}
-                        <div className="p-3.5 sm:p-4 bg-slate-50 border-2 border-slate-200/80 rounded-2xl shadow-xs space-y-3 text-right">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <span className="text-base">🔄</span>
-                              <span className="text-xs font-black text-slate-800">طريقة الانتقال بين الأسئلة</span>
-                            </div>
-                            <span className="text-[10px] font-black text-slate-600 bg-white px-2.5 py-0.5 rounded-full border border-slate-200">
-                              {v1TransitionMode === 'SYNC' ? 'متزامن (سؤال بسؤال)' : 'فردي (سباق حر)'}
-                            </span>
-                          </div>
-
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                            {/* Option 1: SYNC */}
-                            <button
-                              type="button"
-                              onClick={() => setV1TransitionMode('SYNC')}
-                              className={`p-3.5 sm:p-4 rounded-xl border-2 text-right transition-all cursor-pointer flex flex-col justify-between gap-2 ${
-                                v1TransitionMode === 'SYNC'
-                                  ? 'border-orange-500 bg-orange-50/70 shadow-xs ring-2 ring-orange-500/20'
-                                  : 'border-slate-200 bg-white hover:border-slate-300'
-                              }`}
-                            >
-                              <div className="flex items-center justify-between">
-                                <span className={`text-xs font-black ${v1TransitionMode === 'SYNC' ? 'text-orange-900' : 'text-slate-800'}`}>
-                                  متزامن - انتظار الجميع ⏳
+                              </div>
+                              <div className="flex items-baseline gap-2 my-1">
+                                <span className="text-2xl font-black text-indigo-700">
+                                  {totalConfiguredQuestions}
                                 </span>
-                                <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${v1TransitionMode === 'SYNC' ? 'border-orange-500 bg-orange-500' : 'border-slate-300'}`}>
-                                  {v1TransitionMode === 'SYNC' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                                <span className="text-xs font-black text-slate-400">سؤال في الغرفة (فئة: الصحابة)</span>
+                              </div>
+                            </div>
+
+                            {/* التنبيه الأنيق البديل للمؤقت وطريقة الانتقال */}
+                            <WhoAmIInfoAlert />
+                          </div>
+                        ) : (
+                          <>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 md:gap-5 pt-1">
+                              {/* 3. إجمالي عدد الأسئلة التلقائي (Reactive Total Counter) */}
+                              <div className="text-right flex flex-col justify-between p-3.5 sm:p-4 bg-slate-50 border-2 border-slate-200/80 rounded-2xl shadow-xs">
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className="text-xs font-black text-slate-700">إجمالي عدد الأسئلة</span>
+                                  <span className="text-[10px] font-black text-brand-emerald bg-brand-emerald/10 px-2 py-0.5 rounded-full border border-brand-emerald/20">
+                                    عداد تلقائي ⚡
+                                  </span>
+                                </div>
+                                <div className="flex items-baseline gap-2 my-1">
+                                  <span className={`text-2xl font-black ${hasCountValidationErrors || totalConfiguredQuestions === 0 ? 'text-red-600' : 'text-slate-800'}`}>
+                                    {totalConfiguredQuestions}
+                                  </span>
+                                  <span className="text-xs font-black text-slate-400">سؤال في الغرفة</span>
+                                </div>
+                                {/* Breakdown */}
+                                <div className="flex flex-wrap items-center gap-1 text-[10px] font-bold text-slate-500">
+                                  {v1GameModes.includes('audio') && !systemSettings.hideAudioChallenge && (
+                                    <span className="bg-white px-2 py-0.5 rounded-md border border-slate-200">صوتي: {skillQuestionCounts.audio || 0}</span>
+                                  )}
+                                  {v1GameModes.includes('complete') && !systemSettings.hideCompletionChallenge && (
+                                    <span className="bg-white px-2 py-0.5 rounded-md border border-slate-200">إكمال: {skillQuestionCounts.complete || 0}</span>
+                                  )}
+                                  {v1GameModes.includes('surah') && !systemSettings.hideSurahChallenge && (
+                                    <span className="bg-white px-2 py-0.5 rounded-md border border-slate-200">سورة: {skillQuestionCounts.surah || 0}</span>
+                                  )}
+                                  {v1GameModes.includes('islamic') && (
+                                    <span className="bg-amber-100/70 text-amber-900 px-2 py-0.5 rounded-md border border-amber-200">
+                                      إسلامية: {islamicRoomTopics.includes('all') ? (islamicTopicQuestionCounts['all'] || 0) : islamicRoomTopics.reduce((s, t) => s + (islamicTopicQuestionCounts[t] || 0), 0)}
+                                    </span>
+                                  )}
+                                </div>
+                                {totalConfiguredQuestions === 0 && (
+                                  <p className="text-[10px] font-black text-red-500 mt-1.5">
+                                    ⚠️ يرجى تحديد عدد الأسئلة لمهارة واحدة على الأقل
+                                  </p>
+                                )}
+                                {hasCountValidationErrors && totalConfiguredQuestions > 0 && (
+                                  <p className="text-[10px] font-black text-red-500 mt-1.5">
+                                    ⚠️ هناك مهارات أو مواضيع تتجاوز العدد الأقصى المتاح من الأسئلة
+                                  </p>
+                                )}
+                              </div>
+
+                              {/* 4. المؤقت - إدخال حر بالثواني */}
+                              <div className="text-right p-3.5 sm:p-4 bg-slate-50 border-2 border-slate-200/80 rounded-2xl shadow-xs">
+                                <div className="flex items-center justify-between mb-2">
+                                  <label className="text-xs font-black text-slate-600">الوقت لكل سؤال</label>
+                                  <button
+                                    type="button"
+                                    onClick={() => setV1Timer(!v1Timer)}
+                                    className={`text-[10px] font-black px-2.5 py-0.5 rounded-full transition-all cursor-pointer ${
+                                      v1Timer ? 'bg-orange-100 text-orange-600' : 'bg-slate-100 text-slate-400'
+                                    }`}
+                                  >
+                                    {v1Timer ? 'المؤقت مفعل ⚡' : 'المؤقت معطل'}
+                                  </button>
+                                </div>
+                                <div className="relative flex items-center">
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    max={300}
+                                    disabled={!v1Timer}
+                                    value={v1Timer ? (v1TimePerQuestion || '') : ''}
+                                    onChange={(e) => {
+                                      const val = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
+                                      setV1TimePerQuestion(isNaN(val) ? 0 : Math.max(0, Math.min(300, val)));
+                                    }}
+                                    placeholder={v1Timer ? 'اكتب الثواني (مثال: 20)' : 'المؤقت معطل (0)'}
+                                    className={`w-full pl-14 pr-4 py-3 rounded-2xl border-2 font-black text-sm text-right shadow-xs transition-all ${
+                                      v1Timer
+                                        ? 'border-orange-300 bg-white text-slate-800 focus:border-orange-500 focus:outline-none'
+                                        : 'border-slate-100 bg-slate-50 text-slate-300 cursor-not-allowed'
+                                    }`}
+                                  />
+                                  <span className="absolute left-3.5 text-xs font-black text-slate-400 pointer-events-none">
+                                    {v1Timer ? 'ثانية' : ''}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between items-center mt-1 text-[10px] text-slate-400 font-bold px-1">
+                                  <span>{v1Timer ? 'الوقت بالثواني المتاح لكل سؤال' : 'انقر على الزر لتفعيل المؤقت'}</span>
+                                  {v1Timer && <span>(مثال: 15، 30، 60)</span>}
                                 </div>
                               </div>
-                              <p className="text-[11px] text-slate-500 font-bold leading-relaxed">
-                                ينتقل جميع اللاعبين معاً سؤالاً بسؤال عند إجابة الجميع أو انتهاء المؤقت.
-                              </p>
-                            </button>
+                            </div>
 
-                            {/* Option 2: ASYNC */}
-                            <button
-                              type="button"
-                              onClick={() => setV1TransitionMode('ASYNC')}
-                              className={`p-3.5 sm:p-4 rounded-xl border-2 text-right transition-all cursor-pointer flex flex-col justify-between gap-2 ${
-                                v1TransitionMode === 'ASYNC'
-                                  ? 'border-orange-500 bg-orange-50/70 shadow-xs ring-2 ring-orange-500/20'
-                                  : 'border-slate-200 bg-white hover:border-slate-300'
-                              }`}
-                            >
+                            {/* 5. طريقة الانتقال بين الأسئلة (Question Transition Mode) */}
+                            <div className="p-3.5 sm:p-4 bg-slate-50 border-2 border-slate-200/80 rounded-2xl shadow-xs space-y-3 text-right">
                               <div className="flex items-center justify-between">
-                                <span className={`text-xs font-black ${v1TransitionMode === 'ASYNC' ? 'text-orange-900' : 'text-slate-800'}`}>
-                                  تلقائي فردي 🚀
-                                </span>
-                                <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${v1TransitionMode === 'ASYNC' ? 'border-orange-500 bg-orange-500' : 'border-slate-300'}`}>
-                                  {v1TransitionMode === 'ASYNC' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                                <div className="flex items-center gap-2">
+                                  <span className="text-base">🔄</span>
+                                  <span className="text-xs font-black text-slate-800">طريقة الانتقال بين الأسئلة</span>
                                 </div>
+                                <span className="text-[10px] font-black text-slate-600 bg-white px-2.5 py-0.5 rounded-full border border-slate-200">
+                                  {v1TransitionMode === 'SYNC' ? 'متزامن (سؤال بسؤال)' : 'فردي (سباق حر)'}
+                                </span>
                               </div>
-                              <p className="text-[11px] text-slate-500 font-bold leading-relaxed">
-                                ينتقل كل لاعب فور إجابته دون انتظار البقية، في سباق سرعة ودقة مستقل.
-                              </p>
-                            </button>
-                          </div>
-                        </div>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                {/* Option 1: SYNC */}
+                                <button
+                                  type="button"
+                                  onClick={() => setV1TransitionMode('SYNC')}
+                                  className={`p-3.5 sm:p-4 rounded-xl border-2 text-right transition-all cursor-pointer flex flex-col justify-between gap-2 ${
+                                    v1TransitionMode === 'SYNC'
+                                      ? 'border-orange-500 bg-orange-50/70 shadow-xs ring-2 ring-orange-500/20'
+                                      : 'border-slate-200 bg-white hover:border-slate-300'
+                                  }`}
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <span className={`text-xs font-black ${v1TransitionMode === 'SYNC' ? 'text-orange-900' : 'text-slate-800'}`}>
+                                      متزامن - انتظار الجميع ⏳
+                                    </span>
+                                    <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${v1TransitionMode === 'SYNC' ? 'border-orange-500 bg-orange-500' : 'border-slate-300'}`}>
+                                      {v1TransitionMode === 'SYNC' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                                    </div>
+                                  </div>
+                                  <p className="text-[11px] text-slate-500 font-bold leading-relaxed">
+                                    ينتقل جميع اللاعبين معاً سؤالاً بسؤال عند إجابة الجميع أو انتهاء المؤقت.
+                                  </p>
+                                </button>
+
+                                {/* Option 2: ASYNC */}
+                                <button
+                                  type="button"
+                                  onClick={() => setV1TransitionMode('ASYNC')}
+                                  className={`p-3.5 sm:p-4 rounded-xl border-2 text-right transition-all cursor-pointer flex flex-col justify-between gap-2 ${
+                                    v1TransitionMode === 'ASYNC'
+                                      ? 'border-orange-500 bg-orange-50/70 shadow-xs ring-2 ring-orange-500/20'
+                                      : 'border-slate-200 bg-white hover:border-slate-300'
+                                  }`}
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <span className={`text-xs font-black ${v1TransitionMode === 'ASYNC' ? 'text-orange-900' : 'text-slate-800'}`}>
+                                      تلقائي فردي 🚀
+                                    </span>
+                                    <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${v1TransitionMode === 'ASYNC' ? 'border-orange-500 bg-orange-500' : 'border-slate-300'}`}>
+                                      {v1TransitionMode === 'ASYNC' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                                    </div>
+                                  </div>
+                                  <p className="text-[11px] text-slate-500 font-bold leading-relaxed">
+                                    ينتقل كل لاعب فور إجابته دون انتظار البقية، في سباق سرعة ودقة مستقل.
+                                  </p>
+                                </button>
+                              </div>
+                            </div>
+                          </>
+                        )}
 
                         <div className="pt-4 space-y-3">
                           <button
@@ -6513,6 +6650,37 @@ ${versesList}
                     </motion.button>
                   </motion.div>
                 ) : view === 'group_game' ? (
+                  room?.gameMode === 'WHO_AM_I' ? (
+                    <motion.div
+                      key="group_who_am_i"
+                      initial={{ opacity: 0, scale: 0.98 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="w-full max-w-2xl mx-auto py-4 sm:py-6 px-3 sm:px-4 min-h-[60vh]"
+                    >
+                      <div className="bg-white/95 backdrop-blur-md rounded-3xl border border-slate-100 shadow-xl p-4 sm:p-6 text-slate-800">
+                        <WhoAmIGame
+                          roomId={room.id}
+                          currentUser={{ id: String(playerUsername || playerName), name: playerName || 'لاعب' }}
+                          isLeader={Boolean(
+                            (room?.player1Id && (room.player1Id === playerUsername || room.player1Id === playerName || (room.player1 && (room.player1.name === playerName || room.player1.username === playerUsername)))) ||
+                            (room?.hostName && playerName && room.hostName === playerName) ||
+                            (room?.hostUsername && playerUsername && room.hostUsername.toLowerCase() === playerUsername.toLowerCase())
+                          )}
+                          players={(room.participants || []).map((p: any) => ({
+                            id: String(p.username || p.name || p.id),
+                            name: p.name || p.username || 'لاعب'
+                          }))}
+                          category={room.categoryFilter || room.category || 'الصحابة'}
+                          totalRounds={room.questionCount || 10}
+                          onExit={() => {
+                            setRoom(null);
+                            setView('home');
+                          }}
+                        />
+                      </div>
+                    </motion.div>
+                  ) : (
                   <motion.div
                     key="group_results"
                     initial={{ opacity: 0 }}
@@ -6696,6 +6864,7 @@ ${versesList}
                       />
                     )}
                   </motion.div>
+                  )
                 ) : view === 'speed_challenge' ? (
                   <motion.div
                     key="speed_challenge"

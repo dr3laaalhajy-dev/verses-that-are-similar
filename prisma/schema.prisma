@@ -144,3 +144,64 @@ model Reaction {
 
 
 
+
+model WhoAmIQuestion {
+  id         String   @id @default(uuid())
+  category   String   @default("الصحابة")
+  hint_1     String
+  hint_2     String
+  answer     String
+  created_at DateTime @default(now())
+
+  rounds     WhoAmIRound[]
+
+  @@map("who_am_i_questions")
+}
+
+model WhoAmIRound {
+  id          String   @id @default(uuid())
+  room_id     String
+  question_id String
+  round_no    Int
+  status      String   @default("active")
+  started_at  DateTime @default(now())
+
+  question    WhoAmIQuestion @relation(fields: [question_id], references: [id])
+  answers     WhoAmIAnswer[]
+  submissions WhoAmISubmission[]
+
+  @@unique([room_id, round_no])
+  @@map("who_am_i_rounds")
+}
+
+model WhoAmIAnswer {
+  id          String   @id @default(uuid())
+  room_id     String
+  round_id    String
+  user_id     String
+  player_name String
+  answer_text String
+  phase       Int
+  is_correct  Boolean  @default(false)
+  points      Int      @default(0)
+  overridden  Boolean  @default(false)
+  created_at  DateTime @default(now())
+
+  round       WhoAmIRound @relation(fields: [round_id], references: [id], onDelete: Cascade)
+
+  @@unique([round_id, user_id])
+  @@map("who_am_i_answers")
+}
+
+model WhoAmISubmission {
+  round_id    String
+  room_id     String
+  user_id     String
+  player_name String
+  created_at  DateTime @default(now())
+
+  round       WhoAmIRound @relation(fields: [round_id], references: [id], onDelete: Cascade)
+
+  @@id([round_id, user_id])
+  @@map("who_am_i_submissions")
+}
