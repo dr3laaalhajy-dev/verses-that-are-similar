@@ -1222,6 +1222,24 @@ export default function App() {
     fetchSettings();
   }, [fetchSettings]);
 
+  const fetchWhoAmICategories = useCallback(async () => {
+    try {
+      const res = await fetch('/api/who-am-i?action=categories');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.categories) && data.categories.length > 0) {
+          setWhoAmIAvailableCategories(data.categories);
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to fetch who-am-i categories:', e);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchWhoAmICategories();
+  }, [fetchWhoAmICategories]);
+
 
   const getInitialChallenges = (): any[] => {
     try {
@@ -1444,6 +1462,19 @@ export default function App() {
   });
   const [whoAmIQuestionCount, setWhoAmIQuestionCount] = useState<number>(10);
   const [whoAmICategory, setWhoAmICategory] = useState<string>('الصحابة');
+  const [whoAmIAvailableCategories, setWhoAmIAvailableCategories] = useState<{ id: string; name: string; count: number; icon?: string }[]>([
+    { id: '1', name: 'الصحابة', count: 60, icon: 'Users' },
+    { id: '2', name: 'الأنبياء', count: 0, icon: 'Sparkles' },
+    { id: '3', name: 'العلماء', count: 0, icon: 'BookOpen' },
+    { id: '4', name: 'الغزوات', count: 0, icon: 'Shield' }
+  ]);
+  const [selectedWhoAmICategories, setSelectedWhoAmICategories] = useState<string[]>(['الصحابة']);
+  const [whoAmICategoryCounts, setWhoAmICategoryCounts] = useState<Record<string, number>>({
+    'الصحابة': 5,
+    'الأنبياء': 3,
+    'العلماء': 2,
+    'الغزوات': 2
+  });
   const [islamicRoomCategories, setIslamicRoomCategories] = useState<string[]>(['akida']);
   const [islamicRoomLevels, setIslamicRoomLevels] = useState<(1 | 2 | 3)[]>([1]);
   const [islamicRoomTopics, setIslamicRoomTopics] = useState<string[]>(['all']);
@@ -2505,7 +2536,7 @@ export default function App() {
   const totalConfiguredQuestions = useMemo(() => {
     let sum = 0;
     if (v1GameModes.includes('who_am_i')) {
-      return Math.max(1, whoAmIQuestionCount || 10);
+      return selectedWhoAmICategories.reduce((acc, cat) => acc + (Math.max(0, Number(whoAmICategoryCounts[cat])) || 0), 0);
     }
     if (v1GameModes.includes('audio') && !systemSettings.hideAudioChallenge) {
       sum += Math.max(0, Number(skillQuestionCounts.audio) || 0);
@@ -2526,11 +2557,13 @@ export default function App() {
       }
     }
     return sum;
-  }, [v1GameModes, skillQuestionCounts, islamicRoomTopics, islamicTopicQuestionCounts, systemSettings, whoAmIQuestionCount]);
+  }, [v1GameModes, skillQuestionCounts, islamicRoomTopics, islamicTopicQuestionCounts, systemSettings, selectedWhoAmICategories, whoAmICategoryCounts]);
 
   const hasCountValidationErrors = useMemo(() => {
     if (v1GameModes.includes('who_am_i')) {
-      return (whoAmIQuestionCount || 0) <= 0;
+      if (selectedWhoAmICategories.length === 0) return true;
+      const sum = selectedWhoAmICategories.reduce((acc, cat) => acc + (Math.max(0, Number(whoAmICategoryCounts[cat])) || 0), 0);
+      return sum <= 0;
     }
     for (const skill of ['audio', 'complete', 'surah'] as const) {
       const isHidden = 
@@ -2652,7 +2685,13 @@ export default function App() {
     setV1Error(null);
     try {
       if (v1GameModes.includes('who_am_i')) {
-        const count = Math.max(1, whoAmIQuestionCount || 10);
+        const categories_config = selectedWhoAmICategories.map(cat => ({
+          category: cat,
+          count: Math.max(1, Number(whoAmICategoryCounts[cat]) || 1)
+        }));
+        const totalCount = Math.max(1, categories_config.reduce((sum, c) => sum + c.count, 0));
+        const categorySummary = categories_config.map(c => `${c.category} (${c.count})`).join(' + ');
+
         const requestBody = {
           action: 'create',
           player1Id: playerUsername || playerName,
@@ -2662,12 +2701,18 @@ export default function App() {
           password: v1IsPrivate ? v1RoomPassword.trim() : null,
           gameMode: 'WHO_AM_I',
           gameModes: ['WHO_AM_I'],
-          categories: [whoAmICategory],
-          category: whoAmICategory,
-          questionCount: count,
+          challenge_type: 'who_am_i',
+          categories_config: categories_config,
+          categories: categories_config.map(c => c.category),
+          category: categorySummary,
+          questionCount: totalCount,
           timePerQuestion: 40,
           transitionMode: 'SYNC',
-          customChallenges: Array.from({ length: count }, (_, i) => ({
+          room_config: {
+            challenge_type: 'who_am_i',
+            categories_config: categories_config
+          },
+          customChallenges: Array.from({ length: totalCount }, (_, i) => ({
             id: i + 1,
             type: 'WHO_AM_I',
             keyword: 'من أنا؟',
@@ -5805,7 +5850,7 @@ ${versesList}
                               { id: 'complete', label: 'تحدي إكمال الآية', icon: CheckCircle, color: 'blue', bg: 'bg-blue-600/10', desc: 'توقع الكلمات المفقودة في الآية', hidden: systemSettings.hideCompletionChallenge },
                               { id: 'surah', label: 'تحديد اسم السورة', icon: BookOpen, color: 'purple', bg: 'bg-purple-600/10', desc: 'تعرف على اسم السورة من الآية', hidden: systemSettings.hideSurahChallenge },
                               { id: 'islamic', label: 'تحدي معلومات إسلامية', icon: Sparkles, color: 'amber', bg: 'bg-amber-500/10', desc: 'أسئلة في العقيدة، الفقه، والتفسير', hidden: false },
-                              { id: 'who_am_i', label: 'من أنا؟ (الصحابة)', icon: HelpCircle, color: 'indigo', bg: 'bg-indigo-600/10', desc: 'تحدي الصحابة بنظام التلميحات المتدرجة والـ VAR', hidden: false }
+                              { id: 'who_am_i', label: 'تحدي من أنا؟', icon: HelpCircle, color: 'indigo', bg: 'bg-indigo-600/10', desc: 'تحدي الشخصيات بالتلميحات المتدرجة وفئات متعددة', hidden: false }
                             ].filter(m => !m.hidden).map(mode => {
                               const isSelected = v1GameModes.includes(mode.id as any);
                               const skillKey = mode.id as 'audio' | 'complete' | 'surah';
@@ -5926,28 +5971,16 @@ ${versesList}
                                     </div>
                                   )}
 
-                                  {/* Dynamic Numeric Input for Who Am I */}
+                                  {/* Dynamic Summary for Who Am I */}
                                   {isSelected && mode.id === 'who_am_i' && (
                                     <div className="mt-2.5 pt-2 border-t border-indigo-200 flex flex-col gap-1 w-full text-right">
                                       <div className="flex items-center justify-between text-[10px] font-black">
-                                        <span className="text-indigo-900">عدد الأسئلة:</span>
-                                        <span className="text-indigo-600 font-bold">المتاح: 50</span>
+                                        <span className="text-indigo-900">الفئات المحددة:</span>
+                                        <span className="text-indigo-600 font-bold">{selectedWhoAmICategories.length} فئة ({totalConfiguredQuestions} أسئلة)</span>
                                       </div>
-                                      <input
-                                        type="number"
-                                        min={1}
-                                        max={50}
-                                        value={whoAmIQuestionCount || ''}
-                                        onChange={(e) => {
-                                          const val = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
-                                          setWhoAmIQuestionCount(isNaN(val) ? 0 : Math.max(1, Math.min(50, val)));
-                                        }}
-                                        placeholder="عدد الأسئلة (المتاح: 50)"
-                                        className="w-full px-2.5 py-2 rounded-xl border-2 border-indigo-200 focus:border-indigo-500 font-black text-xs text-center bg-white shadow-xs focus:outline-none text-slate-800"
-                                      />
-                                      <span className="text-[9px] text-indigo-700 font-bold text-center leading-tight">
-                                        الفئة المخصصة: الصحابة رضوان الله عليهم (50 سؤالاً)
-                                      </span>
+                                      <div className="text-[10px] text-indigo-700 font-bold bg-indigo-100/70 py-1 px-2 rounded-lg truncate text-center">
+                                        {selectedWhoAmICategories.length > 0 ? selectedWhoAmICategories.join('، ') : 'لم يتم تحديد فئات'}
+                                      </div>
                                     </div>
                                   )}
 
@@ -6016,24 +6049,169 @@ ${versesList}
                         </div>
 
                         {v1GameModes.includes('who_am_i') ? (
-                          <div className="space-y-4 pt-1">
-                            {/* 3. إجمالي عدد الأسئلة لتحدي من أنا؟ */}
-                            <div className="text-right flex flex-col justify-between p-3.5 sm:p-4 bg-slate-50 border-2 border-indigo-100 rounded-2xl shadow-xs">
+                          <div className="space-y-4 pt-1 text-right" dir="rtl">
+                            {/* Categories Selection & Customization Box */}
+                            <div className="p-4 sm:p-5 bg-white border-2 border-indigo-100 rounded-3xl shadow-xs space-y-4">
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-indigo-50">
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm font-black text-indigo-950">تخصيص فئات وعدد أسئلة التحدي</span>
+                                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 font-bold">
+                                      {selectedWhoAmICategories.length} فئة محددة
+                                    </span>
+                                  </div>
+                                  <p className="text-[11px] text-slate-400 font-bold mt-0.5">
+                                    اختر فئة واحدة أو عدة فئات وحدد عدد الأسئلة المطلوبة من كل فئة بدقة
+                                  </p>
+                                </div>
+
+                                {/* Random Mixed Button */}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    // خيار متنوع / مخلط (Random Mixed)
+                                    const allCats = whoAmIAvailableCategories.map(c => c.name);
+                                    setSelectedWhoAmICategories(allCats);
+                                    const newCounts: Record<string, number> = {};
+                                    allCats.forEach(c => {
+                                      newCounts[c] = whoAmICategoryCounts[c] || 3;
+                                    });
+                                    setWhoAmICategoryCounts(prev => ({ ...prev, ...newCounts }));
+                                  }}
+                                  className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-black text-xs shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
+                                >
+                                  <span>متنوع / مخلط (Random Mixed) 🎲</span>
+                                </button>
+                              </div>
+
+                              {/* Categories List / Grid with Checkboxes and Number Inputs */}
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                {whoAmIAvailableCategories.map(cat => {
+                                  const isChecked = selectedWhoAmICategories.includes(cat.name);
+                                  const currentCount = whoAmICategoryCounts[cat.name] ?? 3;
+                                  return (
+                                    <div
+                                      key={cat.id || cat.name}
+                                      className={`p-3.5 rounded-2xl border-2 transition-all flex flex-col justify-between gap-3 ${
+                                        isChecked
+                                          ? 'border-indigo-500 bg-indigo-50/50 shadow-xs'
+                                          : 'border-slate-100 bg-slate-50/60 opacity-80 hover:opacity-100'
+                                      }`}
+                                    >
+                                      {/* Header with Checkbox */}
+                                      <div
+                                        onClick={() => {
+                                          setSelectedWhoAmICategories(prev => {
+                                            if (prev.includes(cat.name)) {
+                                              if (prev.length <= 1) return prev; // Keep at least one
+                                              return prev.filter(c => c !== cat.name);
+                                            }
+                                            return [...prev, cat.name];
+                                          });
+                                        }}
+                                        className="flex items-center justify-between cursor-pointer select-none"
+                                      >
+                                        <div className="flex items-center gap-2.5">
+                                          <div className={`w-5 h-5 rounded-md flex items-center justify-center transition-all ${
+                                            isChecked ? 'bg-indigo-600 text-white shadow-xs' : 'border border-slate-300 bg-white'
+                                          }`}>
+                                            {isChecked && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                                          </div>
+                                          <div>
+                                            <span className={`text-xs md:text-sm font-black ${isChecked ? 'text-indigo-950' : 'text-slate-700'}`}>
+                                              {cat.name}
+                                            </span>
+                                            {cat.count !== undefined && (
+                                              <span className="text-[10px] text-slate-400 block font-bold">
+                                                المتاح في البنك: {cat.count} سؤال
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+
+                                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-md ${
+                                          isChecked ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-200/60 text-slate-500'
+                                        }`}>
+                                          {isChecked ? 'محددة ✅' : 'إضافة +'}
+                                        </span>
+                                      </div>
+
+                                      {/* Number input for question count per category */}
+                                      {isChecked && (
+                                        <div className="pt-2.5 border-t border-indigo-200/60 flex items-center justify-between gap-2">
+                                          <span className="text-[11px] font-black text-indigo-900">عدد الأسئلة:</span>
+                                          <div className="flex items-center gap-1.5">
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setWhoAmICategoryCounts(prev => ({
+                                                  ...prev,
+                                                  [cat.name]: Math.max(1, (prev[cat.name] ?? 3) - 1)
+                                                }));
+                                              }}
+                                              className="w-7 h-7 rounded-lg bg-indigo-100 hover:bg-indigo-200 text-indigo-800 font-black text-sm flex items-center justify-center transition-all cursor-pointer"
+                                            >
+                                              -
+                                            </button>
+                                            <input
+                                              type="number"
+                                              min={1}
+                                              max={cat.count && cat.count > 0 ? cat.count : 50}
+                                              value={currentCount}
+                                              onChange={(e) => {
+                                                const val = parseInt(e.target.value, 10);
+                                                setWhoAmICategoryCounts(prev => ({
+                                                  ...prev,
+                                                  [cat.name]: isNaN(val) ? 1 : Math.max(1, val)
+                                                }));
+                                              }}
+                                              className="w-14 text-center py-1 rounded-lg border-2 border-indigo-200 font-black text-xs text-slate-800 focus:outline-none focus:border-indigo-500 bg-white"
+                                            />
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setWhoAmICategoryCounts(prev => ({
+                                                  ...prev,
+                                                  [cat.name]: (prev[cat.name] ?? 3) + 1
+                                                }));
+                                              }}
+                                              className="w-7 h-7 rounded-lg bg-indigo-100 hover:bg-indigo-200 text-indigo-800 font-black text-sm flex items-center justify-center transition-all cursor-pointer"
+                                            >
+                                              +
+                                            </button>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            {/* Reactive Total Summary */}
+                            <div className="text-right flex flex-col justify-between p-4 bg-slate-50 border-2 border-indigo-100 rounded-3xl shadow-xs">
                               <div className="flex items-center justify-between mb-1">
-                                <span className="text-xs font-black text-slate-700">إجمالي عدد الأسئلة</span>
-                                <span className="text-[10px] font-black text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-200">
-                                  تحدي من أنا؟ (الصحابة) 🕵️
+                                <span className="text-xs font-black text-slate-700">إجمالي عدد الأسئلة النهائي في الغرفة</span>
+                                <span className="text-[10px] font-black text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-200">
+                                  توزيع ديناميكي مخلوط 🎲
                                 </span>
                               </div>
                               <div className="flex items-baseline gap-2 my-1">
                                 <span className="text-2xl font-black text-indigo-700">
                                   {totalConfiguredQuestions}
                                 </span>
-                                <span className="text-xs font-black text-slate-400">سؤال في الغرفة (فئة: الصحابة)</span>
+                                <span className="text-xs font-black text-slate-400">سؤال إجمالي</span>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-bold text-slate-500 mt-1">
+                                {selectedWhoAmICategories.map(cat => (
+                                  <span key={cat} className="bg-white px-2.5 py-1 rounded-lg border border-slate-200 text-indigo-900 font-black">
+                                    {cat}: {whoAmICategoryCounts[cat] ?? 3}
+                                  </span>
+                                ))}
                               </div>
                             </div>
 
-                            {/* التنبيه الأنيق البديل للمؤقت وطريقة الانتقال */}
+                            {/* Alert Info */}
                             <WhoAmIInfoAlert />
                           </div>
                         ) : (
@@ -6672,6 +6850,7 @@ ${versesList}
                             name: p.name || p.username || 'لاعب'
                           }))}
                           category={room.categoryFilter || room.category || 'الصحابة'}
+                          categoriesConfig={Array.isArray(room.surahFilters) && room.surahFilters.length > 0 && room.surahFilters[0]?.category ? room.surahFilters : (room.categories_config || undefined)}
                           totalRounds={room.questionCount || 10}
                           onExit={() => {
                             setRoom(null);

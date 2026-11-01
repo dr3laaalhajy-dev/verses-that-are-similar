@@ -116,7 +116,7 @@ async function getFullRoom(roomId: string) {
 }
 
 async function handleCreate(req: VercelRequest, res: VercelResponse) {
-    const { player1Id, player1Name, category, categories, level, levels, questionCount, questionIds, maxPlayers, gameMode, gameModes, timePerQuestion, customChallenges, topics, roomName, name, isPrivate, password, transitionMode, transition_mode } = req.body
+    const { player1Id, player1Name, category, categories, categories_config, challenge_type, level, levels, questionCount, questionIds, maxPlayers, gameMode, gameModes, timePerQuestion, customChallenges, topics, roomName, name, isPrivate, password, transitionMode, transition_mode } = req.body
     if (!player1Id && !player1Name) return res.status(400).json({ message: 'Missing player1Id' })
 
     const maxQuestions = Number(questionCount) || 5
@@ -236,7 +236,8 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
         player1Id: player1.id,
         challengeIds: selectedIds,
         status: 'WAITING',
-        categoryFilter: category || "",
+        surahFilters: categories_config || (Array.isArray(categories) ? categories : []),
+        categoryFilter: category || (Array.isArray(categories_config) ? categories_config.map((c: any) => c.category).join('، ') : ""),
         questionCount: finalQuestionCount,
         maxPlayers: 999,
         gameMode: gameMode || "STANDARD",

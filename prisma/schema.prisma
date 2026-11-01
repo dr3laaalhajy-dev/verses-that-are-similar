@@ -145,6 +145,16 @@ model Reaction {
 
 
 
+model WhoAmICategory {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  icon        String?
+  created_at  DateTime @default(now())
+
+  @@map("who_am_i_categories")
+}
+
 model WhoAmIQuestion {
   id         String   @id @default(uuid())
   category   String   @default("الصحابة")

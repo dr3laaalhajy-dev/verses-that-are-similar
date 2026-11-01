@@ -19,6 +19,7 @@ export interface WhoAmIGameProps {
   isLeader: boolean;
   players: Player[];
   category?: string;
+  categoriesConfig?: Array<{ category: string; count: number }>;
   totalRounds?: number;
   onExit?: () => void;
 }
@@ -29,6 +30,7 @@ export default function WhoAmIGame({
   isLeader,
   players,
   category = 'الصحابة',
+  categoriesConfig,
   totalRounds = 10,
   onExit,
 }: WhoAmIGameProps) {
@@ -41,6 +43,7 @@ export default function WhoAmIGame({
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const revealingRef = useRef<string | null>(null);
+  const queueRef = useRef<any[]>([]);
 
   const round = rounds[rounds.length - 1] || null;
   const roundId = round?.id;
@@ -157,20 +160,79 @@ export default function WhoAmIGame({
   }, [isLeader, round, roundSubs.length, players.length, timeUp, refresh]);
 
   // ---------- الإجراءات ----------
-  const startNext = async () => {
-    const used = rounds.map((r) => r.question_id);
-    let q = supabase.from('who_am_i_questions').select('id').eq('category', category);
-    if (used.length) q = q.not('id', 'in', `(${used.join(',')})`);
-    const { data, error } = await q;
-    if (error) console.error('[WhoAmIGame] Questions query error:', error);
-    if (!data?.length) {
-      alert('لا توجد أسئلة إضافية في هذه الفئة');
-      return;
+  // تحميل وخلط الأسئلة الموزعة حسب الفئات
+  const loadMixedQueue = async (): Promise<any[]> => {
+    if (queueRef.current.length > 0) return queueRef.current;
+
+    if (categoriesConfig && categoriesConfig.length > 0) {
+      try {
+        const res = await fetch('/api/who-am-i', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'get-mixed-questions', categories_config: categoriesConfig }),
+        });
+        const d = await res.json();
+        if (d.questions && d.questions.length > 0) {
+          queueRef.current = d.questions;
+          return d.questions;
+        }
+      } catch (err) {
+        console.warn('[WhoAmIGame] API get-mixed-questions fallback:', err);
+      }
+
+      // Fallback: Supabase مباشر
+      let collected: any[] = [];
+      for (const item of categoriesConfig) {
+        const { data } = await supabase
+          .from('who_am_i_questions')
+          .select('id, category')
+          .eq('category', item.category);
+        if (data && data.length > 0) {
+          const shuffled = [...data].sort(() => Math.random() - 0.5);
+          collected.push(...shuffled.slice(0, item.count));
+        }
+      }
+      const finalShuffled = collected.sort(() => Math.random() - 0.5);
+      queueRef.current = finalShuffled;
+      return finalShuffled;
     }
-    const pick = data[Math.floor(Math.random() * data.length)];
+    return [];
+  };
+
+  const startNext = async () => {
+    const used = new Set(rounds.map((r) => r.question_id));
+    let nextQuestionId: string | null = null;
+
+    if (categoriesConfig && categoriesConfig.length > 0) {
+      const qList = await loadMixedQueue();
+      const available = qList.find((item) => !used.has(item.id));
+      if (available) {
+        nextQuestionId = available.id;
+      }
+    }
+
+    if (!nextQuestionId) {
+      // تفريغ أو اختيار من الفئة الافتراضية
+      let q = supabase.from('who_am_i_questions').select('id');
+      if (category && (!categoriesConfig || categoriesConfig.length === 0)) {
+        q = q.eq('category', category);
+      }
+      if (used.size > 0) {
+        q = q.not('id', 'in', `(${Array.from(used).join(',')})`);
+      }
+      const { data, error } = await q;
+      if (error) console.error('[WhoAmIGame] Questions query error:', error);
+      if (!data?.length) {
+        alert('لا توجد أسئلة إضافية متاحة');
+        return;
+      }
+      const pick = data[Math.floor(Math.random() * data.length)];
+      nextQuestionId = pick.id;
+    }
+
     const { error: insErr } = await supabase.from('who_am_i_rounds').insert({
       room_id: roomId,
-      question_id: pick.id,
+      question_id: nextQuestionId,
       round_no: rounds.length + 1,
     });
     if (insErr) console.error('[WhoAmIGame] Error inserting round:', insErr);
@@ -227,7 +289,10 @@ export default function WhoAmIGame({
   if (!round) {
     return (
       <div className="wai" dir="rtl">
-        <h2>🕵️ من أنا؟ — {category}</h2>
+        <h2>🕵️ تحدي "من أنا؟"</h2>
+        <p className="wai-muted" style={{ marginTop: 4, marginBottom: 12 }}>
+          {category ? `الفئات المحددة: ${category}` : 'تحدي التلميحات المتدرجة'}
+        </p>
         {isLeader ? (
           <button className="wai-btn" onClick={startNext}>
             ابدأ التحدي
@@ -258,9 +323,26 @@ export default function WhoAmIGame({
   return (
     <div className="wai" dir="rtl">
       <div className="wai-head">
-        <span>
-          السؤال {round.round_no} / {totalRounds}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span>
+            السؤال {round.round_no} / {totalRounds}
+          </span>
+          {question?.category && (
+            <span
+              style={{
+                fontSize: '11px',
+                fontWeight: 900,
+                padding: '2px 8px',
+                borderRadius: '999px',
+                backgroundColor: '#e0e7ff',
+                color: '#3730a3',
+                border: '1px solid #c7d2fe',
+              }}
+            >
+              {question.category}
+            </span>
+          )}
+        </div>
         {!revealed && <span className={`wai-timer ph${phase}`}>{remaining}s</span>}
       </div>
       <div className="wai-bar">
@@ -371,3 +453,4 @@ function Scoreboard({ scores, meId }: { scores: Player[]; meId: string }) {
     </ol>
   );
 }
+

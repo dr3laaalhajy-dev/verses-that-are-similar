@@ -6,12 +6,14 @@ import {
   Hash, List, ChevronDown, ChevronUp, Users, Shield, UserPlus, Key, Loader2, Home,
   Crown, Lock, KeyRound, Copy, Check, User, Menu, LogOut, UserX, UserCheck,
   Trophy, Star, RefreshCw, Eye, EyeOff, ShieldCheck, CheckCircle2, XCircle,
-  Smartphone, Mail, ExternalLink, Clock, CheckCircle, Video, Play, Rocket
+  Smartphone, Mail, ExternalLink, Clock, CheckCircle, Video, Play, Rocket,
+  HelpCircle
 } from 'lucide-react';
 import { searchGroupedAyahsByStart, GroupedAyah } from '../../services/QuranRepository';
 import { ALL_QURAN_SURAHS, getJuzsForSurah, formatJuzsDescription, JUZ_NAMES_AR } from '../../services/JuzRepository';
 import { INITIAL_ISLAMIC_VIDEOS, VIDEO_CATEGORIES, IslamicVideo } from '../../data/islamicVideosData';
 import ConfirmModal from '../ConfirmModal';
+import WhoAmIAdmin from './WhoAmIAdmin';
 
 interface Verse {
   id: string;
@@ -624,7 +626,7 @@ export default function AdminDashboard({
   const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [admins, setAdmins] = useState<Admin[]>([]);
   const [inviteCodes, setInviteCodes] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<'STANDARD' | 'COMPLETION' | 'SURAH' | 'videos' | 'admins' | 'users' | 'testers' | 'app_update'>('STANDARD');
+  const [activeTab, setActiveTab] = useState<'STANDARD' | 'COMPLETION' | 'SURAH' | 'videos' | 'who_am_i' | 'admins' | 'users' | 'testers' | 'app_update'>('STANDARD');
   
   // App Version Control state
   const [versionControlData, setVersionControlData] = useState<{
@@ -1771,7 +1773,7 @@ export default function AdminDashboard({
     setLevel('');
     setVerses([]);
     setSuggestions([]);
-    setType(activeTab === 'admins' || activeTab === 'users' || activeTab === 'testers' || activeTab === 'videos' || activeTab === 'app_update' ? 'STANDARD' : activeTab);
+    setType(activeTab === 'admins' || activeTab === 'users' || activeTab === 'testers' || activeTab === 'videos' || activeTab === 'app_update' || activeTab === 'who_am_i' ? 'STANDARD' : activeTab);
     setAudioUrl('');
     setOptions(['', '', '', '']);
     setCorrectIndex(null);
@@ -1861,7 +1863,7 @@ export default function AdminDashboard({
             <div>
               <h1 className="text-xs font-black text-slate-800 leading-tight">لوحة التحكم</h1>
               <span className="text-[10px] text-brand-emerald font-bold">
-                {activeTab === 'STANDARD' ? 'المتشابهات' : activeTab === 'COMPLETION' ? 'تكملة الآية' : activeTab === 'SURAH' ? 'اسم السورة' : activeTab === 'videos' ? 'المكتبة المرئية' : activeTab === 'users' ? 'إدارة المستخدمين' : activeTab === 'testers' ? 'طلبات Google Play' : activeTab === 'app_update' ? 'نظام تحديث التطبيق 🚀' : 'المشرفين'}
+                {activeTab === 'STANDARD' ? 'المتشابهات' : activeTab === 'COMPLETION' ? 'تكملة الآية' : activeTab === 'SURAH' ? 'اسم السورة' : activeTab === 'videos' ? 'المكتبة المرئية' : activeTab === 'who_am_i' ? 'تحدي من أنا؟' : activeTab === 'users' ? 'إدارة المستخدمين' : activeTab === 'testers' ? 'طلبات Google Play' : activeTab === 'app_update' ? 'نظام تحديث التطبيق 🚀' : 'المشرفين'}
               </span>
             </div>
           </div>
@@ -2064,6 +2066,31 @@ export default function AdminDashboard({
                   )}
                 </button>
               )}
+
+              {/* تحدي من أنا؟ */}
+              <button
+                type="button"
+                onClick={() => {
+                  resetForm();
+                  setActiveTab('who_am_i');
+                  setIsMobileSidebarOpen(false);
+                }}
+                className={`w-full flex items-center justify-between p-3 rounded-2xl text-xs md:text-sm font-black transition-all ${
+                  activeTab === 'who_am_i'
+                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/20'
+                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <HelpCircle className="w-4 h-4" />
+                  <span>تحدي من أنا؟</span>
+                </div>
+                <span className={`text-[9px] px-1.5 py-0.5 rounded-md font-black ${
+                  activeTab === 'who_am_i' ? 'bg-white/20 text-white' : 'bg-indigo-50 text-indigo-700'
+                }`}>
+                  جديد ✨
+                </span>
+              </button>
             </div>
           </div>
 
@@ -2223,7 +2250,7 @@ export default function AdminDashboard({
       {/* Main Content Area */}
       <div className="flex-1 min-w-0 min-h-screen p-4 md:p-8 overflow-x-hidden">
         {/* Top Action Bar in Main Area (when viewing Questions tabs) */}
-        {activeTab !== 'admins' && activeTab !== 'users' && activeTab !== 'testers' && activeTab !== 'videos' && (
+        {activeTab !== 'admins' && activeTab !== 'users' && activeTab !== 'testers' && activeTab !== 'videos' && activeTab !== 'app_update' && activeTab !== 'who_am_i' && (
           <div className="mb-6 flex flex-col sm:flex-row items-center justify-between gap-4 bg-white dark:bg-slate-900 p-4 md:p-5 rounded-2xl md:rounded-[2rem] border border-slate-200/80 dark:border-slate-800 shadow-xs">
             <div>
               <h2 className="text-base md:text-lg font-black text-slate-800 dark:text-slate-100">
@@ -3985,6 +4012,8 @@ export default function AdminDashboard({
                   ))}
                 </div>
               </div>
+            ) : activeTab === 'who_am_i' ? (
+              <WhoAmIAdmin />
             ) : (
               <>
             <AnimatePresence>

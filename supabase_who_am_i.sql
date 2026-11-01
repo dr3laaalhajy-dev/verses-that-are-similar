@@ -6,6 +6,33 @@
 
 create extension if not exists pgcrypto;
 
+-- 0) جدول الفئات لتحدي من أنا؟
+create table if not exists public.who_am_i_categories (
+  id          uuid primary key default gen_random_uuid(),
+  name        text not null unique,
+  description text,
+  icon        text,
+  created_at  timestamptz not null default now()
+);
+
+alter table public.who_am_i_categories enable row level security;
+
+create policy "Allow public read who_am_i_categories"
+on public.who_am_i_categories for select
+using (true);
+
+create policy "Allow all write who_am_i_categories"
+on public.who_am_i_categories for all
+using (true)
+with check (true);
+
+insert into public.who_am_i_categories (name, description, icon) values
+  ('الصحابة', 'أسئلة وتلميحات عن صحابة رسول الله ﷺ', 'Users'),
+  ('الأنبياء', 'أسئلة وتلميحات عن أنبياء ورسل الله عليهم السلام', 'Sparkles'),
+  ('العلماء', 'أسئلة وتلميحات عن أئمة الإسلام والفقهاء والمحدثين', 'BookOpen'),
+  ('الغزوات', 'أسئلة وتلميحات عن غزوات ومعارك التاريخ الإسلامي', 'Shield')
+on conflict (name) do nothing;
+
 -- 1) جدول الأسئلة
 create table if not exists public.who_am_i_questions (
   id         uuid primary key default gen_random_uuid(),
