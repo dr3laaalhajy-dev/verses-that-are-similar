@@ -5809,7 +5809,7 @@ ${versesList}
                             ].filter(m => !m.hidden).map(mode => {
                               const isSelected = v1GameModes.includes(mode.id as any);
                               const skillKey = mode.id as 'audio' | 'complete' | 'surah';
-                              const maxAvail = mode.id === 'who_am_i' ? 10 : (availableSkillCounts[skillKey] || 0);
+                              const maxAvail = mode.id === 'who_am_i' ? 50 : (availableSkillCounts[skillKey] || 0);
                               const currentVal = mode.id === 'who_am_i' ? whoAmIQuestionCount : (skillQuestionCounts[skillKey] || 0);
                               const isExceeded = isSelected && mode.id !== 'islamic' && mode.id !== 'who_am_i' && maxAvail > 0 && currentVal > maxAvail;
 
@@ -5931,22 +5931,22 @@ ${versesList}
                                     <div className="mt-2.5 pt-2 border-t border-indigo-200 flex flex-col gap-1 w-full text-right">
                                       <div className="flex items-center justify-between text-[10px] font-black">
                                         <span className="text-indigo-900">عدد الأسئلة:</span>
-                                        <span className="text-indigo-600 font-bold">المتاح: 10</span>
+                                        <span className="text-indigo-600 font-bold">المتاح: 50</span>
                                       </div>
                                       <input
                                         type="number"
                                         min={1}
-                                        max={10}
+                                        max={50}
                                         value={whoAmIQuestionCount || ''}
                                         onChange={(e) => {
                                           const val = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
-                                          setWhoAmIQuestionCount(isNaN(val) ? 0 : Math.max(1, Math.min(10, val)));
+                                          setWhoAmIQuestionCount(isNaN(val) ? 0 : Math.max(1, Math.min(50, val)));
                                         }}
-                                        placeholder="عدد الأسئلة"
+                                        placeholder="عدد الأسئلة (المتاح: 50)"
                                         className="w-full px-2.5 py-2 rounded-xl border-2 border-indigo-200 focus:border-indigo-500 font-black text-xs text-center bg-white shadow-xs focus:outline-none text-slate-800"
                                       />
                                       <span className="text-[9px] text-indigo-700 font-bold text-center leading-tight">
-                                        الفئة المخصصة: الصحابة رضوان الله عليهم
+                                        الفئة المخصصة: الصحابة رضوان الله عليهم (50 سؤالاً)
                                       </span>
                                     </div>
                                   )}
