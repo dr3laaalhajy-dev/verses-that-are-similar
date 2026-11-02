@@ -389,25 +389,6 @@ export const MushafPage: React.FC<MushafPageProps> = ({
                                 <Clock className="w-4 h-4 text-amber-600" />
                                 <span>الورد اليومي المخصص 📖</span>
                               </button>
-
-                              {currentPage > 1 && (
-                                <button
-                                  onClick={() => {
-                                    setCurrentPage(1);
-                                    setIsPageModeActive(true);
-                                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                                  }}
-                                  className={`px-4 py-3.5 md:py-4 rounded-2xl border font-bold text-xs md:text-sm transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95 ${
-                                    librarySettings.darkMode
-                                      ? 'bg-slate-800/60 border-slate-700 text-slate-300 hover:bg-slate-800'
-                                      : 'bg-white/70 border-slate-200 text-slate-600 hover:bg-slate-100'
-                                  }`}
-                                  title="البدء من الفاتحة صفحة 1"
-                                >
-                                  <RotateCcw className="w-4 h-4 text-slate-400" />
-                                  <span>البدء من الفاتحة (ص 1)</span>
-                                </button>
-                              )}
                             </div>
 
                             {/* مربع الإرشاد البارز: لإظهار تفاصيل الآية، اضغط عليها (بدون خلفية بيضاء صلبة) */}
