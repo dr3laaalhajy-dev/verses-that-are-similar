@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bell, Check, X, Sparkles, Smartphone, CheckCheck } from 'lucide-react';
+import { Bell, Check, X, Sparkles, Smartphone, CheckCheck, Clock, User } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { usePushNotifications } from '../hooks/usePushNotifications';
 
@@ -24,6 +24,13 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
   const [unreadCount, setUnreadCount] = useState<number>(0);
   const [isOpen, setIsOpen] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [lastReadTime, setLastReadTime] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem('last_read_notification_time');
+    } catch {
+      return null;
+    }
+  });
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const { permission, requestPermissionAndRegister, isLoading: isFCMRegistering } = usePushNotifications(userId);
@@ -82,6 +89,7 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
   const calculateUnread = (items: NotificationItem[]) => {
     try {
       const lastRead = localStorage.getItem('last_read_notification_time');
+      setLastReadTime(lastRead);
       if (!lastRead) {
         setUnreadCount(items.length);
         return;
@@ -97,9 +105,20 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
   // Mark all notifications as read
   const markAllAsRead = () => {
     try {
-      localStorage.setItem('last_read_notification_time', new Date().toISOString());
+      const now = new Date().toISOString();
+      localStorage.setItem('last_read_notification_time', now);
+      setLastReadTime(now);
       setUnreadCount(0);
     } catch {}
+  };
+
+  const isItemUnread = (item: NotificationItem) => {
+    try {
+      if (!lastReadTime) return true;
+      return new Date(item.created_at).getTime() > new Date(lastReadTime).getTime();
+    } catch {
+      return false;
+    }
   };
 
   // Subscribe to Supabase Realtime updates
@@ -158,9 +177,6 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
         type="button"
         onClick={() => {
           setIsOpen(!isOpen);
-          if (!isOpen && unreadCount > 0) {
-            markAllAsRead();
-          }
         }}
         className={buttonClassName || "relative h-10 px-3 flex items-center justify-center gap-2 rounded-xl bg-white/10 hover:bg-white/20 text-white border border-white/10 transition-all text-xs sm:text-sm font-bold shadow-md hover:scale-105 active:scale-95 cursor-pointer"}
         title="التنبيهات والإشعارات"
@@ -184,40 +200,50 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 8, scale: 0.95 }}
             transition={{ duration: 0.18 }}
-            className={`absolute left-0 mt-2.5 w-[320px] sm:w-[380px] max-w-[92vw] rounded-3xl shadow-2xl border z-[999] overflow-hidden ${
+            className={`absolute left-0 mt-2.5 w-[330px] sm:w-[400px] max-w-[92vw] rounded-2xl sm:rounded-3xl shadow-2xl border z-[999] overflow-hidden ${
               darkMode
                 ? 'bg-slate-900/95 border-slate-800 text-slate-100 backdrop-blur-xl'
-                : 'bg-white/95 border-slate-200 text-slate-800 backdrop-blur-xl'
+                : 'bg-white border-gray-200 text-gray-800 backdrop-blur-xl'
             }`}
           >
-            {/* Header */}
-            <div className={`p-4 border-b flex items-center justify-between gap-2 ${darkMode ? 'border-slate-800 bg-slate-800/40' : 'border-slate-100 bg-slate-50/70'}`}>
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center shrink-0">
+            {/* 1. Header */}
+            <div className={`px-4 py-3.5 border-b flex justify-between items-center gap-2 ${darkMode ? 'border-slate-800 bg-slate-800/40' : 'border-gray-100 bg-gray-50/70'}`}>
+              {/* Right Side: Bell Icon & Title */}
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-brand-emerald dark:text-emerald-400 flex items-center justify-center shrink-0">
                   <Bell className="w-4 h-4" />
                 </div>
-                <div>
-                  <h3 className="text-sm font-black text-current">التنبيهات</h3>
-                  <span className="text-[10px] font-bold text-slate-400">آخر المستجدات والتحديات</span>
+                <div className="flex flex-col text-right">
+                  <div className="flex items-center gap-1.5">
+                    <h3 className="text-sm font-bold text-gray-800 dark:text-slate-100 leading-tight">التنبيهات</h3>
+                    {unreadCount > 0 && (
+                      <span className="px-1.5 py-0.2 text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 rounded-full">
+                        {unreadCount}
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">آخر المستجدات</span>
                 </div>
               </div>
 
-              <div className="flex items-center gap-1.5">
+              {/* Left Side: Mark all as read & Close */}
+              <div className="flex items-center gap-3">
                 {unreadCount > 0 && (
                   <button
                     type="button"
                     onClick={markAllAsRead}
-                    className="text-[11px] font-bold text-emerald-600 hover:text-emerald-700 p-1 flex items-center gap-1 cursor-pointer"
+                    className="text-xs sm:text-sm font-medium text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 hover:underline transition-all cursor-pointer whitespace-nowrap"
                     title="تحديد الكل كمقروء"
                   >
-                    <CheckCheck className="w-3.5 h-3.5" />
-                    <span>قراءة الكل</span>
+                    تحديد الكل كمقروء
                   </button>
                 )}
                 <button
                   type="button"
                   onClick={() => setIsOpen(false)}
-                  className="p-1 rounded-lg text-slate-400 hover:text-slate-600 transition-colors"
+                  className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-slate-200 hover:bg-gray-200/50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                  title="إغلاق النافذة"
+                  aria-label="إغلاق"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -226,65 +252,102 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
 
             {/* FCM Push Permission Banner (if not granted) */}
             {permission !== 'granted' && (
-              <div className="p-3 bg-gradient-to-r from-amber-50 to-orange-50 border-b border-amber-200 text-amber-900 flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <Smartphone className="w-4 h-4 text-orange-600 shrink-0" />
-                  <span className="text-[11px] font-bold leading-tight">تفعيل تنبيهات الهاتف عند إضافة تحديات</span>
+              <div className="px-3.5 py-2.5 bg-emerald-500/10 border-b border-emerald-500/15 text-emerald-900 dark:text-emerald-200 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Smartphone className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  <span className="text-[11px] font-medium leading-tight truncate">تفعيل إشعارات الهاتف للتحديات الجديدة</span>
                 </div>
                 <button
                   type="button"
                   onClick={requestPermissionAndRegister}
                   disabled={isFCMRegistering}
-                  className="px-2.5 py-1 text-[10px] font-black bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-all shadow-xs cursor-pointer shrink-0 disabled:opacity-50"
+                  className="px-2.5 py-1 text-[10px] font-bold bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-all shadow-xs cursor-pointer shrink-0 disabled:opacity-50"
                 >
                   {isFCMRegistering ? 'جاري...' : 'تفعيل'}
                 </button>
               </div>
             )}
 
-            {/* Notifications List */}
-            <div className="max-h-[360px] overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800/80">
+            {/* 2. Notifications List */}
+            <div className="max-h-[360px] overflow-y-auto divide-y divide-gray-100 dark:divide-slate-800/80">
               {isLoading ? (
-                <div className="py-12 text-center text-xs font-bold text-slate-400">
+                <div className="py-12 text-center text-xs font-bold text-gray-400 dark:text-slate-500">
                   <div className="w-6 h-6 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
                   <span>جاري جلب التنبيهات...</span>
                 </div>
               ) : notifications.length === 0 ? (
-                <div className="py-12 text-center text-slate-400 px-4">
-                  <Sparkles className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                  <p className="text-xs font-bold">لا توجد تنبيهات جديدة حالياً</p>
-                  <span className="text-[10px] text-slate-400 mt-0.5 block">ستصلك هنا أحدث المسابقات والتنبيهات فور نشرها</span>
+                <div className="py-12 text-center text-gray-400 dark:text-slate-500 px-4">
+                  <div className="w-12 h-12 rounded-2xl bg-gray-100 dark:bg-slate-800 flex items-center justify-center mx-auto mb-3 text-gray-400">
+                    <Sparkles className="w-6 h-6" />
+                  </div>
+                  <p className="text-xs sm:text-sm font-bold text-gray-700 dark:text-slate-300">لا توجد تنبيهات حالياً</p>
+                  <span className="text-xs text-gray-400 mt-1 block">ستصلك أحدث المستجدات والتحديات هنا فور نشرها</span>
                 </div>
               ) : (
-                notifications.map((item) => (
-                  <div
-                    key={item.id}
-                    className="p-3.5 hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors text-right relative group"
-                  >
-                    <div className="flex items-start justify-between gap-2 mb-1">
-                      <h4 className="text-xs sm:text-sm font-black text-slate-800 dark:text-slate-100 leading-snug">
-                        {item.title}
-                      </h4>
-                      <span className="text-[9px] font-bold text-slate-400 shrink-0 whitespace-nowrap">
-                        {formatRelativeTime(item.created_at)}
-                      </span>
+                notifications.map((item) => {
+                  const unread = isItemUnread(item);
+                  return (
+                    <div
+                      key={item.id}
+                      className={`flex items-start gap-3 p-3.5 transition-colors text-right relative group hover:bg-gray-50 dark:hover:bg-slate-800/50 cursor-pointer ${
+                        unread ? 'bg-green-50/30 dark:bg-emerald-950/20' : ''
+                      }`}
+                    >
+                      {/* الأيقونة/الصورة على اليمين */}
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-105 ${
+                        unread
+                          ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                          : 'bg-gray-100 text-gray-500 dark:bg-slate-800 dark:text-slate-400 border border-transparent'
+                      }`}>
+                        <Bell className="w-4 h-4" />
+                      </div>
+
+                      {/* المحتوى في المنتصف */}
+                      <div className="flex-1 min-w-0">
+                        {/* العنوان ونقطة الإشعار غير المقروء */}
+                        <div className="flex items-center gap-1.5 mb-1">
+                          {unread && (
+                            <span
+                              className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 animate-pulse"
+                              title="غير مقروء"
+                            />
+                          )}
+                          <h4 className="font-bold text-gray-800 dark:text-slate-100 text-xs sm:text-sm leading-snug">
+                            {item.title}
+                          </h4>
+                        </div>
+
+                        {/* نص الإشعار */}
+                        <p className="text-sm text-gray-600 dark:text-slate-300 font-normal leading-relaxed">
+                          {item.body}
+                        </p>
+
+                        {/* البيانات الوصفية في سطر واحد أسفل النص */}
+                        <div className="text-xs text-gray-400 dark:text-slate-500 flex items-center gap-2 mt-2">
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-3 h-3 text-gray-400/80" />
+                            <span>{formatRelativeTime(item.created_at)}</span>
+                          </span>
+                          {item.sender_name && (
+                            <>
+                              <span>•</span>
+                              <span className="flex items-center gap-1">
+                                <User className="w-3 h-3 text-gray-400/80" />
+                                <span>من: {item.sender_name}</span>
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                    <p className="text-[11px] sm:text-xs text-slate-600 dark:text-slate-300 font-medium leading-relaxed">
-                      {item.body}
-                    </p>
-                    {item.sender_name && (
-                      <span className="text-[9px] font-black text-emerald-600 dark:text-emerald-400 mt-1 block">
-                        من: {item.sender_name}
-                      </span>
-                    )}
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
 
-            {/* Footer */}
-            <div className={`p-2.5 text-center text-[10px] font-bold text-slate-400 border-t ${darkMode ? 'border-slate-800' : 'border-slate-100'}`}>
-              متصل لحظياً عبر Supabase Realtime • FCM
+            {/* 3. Footer */}
+            <div className={`py-2 px-4 text-center text-[10px] text-gray-300 dark:text-slate-600 border-t ${darkMode ? 'border-slate-800/80' : 'border-gray-100'}`}>
+              متصل لحظياً عبر Supabase
             </div>
           </motion.div>
         )}
