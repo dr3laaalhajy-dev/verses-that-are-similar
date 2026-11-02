@@ -145,23 +145,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const cleanTitle = title.trim();
     const cleanBody = body.trim();
+    const nowIso = new Date().toISOString();
 
     try {
-      // 1. Update in Supabase
+      // 1. Update in Supabase (with updated_at = now)
       try {
         await supabase
           .from('notifications')
-          .update({ title: cleanTitle, body: cleanBody })
+          .update({ title: cleanTitle, body: cleanBody, updated_at: nowIso })
           .eq('id', notificationId);
       } catch (sbErr) {
         console.warn('[Notifications] Supabase update warning:', sbErr);
       }
 
-      // 2. Update in Prisma
+      // 2. Update in Prisma (with updated_at = now)
       try {
         await (prisma as any).notification.update({
           where: { id: notificationId },
-          data: { title: cleanTitle, body: cleanBody }
+          data: { title: cleanTitle, body: cleanBody, updated_at: new Date(nowIso) }
         });
       } catch (prismaErr) {
         console.warn('[Notifications] Prisma update warning:', prismaErr);
@@ -170,7 +171,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({
         success: true,
         message: 'Notification updated successfully',
-        notification: { id: notificationId, title: cleanTitle, body: cleanBody }
+        notification: { id: notificationId, title: cleanTitle, body: cleanBody, updated_at: nowIso }
       });
     } catch (err: any) {
       console.error('[Notifications] Update error:', err);

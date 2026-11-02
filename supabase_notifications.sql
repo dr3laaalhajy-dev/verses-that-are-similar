@@ -17,8 +17,12 @@ create table if not exists public.notifications (
   sender_role text default 'FOUNDER',
   sender_name text,
   metadata    jsonb default '{}'::jsonb,
-  created_at  timestamptz not null default now()
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now()
 );
+
+-- التأكد من وجود حقل updated_at في حال كان الجدول منشأ مسبقاً
+alter table public.notifications add column if not exists updated_at timestamptz not null default now();
 
 -- إنشاء فهرس لتسريع استرجاع الإشعارات مرتبة تنازلياً حسب وقت الإنشاء
 create index if not exists idx_notifications_created_at on public.notifications (created_at desc);

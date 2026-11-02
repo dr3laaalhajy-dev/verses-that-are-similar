@@ -88,16 +88,22 @@ export const NotificationAdmin: React.FC<NotificationAdminProps> = ({
 
     setIsUpdating(true);
     try {
+      const nowIso = new Date().toISOString();
       const updatedData = {
         id: editingItem.id,
         title: editTitle.trim(),
-        body: editBody.trim()
+        body: editBody.trim(),
+        updated_at: nowIso
       };
 
-      // 1. Send UPDATE to Supabase
+      // 1. Send UPDATE to Supabase with updated_at = now()
       const { error: sbErr } = await supabase
         .from('notifications')
-        .update({ title: updatedData.title, body: updatedData.body })
+        .update({
+          title: updatedData.title,
+          body: updatedData.body,
+          updated_at: nowIso
+        })
         .eq('id', editingItem.id);
 
       // 2. Fallback to API route if needed

@@ -224,6 +224,7 @@ model Notification {
   sender_name String?
   metadata    Json?    @default("{}")
   created_at  DateTime @default(now())
+  updated_at  DateTime @default(now()) @updatedAt
 
   @@map("notifications")
 }

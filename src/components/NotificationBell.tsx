@@ -11,6 +11,7 @@ export interface NotificationItem {
   sender_role?: string;
   sender_name?: string;
   created_at: string;
+  updated_at?: string;
 }
 
 export interface NotificationBellProps {
@@ -19,16 +20,35 @@ export interface NotificationBellProps {
   buttonClassName?: string;
 }
 
-const STORAGE_KEY = 'read_notification_ids';
+const STORAGE_KEY = 'read_notifications_map';
 
-const getStoredReadIds = (): Set<string> => {
+export type ReadTimestampsMap = Record<string, string>;
+
+const getStoredReadMap = (): ReadTimestampsMap => {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return new Set();
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? new Set(parsed) : new Set();
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed;
+      }
+    }
+    // Backward compatibility with previous array format:
+    const oldRaw = localStorage.getItem('read_notification_ids');
+    if (oldRaw) {
+      const oldParsed = JSON.parse(oldRaw);
+      if (Array.isArray(oldParsed)) {
+        const migrated: ReadTimestampsMap = {};
+        const past = new Date(0).toISOString();
+        oldParsed.forEach((id: string) => {
+          migrated[id] = past;
+        });
+        return migrated;
+      }
+    }
+    return {};
   } catch {
-    return new Set();
+    return {};
   }
 };
 
@@ -37,8 +57,13 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
   const [unreadCount, setUnreadCount] = useState<number>(0);
   const [isOpen, setIsOpen] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [readIds, setReadIds] = useState<Set<string>>(() => getStoredReadIds());
+  const [readMap, setReadMap] = useState<ReadTimestampsMap>(() => getStoredReadMap());
+  const readMapRef = useRef<ReadTimestampsMap>(readMap);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    readMapRef.current = readMap;
+  }, [readMap]);
 
   const { permission, requestPermissionAndRegister, isLoading: isFCMRegistering } = usePushNotifications(userId);
 
@@ -58,20 +83,38 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
     };
   }, [isOpen]);
 
-  const isItemUnread = (item: NotificationItem): boolean => {
-    return !readIds.has(item.id);
+  /**
+   * Check whether an item is unread:
+   * 1. If never marked as read in readMap -> unread.
+   * 2. If updated_at is newer than the saved read timestamp -> unread (re-broadcast upon update).
+   * 3. Otherwise -> read.
+   */
+  const isItemUnread = (item: NotificationItem, currentMap?: ReadTimestampsMap): boolean => {
+    const map = currentMap || readMapRef.current;
+    const readTimestamp = map[item.id];
+
+    if (!readTimestamp) {
+      return true;
+    }
+
+    const effectiveTime = item.updated_at
+      ? new Date(item.updated_at).getTime()
+      : new Date(item.created_at).getTime();
+    const readTime = new Date(readTimestamp).getTime();
+
+    return effectiveTime > readTime;
   };
 
-  const calculateUnread = (items: NotificationItem[], currentReadIds?: Set<string>) => {
-    const ids = currentReadIds || readIds;
-    const count = items.filter(n => !ids.has(n.id)).length;
+  const calculateUnread = (items: NotificationItem[], currentMap?: ReadTimestampsMap) => {
+    const map = currentMap || readMapRef.current;
+    const count = items.filter(n => isItemUnread(n, map)).length;
     setUnreadCount(count);
   };
 
   // Fetch initial notifications
   const fetchNotifications = async () => {
     try {
-      const stored = getStoredReadIds();
+      const stored = getStoredReadMap();
       // 1. Try Supabase
       const { data, error } = await supabase
         .from('notifications')
@@ -91,7 +134,7 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
 
     // 2. Fallback to API route
     try {
-      const stored = getStoredReadIds();
+      const stored = getStoredReadMap();
       const res = await fetch('/api/notifications?limit=20');
       const data = await res.json();
       if (res.ok && data.notifications) {
@@ -107,14 +150,14 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
 
   // 2. Individual Read: Click a single notification to mark it as read immediately
   const handleItemClick = (item: NotificationItem) => {
-    if (!readIds.has(item.id)) {
-      setReadIds(prev => {
-        const next = new Set(prev);
-        next.add(item.id);
+    if (isItemUnread(item)) {
+      const nowIso = new Date().toISOString();
+      setReadMap(prev => {
+        const next = { ...prev, [item.id]: nowIso };
         try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(next)));
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
         } catch (e) {
-          console.warn('[NotificationBell] Failed to save read IDs to LocalStorage:', e);
+          console.warn('[NotificationBell] Failed to save read map to LocalStorage:', e);
         }
         return next;
       });
@@ -126,13 +169,16 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
   const markAllAsRead = () => {
     if (notifications.length === 0 || unreadCount === 0) return;
 
-    setReadIds(prev => {
-      const next = new Set(prev);
-      notifications.forEach(n => next.add(n.id));
+    const nowIso = new Date().toISOString();
+    setReadMap(prev => {
+      const next = { ...prev };
+      notifications.forEach(n => {
+        next[n.id] = nowIso;
+      });
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(next)));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
       } catch (e) {
-        console.warn('[NotificationBell] Failed to save read IDs to LocalStorage:', e);
+        console.warn('[NotificationBell] Failed to save read map to LocalStorage:', e);
       }
       return next;
     });
@@ -156,11 +202,10 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
 
           setNotifications(prev => {
             if (prev.some(n => n.id === newItem.id)) return prev;
-            return [newItem, ...prev];
+            const nextList = [newItem, ...prev];
+            calculateUnread(nextList, readMapRef.current);
+            return nextList;
           });
-
-          // Newly inserted item is unread
-          setUnreadCount(prev => prev + 1);
 
           // Haptic feedback if available
           if (typeof window !== 'undefined' && window.navigator && window.navigator.vibrate) {
@@ -177,7 +222,18 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
           console.log('[NotificationBell] Notification updated via Realtime:', payload.new);
           const updated = payload.new as NotificationItem;
           if (updated?.id) {
-            setNotifications(prev => prev.map(n => n.id === updated.id ? { ...n, ...updated } : n));
+            setNotifications(prev => {
+              const nextList = prev.map(n => n.id === updated.id ? { ...n, ...updated } : n);
+              // Recalculate unread with updated item's updated_at timestamp!
+              calculateUnread(nextList, readMapRef.current);
+              return nextList;
+            });
+
+            if (typeof window !== 'undefined' && window.navigator && window.navigator.vibrate) {
+              try {
+                window.navigator.vibrate([80, 50, 80]);
+              } catch {}
+            }
           }
         }
       )
@@ -188,10 +244,11 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
           console.log('[NotificationBell] Notification deleted via Realtime:', payload.old);
           const deletedId = (payload.old as { id: string })?.id;
           if (deletedId) {
-            setNotifications(prev => prev.filter(n => n.id !== deletedId));
-            if (!readIds.has(deletedId)) {
-              setUnreadCount(prev => Math.max(0, prev - 1));
-            }
+            setNotifications(prev => {
+              const nextList = prev.filter(n => n.id !== deletedId);
+              calculateUnread(nextList, readMapRef.current);
+              return nextList;
+            });
           }
         }
       )
@@ -201,7 +258,17 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
         (payload) => {
           const updated = payload.payload as NotificationItem;
           if (updated?.id) {
-            setNotifications(prev => prev.map(n => n.id === updated.id ? { ...n, ...updated } : n));
+            setNotifications(prev => {
+              const nextList = prev.map(n => n.id === updated.id ? { ...n, ...updated } : n);
+              calculateUnread(nextList, readMapRef.current);
+              return nextList;
+            });
+
+            if (typeof window !== 'undefined' && window.navigator && window.navigator.vibrate) {
+              try {
+                window.navigator.vibrate([80, 50, 80]);
+              } catch {}
+            }
           }
         }
       )
@@ -211,10 +278,11 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
         (payload) => {
           const { id } = payload.payload as { id: string };
           if (id) {
-            setNotifications(prev => prev.filter(n => n.id !== id));
-            if (!readIds.has(id)) {
-              setUnreadCount(prev => Math.max(0, prev - 1));
-            }
+            setNotifications(prev => {
+              const nextList = prev.filter(n => n.id !== id);
+              calculateUnread(nextList, readMapRef.current);
+              return nextList;
+            });
           }
         }
       )
