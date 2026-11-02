@@ -7,9 +7,7 @@ import {
 } from "lucide-react";
 import { View } from "../types/challenges";
 import { quranData } from "../services/QuranRepository";
-import { ALL_QURAN_SURAHS, JUZ_NAMES_AR, juzBoundaries, getJuzsForSurah } from "../services/JuzRepository";
-import { getPageNumber, juzStartPages, surahStartPages } from "../services/PageRepository";
-import { renderQuranText } from "../utils/quranUtils";
+import { juzStartPages, surahStartPages } from "../services/PageRepository";
 import QuranZoomViewer from "../components/QuranZoomViewer";
 import AyahActionSheet from "../components/AyahActionSheet";
 
