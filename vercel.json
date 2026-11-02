@@ -7,6 +7,14 @@
     {
       "path": "/api/notifications/cron-wird",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/adhkar?type=morning",
+      "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/adhkar?type=evening",
+      "schedule": "0 14 * * *"
     }
   ],
   "rewrites": [
