@@ -38,6 +38,19 @@ create policy "Allow authorized insert notifications"
 on public.notifications for insert
 with check (true);
 
+-- سياسة التعديل: مسموح للمؤسسين والمشرفين المصرح لهم
+drop policy if exists "Allow authorized update notifications" on public.notifications;
+create policy "Allow authorized update notifications"
+on public.notifications for update
+using (true)
+with check (true);
+
+-- سياسة الحذف: مسموح للمؤسسين والمشرفين المصرح لهم
+drop policy if exists "Allow authorized delete notifications" on public.notifications;
+create policy "Allow authorized delete notifications"
+on public.notifications for delete
+using (true);
+
 -- ------------------------------------------------------------------------------
 -- 2. جدول رموز الأجهزة (device_tokens) - للإشعارات الخارجية FCM Push Notifications
 -- ------------------------------------------------------------------------------

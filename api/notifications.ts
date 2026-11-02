@@ -101,6 +101,83 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
+  // 4. DELETE: Delete Notification
+  if (req.method === 'DELETE' || action === 'delete') {
+    const id = (req.query.id as string) || req.body?.id;
+    if (!id) {
+      return res.status(400).json({ message: 'Notification ID is required' });
+    }
+
+    try {
+      // 1. Delete in Supabase
+      try {
+        await supabase.from('notifications').delete().eq('id', id);
+      } catch (sbErr) {
+        console.warn('[Notifications] Supabase delete warning:', sbErr);
+      }
+
+      // 2. Delete in Prisma
+      try {
+        await (prisma as any).notification.delete({
+          where: { id }
+        });
+      } catch (prismaErr) {
+        console.warn('[Notifications] Prisma delete warning:', prismaErr);
+      }
+
+      return res.status(200).json({ success: true, message: 'Notification deleted successfully' });
+    } catch (err: any) {
+      console.error('[Notifications] Delete error:', err);
+      return res.status(500).json({ message: 'Failed to delete notification', error: err.message });
+    }
+  }
+
+  // 5. UPDATE: Edit Notification
+  if (req.method === 'PUT' || req.method === 'PATCH' || action === 'update') {
+    const { id, title, body } = req.body || {};
+    const notificationId = id || (req.query.id as string);
+    if (!notificationId) {
+      return res.status(400).json({ message: 'Notification ID is required' });
+    }
+    if (!title?.trim() || !body?.trim()) {
+      return res.status(400).json({ message: 'Title and body are required' });
+    }
+
+    const cleanTitle = title.trim();
+    const cleanBody = body.trim();
+
+    try {
+      // 1. Update in Supabase
+      try {
+        await supabase
+          .from('notifications')
+          .update({ title: cleanTitle, body: cleanBody })
+          .eq('id', notificationId);
+      } catch (sbErr) {
+        console.warn('[Notifications] Supabase update warning:', sbErr);
+      }
+
+      // 2. Update in Prisma
+      try {
+        await (prisma as any).notification.update({
+          where: { id: notificationId },
+          data: { title: cleanTitle, body: cleanBody }
+        });
+      } catch (prismaErr) {
+        console.warn('[Notifications] Prisma update warning:', prismaErr);
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: 'Notification updated successfully',
+        notification: { id: notificationId, title: cleanTitle, body: cleanBody }
+      });
+    } catch (err: any) {
+      console.error('[Notifications] Update error:', err);
+      return res.status(500).json({ message: 'Failed to update notification', error: err.message });
+    }
+  }
+
   return res.status(404).json({ message: 'Endpoint not found' });
 }
 

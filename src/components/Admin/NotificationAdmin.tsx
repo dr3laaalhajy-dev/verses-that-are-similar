@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Bell, Send, CheckCircle2, AlertCircle, Loader2, Users, Smartphone,
-  Radio, Clock, ShieldCheck, RefreshCw, Sparkles, MessageSquare
+  Radio, Clock, ShieldCheck, RefreshCw, Sparkles, MessageSquare,
+  Pencil, Trash2, X, Save
 } from 'lucide-react';
 import { supabase } from '../../services/supabase';
 
@@ -67,6 +68,115 @@ export const NotificationAdmin: React.FC<NotificationAdminProps> = ({
   const [history, setHistory] = useState<NotificationHistoryItem[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const [tokensCount, setTokensCount] = useState<number | null>(null);
+
+  // Edit Modal State
+  const [editingItem, setEditingItem] = useState<NotificationHistoryItem | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editBody, setEditBody] = useState('');
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const handleOpenEdit = (item: NotificationHistoryItem) => {
+    setEditingItem(item);
+    setEditTitle(item.title);
+    setEditBody(item.body);
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingItem || !editTitle.trim() || !editBody.trim()) return;
+
+    setIsUpdating(true);
+    try {
+      const updatedData = {
+        id: editingItem.id,
+        title: editTitle.trim(),
+        body: editBody.trim()
+      };
+
+      // 1. Send UPDATE to Supabase
+      const { error: sbErr } = await supabase
+        .from('notifications')
+        .update({ title: updatedData.title, body: updatedData.body })
+        .eq('id', editingItem.id);
+
+      // 2. Fallback to API route if needed
+      if (sbErr) {
+        await fetch('/api/notifications', {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(updatedData)
+        });
+      }
+
+      // 3. Broadcast Realtime event across Supabase channel
+      const channel = supabase.channel('realtime_public_notifications');
+      channel.send({
+        type: 'broadcast',
+        event: 'NOTIFICATION_UPDATED',
+        payload: updatedData
+      });
+
+      // 4. Update local state
+      setHistory(prev => prev.map(n => n.id === editingItem.id ? { ...n, ...updatedData } : n));
+      setEditingItem(null);
+      setResultMessage({
+        type: 'success',
+        text: 'تم تعديل الإشعار وبث التحديث لحظياً لجميع المستخدمين بنجاح.'
+      });
+    } catch (err: any) {
+      alert('فشل حفظ التعديلات: ' + (err?.message || 'خطأ غير معروف'));
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleDelete = async (item: NotificationHistoryItem) => {
+    if (!window.confirm(`هل أنت متأكد من حذف التنبيه: "${item.title}"؟\nسيتم حذفه وبث أمر إزالته فوراً من نوافذ جميع المستخدمين دون تحديث الصفحة.`)) {
+      return;
+    }
+
+    setDeletingId(item.id);
+    try {
+      // 1. Send DELETE to Supabase
+      const { error: sbErr } = await supabase
+        .from('notifications')
+        .delete()
+        .eq('id', item.id);
+
+      // 2. Fallback to API route if needed
+      if (sbErr) {
+        await fetch(`/api/notifications?action=delete&id=${item.id}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+      }
+
+      // 3. Broadcast Realtime event to delete notification instantly across all clients
+      const channel = supabase.channel('realtime_public_notifications');
+      channel.send({
+        type: 'broadcast',
+        event: 'NOTIFICATION_DELETED',
+        payload: { id: item.id }
+      });
+
+      // 4. Update local state
+      setHistory(prev => prev.filter(n => n.id !== item.id));
+      setResultMessage({
+        type: 'success',
+        text: 'تم حذف التنبيه وبث أمر إزالته فوراً من نوافذ جميع المستخدمين.'
+      });
+    } catch (err: any) {
+      alert('فشل حذف التنبيه: ' + (err?.message || 'خطأ غير معروف'));
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   const handleTemplateChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value;
@@ -452,21 +562,52 @@ export const NotificationAdmin: React.FC<NotificationAdminProps> = ({
                   <p className="text-[11px] text-slate-600 dark:text-slate-300 font-medium leading-relaxed">
                     {item.body}
                   </p>
-                  <div className="flex items-center justify-between pt-1">
-                    <span className="text-[9px] font-black text-emerald-600 dark:text-emerald-400">
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                    <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
                       بواسطة: {item.sender_name || (item.sender_role === 'FOUNDER' ? 'المؤسس' : 'مساعد المؤسس')}
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedTemplateIndex('');
-                        setTitle(item.title);
-                        setBody(item.body);
-                      }}
-                      className="text-[10px] font-bold text-amber-600 hover:text-amber-700 underline cursor-pointer"
-                    >
-                      إعادة استخدام
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      {/* زر تعديل */}
+                      <button
+                        type="button"
+                        onClick={() => handleOpenEdit(item)}
+                        className="px-2.5 py-1 text-[11px] font-bold text-amber-700 dark:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-300/60 dark:border-amber-700/60 rounded-xl flex items-center gap-1 transition-all cursor-pointer active:scale-95"
+                        title="تعديل هذا التنبيه"
+                      >
+                        <Pencil className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+                        <span>تعديل</span>
+                      </button>
+
+                      {/* زر حذف */}
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(item)}
+                        disabled={deletingId === item.id}
+                        className="px-2.5 py-1 text-[11px] font-bold text-red-700 dark:text-red-300 bg-red-500/10 hover:bg-red-500/20 border border-red-300/60 dark:border-red-700/60 rounded-xl flex items-center gap-1 transition-all cursor-pointer active:scale-95 disabled:opacity-50"
+                        title="حذف هذا التنبيه"
+                      >
+                        {deletingId === item.id ? (
+                          <Loader2 className="w-3 h-3 animate-spin text-red-600" />
+                        ) : (
+                          <Trash2 className="w-3 h-3 text-red-600 dark:text-red-400" />
+                        )}
+                        <span>حذف</span>
+                      </button>
+
+                      {/* زر إعادة استخدام */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedTemplateIndex('');
+                          setTitle(item.title);
+                          setBody(item.body);
+                        }}
+                        className="text-[11px] font-bold text-slate-500 hover:text-slate-700 dark:text-slate-400 hover:underline px-1 cursor-pointer"
+                        title="إعادة تعبئة حقول الإرسال"
+                      >
+                        إعادة استخدام
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -474,6 +615,101 @@ export const NotificationAdmin: React.FC<NotificationAdminProps> = ({
           )}
         </div>
       </div>
+
+      {/* Edit Notification Modal */}
+      <AnimatePresence>
+        {editingItem && (
+          <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 15 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 15 }}
+              className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-7 max-w-lg w-full shadow-2xl border border-slate-200 dark:border-slate-800 text-right space-y-4 relative"
+            >
+              <div className="flex items-center justify-between pb-3 border-b border-slate-150 dark:border-slate-800">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center">
+                    <Pencil className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="font-black text-base text-slate-800 dark:text-slate-100">
+                      تعديل التنبيه وبث التحديث
+                    </h3>
+                    <p className="text-[11px] font-bold text-slate-400">
+                      سيتم تحديث النص فوراً لدى جميع المستخدمين المتصلين دون تحديث الصفحة
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditingItem(null)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveEdit} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-black text-slate-700 dark:text-slate-200 mb-1.5">
+                    عنوان التنبيه <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    maxLength={100}
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800 focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:border-amber-500 font-bold text-sm text-slate-800 dark:text-slate-100 transition-all"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-black text-slate-700 dark:text-slate-200 mb-1.5">
+                    نص التنبيه <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    value={editBody}
+                    onChange={(e) => setEditBody(e.target.value)}
+                    rows={4}
+                    maxLength={350}
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800 focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:border-amber-500 font-bold text-sm text-slate-800 dark:text-slate-100 transition-all leading-relaxed"
+                    required
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-150 dark:border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setEditingItem(null)}
+                    disabled={isUpdating}
+                    className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold text-xs sm:text-sm hover:bg-slate-100 dark:hover:bg-slate-800 transition-all cursor-pointer"
+                  >
+                    إلغاء
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isUpdating || !editTitle.trim() || !editBody.trim()}
+                    className="px-5 py-2.5 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-black text-xs sm:text-sm rounded-xl shadow-md shadow-orange-500/20 flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    {isUpdating ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>جاري حفظ التعديل...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-4 h-4" />
+                        <span>حفظ التعديلات والبث اللحظي</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

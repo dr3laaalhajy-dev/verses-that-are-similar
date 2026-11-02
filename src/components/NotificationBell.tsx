@@ -24,6 +24,14 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
   const [unreadCount, setUnreadCount] = useState<number>(0);
   const [isOpen, setIsOpen] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [readIds, setReadIds] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem('read_notification_ids');
+      return stored ? new Set(JSON.parse(stored)) : new Set<string>();
+    } catch {
+      return new Set<string>();
+    }
+  });
   const [lastReadTime, setLastReadTime] = useState<string | null>(() => {
     try {
       return localStorage.getItem('last_read_notification_time');
@@ -86,19 +94,51 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
     }
   };
 
+  const isItemUnread = (item: NotificationItem) => {
+    try {
+      if (readIds.has(item.id)) return false;
+      if (lastReadTime && new Date(item.created_at).getTime() <= new Date(lastReadTime).getTime()) {
+        return false;
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   const calculateUnread = (items: NotificationItem[]) => {
     try {
+      const storedIdsStr = localStorage.getItem('read_notification_ids');
+      const currentReadIds = storedIdsStr ? new Set(JSON.parse(storedIdsStr)) : readIds;
       const lastRead = localStorage.getItem('last_read_notification_time');
-      setLastReadTime(lastRead);
-      if (!lastRead) {
-        setUnreadCount(items.length);
-        return;
-      }
-      const lastReadDate = new Date(lastRead).getTime();
-      const count = items.filter(n => new Date(n.created_at).getTime() > lastReadDate).length;
-      setUnreadCount(count);
+      const lastReadTimeNum = lastRead ? new Date(lastRead).getTime() : 0;
+
+      const unread = items.filter(item => {
+        if (currentReadIds.has(item.id)) return false;
+        if (lastReadTimeNum && new Date(item.created_at).getTime() <= lastReadTimeNum) {
+          return false;
+        }
+        return true;
+      }).length;
+
+      setUnreadCount(unread);
     } catch {
       setUnreadCount(0);
+    }
+  };
+
+  // Mark a single notification as read on click
+  const handleItemClick = (item: NotificationItem) => {
+    if (isItemUnread(item)) {
+      setReadIds(prev => {
+        const next = new Set(prev);
+        next.add(item.id);
+        try {
+          localStorage.setItem('read_notification_ids', JSON.stringify(Array.from(next)));
+        } catch {}
+        return next;
+      });
+      setUnreadCount(prev => Math.max(0, prev - 1));
     }
   };
 
@@ -108,20 +148,17 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
       const now = new Date().toISOString();
       localStorage.setItem('last_read_notification_time', now);
       setLastReadTime(now);
+
+      const allIds = new Set(readIds);
+      notifications.forEach(n => allIds.add(n.id));
+      setReadIds(allIds);
+      localStorage.setItem('read_notification_ids', JSON.stringify(Array.from(allIds)));
+
       setUnreadCount(0);
     } catch {}
   };
 
-  const isItemUnread = (item: NotificationItem) => {
-    try {
-      if (!lastReadTime) return true;
-      return new Date(item.created_at).getTime() > new Date(lastReadTime).getTime();
-    } catch {
-      return false;
-    }
-  };
-
-  // Subscribe to Supabase Realtime updates
+  // Subscribe to Supabase Realtime updates (INSERT, UPDATE, DELETE & broadcast)
   useEffect(() => {
     fetchNotifications();
 
@@ -146,6 +183,54 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
             try {
               window.navigator.vibrate([100, 80, 100]);
             } catch {}
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'notifications' },
+        (payload) => {
+          console.log('[NotificationBell] Notification updated via Realtime:', payload.new);
+          const updated = payload.new as NotificationItem;
+          if (updated?.id) {
+            setNotifications(prev => prev.map(n => n.id === updated.id ? { ...n, ...updated } : n));
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'notifications' },
+        (payload) => {
+          console.log('[NotificationBell] Notification deleted via Realtime:', payload.old);
+          const deletedId = (payload.old as { id: string })?.id;
+          if (deletedId) {
+            setNotifications(prev => prev.filter(n => n.id !== deletedId));
+            if (isItemUnread({ id: deletedId } as any)) {
+              setUnreadCount(prev => Math.max(0, prev - 1));
+            }
+          }
+        }
+      )
+      .on(
+        'broadcast',
+        { event: 'NOTIFICATION_UPDATED' },
+        (payload) => {
+          const updated = payload.payload as NotificationItem;
+          if (updated?.id) {
+            setNotifications(prev => prev.map(n => n.id === updated.id ? { ...n, ...updated } : n));
+          }
+        }
+      )
+      .on(
+        'broadcast',
+        { event: 'NOTIFICATION_DELETED' },
+        (payload) => {
+          const { id } = payload.payload as { id: string };
+          if (id) {
+            setNotifications(prev => prev.filter(n => n.id !== id));
+            if (isItemUnread({ id } as any)) {
+              setUnreadCount(prev => Math.max(0, prev - 1));
+            }
           }
         }
       )
@@ -289,15 +374,18 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
                   return (
                     <div
                       key={item.id}
-                      className={`flex items-start gap-3 p-3.5 transition-colors text-right relative group hover:bg-gray-50 dark:hover:bg-slate-800/50 cursor-pointer ${
-                        unread ? 'bg-green-50/30 dark:bg-emerald-950/20' : ''
+                      onClick={() => handleItemClick(item)}
+                      className={`flex items-start gap-3 p-3.5 transition-all text-right relative group cursor-pointer active:scale-[0.99] ${
+                        unread
+                          ? 'bg-green-50/50 dark:bg-emerald-950/30 hover:bg-green-50/80 dark:hover:bg-emerald-950/50'
+                          : 'bg-transparent hover:bg-gray-50/80 dark:hover:bg-slate-800/40'
                       }`}
                     >
                       {/* الأيقونة/الصورة على اليمين */}
                       <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-105 ${
                         unread
-                          ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
-                          : 'bg-gray-100 text-gray-500 dark:bg-slate-800 dark:text-slate-400 border border-transparent'
+                          ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shadow-xs'
+                          : 'bg-gray-100 text-gray-400 dark:bg-slate-800 dark:text-slate-500 border border-transparent'
                       }`}>
                         <Bell className="w-4 h-4" />
                       </div>
@@ -309,16 +397,28 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
                           {unread && (
                             <span
                               className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 animate-pulse"
-                              title="غير مقروء"
+                              title="تنبيه غير مقروء"
                             />
                           )}
-                          <h4 className="font-bold text-gray-800 dark:text-slate-100 text-xs sm:text-sm leading-snug">
+                          <h4
+                            className={`text-xs sm:text-sm leading-snug ${
+                              unread
+                                ? 'font-bold text-gray-900 dark:text-slate-100'
+                                : 'font-medium text-gray-500 dark:text-slate-400'
+                            }`}
+                          >
                             {item.title}
                           </h4>
                         </div>
 
                         {/* نص الإشعار */}
-                        <p className="text-sm text-gray-600 dark:text-slate-300 font-normal leading-relaxed">
+                        <p
+                          className={`text-sm leading-relaxed ${
+                            unread
+                              ? 'font-medium text-gray-700 dark:text-slate-200'
+                              : 'font-normal text-gray-500 dark:text-slate-500'
+                          }`}
+                        >
                           {item.body}
                         </p>
 
