@@ -89,3 +89,31 @@ values (
 )
 on conflict do nothing;
 
+
+-- ------------------------------------------------------------------------------
+-- 4. جدول الورد القرآني اليومي المخصص للمستخدمين (user_wird)
+-- ------------------------------------------------------------------------------
+create table if not exists public.user_wird (
+  id uuid primary key default gen_random_uuid(),
+  user_id text not null unique,
+  pages_per_day integer not null default 4,
+  current_page integer not null default 1,
+  notification_time text not null default '08:00',
+  is_active boolean not null default true,
+  last_notified_date text default null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- فهارس للبحث السريع أثناء تشغيل مهام الجدولة (Cron Jobs)
+create index if not exists idx_user_wird_active_time on public.user_wird(is_active, notification_time);
+
+-- تفعيل RLS لجدول الورد اليومي
+alter table public.user_wird enable row level security;
+
+-- السماح للمستخدمين بقراءة وحفظ وردهم اليومي
+drop policy if exists "Allow all read/write user_wird" on public.user_wird;
+create policy "Allow all read/write user_wird"
+on public.user_wird for all
+using (true)
+with check (true);

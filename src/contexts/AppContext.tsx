@@ -1571,6 +1571,66 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [playerName]);
 
+  // Deep Linking: Check for /mushaf or page parameter in URL on mount and handle Service Worker messages
+  useEffect(() => {
+    const handleMushafDeepLink = (urlOrParams?: string | URLSearchParams) => {
+      let params: URLSearchParams;
+      let path = window.location.pathname;
+
+      if (typeof urlOrParams === 'string') {
+        try {
+          const parsed = new URL(urlOrParams, window.location.origin);
+          params = parsed.searchParams;
+          path = parsed.pathname;
+        } catch {
+          params = new URLSearchParams(window.location.search);
+        }
+      } else if (urlOrParams instanceof URLSearchParams) {
+        params = urlOrParams;
+      } else {
+        params = new URLSearchParams(window.location.search);
+      }
+
+      const pageParam = params.get('page');
+      const isMushaf = path.includes('/mushaf') || params.get('view') === 'mushaf' || !!pageParam;
+
+      if (isMushaf) {
+        const pageNum = parseInt(pageParam || '1', 10);
+        if (!isNaN(pageNum) && pageNum >= 1 && pageNum <= 604) {
+          setCurrentPage(pageNum);
+        }
+        setIsPageModeActive(true);
+        setView('mushaf');
+      }
+    };
+
+    // 1. Check URL parameters immediately on mount
+    handleMushafDeepLink();
+
+    // 2. Listen for deep link events from Service Worker & Window (when notification is clicked)
+    const deepLinkListener = (event: MessageEvent) => {
+      if (event.data?.type === 'DEEP_LINK_NAVIGATE') {
+        handleMushafDeepLink(event.data.url);
+      }
+    };
+
+    if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', deepLinkListener);
+    }
+    if (typeof window !== 'undefined') {
+      window.addEventListener('message', deepLinkListener);
+    }
+
+    return () => {
+      if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+        navigator.serviceWorker.removeEventListener('message', deepLinkListener);
+      }
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('message', deepLinkListener);
+      }
+    };
+  }, []);
+
   const fetchAvailableRooms = useCallback(async (showLoading = false) => {
     if (showLoading) setIsLoadingRooms(true);
     try {

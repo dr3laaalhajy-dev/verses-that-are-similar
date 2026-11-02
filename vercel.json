@@ -3,6 +3,10 @@
     {
       "path": "/api/notifications/cron-friday",
       "schedule": "0 6 * * 5"
+    },
+    {
+      "path": "/api/notifications/cron-wird",
+      "schedule": "0 * * * *"
     }
   ],
   "rewrites": [

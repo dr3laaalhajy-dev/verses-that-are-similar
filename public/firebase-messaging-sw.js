@@ -56,16 +56,22 @@ self.addEventListener('notificationclick', (event) => {
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
-      // إذا كان هناك تبويب مفتوح بالفعل، قم بتركيزه والتوجيه إليه
+      // إذا كان هناك تبويب مفتوح بالفعل، قم بإرسال رسالة التوجيه الذكي وتركيزه
       for (const client of windowClients) {
         if (client.url.includes(self.location.origin) && 'focus' in client) {
-          if ('navigate' in client) {
+          client.postMessage({
+            type: 'DEEP_LINK_NAVIGATE',
+            url: targetUrl,
+            data: event.notification.data
+          });
+
+          if ('navigate' in client && !client.url.endsWith(targetUrl)) {
             client.navigate(targetUrl);
           }
           return client.focus();
         }
       }
-      // إذا لم يكن التطبيق مفتوحاً، افتح نافذة جديدة
+      // إذا لم يكن التطبيق مفتوحاً، افتح نافذة جديدة بالرابط المحدد
       if (clients.openWindow) {
         return clients.openWindow(targetUrl);
       }

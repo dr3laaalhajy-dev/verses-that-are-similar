@@ -1,15 +1,17 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { normalizeArabicText } from "../utils/arabic";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowRight, Sparkles, BookOpen, Search, XCircle, ChevronDown, Check,
-  ChevronLeft, ChevronRight, Settings, ZoomIn, ZoomOut, Maximize2, Hash, Moon, RotateCcw, X, ListFilter
+  ChevronLeft, ChevronRight, Settings, ZoomIn, ZoomOut, Maximize2, Hash, Moon, RotateCcw, X, ListFilter,
+  Clock
 } from "lucide-react";
 import { View } from "../types/challenges";
 import { quranData } from "../services/QuranRepository";
 import { juzStartPages, surahStartPages } from "../services/PageRepository";
 import QuranZoomViewer from "../components/QuranZoomViewer";
 import AyahActionSheet from "../components/AyahActionSheet";
+import UserWirdModal from "../components/UserWirdModal";
 
 export interface MushafPageProps {
   isPageModeActive: boolean;
@@ -72,6 +74,8 @@ export const MushafPage: React.FC<MushafPageProps> = ({
   setSelectedAyah,
   setView
 }) => {
+  const [isWirdModalOpen, setIsWirdModalOpen] = useState(false);
+
   const searchResults = useMemo(() => {
     const trimmed = (searchQuery || "").trim();
     if (!trimmed) return [];
@@ -175,6 +179,20 @@ export const MushafPage: React.FC<MushafPageProps> = ({
                               >
                                 <Sparkles className="w-4 h-4 text-brand-gold" />
                                 <span>مميزات وخصائص المصحف</span>
+                              </button>
+
+                              {/* زر تحديد الورد اليومي المخصص */}
+                              <button
+                                onClick={() => setIsWirdModalOpen(true)}
+                                className={`w-full sm:w-auto px-5 py-3.5 md:py-4 rounded-2xl border transition-all flex items-center justify-center gap-2 font-black text-xs md:text-sm shadow-xs cursor-pointer active:scale-95 ${
+                                  librarySettings.darkMode
+                                    ? 'bg-amber-950/40 border-amber-800 text-amber-300 hover:bg-amber-900/50'
+                                    : 'bg-amber-50/90 border-amber-200 text-amber-800 hover:bg-amber-100 hover:border-amber-300'
+                                }`}
+                                title="تحديد الورد اليومي ووقت التذكير الذكي"
+                              >
+                                <Clock className="w-4 h-4 text-amber-600" />
+                                <span>الورد اليومي المخصص 📖</span>
                               </button>
 
                               {currentPage > 1 && (
@@ -729,19 +747,34 @@ export const MushafPage: React.FC<MushafPageProps> = ({
                                   </div>
                                 </div>
 
-                                {/* Row 2: Index Return Button */}
-                                <button
-                                  onClick={() => {
-                                    setIsPageModeActive(false);
-                                    window.scrollTo({ top: 0, behavior: 'smooth' });
-                                  }}
-                                  className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-white transition-all font-bold text-xs shadow-sm border active:scale-95 cursor-pointer ${librarySettings.darkMode ? 'bg-slate-800 hover:bg-emerald-600 border-slate-700' : 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 border-emerald-500/60'
+                                {/* Row 2: Index Return + Wird Buttons */}
+                                <div className="flex flex-wrap items-center justify-center gap-2">
+                                  <button
+                                    onClick={() => {
+                                      setIsPageModeActive(false);
+                                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                                    }}
+                                    className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-white transition-all font-bold text-xs shadow-sm border active:scale-95 cursor-pointer ${librarySettings.darkMode ? 'bg-slate-800 hover:bg-emerald-600 border-slate-700' : 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 border-emerald-500/60'
+                                      }`}
+                                    title="العودة لدليل وفهرس المصحف"
+                                  >
+                                    <RotateCcw className="w-3.5 h-3.5 text-brand-gold" />
+                                    <span>العودة لدليل وفهرس المصحف</span>
+                                  </button>
+
+                                  <button
+                                    onClick={() => setIsWirdModalOpen(true)}
+                                    className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl transition-all font-black text-xs shadow-sm border active:scale-95 cursor-pointer ${
+                                      librarySettings.darkMode
+                                        ? 'bg-amber-950/40 text-amber-300 border-amber-800 hover:bg-amber-900/60'
+                                        : 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100'
                                     }`}
-                                  title="العودة لدليل وفهرس المصحف"
-                                >
-                                  <RotateCcw className="w-3.5 h-3.5 text-brand-gold" />
-                                  <span>العودة لدليل وفهرس المصحف</span>
-                                </button>
+                                    title="تخصيص الورد اليومي والتذكير"
+                                  >
+                                    <Clock className="w-3.5 h-3.5 text-amber-600" />
+                                    <span>الورد اليومي 📖</span>
+                                  </button>
+                                </div>
                               </div>
 
                               {/* Generous Bottom Spacer */}
@@ -1008,6 +1041,18 @@ export const MushafPage: React.FC<MushafPageProps> = ({
                         </div>
                       </div>
                     )}
+
+                    {/* نافذة تحديد الورد القرآني المخصص */}
+                    <UserWirdModal
+                      isOpen={isWirdModalOpen}
+                      onClose={() => setIsWirdModalOpen(false)}
+                      currentPageNumber={currentPage}
+                      onNavigateToPage={(pageNum) => {
+                        setCurrentPage(pageNum);
+                        setIsPageModeActive(true);
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                      }}
+                    />
                   </motion.div>
   );
 };

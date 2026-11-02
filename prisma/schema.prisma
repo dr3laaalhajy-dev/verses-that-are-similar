@@ -238,3 +238,17 @@ model DeviceToken {
 
   @@map("device_tokens")
 }
+
+model UserWird {
+  id                 String   @id @default(uuid())
+  user_id            String   @unique
+  pages_per_day      Int      @default(4)
+  current_page       Int      @default(1)
+  notification_time  String   @default("08:00")
+  is_active          Boolean  @default(true)
+  last_notified_date String?
+  created_at         DateTime @default(now())
+  updated_at         DateTime @default(now()) @updatedAt
+
+  @@map("user_wird")
+}
