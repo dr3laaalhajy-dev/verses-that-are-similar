@@ -232,7 +232,7 @@ model Notification {
 
 model DeviceToken {
   id         String   @id @default(uuid())
-  user_id    String
+  user_id    String?
   fcm_token  String   @unique
   platform   String?  @default("web")
   created_at DateTime @default(now())

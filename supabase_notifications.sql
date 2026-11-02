@@ -62,12 +62,15 @@ using (true);
 -- ------------------------------------------------------------------------------
 create table if not exists public.device_tokens (
   id          uuid primary key default gen_random_uuid(),
-  user_id     text not null,
+  user_id     text,
   fcm_token   text not null unique,
   platform    text default 'web',
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now()
 );
+
+-- التأكد من إمكانية تخزين أجهزة الزوار غير المسجلين
+alter table public.device_tokens alter column user_id drop not null;
 
 -- فهارس لسرعة الاستعلام والبحث
 create index if not exists idx_device_tokens_user_id on public.device_tokens (user_id);
@@ -136,3 +139,8 @@ create policy "Allow all read/write user_wird"
 on public.user_wird for all
 using (true)
 with check (true);
+
+-- ------------------------------------------------------------------------------
+-- 5. تحديث كاش واجهة برمجة التطبيقات (PostgREST Schema Reload)
+-- ------------------------------------------------------------------------------
+notify pgrst, 'reload schema';
