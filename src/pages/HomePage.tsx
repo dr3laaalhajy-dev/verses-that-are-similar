@@ -1,8 +1,8 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   Gamepad2, Play, Trophy, Star, CheckCircle2, Moon, Flame, Zap, ArrowLeft,
-  Volume2, VolumeX, BookOpen, Share2, Check, Sparkles
+  Volume2, VolumeX, BookOpen, Share2, Check, Sparkles, ChevronLeft
 } from 'lucide-react';
 import { View } from '../types/challenges';
 import Dashboard from '../components/Dashboard';
@@ -52,6 +52,21 @@ const toArabicIndic = (num: number | string): string => {
     .join('');
 };
 
+// Daily Adhkar for Quick Tasbih Widget
+export interface DhikrItem {
+  text: string;
+  desc: string;
+}
+
+export const adhkarList: DhikrItem[] = [
+  { text: 'سُبْحَانَ اللَّهِ وَبِحَمْدِهِ', desc: 'مئة مرة تحط بها الخطايا وإن كانت مثل زبد البحر' },
+  { text: 'أَسْتَغْفِرُ اللَّهَ وَأَتُوبُ إِلَيْهِ', desc: 'تفريج للهموم وتوسعة للرزق ومغفرة للذنوب' },
+  { text: 'اللَّهُمَّ صَلِّ عَلَى مُحَمَّدٍ', desc: 'عشر صلوات من الله ورفع عشر درجات بكل مرة' },
+  { text: 'لَا إِلَهَ إِلَّا اللَّهُ وَحْدَهُ لَا شَرِيكَ لَهُ', desc: 'حرز من الشيطان وعتق أربع رقاب وأفضل الذكر' },
+  { text: 'سُبْحَانَ اللَّهِ وَالْحَمْدُ لِلَّهِ وَلَا إِلَهَ إِلَّا اللَّهُ وَاللَّهُ أَكْبَرُ', desc: 'أحب الكلام إلى الله وخير مما طلعت عليه الشمس' },
+  { text: 'لَا حَوْلَ وَلَا قُوَّةَ إِلَّا بِاللَّهِ', desc: 'كنز من كنوز الجنة ودواء للهم والغم' },
+];
+
 export const HomePage: React.FC<HomePageProps> = ({
   activeRunningRoom,
   handleResumeActiveRoom,
@@ -83,26 +98,41 @@ export const HomePage: React.FC<HomePageProps> = ({
   const [isAyahPlaying, setIsAyahPlaying] = useState(false);
   const [isAyahCopied, setIsAyahCopied] = useState(false);
 
+  // Quick Tasbih Dhikr Index State
+  const [dhikrIndex, setDhikrIndex] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('tasbihIndex');
+      if (saved !== null) {
+        const parsed = Number(saved);
+        if (!isNaN(parsed) && parsed >= 0 && parsed < adhkarList.length) {
+          return parsed;
+        }
+      }
+    } catch {}
+    return 0;
+  });
+
   // Quick Tasbih Counter State with localStorage persistence
   const [tasbihCount, setTasbihCount] = useState<number>(() => {
     try {
       const saved = localStorage.getItem('tasbihCount');
       if (saved !== null) {
-        const parsed = parseInt(saved, 10);
+        const parsed = Number(saved);
         if (!isNaN(parsed) && parsed >= 0) {
           return parsed;
         }
       }
     } catch {}
-    return 33;
+    return 0;
   });
 
-  // Sync Tasbih counter with localStorage
+  // Sync Tasbih counter and dhikr index with localStorage
   useEffect(() => {
     try {
       localStorage.setItem('tasbihCount', tasbihCount.toString());
+      localStorage.setItem('tasbihIndex', dhikrIndex.toString());
     } catch {}
-  }, [tasbihCount]);
+  }, [tasbihCount, dhikrIndex]);
 
   const defaultAyahText = "وَنُنَزِّلُ مِنَ الْقُرْآنِ مَا هُوَ شِفَاءٌ وَرَحْمَةٌ لِّلْمُؤْمِنِينَ";
   const activeAyahText = motivationalQuote || defaultAyahText;
@@ -211,18 +241,39 @@ export const HomePage: React.FC<HomePageProps> = ({
     }
   };
 
-  // Tasbih increment with haptic feedback and persistence
+  // Tasbih increment with haptic feedback, auto dhikr switch upon reaching 100
   const handleTasbihTap = () => {
-    setTasbihCount((prev) => {
-      const next = prev >= 100 ? 1 : prev + 1;
+    if (tasbihCount >= 100) {
+      const nextIndex = (dhikrIndex + 1) % adhkarList.length;
+      setDhikrIndex(nextIndex);
+      setTasbihCount(1);
       try {
-        localStorage.setItem('tasbihCount', next.toString());
+        localStorage.setItem('tasbihIndex', nextIndex.toString());
+        localStorage.setItem('tasbihCount', '1');
       } catch {}
-      return next;
-    });
+    } else {
+      const nextCount = tasbihCount + 1;
+      setTasbihCount(nextCount);
+      try {
+        localStorage.setItem('tasbihCount', nextCount.toString());
+      } catch {}
+    }
+
     if (typeof navigator !== 'undefined' && navigator.vibrate) {
       navigator.vibrate(25);
     }
+  };
+
+  // Manual switch to next dhikr
+  const handleNextDhikr = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    const nextIndex = (dhikrIndex + 1) % adhkarList.length;
+    setDhikrIndex(nextIndex);
+    setTasbihCount(0);
+    try {
+      localStorage.setItem('tasbihIndex', nextIndex.toString());
+      localStorage.setItem('tasbihCount', '0');
+    } catch {}
   };
 
   return (
@@ -625,14 +676,42 @@ export const HomePage: React.FC<HomePageProps> = ({
 
         {/* Interactive Quick Tasbih Counter Widget */}
         <div className="rounded-2xl bg-slate-50 dark:bg-obsidian-850/90 border border-slate-150 dark:border-regalGold-500/20 p-3.5 flex items-center justify-between gap-3 shadow-inner">
-          <div className="space-y-0.5">
-            <span className="text-[11px] text-slate-400 dark:text-regalGold-300/70 font-semibold">الذِّكْرُ الحَالِي:</span>
-            <p className="text-sm sm:text-base font-black text-slate-800 dark:text-regalGold-100 font-tajawal">
-              سُبْحَانَ اللَّهِ وَبِحَمْدِهِ
-            </p>
-            <p className="text-[11px] text-emerald-600 dark:text-holyEmerald-400 font-medium">
-              مئة مرة تحط بها الخطايا وإن كانت مثل زبد البحر
-            </p>
+          <div className="space-y-1 min-w-0 flex-1">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] text-slate-400 dark:text-regalGold-300/70 font-semibold">الذِّكْرُ الحَالِي:</span>
+                <span className="text-[10px] text-emerald-700 dark:text-holyEmerald-300 font-mono font-bold bg-emerald-500/10 dark:bg-holyEmerald-500/15 px-1.5 py-0.2 rounded-md border border-emerald-300/40 dark:border-holyEmerald-500/30">
+                  {toArabicIndic(dhikrIndex + 1)} / {toArabicIndic(adhkarList.length)}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={handleNextDhikr}
+                className="text-[10px] sm:text-[11px] font-bold text-slate-400 hover:text-emerald-600 dark:text-regalGold-300/70 dark:hover:text-holyEmerald-400 flex items-center gap-0.5 transition-colors px-1.5 py-0.5 rounded-lg hover:bg-slate-200/60 dark:hover:bg-obsidian-800 cursor-pointer"
+                title="التبديل إلى الذكر التالي"
+              >
+                <span>الذكر التالي</span>
+                <ChevronLeft className="w-3 h-3" />
+              </button>
+            </div>
+
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={dhikrIndex}
+                initial={{ opacity: 0, y: 5 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -5 }}
+                transition={{ duration: 0.2 }}
+                className="space-y-0.5"
+              >
+                <p className="text-sm sm:text-base font-black text-slate-800 dark:text-regalGold-100 font-tajawal">
+                  {adhkarList[dhikrIndex]?.text}
+                </p>
+                <p className="text-[11px] text-emerald-600 dark:text-holyEmerald-400 font-medium">
+                  {adhkarList[dhikrIndex]?.desc}
+                </p>
+              </motion.div>
+            </AnimatePresence>
           </div>
 
           {/* Interactive Tap Button with Dynamic Increment */}
