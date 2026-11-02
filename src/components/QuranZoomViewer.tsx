@@ -1,6 +1,43 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { motion, AnimatePresence, Variants } from 'framer-motion';
 import { RotateCcw, ZoomIn, ZoomOut } from 'lucide-react';
 import QuranAyahOverlay from './QuranAyahOverlay';
+
+// 3D Realistic Page Flip Variants (Arabic RTL Oriented)
+const pageFlipVariants: Variants = {
+  enter: (direction: 'next' | 'prev') => ({
+    rotateY: direction === 'next' ? 65 : -65,
+    x: direction === 'next' ? 35 : -35,
+    opacity: 0,
+    scale: 0.95,
+    transformOrigin: direction === 'next' ? 'left center' : 'right center',
+    filter: 'brightness(0.8) drop-shadow(0 15px 30px rgba(0,0,0,0.35))',
+  }),
+  center: {
+    rotateY: 0,
+    x: 0,
+    opacity: 1,
+    scale: 1,
+    transformOrigin: 'center center',
+    filter: 'brightness(1) drop-shadow(0 8px 18px rgba(0,0,0,0.12))',
+    transition: {
+      duration: 0.42,
+      ease: [0.22, 1, 0.36, 1] as const,
+    },
+  },
+  exit: (direction: 'next' | 'prev') => ({
+    rotateY: direction === 'next' ? -65 : 65,
+    x: direction === 'next' ? -35 : 35,
+    opacity: 0,
+    scale: 0.95,
+    transformOrigin: direction === 'next' ? 'right center' : 'left center',
+    filter: 'brightness(0.65) drop-shadow(0 20px 35px rgba(0,0,0,0.45))',
+    transition: {
+      duration: 0.38,
+      ease: [0.22, 1, 0.36, 1] as const,
+    },
+  }),
+};
 
 interface QuranZoomViewerProps {
   pageNumber: number;
@@ -65,6 +102,17 @@ export const QuranZoomViewer: React.FC<QuranZoomViewerProps> = ({
   useEffect(() => {
     setPosition({ x: 0, y: 0 });
     setScale(1);
+  }, [pageNumber]);
+
+  // Preload neighboring pages for instant, flicker-free 3D page flip
+  useEffect(() => {
+    const pages = [pageNumber - 2, pageNumber - 1, pageNumber + 1, pageNumber + 2].filter(
+      (p) => p >= 1 && p <= 604
+    );
+    pages.forEach((p) => {
+      const img = new Image();
+      img.src = `/quran-pages/${p.toString().padStart(3, '0')}.png`;
+    });
   }, [pageNumber]);
 
   // Keep pan within sensible boundaries based on scale
@@ -163,14 +211,14 @@ export const QuranZoomViewer: React.FC<QuranZoomViewerProps> = ({
         const touch = e.changedTouches[0];
         const dx = touch.clientX - dragStartRef.current.x;
         const dy = touch.clientY - dragStartRef.current.y;
-        const swipeThreshold = 50;
+        const swipeThreshold = 40;
 
-        if (Math.abs(dx) > swipeThreshold && Math.abs(dx) > Math.abs(dy) * 2.0) {
-          if (dx > 0) {
-            // Swipe right -> Next page in Arabic RTL
+        if (Math.abs(dx) > swipeThreshold && Math.abs(dx) > Math.abs(dy) * 1.3) {
+          if (dx < 0) {
+            // Swipe left (toward left arrow) -> Next page in Arabic RTL
             if (pageNumber < 604) onPageTurn?.('next');
           } else {
-            // Swipe left -> Prev page in Arabic RTL
+            // Swipe right (toward right arrow) -> Prev page in Arabic RTL
             if (pageNumber > 1) onPageTurn?.('prev');
           }
           return;
@@ -204,9 +252,8 @@ export const QuranZoomViewer: React.FC<QuranZoomViewerProps> = ({
     }
   };
 
-  // Mouse Handlers for Desktop Panning
+  // Mouse Handlers for Desktop Panning & Swipe Page Turning
   const handleMouseDown = (e: React.MouseEvent) => {
-    if (scale <= 1.05) return;
     onInteraction?.();
     isDraggingRef.current = true;
     dragStartRef.current = { x: e.clientX, y: e.clientY };
@@ -215,20 +262,41 @@ export const QuranZoomViewer: React.FC<QuranZoomViewerProps> = ({
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (!isDraggingRef.current || scale <= 1.05) return;
+    if (!isDraggingRef.current) return;
     onInteraction?.();
     const dx = e.clientX - dragStartRef.current.x;
     const dy = e.clientY - dragStartRef.current.y;
     movedDistanceRef.current = Math.hypot(dx, dy);
 
-    const nextX = posStartRef.current.x + dx;
-    const nextY = posStartRef.current.y + dy;
-    setPosition(clampPosition(nextX, nextY, scale));
+    if (scale > 1.05) {
+      const nextX = posStartRef.current.x + dx;
+      const nextY = posStartRef.current.y + dy;
+      setPosition(clampPosition(nextX, nextY, scale));
+    }
   };
 
-  const handleMouseUp = () => {
+  const handleMouseUp = (e: React.MouseEvent) => {
     if (isDraggingRef.current) {
       isDraggingRef.current = false;
+
+      // Desktop Mouse Swipe Page Turning
+      if (scale <= 1.05) {
+        const dx = e.clientX - dragStartRef.current.x;
+        const dy = e.clientY - dragStartRef.current.y;
+        const swipeThreshold = 50;
+
+        if (Math.abs(dx) > swipeThreshold && Math.abs(dx) > Math.abs(dy) * 1.3) {
+          if (dx < 0) {
+            // Drag left -> Next page in Arabic RTL
+            if (pageNumber < 604) onPageTurn?.('next');
+          } else {
+            // Drag right -> Prev page in Arabic RTL
+            if (pageNumber > 1) onPageTurn?.('prev');
+          }
+          return;
+        }
+      }
+
       if (movedDistanceRef.current < 6) {
         onTap?.();
       }
@@ -275,49 +343,79 @@ export const QuranZoomViewer: React.FC<QuranZoomViewerProps> = ({
           : (isZoomed ? 'touch-none overflow-hidden cursor-grab active:cursor-grabbing' : 'touch-pan-y overflow-visible cursor-default')
       }`}
     >
-      {/* Zoomable Image Wrapper */}
+      {/* 3D Realistic Perspective Page Container */}
       <div
         className="w-full h-full flex items-center justify-center transition-transform duration-75 ease-out will-change-transform"
         style={{
           transform: `translate3d(${position.x}px, ${position.y}px, 0px) scale(${scale})`,
           transformOrigin: 'center center',
+          perspective: 1600,
         }}
       >
-        <div className="relative inline-block max-w-full">
-          <img
+        <AnimatePresence mode="wait" custom={effectivePageTurnDirection}>
+          <motion.div
             key={pageNumber}
-            src={`/quran-pages/${pageNumber.toString().padStart(3, '0')}.png`}
-            alt={`صفحة ${pageNumber}`}
-            draggable={false}
-            className={`block pointer-events-none select-none transition-filter duration-300 ${
-              isFullscreen
-                ? 'w-auto h-auto max-h-[100dvh] max-w-full object-contain drop-shadow-2xl'
-                : 'w-full sm:w-auto h-auto max-h-[75vh] sm:max-h-[85vh] max-w-full object-contain shadow-none md:shadow-xl rounded-none md:rounded-2xl'
-            }`}
+            custom={effectivePageTurnDirection}
+            variants={isZoomed ? undefined : pageFlipVariants}
+            initial={isZoomed ? false : 'enter'}
+            animate="center"
+            exit={isZoomed ? undefined : 'exit'}
+            className="relative inline-block max-w-full"
             style={{
-              filter: darkMode
-                ? 'invert(0.92) hue-rotate(180deg) brightness(0.88) contrast(1.12)'
-                : 'none',
+              transformStyle: 'preserve-3d',
+              backfaceVisibility: 'hidden',
             }}
-          />
-
-          {onSelectAyah && (
-            <QuranAyahOverlay
-              pageNumber={pageNumber}
-              selectedAyah={selectedAyah || null}
-              onSelectAyah={(surah, ayah) => {
-                ayahTapTriggeredRef.current = true;
-                setTimeout(() => {
-                  ayahTapTriggeredRef.current = false;
-                }, 400);
-                if (movedDistanceRef.current < 8) {
-                  onSelectAyah(surah, ayah);
-                }
+          >
+            <img
+              src={`/quran-pages/${pageNumber.toString().padStart(3, '0')}.png`}
+              alt={`صفحة ${pageNumber}`}
+              draggable={false}
+              className={`block pointer-events-none select-none transition-filter duration-300 ${
+                isFullscreen
+                  ? 'w-auto h-auto max-h-[100dvh] max-w-full object-contain drop-shadow-2xl'
+                  : 'w-full sm:w-auto h-auto max-h-[75vh] sm:max-h-[85vh] max-w-full object-contain shadow-none md:shadow-xl rounded-none md:rounded-2xl'
+              }`}
+              style={{
+                filter: darkMode
+                  ? 'invert(0.92) hue-rotate(180deg) brightness(0.88) contrast(1.12)'
+                  : 'none',
               }}
-              darkMode={darkMode}
             />
-          )}
-        </div>
+
+            {/* Dynamic 3D Book Spine Shadow & Page Reflection */}
+            {!isZoomed && (
+              <motion.div
+                key={`shadow-${pageNumber}`}
+                initial={{ opacity: 0.65 }}
+                animate={{ opacity: 0 }}
+                exit={{ opacity: 0.75 }}
+                transition={{ duration: 0.38, ease: 'easeOut' }}
+                className={`absolute inset-0 pointer-events-none rounded-none md:rounded-2xl z-20 ${
+                  effectivePageTurnDirection === 'next'
+                    ? 'bg-gradient-to-r from-black/35 via-transparent to-black/15'
+                    : 'bg-gradient-to-l from-black/35 via-transparent to-black/15'
+                }`}
+              />
+            )}
+
+            {onSelectAyah && (
+              <QuranAyahOverlay
+                pageNumber={pageNumber}
+                selectedAyah={selectedAyah || null}
+                onSelectAyah={(surah, ayah) => {
+                  ayahTapTriggeredRef.current = true;
+                  setTimeout(() => {
+                    ayahTapTriggeredRef.current = false;
+                  }, 400);
+                  if (movedDistanceRef.current < 8) {
+                    onSelectAyah(surah, ayah);
+                  }
+                }}
+                darkMode={darkMode}
+              />
+            )}
+          </motion.div>
+        </AnimatePresence>
       </div>
 
       {/* Floating Zoom Controls Badge when Zoomed In */}

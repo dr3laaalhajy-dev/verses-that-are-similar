@@ -114,6 +114,17 @@ export const MushafPage: React.FC<MushafPageProps> = ({
     }
   };
 
+  // Preload neighboring pages for instant display without flickering
+  useEffect(() => {
+    const pages = [currentPage - 2, currentPage - 1, currentPage + 1, currentPage + 2].filter(
+      (p) => p >= 1 && p <= 604
+    );
+    pages.forEach((p) => {
+      const img = new Image();
+      img.src = `/quran-pages/${p.toString().padStart(3, '0')}.png`;
+    });
+  }, [currentPage]);
+
   // Deep Link ?page=X capture to bypass index and open page directly
   useEffect(() => {
     try {
