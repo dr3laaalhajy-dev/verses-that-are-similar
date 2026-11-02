@@ -22,7 +22,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
     <>
       {/* Top Header */}
       {!app.isMushafFullscreen && (
-        <header className="w-full sticky top-0 z-40 glass-dark text-white shadow-xl border-b border-white/10 backdrop-blur-xl">
+        <header className="w-full sticky top-0 z-50 glass-dark text-white shadow-xl border-b border-white/10 backdrop-blur-xl">
           <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32 blur-3xl pointer-events-none" />
           <div className="w-full px-4 sm:px-8 py-2 md:py-2 flex items-center justify-between gap-2 sm:gap-4 relative z-10">
 

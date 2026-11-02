@@ -152,7 +152,7 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
   };
 
   return (
-    <div className="relative inline-block" ref={dropdownRef} dir="rtl">
+    <div className="relative inline-block z-50" ref={dropdownRef} dir="rtl">
       {/* Bell Button */}
       <button
         type="button"

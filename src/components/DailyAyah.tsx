@@ -194,7 +194,7 @@ const DailyAyah: React.FC = () => {
 
   return (
     <>
-      <div className="sticky top-[52px] sm:top-[60px] md:top-[56px] z-40 w-full max-w-5xl mx-auto px-3 sm:px-6 py-2 pointer-events-none">
+      <div className="sticky top-[52px] sm:top-[60px] md:top-[56px] z-30 w-full max-w-5xl mx-auto px-3 sm:px-6 py-2 pointer-events-none">
         <AnimatePresence>
           {isOpen ? (
             <motion.div
