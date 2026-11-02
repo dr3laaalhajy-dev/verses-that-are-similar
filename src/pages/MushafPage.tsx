@@ -1,17 +1,36 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect, useRef } from "react";
 import { normalizeArabicText } from "../utils/arabic";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowRight, Sparkles, BookOpen, Search, XCircle, ChevronDown, Check,
-  ChevronLeft, ChevronRight, Settings, ZoomIn, ZoomOut, Maximize2, Hash, Moon, RotateCcw, X, ListFilter,
+  ChevronLeft, ChevronRight, Settings, ZoomIn, ZoomOut, Maximize2, Minimize2, Hash, Moon, RotateCcw, X, ListFilter,
   Clock
 } from "lucide-react";
 import { View } from "../types/challenges";
 import { quranData } from "../services/QuranRepository";
-import { juzStartPages, surahStartPages } from "../services/PageRepository";
+import { juzStartPages, surahStartPages, pageBoundaries } from "../services/PageRepository";
 import QuranZoomViewer from "../components/QuranZoomViewer";
 import AyahActionSheet from "../components/AyahActionSheet";
 import UserWirdModal from "../components/UserWirdModal";
+
+// أسماء الأجزاء الثلاثين باللغة العربية
+const JUZ_NAMES_ARABIC = [
+  'الأول', 'الثاني', 'الثالث', 'الرابع', 'الخامس', 'السادس', 'السابع', 'الثامن', 'التاسع', 'العاشر',
+  'الحادي عشر', 'الثاني عشر', 'الثالث عشر', 'الرابع عشر', 'الخامس عشر', 'السادس عشر', 'السابع عشر', 'الثامن عشر', 'التاسع عشر', 'العشرون',
+  'الحادي والعشرون', 'الثاني والعشرون', 'الثالث والعشرون', 'الرابع والعشرون', 'الخامس والعشرون', 'السادس والعشرون', 'السابع والعشرون', 'الثامن والعشرون', 'التاسع والعشرون', 'الثلاثون'
+];
+
+// تحويل الأرقام إلى أرقام عربية مشرقية
+const toArabicIndic = (num: number | string): string => {
+  const arabicDigits = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+  return String(num)
+    .split('')
+    .map((ch) => {
+      const parsed = parseInt(ch, 10);
+      return !isNaN(parsed) && arabicDigits[parsed] !== undefined ? arabicDigits[parsed] : ch;
+    })
+    .join('');
+};
 
 export interface MushafPageProps {
   isPageModeActive: boolean;
@@ -74,8 +93,93 @@ export const MushafPage: React.FC<MushafPageProps> = ({
   setSelectedAyah,
   setView
 }) => {
+  const mushafContainerRef = useRef<HTMLDivElement>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [isWirdModalOpen, setIsWirdModalOpen] = useState(false);
   const [internalZoomScale, setInternalZoomScale] = useState<number>(1);
+
+  // حساب معلومات السورة والجزء ديناميكياً بناءً على رقم الصفحة الحالية
+  const pageInfo = useMemo(() => {
+    const pageNum = Math.max(1, Math.min(604, currentPage));
+
+    let surahId = 1;
+    for (let i = pageBoundaries.length - 1; i >= 0; i--) {
+      if (pageNum >= pageBoundaries[i].page) {
+        surahId = pageBoundaries[i].startSurah;
+        break;
+      }
+    }
+    const surahObj = quranData.find((s) => s.id === surahId);
+    const surahName = surahObj ? surahObj.name : 'الفاتحة';
+
+    let juzNumber = 1;
+    for (let j = 30; j >= 1; j--) {
+      if (pageNum >= (juzStartPages[j] || 1)) {
+        juzNumber = j;
+        break;
+      }
+    }
+    const juzName = JUZ_NAMES_ARABIC[juzNumber - 1] || `${juzNumber}`;
+
+    return {
+      surahId,
+      surahName,
+      juzNumber,
+      juzName,
+      pageNum
+    };
+  }, [currentPage]);
+
+  // التحكم بوضع ملء الشاشة عبر Fullscreen API القياسية على حاوية المصحف الرئيسية
+  const handleToggleFullscreen = async () => {
+    try {
+      if (!document.fullscreenElement) {
+        const targetElement = mushafContainerRef.current || document.getElementById('mushaf-reader-container');
+        if (targetElement) {
+          if (targetElement.requestFullscreen) {
+            await targetElement.requestFullscreen();
+          } else if ((targetElement as any).webkitRequestFullscreen) {
+            await (targetElement as any).webkitRequestFullscreen();
+          } else if ((targetElement as any).msRequestFullscreen) {
+            await (targetElement as any).msRequestFullscreen();
+          }
+          setIsFullscreen(true);
+        }
+      } else {
+        if (document.exitFullscreen) {
+          await document.exitFullscreen();
+        } else if ((document as any).webkitExitFullscreen) {
+          await (document as any).webkitExitFullscreen();
+        } else if ((document as any).msExitFullscreen) {
+          await (document as any).msExitFullscreen();
+        }
+        setIsFullscreen(false);
+      }
+    } catch (err) {
+      console.warn('[Mushaf Fullscreen] Error toggling fullscreen:', err);
+      enterMushafFullscreen?.();
+    }
+  };
+
+  useEffect(() => {
+    const onFullscreenChange = () => {
+      const activeElement = document.fullscreenElement;
+      const isTargetFullscreen = !!activeElement && (
+        activeElement === mushafContainerRef.current ||
+        activeElement.id === 'mushaf-reader-container' ||
+        mushafContainerRef.current?.contains(activeElement)
+      );
+      setIsFullscreen(isTargetFullscreen);
+    };
+
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', onFullscreenChange);
+
+    return () => {
+      document.removeEventListener('fullscreenchange', onFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', onFullscreenChange);
+    };
+  }, []);
 
   const safeZoomScale = typeof mushafZoomScale === 'number' && Number.isFinite(mushafZoomScale) && mushafZoomScale > 0
     ? mushafZoomScale
@@ -141,6 +245,31 @@ export const MushafPage: React.FC<MushafPageProps> = ({
       // ignore
     }
   }, [setCurrentPage, setIsPageModeActive]);
+
+  // Synchronize external selection of Surah or Juz into unified Page Mode without isolated sub-views
+  useEffect(() => {
+    if (selectedSurahId) {
+      const targetPage = surahStartPages[selectedSurahId] || 1;
+      setCurrentPage(targetPage);
+      setIsPageModeActive(true);
+      setSelectedSurahId(null);
+      try {
+        window.history.replaceState({ page: targetPage, view: 'mushaf' }, '', `/mushaf?page=${targetPage}`);
+      } catch {}
+    }
+  }, [selectedSurahId, setCurrentPage, setIsPageModeActive, setSelectedSurahId]);
+
+  useEffect(() => {
+    if (selectedJuz) {
+      const targetPage = juzStartPages[selectedJuz] || 1;
+      setCurrentPage(targetPage);
+      setIsPageModeActive(true);
+      setSelectedJuz(null);
+      try {
+        window.history.replaceState({ page: targetPage, view: 'mushaf' }, '', `/mushaf?page=${targetPage}`);
+      } catch {}
+    }
+  }, [selectedJuz, setCurrentPage, setIsPageModeActive, setSelectedJuz]);
 
   const searchResults = useMemo(() => {
     const trimmed = (searchQuery || "").trim();
@@ -577,13 +706,22 @@ export const MushafPage: React.FC<MushafPageProps> = ({
                                   {/* Fullscreen button */}
                                   <button
                                     type="button"
-                                    onClick={enterMushafFullscreen}
-                                    className={`flex-1 sm:flex-none px-3 sm:px-3.5 md:px-4 py-2 sm:py-2.5 md:py-3.5 rounded-2xl border transition-all shadow-sm flex items-center justify-center gap-1.5 font-bold text-xs md:text-sm whitespace-nowrap cursor-pointer ${librarySettings.darkMode ? 'bg-slate-800 border-slate-700 text-slate-200 hover:text-emerald-400' : 'bg-white border-slate-200 text-slate-600 hover:text-brand-emerald'
-                                      }`}
-                                    title="ملء الشاشة"
+                                    onClick={handleToggleFullscreen}
+                                    className={`flex-1 sm:flex-none px-3 sm:px-3.5 md:px-4 py-2 sm:py-2.5 md:py-3.5 rounded-2xl border transition-all shadow-sm flex items-center justify-center gap-1.5 font-bold text-xs md:text-sm whitespace-nowrap cursor-pointer ${
+                                      isFullscreen
+                                        ? 'bg-holyEmerald-600 border-holyEmerald-500 text-white'
+                                        : librarySettings.darkMode
+                                          ? 'bg-slate-800 border-slate-700 text-slate-200 hover:text-emerald-400'
+                                          : 'bg-white border-slate-200 text-slate-600 hover:text-brand-emerald'
+                                    }`}
+                                    title={isFullscreen ? 'الخروج من ملء الشاشة' : 'ملء الشاشة'}
                                   >
-                                    <Maximize2 className="w-4 h-4 text-brand-gold" />
-                                    <span>ملء الشاشة</span>
+                                    {isFullscreen ? (
+                                      <Minimize2 className="w-4 h-4 text-regalGold-400" />
+                                    ) : (
+                                      <Maximize2 className="w-4 h-4 text-brand-gold" />
+                                    )}
+                                    <span>{isFullscreen ? 'إنهاء ملء الشاشة' : 'ملء الشاشة'}</span>
                                   </button>
                                 </div>
                               </div>
@@ -632,10 +770,20 @@ export const MushafPage: React.FC<MushafPageProps> = ({
                                     {quranData.map((surah: any) => (
                                       <button
                                         key={surah.id}
-                                        onClick={() => {
-                                          setCurrentPage(surahStartPages[surah.id] || 1);
-                                          setIsSurahMenuOpen(false);
+                                        onClick={(e) => {
+                                          e.preventDefault();
+                                          const targetPage = surahStartPages[surah.id] || 1;
+                                          setCurrentPage(targetPage);
                                           setIsPageModeActive(true);
+                                          setIsSurahMenuOpen(false);
+                                          setIsJuzMenuOpen(false);
+                                          setSelectedSurahId(null);
+                                          setSelectedJuz(null);
+                                          setIsSearchSubmitted(false);
+                                          setSelectedAyah(null);
+                                          try {
+                                            window.history.replaceState({ page: targetPage, view: 'mushaf' }, '', `/mushaf?page=${targetPage}`);
+                                          } catch {}
                                         }}
                                         className={`p-2 rounded-xl transition-all text-xs font-bold text-right flex items-center justify-between ${librarySettings.darkMode ? 'bg-slate-800 text-slate-200 hover:bg-brand-emerald hover:text-white' : 'bg-slate-50 hover:bg-brand-emerald hover:text-white'}`}
                                       >
@@ -662,11 +810,20 @@ export const MushafPage: React.FC<MushafPageProps> = ({
                                     {Array.from({ length: 30 }).map((_, i) => (
                                       <button
                                         key={i + 1}
-                                        onClick={() => {
-                                          setSelectedJuz(i + 1);
-                                          setIsJuzMenuOpen(false);
-                                          setCurrentPage(juzStartPages[i + 1] || 1);
+                                        onClick={(e) => {
+                                          e.preventDefault();
+                                          const targetPage = juzStartPages[i + 1] || 1;
+                                          setCurrentPage(targetPage);
                                           setIsPageModeActive(true);
+                                          setIsJuzMenuOpen(false);
+                                          setIsSurahMenuOpen(false);
+                                          setSelectedJuz(null);
+                                          setSelectedSurahId(null);
+                                          setIsSearchSubmitted(false);
+                                          setSelectedAyah(null);
+                                          try {
+                                            window.history.replaceState({ page: targetPage, view: 'mushaf' }, '', `/mushaf?page=${targetPage}`);
+                                          } catch {}
                                         }}
                                         className={`aspect-square rounded-xl transition-all font-black text-xs flex flex-col items-center justify-center ${librarySettings.darkMode ? 'bg-slate-800 text-slate-200 hover:bg-brand-emerald hover:text-white' : 'bg-slate-50 hover:bg-brand-emerald hover:text-white'}`}
                                       >
@@ -680,7 +837,66 @@ export const MushafPage: React.FC<MushafPageProps> = ({
                             </AnimatePresence>
 
                             {/* Page Container: Premium Islamic Manuscript Background Frame */}
-                            <div className="w-full flex flex-col items-center gap-4">
+                            <div
+                              ref={mushafContainerRef}
+                              id="mushaf-reader-container"
+                              className={`w-full flex flex-col items-center transition-all ${
+                                isFullscreen
+                                  ? 'fixed inset-0 z-[100] w-screen h-screen bg-[#070E0E] p-2 sm:p-4 overflow-y-auto justify-between'
+                                  : 'gap-3 sm:gap-4'
+                              }`}
+                            >
+                              {/* شريط معلومات الصفحة العلوي (Surah & Juz Header) */}
+                              <div className={`w-full max-w-3xl mx-auto flex items-center justify-between px-3 sm:px-4 py-2 sm:py-2.5 rounded-2xl backdrop-blur-xl border shadow-lg transition-all ${
+                                librarySettings.darkMode
+                                  ? 'bg-obsidian-900/90 border-regalGold-500/25 text-slate-100 shadow-obsidian-950/60'
+                                  : 'bg-white/95 border-emerald-500/30 text-slate-800 shadow-slate-200/60'
+                              }`}>
+                                {/* اسم السورة واسم ورقم الجزء */}
+                                <div className="flex items-center gap-2 sm:gap-2.5">
+                                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-holyEmerald-600/20 border border-holyEmerald-500/30 flex items-center justify-center text-holyEmerald-400 shrink-0 shadow-xs">
+                                    <BookOpen className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-regalGold-400" />
+                                  </div>
+                                  <div className="flex items-center gap-1.5 sm:gap-2">
+                                    <span className="font-quran text-sm sm:text-base md:text-lg font-bold text-regalGold-400 whitespace-nowrap">
+                                      سورة {pageInfo.surahName}
+                                    </span>
+                                    <span className="text-xs text-regalGold-500/60">•</span>
+                                    <span className="text-xs sm:text-sm font-bold text-slate-300 dark:text-slate-200 whitespace-nowrap">
+                                      الجزء {pageInfo.juzName}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                {/* رقم الصفحة وزر ملء الشاشة */}
+                                <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                                  <div className={`px-2.5 py-1 rounded-xl border text-[11px] sm:text-xs font-mono font-bold flex items-center gap-1 ${
+                                    librarySettings.darkMode
+                                      ? 'bg-obsidian-950/80 border-regalGold-500/25 text-regalGold-300'
+                                      : 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                                  }`}>
+                                    <span className="text-[10px] text-regalGold-500">صفحة</span>
+                                    <span>{toArabicIndic(pageInfo.pageNum)}</span>
+                                  </div>
+
+                                  <button
+                                    type="button"
+                                    onClick={handleToggleFullscreen}
+                                    className={`p-1.5 sm:p-2 rounded-xl border transition-all cursor-pointer active:scale-95 ${
+                                      librarySettings.darkMode
+                                        ? 'bg-obsidian-950/80 border-regalGold-500/25 text-regalGold-400 hover:bg-holyEmerald-600 hover:text-white'
+                                        : 'bg-slate-100 border-slate-200 text-slate-700 hover:bg-emerald-600 hover:text-white'
+                                    }`}
+                                    title={isFullscreen ? 'الخروج من وضع ملء الشاشة' : 'ملء الشاشة'}
+                                  >
+                                    {isFullscreen ? (
+                                      <Minimize2 className="w-4 h-4 text-regalGold-400" />
+                                    ) : (
+                                      <Maximize2 className="w-4 h-4 text-regalGold-400" />
+                                    )}
+                                  </button>
+                                </div>
+                              </div>
                               <div
                                 className="w-full p-0 sm:p-1 md:p-2 border-0 md:border-2 md:border-brand-gold/30 md:rounded-[2.5rem] md:shadow-2xl transition-all relative group overflow-visible md:overflow-hidden"
                                 style={{
@@ -699,7 +915,7 @@ export const MushafPage: React.FC<MushafPageProps> = ({
                                   <QuranZoomViewer
                                     pageNumber={currentPage}
                                     darkMode={librarySettings.darkMode}
-                                    isFullscreen={false}
+                                    isFullscreen={isFullscreen}
                                     externalScale={safeZoomScale}
                                     onExternalScaleChange={updateZoomScale}
                                     onPageTurn={(dir) => {
@@ -811,6 +1027,26 @@ export const MushafPage: React.FC<MushafPageProps> = ({
                                       <ZoomOut className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                                     </button>
                                   </div>
+
+                                  {/* Fullscreen Button in Controls */}
+                                  <button
+                                    type="button"
+                                    onClick={handleToggleFullscreen}
+                                    className={`p-1.5 sm:p-2 rounded-lg text-white transition-all shadow-2xs shrink-0 active:scale-95 cursor-pointer ${
+                                      isFullscreen
+                                        ? 'bg-holyEmerald-600 hover:bg-holyEmerald-700'
+                                        : librarySettings.darkMode
+                                          ? 'bg-slate-700 hover:bg-emerald-600'
+                                          : 'bg-emerald-700 hover:bg-emerald-800'
+                                    }`}
+                                    title={isFullscreen ? 'الخروج من ملء الشاشة' : 'ملء الشاشة'}
+                                  >
+                                    {isFullscreen ? (
+                                      <Minimize2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-regalGold-400" />
+                                    ) : (
+                                      <Maximize2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-brand-gold" />
+                                    )}
+                                  </button>
                                 </div>
 
                                 {/* Row 2: Index Return + Wird Buttons */}
@@ -883,15 +1119,18 @@ export const MushafPage: React.FC<MushafPageProps> = ({
                               {searchResults.map((result, idx) => (
                                 <button
                                   key={idx}
-                                  onClick={() => {
-                                    if (librarySettings.readingMode === 'page') {
-                                      setCurrentPage(result.page);
-                                      setIsPageModeActive(true);
-                                      setIsSearchSubmitted(false);
-                                    } else {
-                                      setSelectedSurahId(result.surahId);
-                                      setIsSearchSubmitted(false);
-                                    }
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    const targetPage = result.page || surahStartPages[result.surahId] || 1;
+                                    setCurrentPage(targetPage);
+                                    setIsPageModeActive(true);
+                                    setIsSearchSubmitted(false);
+                                    setSelectedSurahId(null);
+                                    setSelectedJuz(null);
+                                    setSelectedAyah({ surah: result.surahId, ayah: result.id });
+                                    try {
+                                      window.history.replaceState({ page: targetPage, view: 'mushaf' }, '', `/mushaf?page=${targetPage}`);
+                                    } catch {}
                                   }}
                                   className="w-full text-right pt-10 first:pt-0 group focus:outline-none"
                                 >
