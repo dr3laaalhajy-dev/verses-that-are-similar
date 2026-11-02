@@ -9,6 +9,7 @@ import { useApp } from '../../contexts/AppContext';
 import DailyAyah from '../DailyAyah';
 import { PullToRefresh } from '../PullToRefresh';
 import QuranZoomViewer from '../QuranZoomViewer';
+import { NotificationBell } from '../NotificationBell';
 
 export interface MainLayoutProps {
   children: React.ReactNode;
@@ -89,6 +90,12 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                   {app.librarySettings.darkMode ? 'فاتح' : 'داكن'}
                 </span>
               </button>
+
+              {/* In-App & Push Notification Bell */}
+              <NotificationBell
+                darkMode={app.librarySettings.darkMode}
+                userId={app.playerUsername || app.playerName}
+              />
 
               <button
                 onClick={() => app.setShowAboutModal(true)}

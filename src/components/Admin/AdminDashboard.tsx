@@ -7,13 +7,14 @@ import {
   Crown, Lock, KeyRound, Copy, Check, User, Menu, LogOut, UserX, UserCheck,
   Trophy, Star, RefreshCw, Eye, EyeOff, ShieldCheck, CheckCircle2, XCircle,
   Smartphone, Mail, ExternalLink, Clock, CheckCircle, Video, Play, Rocket,
-  HelpCircle
+  HelpCircle, Bell
 } from 'lucide-react';
 import { searchGroupedAyahsByStart, GroupedAyah } from '../../services/QuranRepository';
 import { ALL_QURAN_SURAHS, getJuzsForSurah, formatJuzsDescription, JUZ_NAMES_AR } from '../../services/JuzRepository';
 import { INITIAL_ISLAMIC_VIDEOS, VIDEO_CATEGORIES, IslamicVideo } from '../../data/islamicVideosData';
 import ConfirmModal from '../ConfirmModal';
 import WhoAmIAdmin from './WhoAmIAdmin';
+import NotificationAdmin from './NotificationAdmin';
 
 interface Verse {
   id: string;
@@ -626,7 +627,7 @@ export default function AdminDashboard({
   const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [admins, setAdmins] = useState<Admin[]>([]);
   const [inviteCodes, setInviteCodes] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<'STANDARD' | 'COMPLETION' | 'SURAH' | 'videos' | 'who_am_i' | 'admins' | 'users' | 'testers' | 'app_update'>('STANDARD');
+  const [activeTab, setActiveTab] = useState<'STANDARD' | 'COMPLETION' | 'SURAH' | 'videos' | 'who_am_i' | 'admins' | 'users' | 'testers' | 'app_update' | 'notifications'>('STANDARD');
   
   // App Version Control state
   const [versionControlData, setVersionControlData] = useState<{
@@ -1773,7 +1774,7 @@ export default function AdminDashboard({
     setLevel('');
     setVerses([]);
     setSuggestions([]);
-    setType(activeTab === 'admins' || activeTab === 'users' || activeTab === 'testers' || activeTab === 'videos' || activeTab === 'app_update' || activeTab === 'who_am_i' ? 'STANDARD' : activeTab);
+    setType(activeTab === 'admins' || activeTab === 'users' || activeTab === 'testers' || activeTab === 'videos' || activeTab === 'app_update' || activeTab === 'who_am_i' || activeTab === 'notifications' ? 'STANDARD' : activeTab);
     setAudioUrl('');
     setOptions(['', '', '', '']);
     setCorrectIndex(null);
@@ -1863,7 +1864,7 @@ export default function AdminDashboard({
             <div>
               <h1 className="text-xs font-black text-slate-800 leading-tight">لوحة التحكم</h1>
               <span className="text-[10px] text-brand-emerald font-bold">
-                {activeTab === 'STANDARD' ? 'المتشابهات' : activeTab === 'COMPLETION' ? 'تكملة الآية' : activeTab === 'SURAH' ? 'اسم السورة' : activeTab === 'videos' ? 'المكتبة المرئية' : activeTab === 'who_am_i' ? 'تحدي من أنا؟' : activeTab === 'users' ? 'إدارة المستخدمين' : activeTab === 'testers' ? 'طلبات Google Play' : activeTab === 'app_update' ? 'نظام تحديث التطبيق 🚀' : 'المشرفين'}
+                {activeTab === 'STANDARD' ? 'المتشابهات' : activeTab === 'COMPLETION' ? 'تكملة الآية' : activeTab === 'SURAH' ? 'اسم السورة' : activeTab === 'videos' ? 'المكتبة المرئية' : activeTab === 'who_am_i' ? 'تحدي من أنا؟' : activeTab === 'users' ? 'إدارة المستخدمين' : activeTab === 'testers' ? 'طلبات Google Play' : activeTab === 'app_update' ? 'نظام تحديث التطبيق 🚀' : activeTab === 'notifications' ? 'نظام إرسال التنبيهات 🔔' : 'المشرفين'}
               </span>
             </div>
           </div>
@@ -2221,6 +2222,33 @@ export default function AdminDashboard({
                     )}
                   </button>
                 )}
+
+                {/* نظام إرسال التنبيهات والإشعارات */}
+                {(isCurrentUserFounder || isCurrentUserCoFounder) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      resetForm();
+                      setActiveTab('notifications');
+                      setIsMobileSidebarOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between p-3 rounded-2xl text-xs md:text-sm font-black transition-all ${
+                      activeTab === 'notifications'
+                        ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/20'
+                        : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Bell className="w-4 h-4 text-amber-500" />
+                      <span>إرسال التنبيهات 🔔</span>
+                    </div>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
+                      activeTab === 'notifications' ? 'bg-white/25 text-white' : 'bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-200'
+                    }`}>
+                      للمؤسسين
+                    </span>
+                  </button>
+                )}
               </div>
             </div>
           )}
@@ -2250,7 +2278,7 @@ export default function AdminDashboard({
       {/* Main Content Area */}
       <div className="flex-1 min-w-0 min-h-screen p-4 md:p-8 overflow-x-hidden">
         {/* Top Action Bar in Main Area (when viewing Questions tabs) */}
-        {activeTab !== 'admins' && activeTab !== 'users' && activeTab !== 'testers' && activeTab !== 'videos' && activeTab !== 'app_update' && activeTab !== 'who_am_i' && (
+        {activeTab !== 'admins' && activeTab !== 'users' && activeTab !== 'testers' && activeTab !== 'videos' && activeTab !== 'app_update' && activeTab !== 'who_am_i' && activeTab !== 'notifications' && (
           <div className="mb-6 flex flex-col sm:flex-row items-center justify-between gap-4 bg-white dark:bg-slate-900 p-4 md:p-5 rounded-2xl md:rounded-[2rem] border border-slate-200/80 dark:border-slate-800 shadow-xs">
             <div>
               <h2 className="text-base md:text-lg font-black text-slate-800 dark:text-slate-100">
@@ -3570,6 +3598,16 @@ export default function AdminDashboard({
               <Shield className="w-12 h-12 text-slate-300 mx-auto mb-3" />
               <p className="text-slate-600 font-black text-base">ليس لديك صلاحية للوصول إلى نظام تحديثات التطبيق</p>
               <p className="text-slate-400 font-bold text-xs mt-1">هذا القسم متاح للمؤسس فقط</p>
+            </div>
+          )
+        ) : activeTab === 'notifications' ? (
+          (isCurrentUserFounder || isCurrentUserCoFounder) ? (
+            <NotificationAdmin token={token} isFounder={isCurrentUserFounder} isCoFounder={isCurrentUserCoFounder} />
+          ) : (
+            <div className="py-20 text-center bg-white rounded-3xl border border-dashed border-slate-200 p-8 shadow-xs">
+              <Shield className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+              <p className="text-slate-600 font-black text-base">ليس لديك صلاحية للوصول إلى نظام إرسال التنبيهات</p>
+              <p className="text-slate-400 font-bold text-xs mt-1">هذا القسم متاح للمؤسس ومساعد المؤسس فقط</p>
             </div>
           )
         ) : activeTab !== 'admins' ? (

@@ -215,3 +215,26 @@ model WhoAmISubmission {
   @@id([round_id, user_id])
   @@map("who_am_i_submissions")
 }
+
+model Notification {
+  id          String   @id @default(uuid())
+  title       String
+  body        String
+  sender_role String?  @default("FOUNDER")
+  sender_name String?
+  metadata    Json?    @default("{}")
+  created_at  DateTime @default(now())
+
+  @@map("notifications")
+}
+
+model DeviceToken {
+  id         String   @id @default(uuid())
+  user_id    String
+  fcm_token  String   @unique
+  platform   String?  @default("web")
+  created_at DateTime @default(now())
+  updated_at DateTime @default(now()) @updatedAt
+
+  @@map("device_tokens")
+}
