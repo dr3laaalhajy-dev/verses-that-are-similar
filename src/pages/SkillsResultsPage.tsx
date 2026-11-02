@@ -204,3 +204,4 @@ export const SkillsResultsPage: React.FC<SkillsResultsPageProps> = ({
 };
 
 export default SkillsResultsPage;
+

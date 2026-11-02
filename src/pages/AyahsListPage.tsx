@@ -130,3 +130,4 @@ export const AyahsListPage: React.FC<AyahsListPageProps> = ({
 };
 
 export default AyahsListPage;
+

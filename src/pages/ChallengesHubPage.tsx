@@ -259,3 +259,4 @@ export const ChallengesHubPage: React.FC<ChallengesHubPageProps> = ({
 };
 
 export default ChallengesHubPage;
+

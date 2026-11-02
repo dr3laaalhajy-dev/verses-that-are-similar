@@ -67,3 +67,4 @@ export const getSpeedQuestionDuration = (challenge: any): number => {
   if (lvl === 'easy' || lvl === 'سهل') return 10;
   return 15; // متوسط (medium) default
 };
+

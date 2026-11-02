@@ -109,3 +109,4 @@ export const SkillsChallengeHeader: React.FC<SkillsChallengeHeaderProps> = ({
 );
 
 export default SkillsChallengeHeader;
+

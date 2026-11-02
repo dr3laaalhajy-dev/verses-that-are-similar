@@ -281,3 +281,4 @@ export const GroupJoinPage: React.FC<GroupJoinPageProps> = ({
 };
 
 export default GroupJoinPage;
+

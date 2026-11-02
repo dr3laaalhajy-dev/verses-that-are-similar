@@ -335,3 +335,4 @@ export const SpeedChallengePage: React.FC<SpeedChallengePageProps> = ({
 };
 
 export default SpeedChallengePage;
+

@@ -221,3 +221,4 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
 };
 
 export default GroupWaitingPage;
+

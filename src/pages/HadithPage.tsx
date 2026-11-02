@@ -80,3 +80,4 @@ export const HadithPage: React.FC<HadithPageProps> = ({
 };
 
 export default HadithPage;
+

@@ -158,3 +158,4 @@ export const VerseCard = memo(({ verse, keyword, isMatched, index, keywordWordCo
 });
 
 export default VerseCard;
+

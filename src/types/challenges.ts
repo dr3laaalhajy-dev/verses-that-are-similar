@@ -72,3 +72,4 @@ export interface VerseCardProps {
   keywordWordCount: number;
   wordStates: Record<number, 'correct' | 'skipped'>;
 }
+

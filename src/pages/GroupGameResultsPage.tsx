@@ -242,3 +242,4 @@ export const GroupGameResultsPage: React.FC<GroupGameResultsPageProps> = ({
 };
 
 export default GroupGameResultsPage;
+
