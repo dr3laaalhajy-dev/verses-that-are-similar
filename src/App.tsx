@@ -28,6 +28,7 @@ import { GoogleGenAI } from '@google/genai';
 import ReactMarkdown from 'react-markdown';
 import Confetti from 'react-confetti';
 import ConfirmModal from './components/ConfirmModal';
+import { supabase } from './services/supabase';
 import AdminLogin from './components/Admin/AdminLogin';
 import AdminDashboard from './components/Admin/AdminDashboard';
 import SkillsMenu from './components/SkillsMenu';
@@ -1440,6 +1441,15 @@ export default function App() {
   const setRoom = (val: any) => {
     roomRef.current = val;
     _setRoom(val);
+    if (val && val.id) {
+      try {
+        localStorage.setItem('activeRoomId', String(val.id));
+      } catch (e) {}
+    } else if (!val) {
+      try {
+        localStorage.removeItem('activeRoomId');
+      } catch (e) {}
+    }
   };
   const prevParticipantsCount = useRef<number>(0);
   const prevRoomStatus = useRef<string>('WAITING');
@@ -1511,7 +1521,9 @@ export default function App() {
   });
   const [v1IsStartingRoom, setV1IsStartingRoom] = useState(false);
   const [v1Category, setV1Category] = useState<string>('');
-  const [skillsType, setSkillsType] = useState<'audio' | 'complete' | 'surah'>('audio');
+  const [skillsType, setSkillsType] = useState<'audio' | 'complete' | 'surah' | null>(null);
+  const [isRoomLoading, setIsRoomLoading] = useState<boolean>(false);
+  const [isReconnecting, setIsReconnecting] = useState<boolean>(false);
   const [skillsOptions, setSkillsOptions] = useState<any[]>([]);
   const [skillsCorrectAnswer, setSkillsCorrectAnswer] = useState<string>('');
   const [isSpeedMode, setIsSpeedMode] = useState(false);
@@ -2628,6 +2640,14 @@ export default function App() {
         setPrivateRoomModal({ isOpen: false, room: null, password: '', error: undefined });
         if (data.status === 'PLAYING') {
           const roomMode = data.gameMode === 'STANDARD' ? 'audio' : (data.gameMode === 'COMPLETION' || data.gameMode === 'ISLAMIC') ? 'complete' : 'surah';
+          if (
+            (roomMode === 'audio' && systemSettings.hideAudioChallenge) ||
+            (roomMode === 'complete' && systemSettings.hideCompletionChallenge) ||
+            (roomMode === 'surah' && systemSettings.hideSurahChallenge)
+          ) {
+            toast.error('تم تعطيل هذا التحدي من لوحة الإدارة');
+            return;
+          }
           setSkillsType(roomMode);
           const mapped = (data.challenges || []).map((q: any) => ({ ...q, verseText: q.verseText || q.keyword || q.text }));
           setChallenges(mapped);
@@ -2879,6 +2899,15 @@ export default function App() {
 
         const firstQ = mapped[0];
         const mode = firstQ?.type === 'SURAH' ? 'surah' : (firstQ?.type === 'STANDARD' || firstQ?.type === 'AUDIO') ? 'audio' : 'complete';
+        if (
+          (mode === 'audio' && systemSettings.hideAudioChallenge) ||
+          (mode === 'complete' && systemSettings.hideCompletionChallenge) ||
+          (mode === 'surah' && systemSettings.hideSurahChallenge)
+        ) {
+          toast.error('تم تعطيل هذا التحدي من لوحة الإدارة');
+          setV1IsStartingRoom(false);
+          return;
+        }
         setSkillsType(mode);
         setRoom(data);
         const roomTime = (data.timePerQuestion && data.timePerQuestion > 0) ? data.timePerQuestion : 0;
@@ -3055,6 +3084,17 @@ export default function App() {
             const mapped = (data.challenges || []).map((q: any) => ({ ...q, verseText: q.verseText || q.keyword || q.text }));
             const firstQ = mapped[0];
             const roomMode = firstQ?.type === 'SURAH' ? 'surah' : (firstQ?.type === 'STANDARD' || firstQ?.type === 'AUDIO') ? 'audio' : 'complete';
+            if (
+              (roomMode === 'audio' && systemSettings.hideAudioChallenge) ||
+              (roomMode === 'complete' && systemSettings.hideCompletionChallenge) ||
+              (roomMode === 'surah' && systemSettings.hideSurahChallenge)
+            ) {
+              setRoom(null);
+              setSkillsType(null);
+              toast.error('تم تعطيل هذا التحدي من لوحة الإدارة');
+              setView('group_join');
+              return;
+            }
             setSkillsType(roomMode);
             setChallenges(mapped);
             setChallengesLoading(false);
@@ -3269,6 +3309,150 @@ export default function App() {
     return () => clearInterval(interval);
   }, [view, playerName, playerUsername]);
 
+  // 1. معالجة حالة التحميل (Loading State) واستعادة الغرفة عند تحديث الصفحة (Reload)
+  useEffect(() => {
+    const isMultiplayerView = view === 'group_waiting' || view === 'group_game' || (view === 'challenge' && challengeMode !== 'daily');
+
+    // إذا قام اللاعب بتحديث الصفحة (Reload) وكان في شاشة غرفة بدون تحميل بيانات الـ room
+    if (isMultiplayerView && !room) {
+      const savedRoomId = localStorage.getItem('activeRoomId');
+      if (!savedRoomId) {
+        // لا توجد غرفة محفوظة: لا تعرض أي تحدي عشوائي ووجه اللاعب للـ Lobby
+        if (view === 'group_waiting' || view === 'group_game' || (view === 'challenge' && skillsType === null)) {
+          toast.error('حدث خطأ في مزامنة الغرفة');
+          setView('group_join');
+        }
+        return;
+      }
+
+      setIsRoomLoading(true);
+      const playerIdParam = encodeURIComponent(playerUsername || playerName || '');
+
+      fetch(`/api/1v1?action=poll&roomId=${savedRoomId}&playerId=${playerIdParam}`)
+        .then(r => r.json())
+        .then(data => {
+          if (!data || data.error || data.message || data.status === 'CANCELLED' || data.status === 'EXPIRED') {
+            localStorage.removeItem('activeRoomId');
+            setRoom(null);
+            setSkillsType(null);
+            setIsRoomLoading(false);
+            toast.error('حدث خطأ في مزامنة الغرفة');
+            setView('group_join');
+            return;
+          }
+
+          setRoom(data);
+
+          // التحقق من نوع التحدي الحقيقي
+          if (data.gameMode === 'WHO_AM_I' || data.challenge_type === 'who_am_i') {
+            setIsRoomLoading(false);
+            setView('group_game');
+            return;
+          }
+
+          if (data.status === 'WAITING') {
+            setIsRoomLoading(false);
+            setView('group_waiting');
+            return;
+          }
+
+          if (data.status === 'FINISHED') {
+            setIsRoomLoading(false);
+            setView('group_game');
+            return;
+          }
+
+          // غرفة نشطة PLAYING
+          const mapped = (data.challenges || []).map((q: any) => ({
+            ...q,
+            verseText: q.verseText || q.keyword || q.text
+          }));
+          setChallenges(mapped);
+          setCurrentChallengeIndex(data.currentQuestionIndex || 0);
+
+          const curQ = mapped[data.currentQuestionIndex || 0] || mapped[0];
+          let detectedMode: 'audio' | 'complete' | 'surah' | null = null;
+          if (curQ?.type === 'SURAH') detectedMode = 'surah';
+          else if (curQ?.type === 'STANDARD' || curQ?.type === 'AUDIO') detectedMode = 'audio';
+          else if (curQ?.type === 'COMPLETION' || curQ?.type === 'ISLAMIC') detectedMode = 'complete';
+          else if (data.gameMode === 'SURAH') detectedMode = 'surah';
+          else if (data.gameMode === 'STANDARD') detectedMode = 'audio';
+          else if (data.gameMode === 'COMPLETION' || data.gameMode === 'ISLAMIC') detectedMode = 'complete';
+
+          // فرض قيود لوحة الإدارة (Strict Admin Rules)
+          if (!detectedMode) {
+            localStorage.removeItem('activeRoomId');
+            setRoom(null);
+            setSkillsType(null);
+            setIsRoomLoading(false);
+            toast.error('حدث خطأ في مزامنة الغرفة');
+            setView('group_join');
+            return;
+          }
+
+          if (
+            (detectedMode === 'audio' && systemSettings.hideAudioChallenge) ||
+            (detectedMode === 'complete' && systemSettings.hideCompletionChallenge) ||
+            (detectedMode === 'surah' && systemSettings.hideSurahChallenge)
+          ) {
+            localStorage.removeItem('activeRoomId');
+            setRoom(null);
+            setSkillsType(null);
+            setIsRoomLoading(false);
+            toast.error('تم تعطيل هذا التحدي من لوحة الإدارة');
+            setView('group_join');
+            return;
+          }
+
+          setSkillsType(detectedMode);
+          setIsRoomLoading(false);
+          setView('challenge');
+        })
+        .catch(err => {
+          console.error('Room recovery failed:', err);
+          localStorage.removeItem('activeRoomId');
+          setRoom(null);
+          setSkillsType(null);
+          setIsRoomLoading(false);
+          toast.error('حدث خطأ في مزامنة الغرفة');
+          setView('group_join');
+        });
+    }
+  }, [view, room, challengeMode, playerUsername, playerName, systemSettings]);
+
+  // 4. معالجة انقطاع الاتصال (Reconnection UI & Supabase Channel Events)
+  useEffect(() => {
+    if (!room?.id) {
+      setIsReconnecting(false);
+      return;
+    }
+
+    const channel = supabase
+      .channel(`room_sync_${room.id}`)
+      .subscribe((status, err) => {
+        if (err) console.warn('[Supabase Room Channel Error]:', err);
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          setIsReconnecting(true);
+        } else if (status === 'SUBSCRIBED') {
+          setIsReconnecting(false);
+        }
+      });
+
+    const handleOffline = () => setIsReconnecting(true);
+    const handleOnline = () => {
+      setIsReconnecting(false);
+    };
+
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('online', handleOnline);
+
+    return () => {
+      supabase.removeChannel(channel);
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('online', handleOnline);
+    };
+  }, [room?.id]);
+
   const handleResumeActiveRoom = (targetRoom: any) => {
     if (!targetRoom) return;
     setRoom(targetRoom);
@@ -3326,6 +3510,16 @@ export default function App() {
     const curQ = mapped[targetRoom.currentQuestionIndex || 0];
     if (curQ) {
       const mode = curQ.type === 'SURAH' ? 'surah' : (curQ.type === 'STANDARD' || curQ.type === 'AUDIO') ? 'audio' : 'complete';
+      if (
+        (mode === 'audio' && systemSettings.hideAudioChallenge) ||
+        (mode === 'complete' && systemSettings.hideCompletionChallenge) ||
+        (mode === 'surah' && systemSettings.hideSurahChallenge)
+      ) {
+        toast.error('تم تعطيل هذا التحدي في إعدادات التطبيق');
+        setActiveRunningRoom(null);
+        setView('group_join');
+        return;
+      }
       setSkillsType(mode);
     }
 
@@ -10198,7 +10392,17 @@ ${versesList}
                             setView('home');
                           }}
                         />
-                        {skillsType === 'audio' && challengeMode !== 'daily' ? (
+                        {isRoomLoading ? (
+                          <div className="flex flex-col items-center justify-center py-28 text-center bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-xs">
+                            <div className="w-12 h-12 border-4 border-brand-emerald border-t-transparent rounded-full animate-spin mb-4" />
+                            <h3 className="text-sm md:text-base font-black text-slate-800 dark:text-slate-100 mb-1">
+                              جاري استعادة بيانات الغرفة ونوع التحدي...
+                            </h3>
+                            <p className="text-xs text-slate-400 font-bold">
+                              يرجى الانتظار لحظات لمزامنة الجولة الحالية
+                            </p>
+                          </div>
+                        ) : skillsType === 'audio' && !systemSettings.hideAudioChallenge && challengeMode !== 'daily' ? (
                           <AudioChallengeUI
                             targetVerses={targetVerses}
                             matchedIds={matchedIds}
@@ -10218,7 +10422,7 @@ ${versesList}
                             handlePromptNextChallenge={handlePromptNextChallenge}
                             onViewTafsir={handleOpenTafsir}
                           />
-                        ) : skillsType === 'surah' && challengeMode !== 'daily' ? (
+                        ) : skillsType === 'surah' && !systemSettings.hideSurahChallenge && challengeMode !== 'daily' ? (
                           <SurahChallengeUI
                             verseText={KEYWORD}
                             inputs={surahInputs}
@@ -10242,7 +10446,7 @@ ${versesList}
                             currentChallenge={currentChallenge}
                             surahFeedbackData={surahFeedbackData}
                           />
-                        ) : (
+                        ) : ((skillsType === 'complete' && !systemSettings.hideCompletionChallenge) || challengeMode === 'daily') ? (
                           <CompleteChallengeUI
                             verseText={KEYWORD}
                             options={skillsOptions || []}
@@ -10268,6 +10472,28 @@ ${versesList}
                               setView('home');
                             }}
                           />
+                        ) : (
+                          <div className="flex flex-col items-center justify-center py-20 text-center bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm max-w-md mx-auto">
+                            <div className="w-12 h-12 rounded-2xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 flex items-center justify-center mb-3">
+                              <AlertCircle className="w-6 h-6" />
+                            </div>
+                            <h3 className="text-base font-black text-slate-800 dark:text-slate-100 mb-1">حدث خطأ في مزامنة الغرفة</h3>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 font-bold mb-5 leading-relaxed">
+                              تعذر تحديد نوع التحدي للغرفة أو تم تعطيل هذا التحدي في إعدادات التطبيق.
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setRoom(null);
+                                setSkillsType(null);
+                                localStorage.removeItem('activeRoomId');
+                                setView('group_join');
+                              }}
+                              className="px-6 py-2.5 rounded-2xl bg-brand-emerald text-white text-xs font-black shadow-md shadow-brand-emerald/20 hover:bg-brand-emerald/90 transition-all cursor-pointer"
+                            >
+                              العودة لقائمة الغرف
+                            </button>
+                          </div>
                         )}
 
                         {/* Live Reactions in Challenge / Room Game */}
@@ -11192,6 +11418,38 @@ ${versesList}
           </AnimatePresence>
         </>
       )}
+
+      {/* 4. نافذة فوقية أثناء انقطاع الاتصال (Reconnection Overlay) */}
+      <AnimatePresence>
+        {isReconnecting && (room || view === 'group_waiting' || view === 'group_game' || view === 'challenge') && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs text-right"
+            dir="rtl"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 max-w-sm w-full text-center shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4"
+            >
+              <div className="w-14 h-14 rounded-2xl bg-amber-500/10 text-amber-500 flex items-center justify-center mx-auto shadow-inner">
+                <RefreshCw className="w-7 h-7 animate-spin" />
+              </div>
+              <div>
+                <h3 className="text-base font-black text-slate-800 dark:text-slate-100 mb-1">
+                  جاري إعادة الاتصال...
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 font-bold leading-relaxed">
+                  ضعف أو انقطاع في الاتصال بالإنترنت، جاري استعادة المزامنة اللحظية للغرفة دون فقدان تقدمك...
+                </p>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div >
   );
 }

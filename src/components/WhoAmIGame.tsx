@@ -42,6 +42,7 @@ export default function WhoAmIGame({
   const [now, setNow] = useState(Date.now());
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
+  const [isReconnecting, setIsReconnecting] = useState(false);
   const revealingRef = useRef<string | null>(null);
   const queueRef = useRef<any[]>([]);
 
@@ -85,10 +86,25 @@ export default function WhoAmIGame({
       .on('postgres_changes', { event: '*', schema: 'public', table: 'who_am_i_submissions', filter }, refresh)
       .subscribe((status, err) => {
         if (err) console.error('[WhoAmIGame Realtime Error]:', err);
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          setIsReconnecting(true);
+        } else if (status === 'SUBSCRIBED') {
+          setIsReconnecting(false);
+        }
       });
+
+    const handleOffline = () => setIsReconnecting(true);
+    const handleOnline = () => {
+      setIsReconnecting(false);
+      refresh();
+    };
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('online', handleOnline);
 
     return () => {
       supabase.removeChannel(channel);
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('online', handleOnline);
     };
   }, [roomId, refresh]);
 
@@ -436,6 +452,16 @@ export default function WhoAmIGame({
             </>
           )}
         </>
+      )}
+
+      {isReconnecting && (
+        <div className="wai-reconnecting-overlay">
+          <div className="wai-reconnecting-card">
+            <div className="wai-reconnecting-spinner" />
+            <h3 style={{ fontSize: '16px', fontWeight: 900, marginBottom: '6px' }}>جاري إعادة الاتصال...</h3>
+            <p style={{ fontSize: '12px', color: '#64748b', fontWeight: 700 }}>انقطع الاتصال اللحظي، جاري المزامنة مع الغرفة...</p>
+          </div>
+        </div>
       )}
     </div>
   );
