@@ -56,20 +56,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
             </motion.div>
 
             {/* Navigation Actions & Profile */}
-            <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
-              <button
-                onClick={() => {
-                  app.setShowScores(!app.showScores);
-                  app.setShowSettings(false);
-                }}
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3.5 sm:py-1.5 rounded-xl transition-all text-xs sm:text-sm font-bold shadow-md hover:scale-105 active:scale-95 ${app.showScores ? 'bg-brand-gold text-brand-emerald font-black' : 'bg-white/10 text-white hover:bg-white/20 border border-white/10'
-                  }`}
-                title="المتصدرين"
-              >
-                <Trophy className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                <span className="hidden sm:inline">{app.showScores ? 'العودة' : 'المتصدرين'}</span>
-              </button>
-
+            <div className="flex items-center gap-2 sm:gap-3 shrink-0">
               {/* Dark Mode / Light Mode Toggle Button */}
               <button
                 onClick={() => app.setLibrarySettings((prev: any) => ({ ...prev, darkMode: !prev.darkMode }))}
@@ -97,27 +84,12 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                 userId={app.playerUsername || app.playerName}
               />
 
-              <button
-                onClick={() => app.setShowAboutModal(true)}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3.5 sm:py-1.5 rounded-xl bg-white/10 text-white hover:bg-white/20 border border-white/10 transition-all text-xs sm:text-sm font-bold shadow-md hover:scale-105 active:scale-95"
-                title="عن التطبيق"
-              >
-                <Info className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-brand-gold" />
-                <span className="hidden sm:inline">عن التطبيق</span>
-              </button>
-
-              <button
-                onClick={() => app.setView('admin')}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3.5 sm:py-1.5 rounded-xl bg-white/10 text-white hover:bg-white/20 border border-white/10 transition-all text-xs sm:text-sm font-bold shadow-md hover:scale-105 active:scale-95"
-                title="لوحة التحكم"
-              >
-                <Lock className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                <span className="hidden sm:inline">الإدارة</span>
-              </button>
-
               {app.playerName && (
                 <div
-                  onClick={() => app.setView('settings')}
+                  onClick={() => {
+                    app.setView('settings');
+                    app.setShowScores(false);
+                  }}
                   className="flex items-center gap-2 sm:gap-2.5 pr-2 sm:pr-2.5 border-r border-white/20 mr-0.5 sm:mr-1 shrink-0 cursor-pointer group"
                   title="ملفي الشخصي"
                 >
@@ -447,16 +419,18 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
 
       {/* Fixed Bottom Navigation Bar */}
       {!app.isMushafFullscreen && (
-        <nav className="fixed bottom-0 left-0 right-0 z-40 glass-dark border-t border-white/15 shadow-2xl backdrop-blur-2xl py-2 px-3 sm:px-6">
-          <div className="max-w-md mx-auto flex items-center justify-around">
+        <nav className="fixed bottom-0 left-0 right-0 z-40 glass-dark border-t border-white/15 shadow-2xl backdrop-blur-2xl py-2 px-2 sm:px-6">
+          <div className="max-w-lg mx-auto flex items-center justify-around">
+            {/* 1. الرئيسية */}
             <button
               onClick={() => {
                 app.setView('home');
                 app.setShowScores(false);
               }}
-              className={`flex flex-col items-center gap-1 py-1.5 px-3 rounded-2xl transition-all duration-300 ${app.view === 'home' && !app.showScores
-                ? 'text-brand-gold bg-white/15 scale-105 shadow-inner'
-                : 'text-white/70 hover:text-white hover:bg-white/5'
+              className={`flex flex-col items-center gap-1 py-1 px-2 sm:px-3 rounded-2xl transition-all duration-300 cursor-pointer ${
+                app.view === 'home' && !app.showScores
+                  ? 'text-brand-gold bg-white/15 scale-105 shadow-inner'
+                  : 'text-white/70 hover:text-white hover:bg-white/5'
               }`}
               title="الرئيسية"
             >
@@ -464,14 +438,16 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
               <span className="text-[10px] sm:text-xs font-bold whitespace-nowrap">الرئيسية</span>
             </button>
 
+            {/* 2. التحديات */}
             <button
               onClick={() => {
                 app.setView('challenges');
                 app.setShowScores(false);
               }}
-              className={`flex flex-col items-center gap-1 py-1.5 px-3 rounded-2xl transition-all duration-300 ${app.view === 'challenges'
-                ? 'text-brand-gold bg-white/15 scale-105 shadow-inner'
-                : 'text-white/70 hover:text-white hover:bg-white/5'
+              className={`flex flex-col items-center gap-1 py-1 px-2 sm:px-3 rounded-2xl transition-all duration-300 cursor-pointer ${
+                app.view === 'challenges' && !app.showScores
+                  ? 'text-brand-gold bg-white/15 scale-105 shadow-inner'
+                  : 'text-white/70 hover:text-white hover:bg-white/5'
               }`}
               title="التحديات"
             >
@@ -479,14 +455,33 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
               <span className="text-[10px] sm:text-xs font-bold whitespace-nowrap">التحديات</span>
             </button>
 
+            {/* 3. المتصدرين (نقلت من الشريط العلوي لتحفيز التنافس) */}
+            <button
+              onClick={() => {
+                app.setShowScores(true);
+                app.setView('home');
+              }}
+              className={`flex flex-col items-center gap-1 py-1 px-2 sm:px-3 rounded-2xl transition-all duration-300 cursor-pointer ${
+                app.showScores
+                  ? 'text-brand-gold bg-white/15 scale-105 shadow-inner font-black'
+                  : 'text-white/70 hover:text-white hover:bg-white/5'
+              }`}
+              title="لوحة المتصدرين"
+            >
+              <Trophy className="w-5 h-5 sm:w-6 sm:h-6 text-brand-gold" />
+              <span className="text-[10px] sm:text-xs font-bold whitespace-nowrap">المتصدرين</span>
+            </button>
+
+            {/* 4. المكتبة */}
             <button
               onClick={() => {
                 app.setView('library');
                 app.setShowScores(false);
               }}
-              className={`flex flex-col items-center gap-1 py-1.5 px-3 rounded-2xl transition-all duration-300 ${app.view === 'library' || app.view === 'mushaf' || app.view === 'adhkar' || app.view === 'hadith' || app.view === 'book' || app.view === 'encyclopedia' || app.view === 'islamic_videos'
-                ? 'text-brand-gold bg-white/15 scale-105 shadow-inner'
-                : 'text-white/70 hover:text-white hover:bg-white/5'
+              className={`flex flex-col items-center gap-1 py-1 px-2 sm:px-3 rounded-2xl transition-all duration-300 cursor-pointer ${
+                !app.showScores && (app.view === 'library' || app.view === 'mushaf' || app.view === 'adhkar' || app.view === 'hadith' || app.view === 'book' || app.view === 'encyclopedia' || app.view === 'islamic_videos')
+                  ? 'text-brand-gold bg-white/15 scale-105 shadow-inner'
+                  : 'text-white/70 hover:text-white hover:bg-white/5'
               }`}
               title="المكتبة والعلوم الشرعية"
             >
@@ -494,14 +489,16 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
               <span className="text-[10px] sm:text-xs font-bold whitespace-nowrap">المكتبة</span>
             </button>
 
+            {/* 5. الإعدادات */}
             <button
               onClick={() => {
                 app.setView('settings');
                 app.setShowScores(false);
               }}
-              className={`flex flex-col items-center gap-1 py-1.5 px-3 rounded-2xl transition-all duration-300 ${app.view === 'settings'
-                ? 'text-brand-gold bg-white/15 scale-105 shadow-inner'
-                : 'text-white/70 hover:text-white hover:bg-white/5'
+              className={`flex flex-col items-center gap-1 py-1 px-2 sm:px-3 rounded-2xl transition-all duration-300 cursor-pointer ${
+                app.view === 'settings' && !app.showScores
+                  ? 'text-brand-gold bg-white/15 scale-105 shadow-inner'
+                  : 'text-white/70 hover:text-white hover:bg-white/5'
               }`}
               title="الإعدادات"
             >

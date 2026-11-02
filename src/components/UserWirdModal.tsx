@@ -479,3 +479,4 @@ export const UserWirdModal: React.FC<UserWirdModalProps> = ({
 };
 
 export default UserWirdModal;
+

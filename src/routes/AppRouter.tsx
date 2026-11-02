@@ -361,6 +361,14 @@ export const AppRouter: React.FC = () => {
             app.setPrivacyModalInitialTab(tab || 'privacy');
             app.setShowPrivacyModal(true);
           }}
+          canAccessAdmin={
+            app.adminRole === 'FOUNDER' ||
+            app.adminRole === 'CO_FOUNDER' ||
+            (!!app.playerUsername && ['alaa', 'علاء', 'founder'].includes(app.playerUsername.toLowerCase())) ||
+            (!!app.playerName && ['alaa', 'علاء'].includes(app.playerName.trim().toLowerCase()))
+          }
+          onOpenAdminPanel={() => app.setView('admin')}
+          onOpenAboutApp={() => app.setShowAboutModal(true)}
         />
       ) : app.view === "home" ? (
         <HomePage
