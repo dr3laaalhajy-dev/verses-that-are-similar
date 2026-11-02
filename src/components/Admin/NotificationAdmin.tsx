@@ -1,11 +1,213 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Bell, Send, CheckCircle2, AlertCircle, Loader2, Users, Smartphone,
   Radio, Clock, ShieldCheck, RefreshCw, Sparkles, MessageSquare,
-  Pencil, Trash2, X, Save, Link2, ExternalLink
+  Pencil, Trash2, X, Save, Link2, ExternalLink, ChevronDown, Search
 } from 'lucide-react';
 import { supabase } from '../../services/supabase';
+import { defaultChallenges } from '../../data/defaultChallenges';
+
+export interface RouteOption {
+  label: string;
+  value: string;
+  category?: string;
+}
+
+export const STATIC_APP_ROUTES: RouteOption[] = [
+  { label: 'المتصدرين - Leaderboard', value: '/leaderboard', category: 'مسار رئيسي' },
+  { label: 'المكتبة القرآنية - Library', value: '/library', category: 'مسار رئيسي' },
+  { label: 'التحديات - Challenges', value: '/challenges', category: 'مسار رئيسي' },
+  { label: 'الرئيسية - Home', value: '/home', category: 'مسار رئيسي' },
+  { label: 'المصحف الشريف - Mushaf', value: '/mushaf', category: 'مصحف' },
+  { label: 'أذكار المسلم - Adhkar', value: '/adhkar', category: 'مسار رئيسي' },
+  { label: 'الأحاديث النبوية - Hadith', value: '/hadith', category: 'مسار رئيسي' },
+  { label: 'مسابقة من أنا؟ الإسلامية - Islamic Quiz', value: '/islamic_quiz', category: 'تحدي' },
+  { label: 'تحدي السرعة - Speed Challenge', value: '/speed_challenge', category: 'تحدي' },
+  { label: 'بنك المهارات والأسئلة - Skills Bank', value: '/skills_menu', category: 'تحدي' },
+  { label: 'الغرف والتحدي الجماعي - Group Challenge', value: '/group_menu', category: 'تحدي' },
+  { label: 'موسوعة المتشابهات - Encyclopedia', value: '/encyclopedia', category: 'مسار رئيسي' },
+  { label: 'كتاب المتشابهات - Quran Book', value: '/book', category: 'مسار رئيسي' },
+  { label: 'الإعدادات - Settings', value: '/settings', category: 'مسار رئيسي' },
+  // سور المصحف الشريف الشائعة
+  { label: 'سورة الكهف (صفحة 293) - Surah Al-Kahf', value: '/mushaf?page=293', category: 'مصحف' },
+  { label: 'سورة البقرة (صفحة 2) - Surah Al-Baqarah', value: '/mushaf?page=2', category: 'مصحف' },
+  { label: 'سورة آل عمران (صفحة 50) - Surah Ali Imran', value: '/mushaf?page=50', category: 'مصحف' },
+  { label: 'سورة يس (صفحة 440) - Surah Ya-Sin', value: '/mushaf?page=440', category: 'مصحف' },
+  { label: 'سورة الملك (صفحة 562) - Surah Al-Mulk', value: '/mushaf?page=562', category: 'مصحف' },
+  // تصنيفات التحديات الإسلامية
+  { label: 'تحدي: السيرة النبوية - Challenge Seerah', value: '/challenges/seerah', category: 'تحدي' },
+  { label: 'تحدي: الصحابة - Challenge Sahaba', value: '/challenges/sahaba', category: 'تحدي' },
+  { label: 'تحدي: الفقه الإسلامي - Challenge Fiqh', value: '/challenges/fiqh', category: 'تحدي' },
+  { label: 'تحدي: العقيدة والتوحيد - Challenge Aqeedah', value: '/challenges/aqeedah', category: 'تحدي' },
+  { label: 'تحدي: علوم القرآن والتفسير - Challenge Tafseer', value: '/challenges/tafseer', category: 'تحدي' },
+  { label: 'تحدي: الحديث الشريف - Challenge Hadith', value: '/challenges/hadith', category: 'تحدي' },
+  { label: 'تحدي: اللغة العربية - Challenge Arabic', value: '/challenges/arabia', category: 'تحدي' }
+];
+
+interface SearchableRouteInputProps {
+  value: string;
+  onChange: (val: string) => void;
+  options: RouteOption[];
+  placeholder?: string;
+  disabled?: boolean;
+}
+
+export const SearchableRouteInput: React.FC<SearchableRouteInputProps> = ({
+  value,
+  onChange,
+  options,
+  placeholder = "مثال: /challenges أو /library",
+  disabled = false
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleOutsideClick = (event: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
+  const normalizeForSearch = (str: string) => {
+    return str
+      .toLowerCase()
+      .replace(/[أإآٱ]/g, 'ا')
+      .replace(/[ة]/g, 'ه')
+      .replace(/[ى]/g, 'ي')
+      .replace(/[ؤئ]/g, 'ء')
+      .replace(/[\u064B-\u065F\u0670]/g, '')
+      .trim();
+  };
+
+  const filteredOptions = useMemo(() => {
+    if (!value || !value.trim()) {
+      return options.slice(0, 10);
+    }
+    const q = normalizeForSearch(value);
+    return options.filter(opt => {
+      const normLabel = normalizeForSearch(opt.label);
+      const normVal = normalizeForSearch(opt.value);
+      return normLabel.includes(q) || normVal.includes(q);
+    });
+  }, [options, value]);
+
+  const hasExactMatch = useMemo(() => {
+    if (!value) return false;
+    const clean = value.trim();
+    return options.some(opt => opt.value === clean);
+  }, [options, value]);
+
+  return (
+    <div className="relative" ref={containerRef} dir="rtl">
+      <div className="relative flex items-center">
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => {
+            onChange(e.target.value);
+            setIsOpen(true);
+          }}
+          onFocus={() => setIsOpen(true)}
+          placeholder={placeholder}
+          disabled={disabled}
+          className="w-full px-4 py-3 pl-16 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800 focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:border-amber-500 font-bold text-sm text-slate-800 dark:text-slate-100 transition-all text-left placeholder:text-right"
+          dir="ltr"
+        />
+        <div className="absolute left-2.5 flex items-center gap-1">
+          {value ? (
+            <button
+              type="button"
+              onClick={() => {
+                onChange('');
+                setIsOpen(false);
+              }}
+              className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+              title="مسح الحقل"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => setIsOpen(prev => !prev)}
+            className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+            title="عرض الاقتراحات"
+          >
+            <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+          </button>
+        </div>
+      </div>
+
+      {/* Floating Dropdown Menu */}
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: -4, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -4, scale: 0.98 }}
+            transition={{ duration: 0.15 }}
+            className="absolute top-full left-0 right-0 mt-1.5 z-[1100] max-h-60 overflow-y-auto bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 p-1.5 space-y-1"
+          >
+            {/* Custom URL indicator when user typed something custom */}
+            {value && value.trim() && !hasExactMatch && (
+              <div className="p-2 mb-1 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-right">
+                <span className="text-[11px] font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
+                  <span>اعتماد الرابط المخصص الحالي:</span>
+                  <span className="font-mono text-xs text-amber-900 dark:text-amber-200 mr-auto" dir="ltr">{value}</span>
+                </span>
+              </div>
+            )}
+
+            {filteredOptions.length > 0 ? (
+              filteredOptions.map((opt, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => {
+                    onChange(opt.value);
+                    setIsOpen(false);
+                  }}
+                  className={`w-full text-right p-2.5 rounded-xl hover:bg-amber-500/10 dark:hover:bg-amber-500/20 transition-all flex items-center justify-between gap-3 group cursor-pointer ${
+                    value === opt.value
+                      ? 'bg-amber-500/15 text-amber-900 dark:text-amber-200 font-black'
+                      : 'text-slate-700 dark:text-slate-200'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0 opacity-60 group-hover:opacity-100" />
+                    <span className="text-xs font-bold truncate">{opt.label}</span>
+                  </div>
+                  <span className="text-[10px] font-mono font-bold text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-lg shrink-0" dir="ltr">
+                    {opt.value}
+                  </span>
+                </button>
+              ))
+            ) : (
+              <div className="p-3 text-center text-xs font-bold text-slate-400">
+                لا توجد مسارات مطابقة للاقتراحات — سيتم حفظ الرابط المخصص الذي كتبته
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
 
 export interface NotificationAdminProps {
   token: string;
@@ -71,6 +273,87 @@ export const NotificationAdmin: React.FC<NotificationAdminProps> = ({
   const [history, setHistory] = useState<NotificationHistoryItem[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const [tokensCount, setTokensCount] = useState<number | null>(null);
+  const [availableRoutes, setAvailableRoutes] = useState<RouteOption[]>(STATIC_APP_ROUTES);
+
+  // Load dynamic challenge routes from Supabase and API
+  useEffect(() => {
+    let isMounted = true;
+    const loadDynamicRoutes = async () => {
+      try {
+        const dynamicList: RouteOption[] = [];
+
+        // 1. Fetch from Supabase who_am_i_questions
+        try {
+          const { data: questions } = await supabase
+            .from('who_am_i_questions')
+            .select('id, category, answer')
+            .limit(40);
+
+          if (questions && questions.length > 0) {
+            questions.forEach((q: any) => {
+              const firstAns = (q.answer || '').split('|')[0].trim();
+              dynamicList.push({
+                label: firstAns
+                  ? `تحدي: ${q.category || 'السيرة'} (${firstAns}) - Challenge`
+                  : `تحدي: ${q.category || 'السيرة'} - Challenge`,
+                value: `/challenges/${q.id}`,
+                category: 'تحدي'
+              });
+            });
+          }
+        } catch (err) {
+          console.warn('[NotificationAdmin] who_am_i_questions fetch warn:', err);
+        }
+
+        // 2. Fetch challenges from API (/api/challenges) or defaultChallenges
+        try {
+          const res = await fetch('/api/challenges?limit=40');
+          if (res.ok) {
+            const json = await res.json();
+            const items = Array.isArray(json) ? json : json.challenges;
+            if (Array.isArray(items)) {
+              items.forEach((c: any) => {
+                const name = c.keyword || c.surah || c.category || `رقم ${c.id}`;
+                dynamicList.push({
+                  label: `تحدي: ${name} - Challenge`,
+                  value: `/challenges/${c.id}`,
+                  category: 'تحدي'
+                });
+              });
+            }
+          }
+        } catch {
+          defaultChallenges.slice(0, 15).forEach((c) => {
+            dynamicList.push({
+              label: `تحدي: ${c.keyword} - Challenge`,
+              value: `/challenges/${c.id}`,
+              category: 'تحدي'
+            });
+          });
+        }
+
+        if (isMounted && dynamicList.length > 0) {
+          setAvailableRoutes(prev => {
+            const map = new Map<string, RouteOption>();
+            prev.forEach(item => map.set(item.value, item));
+            dynamicList.forEach(item => {
+              if (!map.has(item.value)) {
+                map.set(item.value, item);
+              }
+            });
+            return Array.from(map.values());
+          });
+        }
+      } catch (e) {
+        console.warn('[NotificationAdmin] Failed to load dynamic routes:', e);
+      }
+    };
+
+    loadDynamicRoutes();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Edit Modal State
   const [editingItem, setEditingItem] = useState<NotificationHistoryItem | null>(null);
@@ -476,7 +759,7 @@ export const NotificationAdmin: React.FC<NotificationAdminProps> = ({
               </span>
             </div>
 
-            {/* رابط التوجيه (اختياري) */}
+            {/* رابط التوجيه (اختياري) - حقل بحث ذكي وتصفية منسدلة */}
             <div>
               <label className="block text-xs font-black text-slate-700 dark:text-slate-200 mb-1.5 flex items-center justify-between">
                 <span className="flex items-center gap-1.5">
@@ -484,19 +767,17 @@ export const NotificationAdmin: React.FC<NotificationAdminProps> = ({
                   <span>رابط التوجيه (اختياري)</span>
                 </span>
                 <span className="text-[10px] text-slate-400 font-bold">
-                  توجيه فوري عند النقر
+                  بحث ذكي في المسارات والتحديات
                 </span>
               </label>
-              <input
-                type="text"
+              <SearchableRouteInput
                 value={targetUrl}
-                onChange={(e) => setTargetUrl(e.target.value)}
-                placeholder="مثال: /challenges أو /library"
-                className="w-full px-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800 focus:bg-white focus:outline-none focus:border-amber-500 font-bold text-sm text-slate-800 dark:text-slate-100 transition-all text-left placeholder:text-right"
-                dir="ltr"
+                onChange={setTargetUrl}
+                options={availableRoutes}
+                placeholder="مثال: ابحث عن سورة، تحدي، أو اكتب /challenges"
               />
               <span className="text-[10px] text-slate-400 block mt-1 text-right">
-                مسار داخلي مثل: /challenges أو /library أو رابط خارجي https://...
+                ابحث باسم السورة أو التحدي (مثل: السيرة، الكهف، المتصدرين) أو اكتب رابطاً مخصصاً بالكامل
               </span>
             </div>
 
@@ -731,13 +1012,11 @@ export const NotificationAdmin: React.FC<NotificationAdminProps> = ({
                     <Link2 className="w-3.5 h-3.5 text-amber-500" />
                     <span>رابط التوجيه (اختياري)</span>
                   </label>
-                  <input
-                    type="text"
+                  <SearchableRouteInput
                     value={editTargetUrl}
-                    onChange={(e) => setEditTargetUrl(e.target.value)}
-                    placeholder="مثال: /challenges أو /library"
-                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800 focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:border-amber-500 font-bold text-sm text-slate-800 dark:text-slate-100 transition-all text-left placeholder:text-right"
-                    dir="ltr"
+                    onChange={setEditTargetUrl}
+                    options={availableRoutes}
+                    placeholder="مثال: ابحث عن سورة، تحدي، أو اكتب /challenges"
                   />
                 </div>
 
