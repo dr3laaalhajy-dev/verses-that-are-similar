@@ -74,6 +74,20 @@ export const useApp = () => {
   return context;
 };
 
+export const MOTIVATIONAL_QUOTES = [
+  "﴿وَرَتِّلِ ٱلۡقُرۡءَانَ تَرۡتِيلًا﴾",
+  "﴿إِنَّ ٱلَّذِينَ يَتۡلُونَ كِتَٰبَ ٱللَّهِ وَأَقَامُواْ ٱلصَّلَوٰةَ وَأَنفَقُواْ مِمَّا رَزَقۡنَٰهُمۡ سِرّٗا وَعَلَانِيَةٗ يَرۡجُونَ تِجَٰرَةٗ لَّن تَبُورَ﴾",
+  "﴿كِتَٰبٌ أَنزَلۡنَٰهُ إِلَيۡكَ مُبَٰرَكٞ لِّيَدَّبَّرُوٓاْ ءَايَٰتِهِۦ وَلِيَتَذَكَّرَ أُوْلُواْ ٱلۡأَلۡبَٰبِ﴾",
+  "﴿وَلَقَدۡ يَسَّرۡنَا ٱلۡقُرۡءَانَ لِلذِّكۡرِ فَهَلۡ مِن مُّدَّكِرٖ﴾",
+  "﴿ٱقۡرَأۡ بِٱسۡمِ رَبِّكَ ٱلَّذِي خَلَقَ﴾",
+  "﴿وَإِذَا قُرِئَ ٱلۡقُرۡءَانُ فَٱسۡتَمِعُواْ لَهُۥ وَأَنصِتُواْ لَعَلَّكُمۡ تُرۡحَمُونَ﴾",
+  "«خَيْرُكُمْ مَنْ تَعَلَّمَ الْقُرْآنَ وَعَلَّمَهُ»",
+  "«اقْرَؤُوا الْقُرْآنَ فَإِنَّهُ يَأْتِي يَوْمَ الْقِيَامَةِ شَفِيعًا لِأَصْحَابِهِ»",
+  "«الَّذِي يَقْرَأُ الْقُرْآنَ وَهُوَ مَاهِرٌ بِهِ مَعَ السَّفَرَةِ الْكِرَامِ الْبَرَرَةِ»",
+  "«مَنْ قَرَأَ حَرْفًا مِنْ كِتَابِ اللَّهِ فَلَهُ بِهِ حَسَنَةٌ وَالْحَسَنَةُ بِعَشْرِ أَمْثَالِهَا»",
+  "«يُقَالُ لِصَاحِبِ الْقُرْآنِ: اقْرَأْ وَارْتَقِ وَرَتِّلْ كَمَا كُنْتَ تُرَتِّلُ فِي الدُّنْيَا»"
+];
+
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [view, setViewState] = useState<View>(() => {
     try {
@@ -1409,7 +1423,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isStreakModalOpen, setIsStreakModalOpen] = useState(false);
   const [streakInfo, setStreakInfo] = useState<StreakInfo>(() => calculateStreakInfo(0, '', null));
   const [incompleteChallenge, setIncompleteChallenge] = useState<{ index: number, mode: 'daily' | 'normal', surah: string } | null>(null);
-  const [motivationalQuote, setMotivationalQuote] = useState('');
+  const [motivationalQuote, setMotivationalQuote] = useState(() => {
+    return MOTIVATIONAL_QUOTES[Math.floor(Math.random() * MOTIVATIONAL_QUOTES.length)];
+  });
 
   const currentJuz = useMemo(() => {
     let juz = 1;
@@ -1470,9 +1486,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setIncompleteChallenge(JSON.parse(savedIncomplete));
     }
 
-    setMotivationalQuote(MOTIVATIONAL_HADITHS[Math.floor(Math.random() * MOTIVATIONAL_HADITHS.length)]);
+    setMotivationalQuote(MOTIVATIONAL_QUOTES[Math.floor(Math.random() * MOTIVATIONAL_QUOTES.length)]);
     return () => clearInterval(interval);
-  }, [MOTIVATIONAL_HADITHS]);
+  }, []);
 
   const updateStatsAfterWin = useCallback(() => {
     const today = new Date().toISOString().split('T')[0];
@@ -4735,6 +4751,7 @@ ${versesList}
     totalPoints, setTotalPoints,
     streak, setStreak,
     streakInfo,
+    motivationalQuote, setMotivationalQuote,
     isStreakModalOpen, setIsStreakModalOpen,
     userAchievement,
     achievementStyles,

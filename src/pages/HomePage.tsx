@@ -122,7 +122,7 @@ export const HomePage: React.FC<HomePageProps> = ({
           السلام عليكم يا <span className={`underline decoration-brand-gold/30 decoration-4 underline-offset-8 transition-all ${isElite && isNameDecorated && currentStyle ? `text-transparent bg-clip-text bg-gradient-to-r ${currentStyle.textColor}` : 'text-brand-emerald'}`}>{playerName || 'يا ضيفنا الكريم'}</span>
         </h1>
 
-        {/* Motivational Quote / Hadith */}
+        {/* Motivational Quote / Quran Ayah / Hadith */}
         {motivationalQuote && (
           <motion.div
             initial={{ opacity: 0 }}
@@ -130,8 +130,8 @@ export const HomePage: React.FC<HomePageProps> = ({
             transition={{ delay: 0.3 }}
             className="max-w-3xl mx-auto px-4 py-2 text-center"
           >
-            <h3 className="font-uthmani text-lg md:text-2xl lg:text-3xl text-emerald-950 font-bold leading-relaxed" dir="rtl">
-              "{motivationalQuote}"
+            <h3 className="font-uthmani text-lg md:text-2xl lg:text-3xl text-emerald-900 dark:text-emerald-300 font-bold leading-relaxed" dir="rtl">
+              {motivationalQuote.startsWith('﴿') || motivationalQuote.startsWith('«') ? motivationalQuote : `"${motivationalQuote}"`}
             </h3>
           </motion.div>
         )}
