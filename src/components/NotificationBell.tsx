@@ -16,9 +16,10 @@ export interface NotificationItem {
 export interface NotificationBellProps {
   darkMode?: boolean;
   userId?: string | null;
+  buttonClassName?: string;
 }
 
-export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, userId }) => {
+export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, userId, buttonClassName }) => {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = useState<number>(0);
   const [isOpen, setIsOpen] = useState<boolean>(false);
@@ -161,19 +162,15 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
             markAllAsRead();
           }
         }}
-        className={`relative p-2 sm:p-2.5 rounded-2xl border transition-all active:scale-95 cursor-pointer ${
-          darkMode
-            ? 'bg-slate-800/90 border-slate-700 text-slate-200 hover:text-white hover:bg-slate-700'
-            : 'bg-white/90 border-white/40 text-slate-700 hover:text-brand-emerald hover:bg-white shadow-xs'
-        }`}
+        className={buttonClassName || "relative h-10 px-3 flex items-center justify-center gap-2 rounded-xl bg-white/10 hover:bg-white/20 text-white border border-white/10 transition-all text-xs sm:text-sm font-bold shadow-md hover:scale-105 active:scale-95 cursor-pointer"}
         title="التنبيهات والإشعارات"
         aria-label="التنبيهات"
       >
-        <Bell className="w-4 h-4 sm:w-5 sm:h-5 text-current" />
+        <Bell className="w-4 h-4 text-white" />
 
         {/* Red Dot / Unread Badge */}
         {unreadCount > 0 && (
-          <span className="absolute -top-1 -left-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-black text-white bg-red-600 rounded-full border-2 border-white dark:border-slate-900 shadow-md animate-pulse">
+          <span className="absolute -top-1 -left-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-black text-white bg-red-600 rounded-full border-2 border-emerald-900 shadow-md animate-pulse">
             {unreadCount > 9 ? '+9' : unreadCount}
           </span>
         )}

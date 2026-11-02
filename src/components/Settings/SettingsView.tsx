@@ -24,8 +24,7 @@ import {
   Smartphone,
   Download,
   FileText,
-  Trash2,
-  Info
+  Trash2
 } from 'lucide-react';
 
 interface SettingsViewProps {
@@ -48,7 +47,6 @@ interface SettingsViewProps {
   onOpenPrivacyPolicy?: (tab?: 'privacy' | 'terms') => void;
   canAccessAdmin?: boolean;
   onOpenAdminPanel?: () => void;
-  onOpenAboutApp?: () => void;
 }
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
@@ -70,8 +68,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onOpenDownloadApp,
   onOpenPrivacyPolicy,
   canAccessAdmin,
-  onOpenAdminPanel,
-  onOpenAboutApp
+  onOpenAdminPanel
 }) => {
   // 1. Profile State
   const [nameInput, setNameInput] = useState(playerName || '');
@@ -1213,48 +1210,26 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 </div>
 
         {/* ================================================= */}
-        {/* ABOUT & ADMIN ACCESS SECTION                      */}
+        {/* ADMIN ACCESS SECTION (Founders only)              */}
         {/* ================================================= */}
-        <div className="bg-slate-50 border border-slate-200/80 rounded-2xl sm:rounded-3xl p-4 sm:p-5 space-y-3">
-          <div className="flex items-center justify-between pb-2 border-b border-slate-200/60">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-700 flex items-center justify-center font-black">
-                <Info className="w-4 h-4 text-amber-600" />
+        {canAccessAdmin && (
+          <div className="bg-slate-50 border border-slate-200/80 rounded-2xl sm:rounded-3xl p-4 sm:p-5 space-y-3">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-200/60">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-700 flex items-center justify-center font-black">
+                  <Lock className="w-4 h-4 text-emerald-600" />
+                </div>
+                <h4 className="font-black text-sm text-slate-800">إدارة النظام</h4>
               </div>
-              <h4 className="font-black text-sm text-slate-800">حول التطبيق والنظام</h4>
+              <span className="text-[10px] font-bold text-slate-400">إصدار التطبيق v2.5</span>
             </div>
-            <span className="text-[10px] font-bold text-slate-400">إصدار التطبيق v2.5</span>
-          </div>
 
-          <div className={`grid grid-cols-1 ${canAccessAdmin ? 'sm:grid-cols-2' : ''} gap-3 pt-1`}>
-            {/* خيار عن التطبيق */}
-            <button
-              type="button"
-              onClick={onOpenAboutApp}
-              className="p-3.5 rounded-2xl bg-white border border-slate-200 hover:border-brand-gold/60 hover:bg-amber-50/30 transition-all flex items-center justify-between group cursor-pointer shadow-xs active:scale-98 text-right"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-brand-gold/15 text-brand-emerald flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-                  <Info className="w-5 h-5 text-brand-gold" />
-                </div>
-                <div>
-                  <h5 className="font-black text-xs sm:text-sm text-slate-800 group-hover:text-brand-emerald transition-colors">
-                    عن التطبيق
-                  </h5>
-                  <p className="text-[11px] font-bold text-slate-400 mt-0.5">
-                    الرؤية، الرسالة، وفريق تطوير متين
-                  </p>
-                </div>
-              </div>
-              <ChevronLeft className="w-4 h-4 text-slate-300 group-hover:text-brand-emerald group-hover:-translate-x-1 transition-all" />
-            </button>
-
-            {/* خيار لوحة الإدارة (محصور بالمؤسس والمساعد) */}
-            {canAccessAdmin && (
+            <div className="pt-1">
+              {/* خيار لوحة الإدارة (محصور بالمؤسس والمساعد) */}
               <button
                 type="button"
                 onClick={onOpenAdminPanel}
-                className="p-3.5 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-emerald-600/10 border border-emerald-300/80 hover:border-emerald-400 hover:bg-emerald-50/50 transition-all flex items-center justify-between group cursor-pointer shadow-xs active:scale-98 text-right"
+                className="w-full p-3.5 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-emerald-600/10 border border-emerald-300/80 hover:border-emerald-400 hover:bg-emerald-50/50 transition-all flex items-center justify-between group cursor-pointer shadow-xs active:scale-98 text-right"
               >
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-emerald to-teal-800 text-white flex items-center justify-center shrink-0 shadow-sm group-hover:scale-105 transition-transform">
@@ -1276,9 +1251,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 </div>
                 <ChevronLeft className="w-4 h-4 text-emerald-600 group-hover:-translate-x-1 transition-all" />
               </button>
-            )}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* ================================================= */}
         {/* PRIVACY POLICY & TERMS OF USE                     */}

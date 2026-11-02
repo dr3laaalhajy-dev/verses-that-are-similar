@@ -368,7 +368,6 @@ export const AppRouter: React.FC = () => {
             (!!app.playerName && ['alaa', 'علاء'].includes(app.playerName.trim().toLowerCase()))
           }
           onOpenAdminPanel={() => app.setView('admin')}
-          onOpenAboutApp={() => app.setShowAboutModal(true)}
         />
       ) : app.view === "home" ? (
         <HomePage

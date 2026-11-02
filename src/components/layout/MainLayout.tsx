@@ -57,21 +57,28 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
 
             {/* Navigation Actions & Profile */}
             <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+              {/* About App Modal Trigger */}
+              <button
+                onClick={() => app.setShowAboutModal(true)}
+                className="h-10 px-3 flex items-center justify-center gap-2 rounded-xl bg-white/10 hover:bg-white/20 text-white border border-white/10 transition-all text-xs sm:text-sm font-bold shadow-md hover:scale-105 active:scale-95 cursor-pointer"
+                title="عن التطبيق"
+                aria-label="عن التطبيق"
+              >
+                <Info className="w-4 h-4 text-white" />
+                <span className="hidden sm:inline">عن التطبيق</span>
+              </button>
+
               {/* Dark Mode / Light Mode Toggle Button */}
               <button
                 onClick={() => app.setLibrarySettings((prev: any) => ({ ...prev, darkMode: !prev.darkMode }))}
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 sm:py-1.5 rounded-xl transition-all text-xs sm:text-sm font-bold shadow-md hover:scale-105 active:scale-95 ${
-                  app.librarySettings.darkMode
-                    ? 'bg-amber-400/25 text-amber-300 border border-amber-400/40 hover:bg-amber-400/35'
-                    : 'bg-white/10 text-white hover:bg-white/20 border border-white/10'
-                }`}
+                className="h-10 px-3 flex items-center justify-center gap-2 rounded-xl bg-white/10 hover:bg-white/20 text-white border border-white/10 transition-all text-xs sm:text-sm font-bold shadow-md hover:scale-105 active:scale-95 cursor-pointer"
                 title={app.librarySettings.darkMode ? 'التبديل إلى الوضع الفاتح (Light Mode)' : 'التبديل إلى الوضع الداكن (Dark Mode)'}
                 aria-label="تبديل الوضع الداكن والفاتح"
               >
                 {app.librarySettings.darkMode ? (
-                  <Sun className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-300" />
+                  <Sun className="w-4 h-4 text-amber-300" />
                 ) : (
-                  <Moon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-200" />
+                  <Moon className="w-4 h-4 text-white" />
                 )}
                 <span className="hidden sm:inline">
                   {app.librarySettings.darkMode ? 'فاتح' : 'داكن'}
@@ -82,6 +89,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
               <NotificationBell
                 darkMode={app.librarySettings.darkMode}
                 userId={app.playerUsername || app.playerName}
+                buttonClassName="relative h-10 px-3 flex items-center justify-center gap-2 rounded-xl bg-white/10 hover:bg-white/20 text-white border border-white/10 transition-all text-xs sm:text-sm font-bold shadow-md hover:scale-105 active:scale-95 cursor-pointer"
               />
 
               {app.playerName && (
