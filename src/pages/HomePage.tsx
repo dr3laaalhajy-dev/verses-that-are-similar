@@ -118,8 +118,8 @@ export const HomePage: React.FC<HomePageProps> = ({
         animate={{ opacity: 1, y: 0 }}
         className="flex flex-col items-center justify-center text-center space-y-4 mb-4"
       >
-        <h1 className="text-3xl md:text-5xl font-black text-slate-800 tracking-tight">
-          السلام عليكم يا <span className={`underline decoration-brand-gold/30 decoration-4 underline-offset-8 transition-all ${isElite && isNameDecorated && currentStyle ? `text-transparent bg-clip-text bg-gradient-to-r ${currentStyle.textColor}` : 'text-brand-emerald'}`}>{playerName || 'يا ضيفنا الكريم'}</span>
+        <h1 className="text-3xl md:text-5xl font-black text-slate-800 dark:text-transparent dark:bg-clip-text dark:bg-gradient-to-r dark:from-regalGold-100 dark:via-regalGold-300 dark:to-regalGold-200 tracking-tight">
+          السلام عليكم يا <span className={`underline decoration-brand-gold/30 decoration-4 underline-offset-8 transition-all ${isElite && isNameDecorated && currentStyle ? `text-transparent bg-clip-text bg-gradient-to-r ${currentStyle.textColor}` : 'text-brand-emerald dark:text-holyEmerald-400'}`}>{playerName || 'يا ضيفنا الكريم'}</span>
         </h1>
 
         {/* Motivational Quote / Hadith */}
@@ -130,13 +130,13 @@ export const HomePage: React.FC<HomePageProps> = ({
             transition={{ delay: 0.3 }}
             className="max-w-3xl mx-auto px-4 py-2 text-center"
           >
-            <h3 className="font-uthmani text-lg md:text-2xl lg:text-3xl text-emerald-950 font-bold leading-relaxed" dir="rtl">
+            <h3 className="font-uthmani text-lg md:text-2xl lg:text-3xl text-emerald-950 dark:text-transparent dark:bg-clip-text dark:bg-gradient-to-r dark:from-regalGold-200 dark:via-regalGold-400 dark:to-regalGold-200 font-bold leading-relaxed" dir="rtl">
               "{motivationalQuote}"
             </h3>
           </motion.div>
         )}
 
-        <div className="h-1 w-20 bg-brand-gold/30 rounded-full mx-auto mt-2" />
+        <div className="h-1 w-20 bg-brand-gold/30 dark:bg-regalGold-500/40 rounded-full mx-auto mt-2" />
       </motion.div>
 
       {/* Top Interactive Hub: Prayer Times & 2x2 Stats Grid Side-by-Side */}
@@ -150,74 +150,74 @@ export const HomePage: React.FC<HomePageProps> = ({
         <div className="lg:col-span-6 flex flex-col justify-between">
           <div className="grid grid-cols-2 gap-2.5 sm:gap-3.5 h-full">
             {/* 1. إجمالي الكؤوس */}
-            <div className="bg-white p-3.5 sm:p-4 rounded-2xl flex flex-col justify-between border border-slate-150 shadow-xs hover:border-amber-300 hover:shadow-md transition-all duration-200">
+            <div className="glass-card bg-white dark:bg-obsidian-900/80 p-3.5 sm:p-4 rounded-2xl flex flex-col justify-between border border-slate-150 dark:border-regalGold-500/20 shadow-xs hover:border-amber-300 dark:hover:border-regalGold-500/40 hover:shadow-md transition-all duration-200">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] sm:text-xs font-black text-slate-400 uppercase tracking-wider">إجمالي الكؤوس</span>
-                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
-                  <Trophy className="w-4 h-4 text-amber-500" />
+                <span className="text-[11px] sm:text-xs font-black text-slate-400 dark:text-regalGold-300/70 uppercase tracking-wider">إجمالي الكؤوس</span>
+                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-amber-50 dark:bg-regalGold-500/15 text-amber-600 dark:text-regalGold-400 flex items-center justify-center shrink-0">
+                  <Trophy className="w-4 h-4 text-amber-500 dark:text-regalGold-400" />
                 </div>
               </div>
               <div className="mt-3 text-right">
-                <span className="text-2xl sm:text-3xl font-black text-slate-800 tabular-nums leading-tight block">{cups}</span>
-                <span className="text-[10px] text-slate-400 font-bold block mt-0.5">الأوسمة والبطولات</span>
+                <span className="text-2xl sm:text-3xl font-black text-slate-800 dark:text-regalGold-100 tabular-nums leading-tight block">{cups}</span>
+                <span className="text-[10px] text-slate-400 dark:text-regalGold-300/60 font-bold block mt-0.5">الأوسمة والبطولات</span>
               </div>
             </div>
 
             {/* 2. نقاط المهارة */}
-            <div className="bg-white p-3.5 sm:p-4 rounded-2xl flex flex-col justify-between border border-slate-150 shadow-xs hover:border-emerald-300 hover:shadow-md transition-all duration-200">
+            <div className="glass-card bg-white dark:bg-obsidian-900/80 p-3.5 sm:p-4 rounded-2xl flex flex-col justify-between border border-slate-150 dark:border-regalGold-500/20 shadow-xs hover:border-emerald-300 dark:hover:border-holyEmerald-500/40 hover:shadow-md transition-all duration-200">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] sm:text-xs font-black text-slate-400 uppercase tracking-wider">نقاط المهارة</span>
-                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-                  <Star className="w-4 h-4 text-emerald-600 fill-emerald-600" />
+                <span className="text-[11px] sm:text-xs font-black text-slate-400 dark:text-regalGold-300/70 uppercase tracking-wider">نقاط المهارة</span>
+                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-emerald-50 dark:bg-holyEmerald-500/15 text-emerald-600 dark:text-holyEmerald-400 flex items-center justify-center shrink-0">
+                  <Star className="w-4 h-4 text-emerald-600 dark:text-holyEmerald-400 fill-emerald-600 dark:fill-holyEmerald-400" />
                 </div>
               </div>
               <div className="mt-3 text-right">
-                <span className="text-2xl sm:text-3xl font-black text-slate-800 tabular-nums leading-tight block">{totalPoints}</span>
-                <span className="text-[10px] text-slate-400 font-bold block mt-0.5">رصيد الخبرة</span>
+                <span className="text-2xl sm:text-3xl font-black text-slate-800 dark:text-regalGold-100 tabular-nums leading-tight block">{totalPoints}</span>
+                <span className="text-[10px] text-slate-400 dark:text-regalGold-300/60 font-bold block mt-0.5">رصيد الخبرة</span>
               </div>
             </div>
 
             {/* 3. التقدم الكلي */}
-            <div className="bg-white p-3.5 sm:p-4 rounded-2xl flex flex-col justify-between border border-slate-150 shadow-xs hover:border-teal-300 hover:shadow-md transition-all duration-200">
+            <div className="glass-card bg-white dark:bg-obsidian-900/80 p-3.5 sm:p-4 rounded-2xl flex flex-col justify-between border border-slate-150 dark:border-regalGold-500/20 shadow-xs hover:border-teal-300 dark:hover:border-holyEmerald-500/40 hover:shadow-md transition-all duration-200">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] sm:text-xs font-black text-slate-400 uppercase tracking-wider">التقدم الكلي</span>
-                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center shrink-0">
-                  <CheckCircle2 className="w-4 h-4 text-teal-600" />
+                <span className="text-[11px] sm:text-xs font-black text-slate-400 dark:text-regalGold-300/70 uppercase tracking-wider">التقدم الكلي</span>
+                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-teal-50 dark:bg-holyEmerald-500/15 text-teal-600 dark:text-holyEmerald-400 flex items-center justify-center shrink-0">
+                  <CheckCircle2 className="w-4 h-4 text-teal-600 dark:text-holyEmerald-400" />
                 </div>
               </div>
               <div className="mt-3 text-right">
-                <span className="text-2xl sm:text-3xl font-black text-slate-800 tabular-nums leading-tight block">{completedChallengeIds.size}</span>
-                <span className="text-[10px] text-slate-400 font-bold block mt-0.5">تحدياً مكتملاً</span>
+                <span className="text-2xl sm:text-3xl font-black text-slate-800 dark:text-regalGold-100 tabular-nums leading-tight block">{completedChallengeIds.size}</span>
+                <span className="text-[10px] text-slate-400 dark:text-regalGold-300/60 font-bold block mt-0.5">تحدياً مكتملاً</span>
               </div>
             </div>
 
             {/* 4. مواسم الطاعات وسنن الأيام */}
             <button
               onClick={() => setIsOccasionsModalOpen(true)}
-              className="bg-white p-3.5 sm:p-4 rounded-2xl flex flex-col justify-between border border-slate-150 shadow-xs hover:border-amber-300 hover:shadow-md transition-all duration-200 text-right group cursor-pointer"
+              className="glass-card bg-white dark:bg-obsidian-900/80 p-3.5 sm:p-4 rounded-2xl flex flex-col justify-between border border-slate-150 dark:border-regalGold-500/20 shadow-xs hover:border-amber-300 dark:hover:border-regalGold-500/40 hover:shadow-md transition-all duration-200 text-right group cursor-pointer"
               title="انقر لاستعراض أقرب مواسم الطاعات وسُنن الأيام والأحاديث الواردة فيها"
             >
               <div className="flex items-center justify-between w-full">
-                <span className="text-[11px] sm:text-xs font-black text-slate-400 uppercase tracking-wider">
+                <span className="text-[11px] sm:text-xs font-black text-slate-400 dark:text-regalGold-300/70 uppercase tracking-wider">
                   مواسم الطاعات
                 </span>
-                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
-                  <Moon className="w-4 h-4 text-amber-500 fill-amber-500" />
+                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-amber-50 dark:bg-regalGold-500/15 text-amber-600 dark:text-regalGold-400 flex items-center justify-center shrink-0">
+                  <Moon className="w-4 h-4 text-amber-500 dark:text-regalGold-400 fill-amber-500 dark:fill-regalGold-400" />
                 </div>
               </div>
               <div className="mt-2 text-right">
-                <span className="text-sm sm:text-base font-black text-slate-800 leading-tight block truncate group-hover:text-amber-700 transition-colors">
+                <span className="text-sm sm:text-base font-black text-slate-800 dark:text-regalGold-100 leading-tight block truncate group-hover:text-amber-700 dark:group-hover:text-regalGold-300 transition-colors">
                   {nearestOccasion?.title}
                 </span>
                 <div className="flex items-center gap-1.5 mt-1">
-                  <span className="text-[10px] bg-amber-50 text-amber-800 border border-amber-200/60 font-bold px-1.5 py-0.2 rounded-md shrink-0">
+                  <span className="text-[10px] bg-amber-50 dark:bg-regalGold-500/15 text-amber-800 dark:text-regalGold-300 border border-amber-200/60 dark:border-regalGold-500/30 font-bold px-1.5 py-0.2 rounded-md shrink-0">
                     {nearestOccasion?.timingBadge}
                   </span>
-                  <span className="text-[10px] text-slate-400 font-bold truncate">
+                  <span className="text-[10px] text-slate-400 dark:text-regalGold-300/60 font-bold truncate">
                     {nearestOccasion?.hijriDateText}
                   </span>
                 </div>
-                <span className="text-[10px] text-amber-600 font-bold block mt-1 group-hover:underline">
+                <span className="text-[10px] text-amber-600 dark:text-regalGold-400 font-bold block mt-1 group-hover:underline">
                   استعراض السُنن والأحاديث 🌙
                 </span>
               </div>
@@ -227,36 +227,36 @@ export const HomePage: React.FC<HomePageProps> = ({
       </div>
 
       {/* Subtitle / Last Played Date info */}
-      <div className="flex items-center justify-between px-3 -mt-2 text-xs text-slate-400 font-medium">
-        <span>آخر نشاط: <strong className="text-slate-600 font-bold">{lastPlayedDate ? (lastPlayedDate === new Date().toISOString().split('T')[0] ? 'اليوم' : lastPlayedDate) : 'لم يبدأ بعد'}</strong></span>
-        <span className="text-[11px] text-emerald-700/80 font-bold hidden sm:inline">انقر على شعلة الزاوية لمعرفة نظام الـ 24 ساعة ومهلة الإنقاذ 🔥</span>
+      <div className="flex items-center justify-between px-3 -mt-2 text-xs text-slate-400 dark:text-regalGold-300/60 font-medium">
+        <span>آخر نشاط: <strong className="text-slate-600 dark:text-regalGold-200 font-bold">{lastPlayedDate ? (lastPlayedDate === new Date().toISOString().split('T')[0] ? 'اليوم' : lastPlayedDate) : 'لم يبدأ بعد'}</strong></span>
+        <span className="text-[11px] text-emerald-700/80 dark:text-holyEmerald-400 font-bold hidden sm:inline">انقر على شعلة الزاوية لمعرفة نظام الـ 24 ساعة ومهلة الإنقاذ 🔥</span>
       </div>
 
       {/* Daily Challenge Card on Home */}
       <div className="px-1">
         {dailyCompleted ? (
-          <div className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-150 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xs">
+          <div className="glass-card p-4 sm:p-5 rounded-2xl bg-white dark:bg-obsidian-900/80 border border-slate-150 dark:border-regalGold-500/20 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xs">
             <div className="flex items-center gap-3.5">
-              <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-holyEmerald-500/15 text-emerald-600 dark:text-holyEmerald-400 flex items-center justify-center shrink-0">
                 <CheckCircle2 className="w-5 h-5" />
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h4 className="font-black text-slate-800 text-sm sm:text-base">تم إنجاز التحدي اليومي بنجاح!</h4>
-                  <span className="text-[10px] bg-emerald-50 text-emerald-800 border border-emerald-200/60 font-bold px-2 py-0.5 rounded-full">مكتمل</span>
+                  <h4 className="font-black text-slate-800 dark:text-regalGold-100 text-sm sm:text-base">تم إنجاز التحدي اليومي بنجاح!</h4>
+                  <span className="text-[10px] bg-emerald-50 dark:bg-holyEmerald-500/15 text-emerald-800 dark:text-holyEmerald-300 border border-emerald-200/60 dark:border-holyEmerald-500/30 font-bold px-2 py-0.5 rounded-full">مكتمل</span>
                 </div>
-                <p className="text-xs text-slate-400 font-bold mt-0.5">شعلتك مشتعلة بأمان حتى الغد. استمر في تعاهد كتاب الله.</p>
+                <p className="text-xs text-slate-400 dark:text-regalGold-300/70 font-bold mt-0.5">شعلتك مشتعلة بأمان حتى الغد. استمر في تعاهد كتاب الله.</p>
               </div>
             </div>
             <button
               onClick={() => setView('challenges')}
-              className="px-4 py-2 bg-slate-50 hover:bg-emerald-50 text-emerald-800 border border-slate-200 hover:border-emerald-300 rounded-xl font-bold text-xs transition-all shadow-xs active:scale-95 shrink-0"
+              className="px-4 py-2 bg-slate-50 dark:bg-obsidian-850 hover:bg-emerald-50 dark:hover:bg-obsidian-800 text-emerald-800 dark:text-regalGold-200 border border-slate-200 dark:border-regalGold-500/20 hover:border-emerald-300 dark:hover:border-regalGold-500/40 rounded-xl font-bold text-xs transition-all shadow-xs active:scale-95 shrink-0 cursor-pointer"
             >
               استكشف التحديات الأخرى
             </button>
           </div>
         ) : streakInfo?.status === 'warning' ? (
-          <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-amber-500/10 via-rose-500/5 to-amber-500/10 border-2 border-amber-400 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="glass-card p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-amber-500/10 via-rose-500/5 to-amber-500/10 dark:from-amber-500/20 dark:via-rose-500/10 dark:to-amber-500/20 border-2 border-amber-400 dark:border-regalGold-500 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-3.5">
               <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 animate-pulse">
                 <Flame className="w-5 h-5 text-amber-200" />
@@ -267,43 +267,43 @@ export const HomePage: React.FC<HomePageProps> = ({
                     مهلة إنقاذ الشعلة: متبقي {streakInfo?.timeLeftFormatted}
                   </span>
                 </div>
-                <h4 className="font-black text-amber-950 text-sm sm:text-base mt-1">
+                <h4 className="font-black text-amber-950 dark:text-regalGold-100 text-sm sm:text-base mt-1">
                   شعلتك انطفأت مؤقتاً! أنقذ سلسلتك الآن
                 </h4>
-                <p className="text-xs text-amber-900/80 font-bold mt-0.5">
+                <p className="text-xs text-amber-900/80 dark:text-regalGold-300/80 font-bold mt-0.5">
                   أكمل التحدي اليومي قبل انتهاء المهلة لتعود الشعلة للاشتعال فوراً ولا تفقد تقدمك!
                 </p>
               </div>
             </div>
             <button
               onClick={handleStartDaily}
-              className="w-full sm:w-auto px-5 py-2.5 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white font-black text-xs sm:text-sm rounded-xl transition-all shadow-xs active:scale-95 flex items-center justify-center gap-2 shrink-0"
+              className="w-full sm:w-auto px-5 py-2.5 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 text-white font-black text-xs sm:text-sm rounded-xl transition-all shadow-xs active:scale-95 flex items-center justify-center gap-2 shrink-0 cursor-pointer"
             >
               <Zap className="w-4 h-4 text-amber-200" />
               <span>أنقذ الشعلة الآن 🔥</span>
             </button>
           </div>
         ) : (
-          <div className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-150 hover:border-emerald-400 transition-all duration-200 shadow-xs hover:shadow-md flex flex-col sm:flex-row items-center justify-between gap-4 text-right group">
+          <div className="glass-card p-4 sm:p-5 rounded-2xl bg-white dark:bg-obsidian-900/80 border border-slate-150 dark:border-regalGold-500/20 hover:border-emerald-400 dark:hover:border-regalGold-500/40 transition-all duration-200 shadow-xs hover:shadow-md flex flex-col sm:flex-row items-center justify-between gap-4 text-right group">
             <div className="flex items-center gap-3.5">
               <DailyChallengeEmblem className="w-11 h-11 shrink-0 transition-transform duration-200 group-hover:scale-105" />
               <div>
                 <div className="flex items-center gap-2 mb-0.5">
-                  <h4 className="font-black text-slate-800 text-base group-hover:text-brand-emerald transition-colors">
+                  <h4 className="font-black text-slate-800 dark:text-regalGold-100 text-base group-hover:text-brand-emerald dark:group-hover:text-regalGold-300 transition-colors">
                     التحدي اليومي: إكمال الآية
                   </h4>
-                  <span className="text-[10px] bg-emerald-50 text-emerald-800 border border-emerald-200/60 font-black px-2 py-0.5 rounded-full">
+                  <span className="text-[10px] bg-emerald-50 dark:bg-holyEmerald-500/15 text-emerald-800 dark:text-holyEmerald-300 border border-emerald-200/60 dark:border-holyEmerald-500/30 font-black px-2 py-0.5 rounded-full">
                     تحدي اليوم
                   </span>
                 </div>
-                <p className="text-xs text-slate-400 font-bold leading-relaxed">
+                <p className="text-xs text-slate-400 dark:text-regalGold-300/70 font-bold leading-relaxed">
                   أكمل الآية الكريمة، وحافظ على اشتعال شعلتك اليومية واكسب نقاط المهارة القرآنية
                 </p>
               </div>
             </div>
             <button
               onClick={handleStartDaily}
-              className="w-full sm:w-auto px-5 py-2.5 bg-brand-emerald hover:bg-[#033628] text-white font-black text-xs sm:text-sm rounded-xl transition-all shadow-xs active:scale-95 flex items-center justify-center gap-2 shrink-0 cursor-pointer"
+              className="w-full sm:w-auto px-5 py-2.5 bg-brand-emerald dark:bg-holyEmerald-600 dark:hover:bg-holyEmerald-700 hover:bg-[#033628] text-white font-black text-xs sm:text-sm rounded-xl transition-all shadow-xs active:scale-95 flex items-center justify-center gap-2 shrink-0 cursor-pointer"
             >
               <span>ابدأ التحدي اليومي</span>
               <ArrowLeft className="w-4 h-4" />

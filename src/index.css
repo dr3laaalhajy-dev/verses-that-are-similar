@@ -1,18 +1,46 @@
-@import url('https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Noto+Naskh+Arabic:wght@400;500;600;700&family=Tajawal:wght@300;400;500;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400;1,700&family=Noto+Naskh+Arabic:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=Tajawal:wght@300;400;500;700;800;900&display=swap');
 @import "tailwindcss";
+@config "../tailwind.config.js";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
   --font-sans: "Tajawal", ui-sans-serif, system-ui, sans-serif;
-  --font-quran: "Noto Naskh Arabic", "Tajawal", "Amiri", serif;
+  --font-tajawal: "Tajawal", ui-sans-serif, system-ui, sans-serif;
+  --font-quran: "Amiri", "Noto Naskh Arabic", serif;
+  --font-mono: "Space Grotesk", monospace;
   
   --color-brand-emerald: #064e3b;
   --color-brand-gold: #d4af37;
   --color-brand-sand: #fdfbf7;
+
+  /* Luxury Obsidian Palette */
+  --color-obsidian-950: #070E0E;
+  --color-obsidian-900: #0B1616;
+  --color-obsidian-850: #0F1D1D;
+  --color-obsidian-800: #142525;
+  --color-obsidian-700: #1E3636;
+  --color-obsidian-600: #2A4B4B;
+
+  /* Regal Gold Palette */
+  --color-regalGold-100: #FDF8ED;
+  --color-regalGold-200: #F9EED4;
+  --color-regalGold-300: #F2DCAB;
+  --color-regalGold-400: #E6C57B;
+  --color-regalGold-500: #D4AF37;
+  --color-regalGold-600: #AA8B24;
+  --color-regalGold-700: #806716;
+
+  /* Holy Emerald Palette */
+  --color-holyEmerald-400: #34D399;
+  --color-holyEmerald-500: #10B981;
+  --color-holyEmerald-600: #059669;
+  --color-holyEmerald-700: #047857;
+  --color-holyEmerald-800: #065F46;
+  --color-holyEmerald-900: #064E3B;
   
   --shadow-premium: 0 10px 30px -5px rgba(6, 78, 59, 0.1), 0 4px 12px -4px rgba(6, 78, 59, 0.05);
-  --shadow-3xl: 0 35px 60px -15px rgba(0, 0, 0, 0.3);
+  --shadow-3xl: 0 35px 60px -15px rgba(0, 0, 0, 0.4);
   
   --mushaf-line-height-mobile: 1.3;
   --mushaf-line-height-desktop: 1.8;
@@ -190,48 +218,105 @@
 
 
 .glass-dark {
-  background: rgba(6, 78, 59, 0.92);
+  background: rgba(7, 14, 14, 0.92);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(212, 175, 55, 0.2);
+  box-shadow: 0 12px 35px 0 rgba(0, 0, 0, 0.5);
 }
 
-/* Library Dark Theme & Global Dark Mode Support */
+/* Girih Geometric Patterns */
+.bg-girih-pattern {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'%3E%3Cg fill='none' stroke='%23D4AF37' stroke-width='0.75' stroke-opacity='0.08'%3E%3Cpath d='M40 0L40 80M0 40L80 40M0 0L80 80M0 80L80 0'/%3E%3Cpolygon points='40,16 64,40 40,64 16,40'/%3E%3Cpolygon points='40,8 72,40 40,72 8,40'/%3E%3Crect x='28' y='28' width='24' height='24' transform='rotate(45 40 40)'/%3E%3C/g%3E%3C/svg%3E");
+}
+
+.girih-overlay {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'%3E%3Cg fill='none' stroke='%23D4AF37' stroke-width='0.75' stroke-opacity='0.06'%3E%3Cpath d='M40 0L40 80M0 40L80 40M0 0L80 80M0 80L80 0'/%3E%3Cpolygon points='40,16 64,40 40,64 16,40'/%3E%3Cpolygon points='40,8 72,40 40,72 8,40'/%3E%3Crect x='28' y='28' width='24' height='24' transform='rotate(45 40 40)'/%3E%3C/g%3E%3C/svg%3E");
+  mask-image: radial-gradient(circle at 50% 30%, black 40%, transparent 85%);
+  -webkit-mask-image: radial-gradient(circle at 50% 30%, black 40%, transparent 85%);
+}
+
+/* Glassmorphism Luxury Obsidian Cards */
+.glass-card {
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(212, 175, 55, 0.25);
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.05);
+}
+
+.dark .glass-card,
+.lib-dark .glass-card {
+  background: rgba(11, 22, 22, 0.82) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  border: 1px solid rgba(212, 175, 55, 0.2) !important;
+  box-shadow: 0 15px 35px -10px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(212, 175, 55, 0.15) !important;
+}
+
+.glass-card-emerald {
+  background: linear-gradient(135deg, rgba(6, 78, 59, 0.12) 0%, rgba(16, 185, 129, 0.05) 100%);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  box-shadow: 0 10px 30px -10px rgba(6, 78, 59, 0.12);
+}
+
+.dark .glass-card-emerald,
+.lib-dark .glass-card-emerald {
+  background: linear-gradient(135deg, rgba(6, 78, 59, 0.45) 0%, rgba(11, 22, 22, 0.88) 100%) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  border: 1px solid rgba(16, 185, 129, 0.3) !important;
+  box-shadow: 0 15px 35px -10px rgba(6, 78, 59, 0.35), inset 0 1px 0 rgba(52, 211, 153, 0.2) !important;
+}
+
+/* Glow Effects */
+.glow-gold {
+  box-shadow: 0 0 25px -4px rgba(212, 175, 55, 0.4), 0 0 10px rgba(212, 175, 55, 0.25);
+}
+
+.glow-emerald {
+  box-shadow: 0 0 25px -4px rgba(16, 185, 129, 0.4), 0 0 10px rgba(16, 185, 129, 0.25);
+}
+
+/* Luxury Obsidian Dark Theme & Global Dark Mode Support */
 .lib-dark,
 html.dark {
-  background-color: #0f172a !important; /* Slate 900 */
-  color: #f8fafc !important;
+  background-color: #070E0E !important; /* Obsidian 950 */
+  color: #FDF8ED !important; /* Regal Gold 100 */
   
   /* Override Mushaf Variables in Dark Mode */
-  --mushaf-bg: #0f172a;
-  --mushaf-text: #e2e8f0;
-  --mushaf-border: rgba(52, 211, 153, 0.4);
-  --mushaf-frame-opacity: 0.2;
-  --mushaf-marker: #34d399;
+  --mushaf-bg: #070E0E;
+  --mushaf-text: #FDF8ED;
+  --mushaf-border: rgba(212, 175, 55, 0.35);
+  --mushaf-frame-opacity: 0.25;
+  --mushaf-marker: #D4AF37;
 }
 
 .lib-dark .text-slate-900,
 .lib-dark .text-slate-800,
-.lib-dark .text-slate-700,
 html.dark .text-slate-900,
-html.dark .text-slate-800,
-html.dark .text-slate-700 {
-  color: #f8fafc !important; /* Slate 50 */
+html.dark .text-slate-800 {
+  color: #FDF8ED !important; /* Regal Gold 100 */
 }
 
+.lib-dark .text-slate-700,
 .lib-dark .text-slate-600,
-.lib-dark .text-slate-50,
+html.dark .text-slate-700,
+html.dark .text-slate-600 {
+  color: #F9EED4 !important; /* Regal Gold 200 */
+}
+
 .lib-dark .text-slate-500,
 .lib-dark .text-slate-400,
-html.dark .text-slate-600,
-html.dark .text-slate-50,
 html.dark .text-slate-500,
 html.dark .text-slate-400 {
-  color: #cbd5e1 !important; /* Slate 300 */
+  color: #E6C57B !important; /* Regal Gold 400 */
+  opacity: 0.85;
 }
 
-/* Ensure all dark green shades in dark mode brighten up to radiant emerald */
+/* Ensure all dark green shades in dark mode brighten up to radiant holyEmerald */
 .lib-dark .text-brand-emerald,
 .lib-dark .text-emerald-950,
 .lib-dark .text-emerald-900,
@@ -242,48 +327,49 @@ html.dark .text-emerald-950,
 html.dark .text-emerald-900,
 html.dark .text-emerald-800,
 html.dark .text-emerald-700 {
-  color: #34d399 !important; /* Emerald 400 */
+  color: #34D399 !important; /* Holy Emerald 400 */
 }
 
-/* Backgrounds in dark mode */
+/* Backgrounds in dark mode: Luxurious Obsidian */
 .lib-dark .bg-white,
 .lib-dark .bg-slate-50,
 .lib-dark .bg-slate-100,
 html.dark .bg-white,
 html.dark .bg-slate-50,
 html.dark .bg-slate-100 {
-  background-color: #1e293b !important; /* Slate 800 */
+  background-color: #0B1616 !important; /* Obsidian 900 */
+  border-color: rgba(212, 175, 55, 0.2) !important;
 }
 
 /* Book pages & Cream backgrounds in dark mode */
 .lib-dark .bg-\[\#fcfaf5\],
 html.dark .bg-\[\#fcfaf5\] {
-  background-color: #0f172a !important;
+  background-color: #070E0E !important;
   border-color: rgba(212, 175, 55, 0.3) !important;
-  color: #f8fafc !important;
+  color: #FDF8ED !important;
 }
 
-/* Opacity variants of white and slate in dark mode: converts light opacity backgrounds to slate-800 */
+/* Opacity variants of white and slate in dark mode: converts light opacity backgrounds to Obsidian */
 .lib-dark [class*="bg-white/"],
 html.dark [class*="bg-white/"] {
-  background-color: rgba(30, 41, 59, 0.9) !important;
-  border-color: rgba(255, 255, 255, 0.08) !important;
+  background-color: rgba(11, 22, 22, 0.85) !important;
+  border-color: rgba(212, 175, 55, 0.2) !important;
 }
 
 .lib-dark [class*="bg-slate-50/"],
 html.dark [class*="bg-slate-50/"],
 .lib-dark [class*="bg-slate-100/"],
 html.dark [class*="bg-slate-100/"] {
-  background-color: rgba(30, 41, 59, 0.85) !important;
-  border-color: rgba(255, 255, 255, 0.08) !important;
+  background-color: rgba(15, 29, 29, 0.85) !important;
+  border-color: rgba(212, 175, 55, 0.2) !important;
 }
 
 /* Admin Sidebar in Dark Mode */
 .lib-dark aside,
 html.dark aside {
-  background-color: #0f172a !important;
-  border-color: rgba(255, 255, 255, 0.08) !important;
-  color: #f8fafc !important;
+  background-color: #070E0E !important;
+  border-color: rgba(212, 175, 55, 0.2) !important;
+  color: #FDF8ED !important;
 }
 
 /* Borders in dark mode */
@@ -298,14 +384,14 @@ html.dark aside {
 html.dark .border-slate-100,
 html.dark .border-slate-150,
 html.dark .border-slate-200 {
-  border-color: rgba(255, 255, 255, 0.08) !important;
+  border-color: rgba(212, 175, 55, 0.2) !important;
 }
 
 .lib-dark .glass,
 html.dark .glass {
-  background: rgba(15, 23, 42, 0.75) !important;
-  border-color: rgba(255, 255, 255, 0.08) !important;
-  backdrop-filter: blur(12px) !important;
+  background: rgba(11, 22, 22, 0.82) !important;
+  border-color: rgba(212, 175, 55, 0.2) !important;
+  backdrop-filter: blur(16px) !important;
 }
 
 /* Quran Verse Numbers and Markers in Dark Mode */

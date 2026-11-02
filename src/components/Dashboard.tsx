@@ -216,27 +216,27 @@ const Dashboard: React.FC<DashboardProps> = ({ className = '' }) => {
       <motion.div
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
-        className="w-full h-full bg-gradient-to-br from-white via-emerald-50/20 to-amber-50/15 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950 border border-emerald-100/80 dark:border-slate-800 shadow-xs hover:border-emerald-300/80 dark:hover:border-emerald-600 hover:shadow-sm transition-all duration-300 p-3.5 sm:p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between"
+        className="glass-card w-full h-full bg-gradient-to-br from-white via-emerald-50/20 to-amber-50/15 dark:from-obsidian-900/90 dark:via-obsidian-900/90 dark:to-obsidian-950/95 border border-emerald-100/80 dark:border-regalGold-500/20 shadow-xs hover:border-emerald-300/80 dark:hover:border-regalGold-500/40 hover:shadow-sm transition-all duration-300 p-3.5 sm:p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between"
       >
         {/* Decorative background glow */}
-        <div className="absolute top-0 right-0 w-48 sm:w-64 h-48 sm:h-64 bg-emerald-400/10 rounded-full blur-3xl pointer-events-none -mr-16 -mt-16" />
-        <div className="absolute bottom-0 left-0 w-48 sm:w-64 h-48 sm:h-64 bg-amber-400/10 rounded-full blur-3xl pointer-events-none -ml-16 -mb-16" />
+        <div className="absolute top-0 right-0 w-48 sm:w-64 h-48 sm:h-64 bg-emerald-400/10 dark:bg-holyEmerald-500/10 rounded-full blur-3xl pointer-events-none -mr-16 -mt-16" />
+        <div className="absolute bottom-0 left-0 w-48 sm:w-64 h-48 sm:h-64 bg-amber-400/10 dark:bg-regalGold-500/10 rounded-full blur-3xl pointer-events-none -ml-16 -mb-16" />
 
         {/* Top Header Bar: Location Badge & Settings Button */}
-        <div className="flex items-center justify-between gap-1.5 pb-2.5 sm:pb-3 mb-1.5 sm:mb-2.5 border-b border-emerald-100/70 dark:border-slate-800 relative z-10">
+        <div className="flex items-center justify-between gap-1.5 pb-2.5 sm:pb-3 mb-1.5 sm:mb-2.5 border-b border-emerald-100/70 dark:border-regalGold-500/20 relative z-10">
           {/* Location Badge */}
-          <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-50/90 dark:bg-emerald-950/60 border border-emerald-200/80 dark:border-emerald-700/70 rounded-full text-[11px] sm:text-xs font-bold shadow-2xs">
-            <MapPin className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-            <span className="truncate max-w-[150px] sm:max-w-none text-emerald-900 dark:text-emerald-200 font-black">{locationName}</span>
+          <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-50/90 dark:bg-obsidian-850 border border-emerald-200/80 dark:border-regalGold-500/25 rounded-full text-[11px] sm:text-xs font-bold shadow-2xs">
+            <MapPin className="w-3.5 h-3.5 text-emerald-600 dark:text-regalGold-400 shrink-0" />
+            <span className="truncate max-w-[150px] sm:max-w-none text-emerald-900 dark:text-regalGold-100 font-black">{locationName}</span>
           </div>
 
           {/* Settings Pill Button */}
           <button
             onClick={handleOpenSettings}
-            className="flex items-center gap-1.5 px-2.5 py-1 sm:px-3.5 sm:py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 active:scale-95 text-white rounded-full font-bold text-[11px] sm:text-xs transition-all shadow-sm shadow-emerald-700/20 group cursor-pointer"
+            className="flex items-center gap-1.5 px-2.5 py-1 sm:px-3.5 sm:py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 dark:from-holyEmerald-600 dark:to-teal-700 active:scale-95 text-white rounded-full font-bold text-[11px] sm:text-xs transition-all shadow-sm shadow-emerald-700/20 group cursor-pointer"
             title="إعدادات مواقيت الصلاة"
           >
-            <Settings className="w-3.5 h-3.5 text-emerald-100 transition-transform duration-300 group-hover:rotate-90 shrink-0" />
+            <Settings className="w-3.5 h-3.5 text-emerald-100 dark:text-regalGold-200 transition-transform duration-300 group-hover:rotate-90 shrink-0" />
             <span>إعدادات المواقيت</span>
           </button>
         </div>
@@ -245,22 +245,22 @@ const Dashboard: React.FC<DashboardProps> = ({ className = '' }) => {
         <div className="flex flex-row items-center justify-between gap-2 py-1 sm:py-2 relative z-10">
           {/* Next Prayer Details */}
           <div className="flex items-center gap-2.5 sm:gap-3.5">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 rounded-2xl bg-gradient-to-br from-emerald-500 via-teal-500 to-emerald-600 text-white flex items-center justify-center shadow-md shadow-emerald-500/20 border border-emerald-400/40 shrink-0">
-              <Bell className="w-4 h-4 sm:w-6 sm:h-6 text-amber-200 animate-pulse" />
+            <div className="w-10 h-10 sm:w-12 sm:h-12 md:w-14 md:h-14 rounded-2xl bg-gradient-to-br from-emerald-500 via-teal-500 to-emerald-600 dark:from-holyEmerald-600 dark:via-teal-700 dark:to-obsidian-850 text-white flex items-center justify-center shadow-md shadow-emerald-500/20 border border-emerald-400/40 dark:border-regalGold-500/30 shrink-0">
+              <Bell className="w-4 h-4 sm:w-6 sm:h-6 text-amber-200 dark:text-regalGold-300 animate-pulse" />
             </div>
             <div>
               <div className="flex items-center gap-1.5 mb-0.5">
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-100/70 dark:bg-emerald-950/60 text-[10px] sm:text-xs font-black text-emerald-800 dark:text-emerald-300">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping shrink-0" />
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-100/70 dark:bg-holyEmerald-900/40 text-[10px] sm:text-xs font-black text-emerald-800 dark:text-holyEmerald-300 border border-transparent dark:border-holyEmerald-500/30">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 dark:bg-holyEmerald-400 animate-ping shrink-0" />
                   الصلاة القادمة
                 </span>
               </div>
               <div className="flex items-baseline gap-1.5 sm:gap-2">
-                <h3 className="text-base sm:text-xl md:text-2xl font-black text-slate-800 dark:text-slate-100 tracking-tight">
+                <h3 className="text-base sm:text-xl md:text-2xl font-black text-slate-800 dark:text-regalGold-100 tracking-tight">
                   {nextPrayer?.name || 'جاري الحساب...'}
                 </h3>
                 {nextPrayer?.time && (
-                  <span className="text-[11px] sm:text-sm font-black text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded-lg border border-emerald-200/50 dark:border-emerald-800/40 tabular-nums">
+                  <span className="text-[11px] sm:text-sm font-black text-emerald-700 dark:text-regalGold-300 bg-emerald-50 dark:bg-obsidian-800 px-2 py-0.5 rounded-lg border border-emerald-200/50 dark:border-regalGold-500/30 tabular-nums">
                     {nextPrayer.time}
                   </span>
                 )}
@@ -269,18 +269,18 @@ const Dashboard: React.FC<DashboardProps> = ({ className = '' }) => {
           </div>
 
           {/* Countdown Display - Inline & Compact on Mobile */}
-          <div className="text-left shrink-0 bg-white/90 dark:bg-slate-800/80 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-2xl border border-emerald-100 dark:border-slate-700 shadow-2xs">
-            <div className="text-xl sm:text-3xl md:text-4xl font-black text-emerald-600 dark:text-emerald-400 tabular-nums tracking-tight font-mono leading-none">
+          <div className="text-left shrink-0 bg-white/90 dark:bg-obsidian-850/90 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-2xl border border-emerald-100 dark:border-regalGold-500/20 shadow-2xs">
+            <div className="text-xl sm:text-3xl md:text-4xl font-black text-emerald-600 dark:text-regalGold-400 tabular-nums tracking-tight font-mono leading-none">
               {nextPrayer ? nextPrayer.timeLeft : '00:00:00'}
             </div>
-            <span className="text-[9px] sm:text-[11px] font-bold text-slate-400 dark:text-slate-400 block text-left mt-0.5">
+            <span className="text-[9px] sm:text-[11px] font-bold text-slate-400 dark:text-regalGold-300/60 block text-left mt-0.5">
               متبقي للأذان
             </span>
           </div>
         </div>
 
         {/* Five Prayers Grid - Compact & Responsive */}
-        <div className="w-full mt-2 sm:mt-3 pt-2.5 sm:pt-3 border-t border-emerald-100/70 dark:border-slate-800 grid grid-cols-5 gap-1.5 sm:gap-2.5 relative z-10">
+        <div className="w-full mt-2 sm:mt-3 pt-2.5 sm:pt-3 border-t border-emerald-100/70 dark:border-regalGold-500/20 grid grid-cols-5 gap-1.5 sm:gap-2.5 relative z-10">
           {prayerTimes &&
             Object.entries(prayerTimes).map(([key, time]) => {
               const isNext = nextPrayer?.key === key;
@@ -289,26 +289,26 @@ const Dashboard: React.FC<DashboardProps> = ({ className = '' }) => {
                   key={key}
                   className={`flex flex-col items-center justify-center py-2 sm:py-2.5 px-0.5 sm:px-1 rounded-xl sm:rounded-2xl transition-all duration-200 ${
                     isNext
-                      ? 'bg-gradient-to-b from-emerald-600 to-teal-700 text-white shadow-md shadow-emerald-700/25 scale-[1.03] border border-emerald-400/50'
-                      : 'bg-white hover:bg-emerald-50/40 text-slate-700 border border-emerald-100/80 shadow-2xs hover:border-emerald-200 hover:shadow-xs dark:bg-slate-800/80 dark:hover:bg-slate-800 dark:text-slate-100 dark:border-slate-700'
+                      ? 'bg-gradient-to-b from-emerald-600 to-teal-700 dark:from-holyEmerald-700 dark:to-obsidian-900 text-white shadow-md shadow-emerald-700/25 scale-[1.03] border border-emerald-400/50 dark:border-regalGold-500/40'
+                      : 'bg-white hover:bg-emerald-50/40 text-slate-700 border border-emerald-100/80 shadow-2xs hover:border-emerald-200 hover:shadow-xs dark:bg-obsidian-850/80 dark:hover:bg-obsidian-800 dark:text-regalGold-100 dark:border-regalGold-500/15'
                   }`}
                 >
                   <span
                     className={`text-[10px] sm:text-xs font-black truncate w-full text-center leading-tight ${
-                      isNext ? 'text-amber-200' : 'text-slate-600 dark:text-slate-300'
+                      isNext ? 'text-amber-200 dark:text-regalGold-300' : 'text-slate-600 dark:text-regalGold-300/70'
                     }`}
                   >
                     {prayerNamesAr[key] || key}
                   </span>
                   <span
                     className={`text-[11px] sm:text-sm md:text-base font-black tabular-nums tracking-tight mt-0.5 ${
-                      isNext ? 'text-white' : 'text-slate-800 dark:text-slate-100'
+                      isNext ? 'text-white dark:text-regalGold-100' : 'text-slate-800 dark:text-regalGold-100'
                     }`}
                   >
                     {time}
                   </span>
                   {isNext && (
-                    <span className="mt-0.5 sm:mt-1 text-[7px] sm:text-[8px] bg-amber-400 text-emerald-950 font-black px-1.5 py-0.2 rounded-full uppercase tracking-tighter shadow-2xs">
+                    <span className="mt-0.5 sm:mt-1 text-[7px] sm:text-[8px] bg-amber-400 dark:bg-regalGold-500 text-emerald-950 font-black px-1.5 py-0.2 rounded-full uppercase tracking-tighter shadow-2xs">
                       القادمة
                     </span>
                   )}

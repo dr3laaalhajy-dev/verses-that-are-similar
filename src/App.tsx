@@ -46,12 +46,12 @@ function AppContent() {
 
   return (
     <div
-      className={`min-h-screen relative text-slate-900 font-sans selection:bg-brand-emerald/10 ${app.librarySettings?.darkMode ? 'lib-dark' : 'bg-slate-50'}`}
+      className={`min-h-screen relative font-sans selection:bg-holyEmerald-500/20 ${app.librarySettings?.darkMode ? 'lib-dark bg-obsidian-950 text-regalGold-100' : 'bg-slate-50 text-slate-900'}`}
       dir="rtl"
     >
       <div
-        className={`absolute inset-0 z-0 opacity-10 pointer-events-none transition-opacity duration-700 ${app.librarySettings?.darkMode ? 'mix-blend-soft-light opacity-5' : 'mix-blend-multiply opacity-10'}`}
-        style={{
+        className={`absolute inset-0 z-0 pointer-events-none transition-opacity duration-700 ${app.librarySettings?.darkMode ? 'girih-overlay opacity-25' : 'mix-blend-multiply opacity-10'}`}
+        style={app.librarySettings?.darkMode ? undefined : {
           backgroundImage: `url('/islamic_pattern.png')`,
           backgroundSize: '400px',
         }}

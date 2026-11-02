@@ -22,8 +22,8 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
     <>
       {/* Top Header */}
       {!app.isMushafFullscreen && (
-        <header className="w-full sticky top-0 z-50 glass-dark text-white shadow-xl border-b border-white/10 backdrop-blur-xl">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32 blur-3xl pointer-events-none" />
+        <header className="w-full sticky top-0 z-50 bg-[#064e3b]/90 dark:bg-obsidian-950/90 text-white dark:text-regalGold-100 shadow-xl border-b border-white/10 dark:border-regalGold-500/20 backdrop-blur-xl transition-colors duration-500">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 dark:bg-regalGold-500/5 rounded-full -mr-32 -mt-32 blur-3xl pointer-events-none" />
           <div className="w-full px-4 sm:px-8 py-2 md:py-2 flex items-center justify-between gap-2 sm:gap-4 relative z-10">
 
             {/* Logo & Title */}
@@ -38,7 +38,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
               className="flex items-center gap-2 sm:gap-3 shrink-0 cursor-pointer group"
               title="تطبيق متين"
             >
-              <div className="bg-white p-1 sm:p-1.5 rounded-xl md:rounded-2xl shadow-lg border border-white/60 flex items-center justify-center shrink-0 transition-transform group-hover:scale-105">
+              <div className="bg-white dark:bg-obsidian-900 p-1 sm:p-1.5 rounded-xl md:rounded-2xl shadow-lg border border-white/60 dark:border-regalGold-500/30 flex items-center justify-center shrink-0 transition-transform group-hover:scale-105">
                 <img src="/logo.png" className="w-8 h-8 sm:w-10 sm:h-10 md:w-11 md:h-11 object-contain" alt="شعار متين" />
               </div>
               <div className="flex flex-col justify-center select-none">
@@ -49,7 +49,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                     alt="متين"
                   />
                 </div>
-                <p className="text-[8px] sm:text-[9px] md:text-[10px] font-bold tracking-[0.2em] text-brand-gold/90 leading-none mt-1 whitespace-nowrap">
+                <p className="text-[8px] sm:text-[9px] md:text-[10px] font-bold tracking-[0.2em] text-brand-gold/90 dark:text-regalGold-400 leading-none mt-1 whitespace-nowrap">
                   لعلوم القرآن الكريم
                 </p>
               </div>
@@ -60,23 +60,23 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
               {/* About App Modal Trigger */}
               <button
                 onClick={() => app.setShowAboutModal(true)}
-                className="h-10 px-3 flex items-center justify-center gap-2 rounded-xl bg-white/10 hover:bg-white/20 text-white border border-white/10 transition-all text-xs sm:text-sm font-bold shadow-md hover:scale-105 active:scale-95 cursor-pointer"
+                className="h-10 px-3 flex items-center justify-center gap-2 rounded-xl bg-white/10 hover:bg-white/20 dark:bg-obsidian-900/70 dark:hover:bg-obsidian-850 text-white dark:text-regalGold-200 border border-white/10 dark:border-regalGold-500/20 transition-all text-xs sm:text-sm font-bold shadow-md hover:scale-105 active:scale-95 cursor-pointer"
                 title="عن التطبيق"
                 aria-label="عن التطبيق"
               >
-                <Info className="w-4 h-4 text-white" />
+                <Info className="w-4 h-4 text-white dark:text-regalGold-300" />
                 <span className="hidden sm:inline">عن التطبيق</span>
               </button>
 
               {/* Dark Mode / Light Mode Toggle Button */}
               <button
                 onClick={() => app.setLibrarySettings((prev: any) => ({ ...prev, darkMode: !prev.darkMode }))}
-                className="h-10 px-3 flex items-center justify-center gap-2 rounded-xl bg-white/10 hover:bg-white/20 text-white border border-white/10 transition-all text-xs sm:text-sm font-bold shadow-md hover:scale-105 active:scale-95 cursor-pointer"
+                className="h-10 px-3 flex items-center justify-center gap-2 rounded-xl bg-white/10 hover:bg-white/20 dark:bg-obsidian-900/70 dark:hover:bg-obsidian-850 text-white dark:text-regalGold-200 border border-white/10 dark:border-regalGold-500/20 transition-all text-xs sm:text-sm font-bold shadow-md hover:scale-105 active:scale-95 cursor-pointer"
                 title={app.librarySettings.darkMode ? 'التبديل إلى الوضع الفاتح (Light Mode)' : 'التبديل إلى الوضع الداكن (Dark Mode)'}
                 aria-label="تبديل الوضع الداكن والفاتح"
               >
                 {app.librarySettings.darkMode ? (
-                  <Sun className="w-4 h-4 text-amber-300" />
+                  <Sun className="w-4 h-4 text-regalGold-400" />
                 ) : (
                   <Moon className="w-4 h-4 text-white" />
                 )}
@@ -89,7 +89,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
               <NotificationBell
                 darkMode={app.librarySettings.darkMode}
                 userId={app.playerUsername || app.playerName}
-                buttonClassName="relative h-10 px-3 flex items-center justify-center gap-2 rounded-xl bg-white/10 hover:bg-white/20 text-white border border-white/10 transition-all text-xs sm:text-sm font-bold shadow-md hover:scale-105 active:scale-95 cursor-pointer"
+                buttonClassName="relative h-10 px-3 flex items-center justify-center gap-2 rounded-xl bg-white/10 hover:bg-white/20 dark:bg-obsidian-900/70 dark:hover:bg-obsidian-850 text-white dark:text-regalGold-200 border border-white/10 dark:border-regalGold-500/20 transition-all text-xs sm:text-sm font-bold shadow-md hover:scale-105 active:scale-95 cursor-pointer"
               />
 
               {app.playerName && (
@@ -427,7 +427,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
 
       {/* Fixed Bottom Navigation Bar */}
       {!app.isMushafFullscreen && (
-        <nav className="fixed bottom-0 left-0 right-0 z-40 glass-dark border-t border-white/15 shadow-2xl backdrop-blur-2xl py-2 px-2 sm:px-6">
+        <nav className="fixed bottom-0 left-0 right-0 z-40 bg-[#064e3b]/90 dark:bg-obsidian-950/95 border-t border-white/15 dark:border-regalGold-500/20 shadow-2xl backdrop-blur-2xl py-2 px-2 sm:px-6 transition-colors duration-500">
           <div className="max-w-lg mx-auto flex items-center justify-around">
             {/* 1. الرئيسية */}
             <button
@@ -437,8 +437,8 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
               }}
               className={`flex flex-col items-center gap-1 py-1 px-2 sm:px-3 rounded-2xl transition-all duration-300 cursor-pointer ${
                 app.view === 'home' && !app.showScores
-                  ? 'text-brand-gold bg-white/15 scale-105 shadow-inner'
-                  : 'text-white/70 hover:text-white hover:bg-white/5'
+                  ? 'text-brand-gold dark:text-regalGold-300 bg-white/15 dark:bg-regalGold-500/15 dark:border dark:border-regalGold-500/30 scale-105 shadow-inner'
+                  : 'text-white/70 dark:text-regalGold-200/60 hover:text-white dark:hover:text-regalGold-200 hover:bg-white/5 dark:hover:bg-regalGold-500/10'
               }`}
               title="الرئيسية"
             >
@@ -454,8 +454,8 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
               }}
               className={`flex flex-col items-center gap-1 py-1 px-2 sm:px-3 rounded-2xl transition-all duration-300 cursor-pointer ${
                 app.view === 'challenges' && !app.showScores
-                  ? 'text-brand-gold bg-white/15 scale-105 shadow-inner'
-                  : 'text-white/70 hover:text-white hover:bg-white/5'
+                  ? 'text-brand-gold dark:text-regalGold-300 bg-white/15 dark:bg-regalGold-500/15 dark:border dark:border-regalGold-500/30 scale-105 shadow-inner'
+                  : 'text-white/70 dark:text-regalGold-200/60 hover:text-white dark:hover:text-regalGold-200 hover:bg-white/5 dark:hover:bg-regalGold-500/10'
               }`}
               title="التحديات"
             >
@@ -471,12 +471,12 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
               }}
               className={`flex flex-col items-center gap-1 py-1 px-2 sm:px-3 rounded-2xl transition-all duration-300 cursor-pointer ${
                 app.showScores
-                  ? 'text-brand-gold bg-white/15 scale-105 shadow-inner font-black'
-                  : 'text-white/70 hover:text-white hover:bg-white/5'
+                  ? 'text-brand-gold dark:text-regalGold-300 bg-white/15 dark:bg-regalGold-500/15 dark:border dark:border-regalGold-500/30 scale-105 shadow-inner font-black'
+                  : 'text-white/70 dark:text-regalGold-200/60 hover:text-white dark:hover:text-regalGold-200 hover:bg-white/5 dark:hover:bg-regalGold-500/10'
               }`}
               title="لوحة المتصدرين"
             >
-              <Trophy className="w-5 h-5 sm:w-6 sm:h-6 text-brand-gold" />
+              <Trophy className="w-5 h-5 sm:w-6 sm:h-6 text-brand-gold dark:text-regalGold-400" />
               <span className="text-[10px] sm:text-xs font-bold whitespace-nowrap">المتصدرين</span>
             </button>
 
@@ -488,8 +488,8 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
               }}
               className={`flex flex-col items-center gap-1 py-1 px-2 sm:px-3 rounded-2xl transition-all duration-300 cursor-pointer ${
                 !app.showScores && (app.view === 'library' || app.view === 'mushaf' || app.view === 'adhkar' || app.view === 'hadith' || app.view === 'book' || app.view === 'encyclopedia' || app.view === 'islamic_videos')
-                  ? 'text-brand-gold bg-white/15 scale-105 shadow-inner'
-                  : 'text-white/70 hover:text-white hover:bg-white/5'
+                  ? 'text-brand-gold dark:text-regalGold-300 bg-white/15 dark:bg-regalGold-500/15 dark:border dark:border-regalGold-500/30 scale-105 shadow-inner'
+                  : 'text-white/70 dark:text-regalGold-200/60 hover:text-white dark:hover:text-regalGold-200 hover:bg-white/5 dark:hover:bg-regalGold-500/10'
               }`}
               title="المكتبة والعلوم الشرعية"
             >
@@ -505,8 +505,8 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
               }}
               className={`flex flex-col items-center gap-1 py-1 px-2 sm:px-3 rounded-2xl transition-all duration-300 cursor-pointer ${
                 app.view === 'settings' && !app.showScores
-                  ? 'text-brand-gold bg-white/15 scale-105 shadow-inner'
-                  : 'text-white/70 hover:text-white hover:bg-white/5'
+                  ? 'text-brand-gold dark:text-regalGold-300 bg-white/15 dark:bg-regalGold-500/15 dark:border dark:border-regalGold-500/30 scale-105 shadow-inner'
+                  : 'text-white/70 dark:text-regalGold-200/60 hover:text-white dark:hover:text-regalGold-200 hover:bg-white/5 dark:hover:bg-regalGold-500/10'
               }`}
               title="الإعدادات"
             >
