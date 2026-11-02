@@ -24,3 +24,4 @@ export function isAnswerCorrect(userAnswer: string, storedAnswer: string): boole
     .split('|')
     .some((a) => normalizeArabic(a) === u);
 }
+
