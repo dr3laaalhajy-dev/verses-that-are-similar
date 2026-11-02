@@ -22,6 +22,8 @@ export interface WhoAmIGameProps {
   categoriesConfig?: Array<{ category: string; count: number }>;
   totalRounds?: number;
   onExit?: () => void;
+  onCancelRoom?: () => void;
+  onWithdraw?: () => void;
 }
 
 export default function WhoAmIGame({
@@ -33,6 +35,8 @@ export default function WhoAmIGame({
   categoriesConfig,
   totalRounds = 10,
   onExit,
+  onCancelRoom,
+  onWithdraw,
 }: WhoAmIGameProps) {
   const [rounds, setRounds] = useState<any[]>([]);
   const [answers, setAnswers] = useState<any[]>([]);
@@ -310,11 +314,31 @@ export default function WhoAmIGame({
           {category ? `الفئات المحددة: ${category}` : 'تحدي التلميحات المتدرجة'}
         </p>
         {isLeader ? (
-          <button className="wai-btn" onClick={startNext}>
-            ابدأ التحدي
-          </button>
+          <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginTop: '12px' }}>
+            <button className="wai-btn" onClick={startNext}>
+              ابدأ التحدي
+            </button>
+            <button
+              type="button"
+              className="wai-btn"
+              onClick={onCancelRoom || onExit}
+              style={{ backgroundColor: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5' }}
+            >
+              إلغاء الغرفة
+            </button>
+          </div>
         ) : (
-          <p className="wai-muted">بانتظار القائد لبدء التحدي...</p>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', marginTop: '12px' }}>
+            <p className="wai-muted">بانتظار القائد لبدء التحدي...</p>
+            <button
+              type="button"
+              className="wai-btn"
+              onClick={onWithdraw || onExit}
+              style={{ backgroundColor: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', width: 'auto', padding: '6px 14px' }}
+            >
+              الانسحاب
+            </button>
+          </div>
         )}
       </div>
     );
@@ -359,7 +383,48 @@ export default function WhoAmIGame({
             </span>
           )}
         </div>
-        {!revealed && <span className={`wai-timer ph${phase}`}>{remaining}s</span>}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {isLeader ? (
+            <button
+              type="button"
+              onClick={onCancelRoom || onExit}
+              className="wai-btn-leave"
+              style={{
+                backgroundColor: '#fee2e2',
+                color: '#dc2626',
+                border: '1px solid #fca5a5',
+                padding: '4px 10px',
+                borderRadius: '8px',
+                fontSize: '12px',
+                fontWeight: 'bold',
+                cursor: 'pointer'
+              }}
+              title="إلغاء الغرفة"
+            >
+              إلغاء الغرفة
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onWithdraw || onExit}
+              className="wai-btn-leave"
+              style={{
+                backgroundColor: '#fef2f2',
+                color: '#dc2626',
+                border: '1px solid #fecaca',
+                padding: '4px 10px',
+                borderRadius: '8px',
+                fontSize: '12px',
+                fontWeight: 'bold',
+                cursor: 'pointer'
+              }}
+              title="الانسحاب من التحدي"
+            >
+              الانسحاب
+            </button>
+          )}
+          {!revealed && <span className={`wai-timer ph${phase}`}>{remaining}s</span>}
+        </div>
       </div>
       <div className="wai-bar">
         <div className={`wai-bar-fill ph${phase}`} style={{ width: `${barPct}%` }} />

@@ -37,9 +37,31 @@ import { View, VALID_VIEWS, Difficulty, Verse, VerseCardProps } from "../types/c
 import { getBestSubsequenceMatch, superNormalizeArabic, getSpeedQuestionDuration } from "../utils/challengeHelpers";
 import { achievementStyles } from "../constants/appConstants";
 
-const toast = {
-  success: (msg: string, ..._args: any[]) => console.log(`SUCCESS: ${msg}`),
-  error: (msg: string, ..._args: any[]) => console.log(`ERROR: ${msg}`)
+export interface ToastNotification {
+  id: string;
+  type: 'success' | 'error' | 'info';
+  message: string;
+}
+
+type ToastListener = (t: ToastNotification) => void;
+const toastListeners = new Set<ToastListener>();
+
+export const toast = {
+  success: (msg: string, ..._args: any[]) => {
+    console.log(`SUCCESS: ${msg}`);
+    const item: ToastNotification = { id: Date.now().toString() + Math.random(), type: 'success', message: msg };
+    toastListeners.forEach(listener => listener(item));
+  },
+  error: (msg: string, ..._args: any[]) => {
+    console.log(`ERROR: ${msg}`);
+    const item: ToastNotification = { id: Date.now().toString() + Math.random(), type: 'error', message: msg };
+    toastListeners.forEach(listener => listener(item));
+  },
+  info: (msg: string, ..._args: any[]) => {
+    console.log(`INFO: ${msg}`);
+    const item: ToastNotification = { id: Date.now().toString() + Math.random(), type: 'info', message: msg };
+    toastListeners.forEach(listener => listener(item));
+  }
 };
 
 const AppContext = createContext<any>(null);
@@ -511,6 +533,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isCancelRoomModalOpen, setIsCancelRoomModalOpen] = useState(false);
   const [isNextChallengeModalOpen, setIsNextChallengeModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isRoomActionLoading, setIsRoomActionLoading] = useState(false);
+
+  const [toastMessage, setToastMessage] = useState<ToastNotification | null>(null);
+  const toastTimerRef = useRef<any>(null);
+
+  useEffect(() => {
+    const handleToast = (item: ToastNotification) => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+      setToastMessage(item);
+      toastTimerRef.current = setTimeout(() => {
+        setToastMessage(null);
+      }, 3500);
+    };
+    toastListeners.add(handleToast);
+    return () => {
+      toastListeners.delete(handleToast);
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    };
+  }, []);
 
   const [playerAuthMode, setPlayerAuthMode] = useState<'register' | 'login'>('login');
   const [nameInput, setNameInput] = useState('');
@@ -2614,34 +2655,80 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setView('challenge');
   };
 
+  const isRoomLeader = Boolean(
+    room && (
+      (room.player1Id && (room.player1Id === playerUsername || room.player1Id === playerName)) ||
+      (room.player1 && (room.player1.username === playerUsername || room.player1.name === playerName || room.player1.id === playerUsername || room.player1.id === playerName)) ||
+      (room.hostName && playerName && room.hostName === playerName) ||
+      (room.hostUsername && playerUsername && room.hostUsername.toLowerCase() === playerUsername.toLowerCase()) ||
+      (room.created_by && (room.created_by === playerUsername || room.created_by === playerName))
+    )
+  );
+
   const handleCancelRoomByHost = () => {
     if (!room?.id) return;
     setIsCancelRoomModalOpen(true);
   };
 
   const confirmCancelRoomByHost = async () => {
-    if (!room?.id) return;
+    if (!room?.id) {
+      setIsCancelRoomModalOpen(false);
+      return;
+    }
+
+    setIsRoomActionLoading(true);
+    const roomId = String(room.id);
 
     try {
-      const res = await fetch('/api/1v1', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'cancel-room',
-          roomId: room.id,
-          playerId: playerUsername || playerName
-        })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        toast.success('تم إلغاء الغرفة بنجاح');
-        setRoom(null);
-        setView('group_join');
-      } else {
-        toast.error(data.message || 'فشل إلغاء الغرفة');
+      // 1. Delete from Supabase rooms, room_participants, and who_am_i tables
+      try {
+        await Promise.allSettled([
+          supabase.from('who_am_i_submissions').delete().eq('room_id', roomId),
+          supabase.from('who_am_i_answers').delete().eq('room_id', roomId),
+          supabase.from('who_am_i_rounds').delete().eq('room_id', roomId),
+          supabase.from('room_participants').delete().eq('room_id', roomId),
+          supabase.from('rooms').delete().eq('id', roomId),
+          supabase.from('Room').delete().eq('id', roomId)
+        ]);
+      } catch (sbErr) {
+        console.warn('[Supabase cancel-room cleanup warn]:', sbErr);
       }
-    } catch (err) {
-      toast.error('حدث خطأ في الاتصال');
+
+      // 2. Call /api/1v1 with cancel-room
+      try {
+        const res = await fetch('/api/1v1', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'cancel-room',
+            roomId: roomId,
+            playerId: playerUsername || playerName
+          })
+        });
+        const data = await res.json();
+        if (!res.ok && res.status !== 404) {
+          console.warn('[API cancel-room non-200]:', data);
+        }
+      } catch (apiErr) {
+        console.warn('[API cancel-room fetch warn]:', apiErr);
+      }
+
+      // 3. Reset local storage & state
+      try {
+        localStorage.removeItem('activeRoomId');
+        localStorage.removeItem('currentRoomId');
+      } catch (e) {}
+
+      setActiveRunningRoom(null);
+      setRoom(null);
+      setIsCancelRoomModalOpen(false);
+      setView('group_join');
+      toast.success('تم إلغاء الغرفة بنجاح');
+    } catch (err: any) {
+      console.error('Error cancelling room:', err);
+      toast.error('حدث خطأ أثناء إلغاء الغرفة');
+    } finally {
+      setIsRoomActionLoading(false);
     }
   };
 
@@ -2668,31 +2755,71 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const handleResignGroupChallenge = async () => {
-    if (!room?.id || (!playerUsername && !playerName)) return;
-    setActiveRunningRoom(null);
-    localStorage.removeItem('activeRoomId');
-    localStorage.removeItem('currentRoomId');
-    try {
-      const res = await fetch('/api/1v1', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'resign',
-          roomId: room.id,
-          playerId: playerUsername || playerName
-        })
-      });
-      const data = await res.json();
-      if (res.ok) setRoom(data);
-    } catch (err) {
-      console.error('Group resign error:', err);
+  const handleWithdraw = async () => {
+    if (!room?.id) {
+      setIsResignModalOpen(false);
+      return;
     }
-    setSessionCorrect(0);
-    setActiveRunningRoom(null);
-    setView('home');
-    setIsResignModalOpen(false);
+
+    setIsRoomActionLoading(true);
+    const roomId = String(room.id);
+    const currentUserId = playerUsername || playerName;
+
+    try {
+      // 1. Delete player from Supabase room_participants and submissions
+      try {
+        if (currentUserId) {
+          await Promise.allSettled([
+            supabase.from('room_participants').delete().match({ room_id: roomId, user_id: currentUserId }),
+            supabase.from('room_participants').delete().match({ room_id: roomId, name: currentUserId }),
+            supabase.from('who_am_i_submissions').delete().match({ room_id: roomId, user_id: currentUserId }),
+            supabase.from('who_am_i_answers').delete().match({ room_id: roomId, user_id: currentUserId })
+          ]);
+        }
+      } catch (sbErr) {
+        console.warn('[Supabase withdraw cleanup warn]:', sbErr);
+      }
+
+      // 2. Call /api/1v1 with resign action
+      try {
+        const res = await fetch('/api/1v1', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'resign',
+            roomId: roomId,
+            playerId: currentUserId
+          })
+        });
+        const data = await res.json();
+        if (!res.ok && res.status !== 404) {
+          console.warn('[API resign non-200]:', data);
+        }
+      } catch (apiErr) {
+        console.warn('[API resign fetch warn]:', apiErr);
+      }
+
+      // 3. Reset local storage & state
+      try {
+        localStorage.removeItem('activeRoomId');
+        localStorage.removeItem('currentRoomId');
+      } catch (e) {}
+
+      setActiveRunningRoom(null);
+      setSessionCorrect(0);
+      setRoom(null);
+      setIsResignModalOpen(false);
+      setView('group_join');
+      toast.success('تم الانسحاب من الغرفة بنجاح');
+    } catch (err: any) {
+      console.error('Error withdrawing from room:', err);
+      toast.error('حدث خطأ أثناء الانسحاب من الغرفة');
+    } finally {
+      setIsRoomActionLoading(false);
+    }
   };
+
+  const handleResignGroupChallenge = handleWithdraw;
   // Speed & Multiplayer Timer
   useEffect(() => {
     let interval: any;
@@ -4488,6 +4615,13 @@ ${versesList}
     handleStartRoom: handleStartRoomV1,
     v1IsStartingRoom,
     handleCancelRoomByHost,
+    confirmCancelRoomByHost,
+    isCancelRoomModalOpen,
+    setIsCancelRoomModalOpen,
+    showDeleteModal: isCancelRoomModalOpen,
+    setShowDeleteModal: setIsCancelRoomModalOpen,
+    isRoomLeader,
+    isRoomActionLoading,
     availableRooms, setAvailableRooms,
     isLoadingRooms, setIsLoadingRooms,
     fetchAvailableRooms,
@@ -4501,10 +4635,15 @@ ${versesList}
       setRoom(null);
       setView('home');
     },
-    handleResign: handleResignGroupChallenge,
-    handleResignMultiplayer: handleResignGroupChallenge,
+    handleWithdraw,
+    handleResignGroupChallenge: handleWithdraw,
+    handleResignMultiplayer: handleWithdraw,
+    handleResign: handleWithdraw,
     isResignModalOpen, setIsResignModalOpen,
     isReconnecting, reconnectSecondsLeft, handleForceReconnect,
+    toastMessage,
+    setToastMessage,
+    toast,
 
     // Leaderboard & Player Profile
     leaderboard, setLeaderboard,

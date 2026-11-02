@@ -320,18 +320,23 @@ export const GlobalOverlays: React.FC = () => {
       <ConfirmModal
         isOpen={app.isResignModalOpen}
         onClose={() => app.setIsResignModalOpen(false)}
-        onConfirm={app.handleResignGroupChallenge}
+        onConfirm={app.handleWithdraw || app.handleResignGroupChallenge}
+        isLoading={app.isRoomActionLoading}
         title="تأكيد الانسحاب من التحدي"
-        message="هل أنت متأكد من الانسحاب من هذا التحدي الجماعي؟ سيتم احتساب 0 نقاط وتسجيل أنك أنهيت التحدي بالانسحاب."
+        message="هل أنت متأكد من الانسحاب من هذا التحدي الجماعي؟ سيتم مغادرة الغرفة وتوجيهك إلى قائمة التحديات."
         confirmText="تأكيد الانسحاب"
         cancelText="إلغاء"
         isDanger={true}
       />
 
       <ConfirmModal
-        isOpen={app.isCancelRoomModalOpen}
-        onClose={() => app.setIsCancelRoomModalOpen(false)}
+        isOpen={app.isCancelRoomModalOpen || app.showDeleteModal}
+        onClose={() => {
+          app.setIsCancelRoomModalOpen(false);
+          app.setShowDeleteModal?.(false);
+        }}
         onConfirm={app.confirmCancelRoomByHost}
+        isLoading={app.isRoomActionLoading}
         title="تأكيد إلغاء الغرفة"
         message="هل أنت متأكد من إلغاء الغرفة؟ سيتم حذفها وإشعار جميع المتسابقين المتواجدين."
         confirmText="تأكيد الإلغاء"
@@ -674,6 +679,44 @@ export const GlobalOverlays: React.FC = () => {
                 </p>
               </div>
             </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Floating Toast Notification Banner */}
+      <AnimatePresence>
+        {app.toastMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: -40, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.95 }}
+            className="fixed top-6 left-1/2 -translate-x-1/2 z-[1300] max-w-md w-[90%] pointer-events-none"
+          >
+            <div className={`p-4 rounded-2xl shadow-2xl backdrop-blur-md flex items-center gap-3 border text-white pointer-events-auto ${
+              app.toastMessage.type === 'success'
+                ? 'bg-emerald-600/95 border-emerald-400 shadow-emerald-500/30'
+                : app.toastMessage.type === 'error'
+                ? 'bg-red-600/95 border-red-400 shadow-red-500/30'
+                : 'bg-slate-800/95 border-slate-600 shadow-slate-900/30'
+            }`}>
+              <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+                {app.toastMessage.type === 'success' ? (
+                  <Check className="w-5 h-5 text-white stroke-[2.5]" />
+                ) : (
+                  <AlertCircle className="w-5 h-5 text-white stroke-[2.5]" />
+                )}
+              </div>
+              <p className="font-bold text-sm sm:text-base leading-snug flex-1">
+                {app.toastMessage.message}
+              </p>
+              <button
+                type="button"
+                onClick={() => app.setToastMessage?.(null)}
+                className="p-1 rounded-lg hover:bg-white/20 text-white/80 hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

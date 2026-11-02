@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import {
-  ShoppingBag, Users, Lock, Globe, Loader2, Trash2, ArrowRight
+  ShoppingBag, Users, Lock, Globe, Loader2, Trash2, ArrowRight, LogOut
 } from 'lucide-react';
 import { View } from '../types/challenges';
 import { LiveReactionsOverlay } from '../components/LiveReactionsOverlay';
@@ -18,6 +18,7 @@ export interface GroupWaitingPageProps {
   handleCancelRoomByHost: () => void;
   setView: (view: View) => void;
   setRoom: (room: any) => void;
+  setIsResignModalOpen?: (open: boolean) => void;
 }
 
 export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
@@ -31,7 +32,8 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
   v1IsStartingRoom,
   handleCancelRoomByHost,
   setView,
-  setRoom
+  setRoom,
+  setIsResignModalOpen
 }) => {
   return (
     <motion.div
@@ -186,24 +188,26 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
             <button
               type="button"
               onClick={() => {
-                if (room?.id) {
+                if (setIsResignModalOpen) {
+                  setIsResignModalOpen(true);
+                } else if (room?.id) {
                   fetch('/api/1v1', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                      action: 'presence',
+                      action: 'resign',
                       roomId: room.id,
-                      playerId: playerUsername || playerName,
-                      isOnline: false
+                      playerId: playerUsername || playerName
                     })
                   }).catch(() => {});
+                  setRoom(null);
+                  setView('group_join');
                 }
-                setRoom(null);
-                setView('group_join');
               }}
-              className="w-full py-3 rounded-xl sm:rounded-2xl font-black text-xs sm:text-sm text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all cursor-pointer"
+              className="w-full py-3 rounded-xl sm:rounded-2xl font-black text-xs sm:text-sm text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 transition-all cursor-pointer flex items-center justify-center gap-2"
             >
-              مغادرة قاعة الانتظار
+              <LogOut className="w-4 h-4 text-red-500" />
+              <span>الانسحاب من قاعة الانتظار</span>
             </button>
           )}
         </div>

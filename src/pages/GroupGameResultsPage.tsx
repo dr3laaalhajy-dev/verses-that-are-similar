@@ -11,6 +11,8 @@ export interface GroupGameResultsPageProps {
   playerName: string | null;
   setRoom: (room: any) => void;
   setView: (view: View) => void;
+  onCancelRoom?: () => void;
+  onWithdraw?: () => void;
 }
 
 export const GroupGameResultsPage: React.FC<GroupGameResultsPageProps> = ({
@@ -18,7 +20,9 @@ export const GroupGameResultsPage: React.FC<GroupGameResultsPageProps> = ({
   playerUsername,
   playerName,
   setRoom,
-  setView
+  setView,
+  onCancelRoom,
+  onWithdraw
 }) => {
   if (room?.gameMode === 'WHO_AM_I') {
     return (
@@ -49,6 +53,8 @@ export const GroupGameResultsPage: React.FC<GroupGameResultsPageProps> = ({
               setRoom(null);
               setView('home');
             }}
+            onCancelRoom={onCancelRoom}
+            onWithdraw={onWithdraw}
           />
         </div>
       </motion.div>

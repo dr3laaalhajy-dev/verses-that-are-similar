@@ -149,6 +149,7 @@ export const AppRouter: React.FC = () => {
           handleCancelRoomByHost={app.handleCancelRoomByHost}
           setView={app.setView}
           setRoom={app.setRoom}
+          setIsResignModalOpen={app.setIsResignModalOpen}
         />
       ) : app.view === "group_join" ? (
         <GroupJoinPage
@@ -169,6 +170,8 @@ export const AppRouter: React.FC = () => {
           playerName={app.playerName}
           setRoom={app.setRoom}
           setView={app.setView}
+          onCancelRoom={() => app.setIsCancelRoomModalOpen(true)}
+          onWithdraw={() => app.setIsResignModalOpen(true)}
         />
       ) : app.view === "speed_challenge" ? (
         <SpeedChallengePage

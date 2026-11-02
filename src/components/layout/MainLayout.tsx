@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Trophy, Sun, Moon, Info, Lock, ArrowRight, BookOpen, LogOut,
+  Trophy, Sun, Moon, Info, Lock, ArrowRight, BookOpen, LogOut, Trash2,
   UserPlus, Key, User, AtSign, ArrowLeft, LogIn, Home, Zap, Settings,
   ChevronRight, ChevronLeft, X
 } from 'lucide-react';
@@ -196,17 +196,30 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
         </div>
       )}
 
-      {/* Multiplayer Resign Button if in a room */}
+      {/* Multiplayer Cancel / Resign Button if in a room */}
       {app.room && (app.view === 'challenge' || app.view === 'group_waiting' || app.view === 'group_game') && (
         <div className="w-full max-w-6xl mx-auto px-4 sm:px-8 pt-3 pb-1 flex justify-end items-center">
-          <button
-            onClick={() => app.setIsResignModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-red-500/10 hover:bg-red-500/20 text-red-600 border border-red-200/80 shadow-sm transition-all text-xs sm:text-sm font-black active:scale-95 group"
-            title="الانسحاب من التحدي الجماعي"
-          >
-            <LogOut className="w-4 h-4 text-red-500 group-hover:rotate-180 transition-transform" />
-            <span>الانسحاب من التحدي</span>
-          </button>
+          {app.isRoomLeader ? (
+            <button
+              type="button"
+              onClick={() => app.setIsCancelRoomModalOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-red-500/10 hover:bg-red-500/20 text-red-600 border border-red-200/80 shadow-sm transition-all text-xs sm:text-sm font-black active:scale-95 group cursor-pointer"
+              title="إلغاء الغرفة وحذفها"
+            >
+              <Trash2 className="w-4 h-4 text-red-500 group-hover:scale-110 transition-transform" />
+              <span>إلغاء الغرفة</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => app.setIsResignModalOpen(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-red-500/10 hover:bg-red-500/20 text-red-600 border border-red-200/80 shadow-sm transition-all text-xs sm:text-sm font-black active:scale-95 group cursor-pointer"
+              title="الانسحاب من التحدي الجماعي"
+            >
+              <LogOut className="w-4 h-4 text-red-500 group-hover:rotate-180 transition-transform" />
+              <span>الانسحاب من التحدي</span>
+            </button>
+          )}
         </div>
       )}
 

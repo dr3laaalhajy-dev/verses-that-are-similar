@@ -12,6 +12,7 @@ interface ConfirmModalProps {
   confirmText?: string;
   cancelText?: string;
   isDanger?: boolean;
+  isLoading?: boolean;
 }
 
 const ConfirmModal: React.FC<ConfirmModalProps> = ({ 
@@ -23,7 +24,8 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
   isAlert = false,
   confirmText = 'حسناً',
   cancelText = 'إلغاء',
-  isDanger = false
+  isDanger = false,
+  isLoading = false
 }) => {
   return (
     <AnimatePresence>
@@ -69,18 +71,26 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
             {/* Actions */}
             <div className={`flex ${isAlert ? 'justify-center' : 'flex-row-reverse gap-4'}`}>
               <button
+                disabled={isLoading}
                 onClick={() => {
                   onConfirm();
-                  onClose();
                 }}
-                className={`${isAlert ? 'px-16' : 'flex-1'} py-4 ${isDanger ? 'bg-red-500 hover:bg-red-600 shadow-red-500/20' : 'bg-brand-emerald hover:bg-brand-emerald/90 shadow-brand-emerald/20'} text-white rounded-2xl font-black text-lg shadow-xl transition-all active:scale-95`}
+                className={`${isAlert ? 'px-16' : 'flex-1'} py-4 ${isDanger ? 'bg-red-500 hover:bg-red-600 shadow-red-500/20' : 'bg-brand-emerald hover:bg-brand-emerald/90 shadow-brand-emerald/20'} text-white rounded-2xl font-black text-lg shadow-xl transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2`}
               >
-                {confirmText}
+                {isLoading ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span>جاري التنفيذ...</span>
+                  </>
+                ) : (
+                  <span>{confirmText}</span>
+                )}
               </button>
               {!isAlert && (
                 <button
+                  disabled={isLoading}
                   onClick={onClose}
-                  className="flex-1 py-4 bg-slate-50 text-slate-500 rounded-2xl font-black text-lg border border-slate-100 hover:bg-slate-100 transition-all active:scale-95"
+                  className="flex-1 py-4 bg-slate-50 text-slate-500 rounded-2xl font-black text-lg border border-slate-100 hover:bg-slate-100 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {cancelText}
                 </button>
