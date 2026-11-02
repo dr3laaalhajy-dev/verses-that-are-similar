@@ -4828,6 +4828,8 @@ ${versesList}
     isPageModeActive, setIsPageModeActive,
     isMushafFeaturesModalOpen, setIsMushafFeaturesModalOpen,
     openWird,
+    mushafZoomScale, setMushafZoomScale,
+    pageTurnDirection, setPageTurnDirection,
     filteredSurahsList,
     currentSurahStartPage,
     currentJuzStartPage,

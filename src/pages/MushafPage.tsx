@@ -34,10 +34,10 @@ export interface MushafPageProps {
   setIsJuzMenuOpen: (open: boolean) => void;
   searchQuery: string;
   setSearchQuery: (query: string) => void;
-  mushafZoomScale: number;
-  setMushafZoomScale: React.Dispatch<React.SetStateAction<number>>;
+  mushafZoomScale?: number;
+  setMushafZoomScale?: React.Dispatch<React.SetStateAction<number>>;
   pageTurnDirection?: "next" | "prev" | null;
-  setPageTurnDirection: (dir: any) => void;
+  setPageTurnDirection?: (dir: any) => void;
   enterMushafFullscreen: () => void;
   selectedAyah: any;
   setSelectedAyah: (ayah: any) => void;
@@ -75,11 +75,28 @@ export const MushafPage: React.FC<MushafPageProps> = ({
   setView
 }) => {
   const [isWirdModalOpen, setIsWirdModalOpen] = useState(false);
+  const [internalZoomScale, setInternalZoomScale] = useState<number>(1);
+
+  const safeZoomScale = typeof mushafZoomScale === 'number' && Number.isFinite(mushafZoomScale) && mushafZoomScale > 0
+    ? mushafZoomScale
+    : internalZoomScale;
+
+  const updateZoomScale = (action: number | ((prev: number) => number)) => {
+    if (typeof setMushafZoomScale === 'function') {
+      setMushafZoomScale(action);
+    } else {
+      setInternalZoomScale(action);
+    }
+  };
 
   // Safe Page Navigation Handlers for Wird & Mushaf Reading
   const handleNextPage = () => {
     if (currentPage < 604) {
-      setPageTurnDirection('next');
+      if (typeof setPageTurnDirection === 'function') {
+        try {
+          setPageTurnDirection('next');
+        } catch {}
+      }
       setCurrentPage((prev) => Math.min(604, prev + 1));
       setSelectedAyah(null);
     }
@@ -87,15 +104,15 @@ export const MushafPage: React.FC<MushafPageProps> = ({
 
   const handlePrevPage = () => {
     if (currentPage > 1) {
-      setPageTurnDirection('prev');
+      if (typeof setPageTurnDirection === 'function') {
+        try {
+          setPageTurnDirection('prev');
+        } catch {}
+      }
       setCurrentPage((prev) => Math.max(1, prev - 1));
       setSelectedAyah(null);
     }
   };
-
-  const safeZoomScale = typeof mushafZoomScale === 'number' && Number.isFinite(mushafZoomScale) && mushafZoomScale > 0
-    ? mushafZoomScale
-    : 1;
 
   // Deep Link ?page=X capture to bypass index and open page directly
   useEffect(() => {
@@ -673,7 +690,7 @@ export const MushafPage: React.FC<MushafPageProps> = ({
                                     darkMode={librarySettings.darkMode}
                                     isFullscreen={false}
                                     externalScale={safeZoomScale}
-                                    onExternalScaleChange={setMushafZoomScale}
+                                    onExternalScaleChange={updateZoomScale}
                                     onPageTurn={(dir) => {
                                       if (dir === 'next') {
                                         handleNextPage();
@@ -747,7 +764,7 @@ export const MushafPage: React.FC<MushafPageProps> = ({
                                   <div className={`flex items-center gap-1 p-1 rounded-xl border shadow-xs shrink-0 ${librarySettings.darkMode ? 'bg-slate-800/90 border-slate-700/80' : 'bg-slate-100/90 border-slate-200/80'
                                     }`}>
                                     <button
-                                      onClick={() => setMushafZoomScale(prev => {
+                                      onClick={() => updateZoomScale(prev => {
                                         const current = (typeof prev === 'number' && Number.isFinite(prev) && prev > 0) ? prev : 1;
                                         return Math.min(2.5, Number((current + 0.1).toFixed(1)));
                                       })}
@@ -760,7 +777,7 @@ export const MushafPage: React.FC<MushafPageProps> = ({
                                     </button>
 
                                     <button
-                                      onClick={() => setMushafZoomScale(1)}
+                                      onClick={() => updateZoomScale(1)}
                                       className={`px-2 py-1 rounded border text-[10px] sm:text-xs font-black transition-colors shadow-2xs shrink-0 ${safeZoomScale === 1
                                           ? (librarySettings.darkMode ? 'bg-emerald-900/60 border-emerald-500 text-emerald-400' : 'bg-emerald-50 border-emerald-300 text-brand-emerald font-black')
                                           : (librarySettings.darkMode ? 'bg-slate-900 border-slate-700 text-slate-200 hover:text-emerald-400' : 'bg-white border-slate-300 text-slate-800 hover:text-brand-emerald')
@@ -771,7 +788,7 @@ export const MushafPage: React.FC<MushafPageProps> = ({
                                     </button>
 
                                     <button
-                                      onClick={() => setMushafZoomScale(prev => {
+                                      onClick={() => updateZoomScale(prev => {
                                         const current = (typeof prev === 'number' && Number.isFinite(prev) && prev > 0) ? prev : 1;
                                         return Math.max(0.6, Number((current - 0.1).toFixed(1)));
                                       })}
