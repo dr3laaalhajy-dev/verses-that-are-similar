@@ -1,15 +1,16 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
+import { getAnalytics, isSupported as isAnalyticsSupported, Analytics } from 'firebase/analytics';
 import { getMessaging, getToken, onMessage, isSupported, Messaging } from 'firebase/messaging';
 
-// Firebase Client Configuration - reads from Vite env variables with fallback structure
+// Firebase Client Configuration - reads from Vite env variables with fallback to project settings
 export const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'AIzaSyPlaceholder_Config_Only',
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || `${import.meta.env.VITE_FIREBASE_PROJECT_ID || 'matin-quran'}.firebaseapp.com`,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'matin-quran',
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || `${import.meta.env.VITE_FIREBASE_PROJECT_ID || 'matin-quran'}.appspot.com`,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '100000000000',
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || '1:100000000000:web:abcdef1234567890',
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || undefined
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyAux6Fg_GonGCh0OBoyGG7GAFNjXBc8NEk",
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "mateen-229f8.firebaseapp.com",
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "mateen-229f8",
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "mateen-229f8.firebasestorage.app",
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "454602577030",
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:454602577030:web:551f014003683a63e92d07",
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || "G-LWSXDD71TM"
 };
 
 // VAPID Key (Public Key for Web Push Certificates)
@@ -17,6 +18,19 @@ export const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY || undefined;
 
 // Initialize Firebase App instance
 export const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+
+// Initialize Firebase Analytics safely
+export let analytics: Analytics | null = null;
+if (typeof window !== 'undefined') {
+  isAnalyticsSupported().then((supported) => {
+    if (supported) {
+      analytics = getAnalytics(app);
+      console.log('[Firebase] Analytics initialized successfully');
+    }
+  }).catch((err) => {
+    console.debug('[Firebase] Analytics not supported in this environment:', err);
+  });
+}
 
 let messagingInstance: Messaging | null = null;
 

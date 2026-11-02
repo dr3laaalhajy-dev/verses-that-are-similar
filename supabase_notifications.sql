@@ -88,3 +88,4 @@ values (
   'إدارة تطبيق متين'
 )
 on conflict do nothing;
+

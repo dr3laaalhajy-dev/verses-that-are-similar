@@ -150,3 +150,4 @@ export function usePushNotifications(userId?: string | null, onNotificationRecei
     requestPermissionAndRegister
   };
 }
+

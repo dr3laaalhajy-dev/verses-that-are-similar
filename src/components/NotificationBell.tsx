@@ -297,3 +297,4 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
 };
 
 export default NotificationBell;
+

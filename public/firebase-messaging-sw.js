@@ -6,14 +6,15 @@
 importScripts('https://www.gstatic.com/firebasejs/10.14.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.14.0/firebase-messaging-compat.js');
 
-// إعدادات Firebase الافتراضية للـ Service Worker
+// إعدادات مشروع Firebase (mateen-229f8)
 const firebaseConfig = {
-  apiKey: "AIzaSyPlaceholder_Config_Only",
-  authDomain: "matin-quran.firebaseapp.com",
-  projectId: "matin-quran",
-  storageBucket: "matin-quran.appspot.com",
-  messagingSenderId: "100000000000",
-  appId: "1:100000000000:web:abcdef1234567890"
+  apiKey: "AIzaSyAux6Fg_GonGCh0OBoyGG7GAFNjXBc8NEk",
+  authDomain: "mateen-229f8.firebaseapp.com",
+  projectId: "mateen-229f8",
+  storageBucket: "mateen-229f8.firebasestorage.app",
+  messagingSenderId: "454602577030",
+  appId: "1:454602577030:web:551f014003683a63e92d07",
+  measurementId: "G-LWSXDD71TM"
 };
 
 // تهيئة تطبيق Firebase داخل الـ Service Worker
@@ -55,11 +56,10 @@ self.addEventListener('notificationclick', (event) => {
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
-      // إذا كان هناك تبويب مفتوح بالفعل للتطبيق، قم بالتركيز عليه
-      for (let i = 0; i < windowClients.length; i++) {
-        const client = windowClients[i];
+      // إذا كان هناك تبويب مفتوح بالفعل، قم بتركيزه والتوجيه إليه
+      for (const client of windowClients) {
         if (client.url.includes(self.location.origin) && 'focus' in client) {
-          if ('navigate' in client && targetUrl !== '/') {
+          if ('navigate' in client) {
             client.navigate(targetUrl);
           }
           return client.focus();

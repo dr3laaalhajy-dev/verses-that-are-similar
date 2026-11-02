@@ -103,3 +103,4 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   return res.status(404).json({ message: 'Endpoint not found' });
 }
+
