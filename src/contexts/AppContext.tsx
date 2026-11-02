@@ -104,16 +104,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         sessionStorage.setItem('current_app_view', nextView);
       } catch (e) {}
 
-      if (pushToHistory && !isPoppingRef.current) {
-        window.history.pushState({ view: nextView }, '', '');
+      if (typeof window !== 'undefined' && window.history) {
+        const cleanPath = nextView === 'home' ? '/' : `/${nextView}`;
+        if (pushToHistory && !isPoppingRef.current) {
+          window.history.pushState({ view: nextView }, '', cleanPath);
+        } else {
+          window.history.replaceState({ view: nextView }, '', cleanPath);
+        }
       }
       return nextView;
     });
   }, []);
 
   useEffect(() => {
-    if (!window.history.state || window.history.state.view !== view) {
-      window.history.replaceState({ view }, '', '');
+    if (typeof window !== 'undefined' && window.history) {
+      if (!window.history.state || window.history.state.view !== view) {
+        const cleanPath = view === 'home' ? '/' : `/${view}`;
+        window.history.replaceState({ view }, '', cleanPath);
+      }
     }
 
     const handlePopState = (e: PopStateEvent) => {
@@ -1594,16 +1602,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         params = new URLSearchParams(window.location.search);
       }
 
-      const pageParam = params.get('page');
-      const isMushaf = path.includes('/mushaf') || params.get('view') === 'mushaf' || !!pageParam;
+      const isExplicitMushaf = path === '/mushaf' || path.startsWith('/mushaf/') || params.get('view') === 'mushaf';
 
-      if (isMushaf) {
-        const pageNum = parseInt(pageParam || '1', 10);
+      if (isExplicitMushaf) {
+        const pageParam = params.get('page');
+        const pageNum = pageParam ? parseInt(pageParam, 10) : NaN;
         if (!isNaN(pageNum) && pageNum >= 1 && pageNum <= 604) {
           setCurrentPage(pageNum);
         }
         setIsPageModeActive(true);
-        setView('mushaf');
+        setView('mushaf', false);
+        return;
+      }
+
+      // If user is at root '/', stay on home or saved view; do not force mushaf
+      if (path === '/' || path === '') {
+        const savedView = sessionStorage.getItem('current_app_view');
+        if (savedView && VALID_VIEWS.includes(savedView as View) && savedView !== 'home') {
+          setView(savedView as View, false);
+        } else {
+          setView('home', false);
+        }
+        if (window.location.search && !params.get('roomId') && !params.get('code')) {
+          try {
+            window.history.replaceState({ view: 'home' }, '', '/');
+          } catch {}
+        }
         return;
       }
 
@@ -1616,12 +1640,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       if (rootSegment === 'settings') {
-        setView('settings');
+        setView('settings', false);
         return;
       }
 
       if (VALID_VIEWS.includes(rootSegment as View)) {
-        setView(rootSegment as View);
+        setView(rootSegment as View, false);
       }
     };
 
@@ -1656,18 +1680,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         window.removeEventListener('popstate', popstateListener);
       }
     };
-  }, []);
+  }, [setView]);
 
   const openWird = useCallback((pageNumber?: number) => {
     const target = pageNumber || currentPage || 1;
     const safePage = Math.max(1, Math.min(604, target));
     setCurrentPage(safePage);
     setIsPageModeActive(true);
-    setView('mushaf');
+    setView('mushaf', false);
     if (typeof window !== 'undefined' && window.history) {
-      window.history.pushState({ page: safePage }, '', `/mushaf?page=${safePage}`);
+      window.history.pushState({ page: safePage, view: 'mushaf' }, '', `/mushaf?page=${safePage}`);
     }
-  }, [currentPage]);
+  }, [currentPage, setView]);
 
   const fetchAvailableRooms = useCallback(async (showLoading = false) => {
     if (showLoading) setIsLoadingRooms(true);

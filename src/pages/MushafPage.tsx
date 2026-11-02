@@ -76,6 +76,27 @@ export const MushafPage: React.FC<MushafPageProps> = ({
 }) => {
   const [isWirdModalOpen, setIsWirdModalOpen] = useState(false);
 
+  // Safe Page Navigation Handlers for Wird & Mushaf Reading
+  const handleNextPage = () => {
+    if (currentPage < 604) {
+      setPageTurnDirection('next');
+      setCurrentPage((prev) => Math.min(604, prev + 1));
+      setSelectedAyah(null);
+    }
+  };
+
+  const handlePrevPage = () => {
+    if (currentPage > 1) {
+      setPageTurnDirection('prev');
+      setCurrentPage((prev) => Math.max(1, prev - 1));
+      setSelectedAyah(null);
+    }
+  };
+
+  const safeZoomScale = typeof mushafZoomScale === 'number' && Number.isFinite(mushafZoomScale) && mushafZoomScale > 0
+    ? mushafZoomScale
+    : 1;
+
   // Deep Link ?page=X capture to bypass index and open page directly
   useEffect(() => {
     try {
@@ -651,14 +672,13 @@ export const MushafPage: React.FC<MushafPageProps> = ({
                                     pageNumber={currentPage}
                                     darkMode={librarySettings.darkMode}
                                     isFullscreen={false}
-                                    externalScale={mushafZoomScale}
+                                    externalScale={safeZoomScale}
                                     onExternalScaleChange={setMushafZoomScale}
                                     onPageTurn={(dir) => {
-                                      setPageTurnDirection(dir);
                                       if (dir === 'next') {
-                                        setCurrentPage(prev => Math.min(604, prev + 1));
+                                        handleNextPage();
                                       } else {
-                                        setCurrentPage(prev => Math.max(1, prev - 1));
+                                        handlePrevPage();
                                       }
                                     }}
                                     onTap={() => setSelectedAyah(null)}
@@ -680,11 +700,8 @@ export const MushafPage: React.FC<MushafPageProps> = ({
                                   <div className={`flex items-center gap-1 p-1 rounded-xl border shadow-xs shrink-0 ${librarySettings.darkMode ? 'bg-slate-800/90 border-slate-700/80' : 'bg-slate-100/90 border-slate-200/80'
                                     }`}>
                                     <button
-                                      onClick={() => {
-                                        setPageTurnDirection('prev');
-                                        setCurrentPage(prev => Math.max(1, prev - 1));
-                                      }}
-                                      disabled={currentPage === 1}
+                                      onClick={handlePrevPage}
+                                      disabled={currentPage <= 1}
                                       className={`p-1.5 sm:p-2 rounded-lg text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-2xs shrink-0 active:scale-95 ${librarySettings.darkMode ? 'bg-slate-700 hover:bg-emerald-600' : 'bg-emerald-700 hover:bg-emerald-800'
                                         }`}
                                       title="الصفحة السابقة"
@@ -700,9 +717,10 @@ export const MushafPage: React.FC<MushafPageProps> = ({
                                         onChange={(e) => {
                                           const val = e.target.value.replace(/[^0-9]/g, '');
                                           if (val === '') return;
-                                          const num = parseInt(val);
-                                          if (num >= 1 && num <= 604) {
+                                          const num = parseInt(val, 10);
+                                          if (!isNaN(num) && num >= 1 && num <= 604) {
                                             setCurrentPage(num);
+                                            setSelectedAyah(null);
                                           }
                                         }}
                                         className={`w-10 sm:w-12 border rounded text-center text-xs sm:text-sm font-black focus:outline-none focus:ring-1 focus:ring-brand-emerald/30 shadow-2xs py-0.5 ${librarySettings.darkMode ? 'bg-slate-900 border-slate-700 text-emerald-400' : 'bg-white border-slate-300 text-brand-emerald'
@@ -712,11 +730,8 @@ export const MushafPage: React.FC<MushafPageProps> = ({
                                     </div>
 
                                     <button
-                                      onClick={() => {
-                                        setPageTurnDirection('next');
-                                        setCurrentPage(prev => Math.min(604, prev + 1));
-                                      }}
-                                      disabled={currentPage === 604}
+                                      onClick={handleNextPage}
+                                      disabled={currentPage >= 604}
                                       className={`p-1.5 sm:p-2 rounded-lg text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-2xs shrink-0 active:scale-95 ${librarySettings.darkMode ? 'bg-slate-700 hover:bg-emerald-600' : 'bg-emerald-700 hover:bg-emerald-800'
                                         }`}
                                       title="الصفحة التالية"
@@ -732,8 +747,11 @@ export const MushafPage: React.FC<MushafPageProps> = ({
                                   <div className={`flex items-center gap-1 p-1 rounded-xl border shadow-xs shrink-0 ${librarySettings.darkMode ? 'bg-slate-800/90 border-slate-700/80' : 'bg-slate-100/90 border-slate-200/80'
                                     }`}>
                                     <button
-                                      onClick={() => setMushafZoomScale(prev => Math.min(1.8, Number((prev + 0.1).toFixed(1))))}
-                                      disabled={mushafZoomScale >= 1.8}
+                                      onClick={() => setMushafZoomScale(prev => {
+                                        const current = (typeof prev === 'number' && Number.isFinite(prev) && prev > 0) ? prev : 1;
+                                        return Math.min(2.5, Number((current + 0.1).toFixed(1)));
+                                      })}
+                                      disabled={safeZoomScale >= 2.5}
                                       className={`p-1.5 sm:p-2 rounded-lg text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-2xs shrink-0 active:scale-95 ${librarySettings.darkMode ? 'bg-slate-700 hover:bg-emerald-600' : 'bg-emerald-700 hover:bg-emerald-800'
                                         }`}
                                       title="تكبير الصفحة"
@@ -743,18 +761,21 @@ export const MushafPage: React.FC<MushafPageProps> = ({
 
                                     <button
                                       onClick={() => setMushafZoomScale(1)}
-                                      className={`px-2 py-1 rounded border text-[10px] sm:text-xs font-black transition-colors shadow-2xs shrink-0 ${mushafZoomScale === 1
+                                      className={`px-2 py-1 rounded border text-[10px] sm:text-xs font-black transition-colors shadow-2xs shrink-0 ${safeZoomScale === 1
                                           ? (librarySettings.darkMode ? 'bg-emerald-900/60 border-emerald-500 text-emerald-400' : 'bg-emerald-50 border-emerald-300 text-brand-emerald font-black')
                                           : (librarySettings.darkMode ? 'bg-slate-900 border-slate-700 text-slate-200 hover:text-emerald-400' : 'bg-white border-slate-300 text-slate-800 hover:text-brand-emerald')
                                         }`}
                                       title="إعادة تعيين 100%"
                                     >
-                                      {Math.round(mushafZoomScale * 100)}%
+                                      {Math.round(safeZoomScale * 100)}%
                                     </button>
 
                                     <button
-                                      onClick={() => setMushafZoomScale(prev => Math.max(0.7, Number((prev - 0.1).toFixed(1))))}
-                                      disabled={mushafZoomScale <= 0.7}
+                                      onClick={() => setMushafZoomScale(prev => {
+                                        const current = (typeof prev === 'number' && Number.isFinite(prev) && prev > 0) ? prev : 1;
+                                        return Math.max(0.6, Number((current - 0.1).toFixed(1)));
+                                      })}
+                                      disabled={safeZoomScale <= 0.6}
                                       className={`p-1.5 sm:p-2 rounded-lg text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-2xs shrink-0 active:scale-95 ${librarySettings.darkMode ? 'bg-slate-700 hover:bg-emerald-600' : 'bg-emerald-700 hover:bg-emerald-800'
                                         }`}
                                       title="تصغير الصفحة"

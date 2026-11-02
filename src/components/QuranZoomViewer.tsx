@@ -35,19 +35,19 @@ export const QuranZoomViewer: React.FC<QuranZoomViewerProps> = ({
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const ayahTapTriggeredRef = useRef(false);
 
-  const scale = externalScale !== undefined ? externalScale : internalScale;
+  const rawScale = externalScale !== undefined ? externalScale : internalScale;
+  const scale = typeof rawScale === 'number' && Number.isFinite(rawScale) && rawScale > 0 ? rawScale : 1;
+
   const setScale = useCallback(
     (newScaleOrFn: number | ((prev: number) => number)) => {
-      if (typeof newScaleOrFn === 'function') {
-        const next = newScaleOrFn(scale);
-        const clamped = Math.max(1, Math.min(3.5, Number(next.toFixed(2))));
-        if (onExternalScaleChange) onExternalScaleChange(clamped);
-        else setInternalScale(clamped);
-      } else {
-        const clamped = Math.max(1, Math.min(3.5, Number(newScaleOrFn.toFixed(2))));
-        if (onExternalScaleChange) onExternalScaleChange(clamped);
-        else setInternalScale(clamped);
+      const currentValid = typeof scale === 'number' && Number.isFinite(scale) && scale > 0 ? scale : 1;
+      let next = typeof newScaleOrFn === 'function' ? newScaleOrFn(currentValid) : newScaleOrFn;
+      if (typeof next !== 'number' || !Number.isFinite(next) || isNaN(next)) {
+        next = 1;
       }
+      const clamped = Math.max(0.6, Math.min(3.5, Number(next.toFixed(2))));
+      if (onExternalScaleChange) onExternalScaleChange(clamped);
+      else setInternalScale(clamped);
     },
     [scale, onExternalScaleChange]
   );
@@ -95,8 +95,10 @@ export const QuranZoomViewer: React.FC<QuranZoomViewerProps> = ({
       const t1 = e.touches[0];
       const t2 = e.touches[1];
       const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
-      initialPinchDistRef.current = dist;
-      initialPinchScaleRef.current = scale;
+      if (dist > 5) {
+        initialPinchDistRef.current = dist;
+        initialPinchScaleRef.current = typeof scale === 'number' && Number.isFinite(scale) && scale > 0 ? scale : 1;
+      }
     } else if (e.touches.length === 1) {
       // 1 Finger Drag / Tap / Double Tap
       const touch = e.touches[0];
@@ -110,18 +112,26 @@ export const QuranZoomViewer: React.FC<QuranZoomViewerProps> = ({
   const handleTouchMove = (e: React.TouchEvent) => {
     onInteraction?.();
 
-    if (e.touches.length === 2 && initialPinchDistRef.current !== null) {
+    if (e.touches.length === 2 && initialPinchDistRef.current && initialPinchDistRef.current > 5) {
       // Pinch to Zoom move
       const t1 = e.touches[0];
       const t2 = e.touches[1];
       const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
-      const ratio = dist / initialPinchDistRef.current;
-      const nextScale = Math.max(1, Math.min(3.5, initialPinchScaleRef.current * ratio));
-      setScale(nextScale);
-      if (nextScale <= 1.05) {
-        setPosition({ x: 0, y: 0 });
-      } else {
-        setPosition((prev) => clampPosition(prev.x, prev.y, nextScale));
+      if (dist > 0) {
+        const ratio = dist / initialPinchDistRef.current;
+        const base = typeof initialPinchScaleRef.current === 'number' && Number.isFinite(initialPinchScaleRef.current) && initialPinchScaleRef.current > 0
+          ? initialPinchScaleRef.current
+          : 1;
+        const rawNextScale = base * ratio;
+        if (Number.isFinite(rawNextScale)) {
+          const nextScale = Math.max(0.6, Math.min(3.5, rawNextScale));
+          setScale(nextScale);
+          if (nextScale <= 1.05) {
+            setPosition({ x: 0, y: 0 });
+          } else {
+            setPosition((prev) => clampPosition(prev.x, prev.y, nextScale));
+          }
+        }
       }
     } else if (e.touches.length === 1 && isDraggingRef.current) {
       const touch = e.touches[0];
@@ -275,6 +285,7 @@ export const QuranZoomViewer: React.FC<QuranZoomViewerProps> = ({
       >
         <div className="relative inline-block max-w-full">
           <img
+            key={pageNumber}
             src={`/quran-pages/${pageNumber.toString().padStart(3, '0')}.png`}
             alt={`صفحة ${pageNumber}`}
             draggable={false}

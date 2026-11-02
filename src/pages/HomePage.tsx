@@ -83,8 +83,26 @@ export const HomePage: React.FC<HomePageProps> = ({
   const [isAyahPlaying, setIsAyahPlaying] = useState(false);
   const [isAyahCopied, setIsAyahCopied] = useState(false);
 
-  // Quick Tasbih Counter State
-  const [tasbihCount, setTasbihCount] = useState<number>(33);
+  // Quick Tasbih Counter State with localStorage persistence
+  const [tasbihCount, setTasbihCount] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('tasbihCount');
+      if (saved !== null) {
+        const parsed = parseInt(saved, 10);
+        if (!isNaN(parsed) && parsed >= 0) {
+          return parsed;
+        }
+      }
+    } catch {}
+    return 33;
+  });
+
+  // Sync Tasbih counter with localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('tasbihCount', tasbihCount.toString());
+    } catch {}
+  }, [tasbihCount]);
 
   const defaultAyahText = "وَنُنَزِّلُ مِنَ الْقُرْآنِ مَا هُوَ شِفَاءٌ وَرَحْمَةٌ لِّلْمُؤْمِنِينَ";
   const activeAyahText = motivationalQuote || defaultAyahText;
@@ -193,9 +211,15 @@ export const HomePage: React.FC<HomePageProps> = ({
     }
   };
 
-  // Tasbih increment with haptic feedback
+  // Tasbih increment with haptic feedback and persistence
   const handleTasbihTap = () => {
-    setTasbihCount((prev) => (prev >= 100 ? 1 : prev + 1));
+    setTasbihCount((prev) => {
+      const next = prev >= 100 ? 1 : prev + 1;
+      try {
+        localStorage.setItem('tasbihCount', next.toString());
+      } catch {}
+      return next;
+    });
     if (typeof navigator !== 'undefined' && navigator.vibrate) {
       navigator.vibrate(25);
     }
