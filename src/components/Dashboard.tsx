@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MapPin, Bell, Settings, X, RotateCcw, Globe, Sliders, CheckCircle2, Clock } from 'lucide-react';
+import { MapPin, Bell, Settings, X, RotateCcw, Globe, Sliders, CheckCircle2, Clock, Compass } from 'lucide-react';
+import * as adhan from 'adhan';
 import {
   PRAYER_COUNTRIES,
   CountryData,
@@ -59,6 +60,21 @@ const Dashboard: React.FC<DashboardProps> = ({ className = '' }) => {
   });
 
   const [nextPrayer, setNextPrayer] = useState<{ name: string; key: string; time: string; timeLeft: string } | null>(null);
+
+  // Qibla Direction Angle
+  const qiblaAngle = useMemo(() => {
+    try {
+      const country = PRAYER_COUNTRIES.find((c) => c.name === selectedCountryName) || PRAYER_COUNTRIES[0];
+      const city = country?.cities.find((c) => c.name === selectedCityName) || country?.cities[0];
+      if (city && typeof city.lat === 'number' && typeof city.lng === 'number') {
+        const q = adhan.Qibla(new adhan.Coordinates(city.lat, city.lng));
+        return Math.round(q);
+      }
+    } catch (e) {
+      console.error("Error computing Qibla angle:", e);
+    }
+    return 136;
+  }, [selectedCountryName, selectedCityName]);
 
   // Settings Modal state
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -222,12 +238,20 @@ const Dashboard: React.FC<DashboardProps> = ({ className = '' }) => {
         <div className="absolute top-0 right-0 w-48 sm:w-64 h-48 sm:h-64 bg-emerald-400/10 dark:bg-holyEmerald-500/10 rounded-full blur-3xl pointer-events-none -mr-16 -mt-16" />
         <div className="absolute bottom-0 left-0 w-48 sm:w-64 h-48 sm:h-64 bg-amber-400/10 dark:bg-regalGold-500/10 rounded-full blur-3xl pointer-events-none -ml-16 -mb-16" />
 
-        {/* Top Header Bar: Location Badge & Settings Button */}
-        <div className="flex items-center justify-between gap-1.5 pb-2.5 sm:pb-3 mb-1.5 sm:mb-2.5 border-b border-emerald-100/70 dark:border-regalGold-500/20 relative z-10">
-          {/* Location Badge */}
-          <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-50/90 dark:bg-obsidian-850 border border-emerald-200/80 dark:border-regalGold-500/25 rounded-full text-[11px] sm:text-xs font-bold shadow-2xs">
-            <MapPin className="w-3.5 h-3.5 text-emerald-600 dark:text-regalGold-400 shrink-0" />
-            <span className="truncate max-w-[150px] sm:max-w-none text-emerald-900 dark:text-regalGold-100 font-black">{locationName}</span>
+        {/* Top Header Bar: Location Badge, Qibla Badge & Settings Button */}
+        <div className="flex items-center justify-between gap-1.5 pb-2.5 sm:pb-3 mb-1.5 sm:mb-2.5 border-b border-emerald-100/70 dark:border-regalGold-500/20 relative z-10 flex-wrap sm:flex-nowrap">
+          {/* Location & Qibla Badges */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <div className="flex items-center gap-1.5 px-3 py-1 bg-emerald-50/90 dark:bg-obsidian-850 border border-emerald-200/80 dark:border-regalGold-500/25 rounded-full text-[11px] sm:text-xs font-bold shadow-2xs">
+              <MapPin className="w-3.5 h-3.5 text-emerald-600 dark:text-regalGold-400 shrink-0" />
+              <span className="truncate max-w-[130px] sm:max-w-none text-emerald-900 dark:text-regalGold-100 font-black">{locationName}</span>
+            </div>
+
+            {/* Qibla Direction Badge */}
+            <div className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50/90 dark:bg-obsidian-850 border border-emerald-200/80 dark:border-regalGold-500/25 text-emerald-900 dark:text-regalGold-300 text-[11px] sm:text-xs font-black shadow-2xs" title="اتجاه القبلة المشرفة">
+              <Compass className="w-3.5 h-3.5 text-emerald-600 dark:text-holyEmerald-400 shrink-0" />
+              <span>{qiblaAngle}° القِبلَة</span>
+            </div>
           </div>
 
           {/* Settings Pill Button */}
