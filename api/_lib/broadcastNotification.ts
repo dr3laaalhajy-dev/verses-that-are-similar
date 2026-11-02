@@ -6,10 +6,49 @@ const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUP
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhleHhib3BmdmJ1bGlha3VmZWpqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMyMzA1MjYsImV4cCI6MjEwODgwNjUyNn0.-JG3tJo4PJrxtaHI9MC9fXQKR1AZ60GY5b-OJOFNSZo';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
+/**
+ * Resolves a full absolute URL for push notifications payload (FCM).
+ * If targetUrl starts with '/' (relative path), it prepends the site base URL.
+ */
+export function resolveFullUrl(pathOrUrl?: string | null): string | null {
+  if (!pathOrUrl) return null;
+  const trimmed = pathOrUrl.trim();
+  if (!trimmed) return null;
+
+  // If already an absolute URL (http:// or https://)
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed;
+  }
+
+  // Ensure relative path starts with /
+  const relativePath = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+
+  // Extract Base URL from environment variables
+  let baseUrl =
+    process.env.VITE_APP_URL ||
+    process.env.APP_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    '';
+
+  if (!baseUrl && process.env.VERCEL_URL) {
+    baseUrl = `https://${process.env.VERCEL_URL}`;
+  }
+  if (!baseUrl && process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+    baseUrl = `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+  }
+  if (!baseUrl) {
+    baseUrl = 'https://mateen-quran.vercel.app';
+  }
+
+  const cleanBase = baseUrl.replace(/\/+$/, '');
+  return `${cleanBase}${relativePath}`;
+}
+
 export interface BroadcastNotificationParams {
   title: string;
   body: string;
   targetUrl?: string | null;
+  fullUrl?: string | null;
   senderRole?: string;
   senderName?: string;
   metadata?: Record<string, any>;
@@ -32,6 +71,7 @@ export async function broadcastNotification({
   title,
   body,
   targetUrl = null,
+  fullUrl = null,
   senderRole = 'SYSTEM',
   senderName = 'تطبيق متين',
   metadata = {}
@@ -39,6 +79,7 @@ export async function broadcastNotification({
   const cleanTitle = title.trim();
   const cleanBody = body.trim();
   const cleanTargetUrl = targetUrl ? targetUrl.trim() : null;
+  const resolvedFullUrl = fullUrl ? fullUrl.trim() : resolveFullUrl(cleanTargetUrl);
 
   let savedNotification: any = null;
 
@@ -132,13 +173,15 @@ export async function broadcastNotification({
           data: {
             title: cleanTitle,
             body: cleanBody,
-            url: cleanTargetUrl || '/',
-            click_action: cleanTargetUrl || '/',
+            url: resolvedFullUrl || '/',
+            full_url: resolvedFullUrl || '/',
+            relative_url: cleanTargetUrl || '/',
+            click_action: resolvedFullUrl || '/',
             ...(metadata || {})
           },
           webpush: {
             fcmOptions: {
-              link: cleanTargetUrl || '/'
+              link: resolvedFullUrl || '/'
             },
             notification: {
               icon: '/logo.png',

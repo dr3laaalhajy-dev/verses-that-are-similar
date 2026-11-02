@@ -28,6 +28,21 @@ const messaging = firebase.messaging();
 messaging.onBackgroundMessage((payload) => {
   console.log('[firebase-messaging-sw.js] Received background message:', payload);
 
+  const rawUrl = payload.data?.url || payload.fcmOptions?.link || '/';
+  const fullUrl = (rawUrl.startsWith('http://') || rawUrl.startsWith('https://'))
+    ? rawUrl
+    : new URL(rawUrl, self.location.origin).href;
+
+  let relativePath = payload.data?.relative_url || '';
+  if (!relativePath || relativePath.startsWith('http')) {
+    try {
+      const parsed = new URL(fullUrl, self.location.origin);
+      relativePath = parsed.pathname + parsed.search + parsed.hash;
+    } catch (e) {
+      relativePath = rawUrl.startsWith('/') ? rawUrl : '/' + rawUrl;
+    }
+  }
+
   const notificationTitle = payload.notification?.title || payload.data?.title || 'تطبيق متين 🔔';
   const notificationOptions = {
     body: payload.notification?.body || payload.data?.body || 'لديك تنبيه جديد من تطبيق متين',
@@ -37,7 +52,9 @@ messaging.onBackgroundMessage((payload) => {
     lang: 'ar',
     vibrate: [200, 100, 200],
     data: {
-      url: payload.data?.url || payload.fcmOptions?.link || '/',
+      url: fullUrl,
+      fullUrl: fullUrl,
+      relative_url: relativePath,
       ...payload.data
     },
     actions: [
@@ -52,28 +69,47 @@ messaging.onBackgroundMessage((payload) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 
-  const targetUrl = event.notification.data?.url || '/';
+  const data = event.notification.data || {};
+  const rawUrl = data.url || data.link || '/';
+
+  // 1. الرابط الكامل لفتح نافذة جديدة في حال كان التطبيق مغلقاً
+  const fullUrl = (rawUrl.startsWith('http://') || rawUrl.startsWith('https://'))
+    ? rawUrl
+    : new URL(rawUrl, self.location.origin).href;
+
+  // 2. المسار النسبي لإرساله عبر postMessage دون إعادة تحميل الصفحة إذا كان التطبيق مفتوحاً
+  let relativePath = data.relative_url || '';
+  if (!relativePath || relativePath.startsWith('http')) {
+    try {
+      const parsed = new URL(fullUrl, self.location.origin);
+      relativePath = parsed.pathname + parsed.search + parsed.hash;
+    } catch (e) {
+      relativePath = rawUrl.startsWith('/') ? rawUrl : '/' + rawUrl;
+    }
+  }
+  if (!relativePath.startsWith('/')) {
+    relativePath = '/' + relativePath;
+  }
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
-      // إذا كان هناك تبويب مفتوح بالفعل، قم بإرسال رسالة التوجيه الذكي وتركيزه
+      // إذا كان التطبيق مفتوحاً في الخلفية، استخدم client.postMessage لإرسال المسار النسبي دون تحديث الصفحة
       for (const client of windowClients) {
         if (client.url.includes(self.location.origin) && 'focus' in client) {
           client.postMessage({
             type: 'DEEP_LINK_NAVIGATE',
-            url: targetUrl,
-            data: event.notification.data
+            url: relativePath,
+            fullUrl: fullUrl,
+            data: data
           });
 
-          if ('navigate' in client && !client.url.endsWith(targetUrl)) {
-            client.navigate(targetUrl);
-          }
           return client.focus();
         }
       }
-      // إذا لم يكن التطبيق مفتوحاً، افتح نافذة جديدة بالرابط المحدد
+
+      // إذا لم يكن التطبيق مفتوحاً، افتح نافذة جديدة بالرابط الكامل المؤكد
       if (clients.openWindow) {
-        return clients.openWindow(targetUrl);
+        return clients.openWindow(fullUrl);
       }
     })
   );

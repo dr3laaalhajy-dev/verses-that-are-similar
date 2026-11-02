@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { prisma } from '../_lib/prisma.js';
 import { handleCors } from '../_lib/cors.js';
-import { broadcastNotification } from '../_lib/broadcastNotification.js';
+import { broadcastNotification, resolveFullUrl } from '../_lib/broadcastNotification.js';
 import jwt from 'jsonwebtoken';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
@@ -55,6 +55,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const cleanTitle = title.trim();
   const cleanBody = body.trim();
   const cleanTargetUrl = (target_url || targetUrl || '').trim() || null;
+  // If target_url starts with '/' (relative path), resolve it to full URL using base URL
+  const fullTargetUrl = resolveFullUrl(cleanTargetUrl);
   const senderRole = isFounder ? 'FOUNDER' : 'CO_FOUNDER';
   const senderName = currentAdmin.name || currentAdmin.username;
 
@@ -63,10 +65,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       title: cleanTitle,
       body: cleanBody,
       targetUrl: cleanTargetUrl,
+      fullUrl: fullTargetUrl,
       senderRole,
       senderName,
       metadata: {
         ...(metadata || {}),
+        fullUrl: fullTargetUrl,
         sentByAdminId: currentAdmin.id,
         sentAt: new Date().toISOString()
       }

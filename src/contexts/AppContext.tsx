@@ -1571,9 +1571,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [playerName]);
 
-  // Deep Linking: Check for /mushaf or page parameter in URL on mount and handle Service Worker messages
+  // Deep Linking: Check for /mushaf, /challenges, /library, or other routes on mount and handle Service Worker messages
   useEffect(() => {
-    const handleMushafDeepLink = (urlOrParams?: string | URLSearchParams) => {
+    const handleAppDeepLink = (urlOrParams?: string | URLSearchParams) => {
       let params: URLSearchParams;
       let path = window.location.pathname;
 
@@ -1584,6 +1584,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           path = parsed.pathname;
         } catch {
           params = new URLSearchParams(window.location.search);
+          path = urlOrParams.split('?')[0];
         }
       } else if (urlOrParams instanceof URLSearchParams) {
         params = urlOrParams;
@@ -1601,16 +1602,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
         setIsPageModeActive(true);
         setView('mushaf');
+        return;
+      }
+
+      const cleanPath = path.replace(/^\//, '').split('?')[0].split('#')[0];
+      const rootSegment = cleanPath.split('/')[0];
+
+      if (rootSegment === 'leaderboard' || rootSegment === 'scores') {
+        setShowScores(true);
+        return;
+      }
+
+      if (rootSegment === 'settings') {
+        setView('settings');
+        return;
+      }
+
+      if (VALID_VIEWS.includes(rootSegment as View)) {
+        setView(rootSegment as View);
       }
     };
 
     // 1. Check URL parameters immediately on mount
-    handleMushafDeepLink();
+    handleAppDeepLink();
 
     // 2. Listen for deep link events from Service Worker & Window (when notification is clicked)
     const deepLinkListener = (event: MessageEvent) => {
       if (event.data?.type === 'DEEP_LINK_NAVIGATE') {
-        handleMushafDeepLink(event.data.url);
+        handleAppDeepLink(event.data.url);
       }
     };
 
