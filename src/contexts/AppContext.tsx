@@ -1628,11 +1628,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // 1. Check URL parameters immediately on mount
     handleAppDeepLink();
 
-    // 2. Listen for deep link events from Service Worker & Window (when notification is clicked)
+    // 2. Listen for deep link events from Service Worker, Window & popstate (when notification is clicked or history changes)
     const deepLinkListener = (event: MessageEvent) => {
       if (event.data?.type === 'DEEP_LINK_NAVIGATE') {
         handleAppDeepLink(event.data.url);
       }
+    };
+
+    const popstateListener = () => {
+      handleAppDeepLink();
     };
 
     if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
@@ -1640,6 +1644,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     if (typeof window !== 'undefined') {
       window.addEventListener('message', deepLinkListener);
+      window.addEventListener('popstate', popstateListener);
     }
 
     return () => {
@@ -1648,9 +1653,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       if (typeof window !== 'undefined') {
         window.removeEventListener('message', deepLinkListener);
+        window.removeEventListener('popstate', popstateListener);
       }
     };
   }, []);
+
+  const openWird = useCallback((pageNumber?: number) => {
+    const target = pageNumber || currentPage || 1;
+    const safePage = Math.max(1, Math.min(604, target));
+    setCurrentPage(safePage);
+    setIsPageModeActive(true);
+    setView('mushaf');
+    if (typeof window !== 'undefined' && window.history) {
+      window.history.pushState({ page: safePage }, '', `/mushaf?page=${safePage}`);
+    }
+  }, [currentPage]);
 
   const fetchAvailableRooms = useCallback(async (showLoading = false) => {
     if (showLoading) setIsLoadingRooms(true);
@@ -4786,6 +4803,7 @@ ${versesList}
     isMushafFullscreen, setIsMushafFullscreen,
     isPageModeActive, setIsPageModeActive,
     isMushafFeaturesModalOpen, setIsMushafFeaturesModalOpen,
+    openWird,
     filteredSurahsList,
     currentSurahStartPage,
     currentJuzStartPage,

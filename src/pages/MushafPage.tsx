@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { normalizeArabicText } from "../utils/arabic";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -75,6 +75,23 @@ export const MushafPage: React.FC<MushafPageProps> = ({
   setView
 }) => {
   const [isWirdModalOpen, setIsWirdModalOpen] = useState(false);
+
+  // Deep Link ?page=X capture to bypass index and open page directly
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const pageParam = params.get('page');
+      if (pageParam) {
+        const pageNum = parseInt(pageParam, 10);
+        if (!isNaN(pageNum) && pageNum >= 1 && pageNum <= 604) {
+          setCurrentPage(pageNum);
+          setIsPageModeActive(true);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, [setCurrentPage, setIsPageModeActive]);
 
   const searchResults = useMemo(() => {
     const trimmed = (searchQuery || "").trim();

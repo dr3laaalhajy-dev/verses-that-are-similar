@@ -178,6 +178,21 @@ export const HomePage: React.FC<HomePageProps> = ({
     return (juzNum - 1) * 2 + (currentPage - startOfJuz >= 10 ? 2 : 1);
   }, [currentJuz, currentPage]);
 
+  // Deep Link Resume Reading Wird Handler
+  const handleResumeReadingWird = () => {
+    const targetPage = currentPage || 1;
+    if (app.openWird) {
+      app.openWird(targetPage);
+    } else {
+      app.setCurrentPage?.(targetPage);
+      app.setIsPageModeActive?.(true);
+      setView('mushaf');
+      if (typeof window !== 'undefined' && window.history) {
+        window.history.pushState({ page: targetPage }, '', `/mushaf?page=${targetPage}`);
+      }
+    }
+  };
+
   // Tasbih increment with haptic feedback
   const handleTasbihTap = () => {
     setTasbihCount((prev) => (prev >= 100 ? 1 : prev + 1));
@@ -339,80 +354,6 @@ export const HomePage: React.FC<HomePageProps> = ({
         <div className="h-1 w-20 bg-brand-gold/30 dark:bg-regalGold-500/40 rounded-full mx-auto mt-2" />
       </motion.div>
 
-      {/* New Feature 3: Daily Khatmah Tracker Card (بطاقة الورد اليومي) */}
-      <section className="w-full rounded-3xl glass-card bg-white dark:bg-obsidian-900/80 border border-slate-150 dark:border-regalGold-500/20 p-4 sm:p-5 shadow-xs text-right relative overflow-hidden">
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-holyEmerald-500/15 text-emerald-600 dark:text-holyEmerald-400 border border-emerald-200/60 dark:border-holyEmerald-500/30 flex items-center justify-center shrink-0">
-              <BookOpen className="w-4 h-4" />
-            </div>
-            <div>
-              <h2 className="text-sm sm:text-base font-black text-slate-800 dark:text-regalGold-100 font-tajawal">
-                خَتْمَةُ الوِرْدِ اليَوْمِي
-              </h2>
-              <p className="text-[11px] text-slate-400 dark:text-regalGold-300/70 font-medium">
-                مُتَابَعَةُ القِرَاءَةِ مِنْ حَيْثُ وَقَفْت
-              </p>
-            </div>
-          </div>
-          <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-holyEmerald-500/15 border border-emerald-200/60 dark:border-holyEmerald-500/30 text-emerald-800 dark:text-holyEmerald-300 text-[11px] font-black">
-            {toArabicIndic(khatmahPercentage)}٪ مكتمل
-          </span>
-        </div>
-
-        {/* Active Bookmark Details */}
-        <div className="my-3 p-3.5 rounded-2xl bg-slate-50 dark:bg-obsidian-850/90 border border-slate-150 dark:border-regalGold-500/20 flex items-center justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-base sm:text-lg font-black text-slate-800 dark:text-regalGold-100 font-tajawal">
-                سُورَةُ {currentSurah.name}
-              </span>
-              <span className="text-xs font-black text-emerald-700 dark:text-holyEmerald-400">
-                الآيَة {toArabicIndic(currentBoundary.startVerse || 1)}
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-400 dark:text-regalGold-300/70 font-semibold mt-0.5">
-              الجزء {toArabicIndic(currentJuz)} • الحزب {toArabicIndic(currentHizb)} • الصفحة {toArabicIndic(currentPage)}
-            </p>
-          </div>
-
-          {/* Circular Mini Progress Graphic */}
-          <div className="relative w-12 h-12 flex items-center justify-center shrink-0">
-            <svg className="w-12 h-12 -rotate-90" viewBox="0 0 36 36">
-              <path
-                className="text-slate-200 dark:text-obsidian-750"
-                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="3.2"
-              />
-              <path
-                className="text-emerald-500 dark:text-holyEmerald-400"
-                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                fill="none"
-                stroke="currentColor"
-                strokeDasharray={`${khatmahPercentage}, 100`}
-                strokeLinecap="round"
-                strokeWidth="3.2"
-              />
-            </svg>
-            <span className="absolute text-[11px] font-black text-slate-800 dark:text-regalGold-200 font-mono">
-              {toArabicIndic(khatmahPercentage)}٪
-            </span>
-          </div>
-        </div>
-
-        {/* Primary Action: Resume Recitation */}
-        <button
-          type="button"
-          onClick={() => setView('mushaf')}
-          className="w-full py-2.5 sm:py-3 px-4 rounded-2xl bg-brand-emerald hover:bg-[#033628] dark:bg-gradient-to-r dark:from-holyEmerald-600 dark:via-holyEmerald-500 dark:to-holyEmerald-600 text-white dark:text-obsidian-950 font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md active:scale-[0.98] transition-all cursor-pointer"
-        >
-          <BookOpen className="w-4 h-4 fill-current" />
-          <span>مُتَابَعَةُ القِرَاءَةِ الآن</span>
-        </button>
-      </section>
-
       {/* Preserved Original Hub: Prayer Times (with Qibla badge) & 2x2 Stats Grid Side-by-Side */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 sm:gap-4 items-stretch px-1">
         {/* Prayer Times Box (Compact & Balanced with Qibla Badge) */}
@@ -567,6 +508,80 @@ export const HomePage: React.FC<HomePageProps> = ({
           </div>
         </div>
       </div>
+
+      {/* New Feature 3: Daily Khatmah Tracker Card (بطاقة الورد اليومي) - Positioned directly below Stats Ribbon & above Quick Tasbih */}
+      <section className="w-full rounded-3xl glass-card bg-white dark:bg-obsidian-900/80 border border-slate-150 dark:border-regalGold-500/20 p-4 sm:p-5 shadow-xs text-right relative overflow-hidden">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-holyEmerald-500/15 text-emerald-600 dark:text-holyEmerald-400 border border-emerald-200/60 dark:border-holyEmerald-500/30 flex items-center justify-center shrink-0">
+              <BookOpen className="w-4 h-4" />
+            </div>
+            <div>
+              <h2 className="text-sm sm:text-base font-black text-slate-800 dark:text-regalGold-100 font-tajawal">
+                خَتْمَةُ الوِرْدِ اليَوْمِي
+              </h2>
+              <p className="text-[11px] text-slate-400 dark:text-regalGold-300/70 font-medium">
+                مُتَابَعَةُ القِرَاءَةِ مِنْ حَيْثُ وَقَفْت
+              </p>
+            </div>
+          </div>
+          <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-holyEmerald-500/15 border border-emerald-200/60 dark:border-holyEmerald-500/30 text-emerald-800 dark:text-holyEmerald-300 text-[11px] font-black">
+            {toArabicIndic(khatmahPercentage)}٪ مكتمل
+          </span>
+        </div>
+
+        {/* Active Bookmark Details */}
+        <div className="my-3 p-3.5 rounded-2xl bg-slate-50 dark:bg-obsidian-850/90 border border-slate-150 dark:border-regalGold-500/20 flex items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-base sm:text-lg font-black text-slate-800 dark:text-regalGold-100 font-tajawal">
+                سُورَةُ {currentSurah.name}
+              </span>
+              <span className="text-xs font-black text-emerald-700 dark:text-holyEmerald-400">
+                الآيَة {toArabicIndic(currentBoundary.startVerse || 1)}
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-400 dark:text-regalGold-300/70 font-semibold mt-0.5">
+              الجزء {toArabicIndic(currentJuz)} • الحزب {toArabicIndic(currentHizb)} • الصفحة {toArabicIndic(currentPage)}
+            </p>
+          </div>
+
+          {/* Circular Mini Progress Graphic */}
+          <div className="relative w-12 h-12 flex items-center justify-center shrink-0">
+            <svg className="w-12 h-12 -rotate-90" viewBox="0 0 36 36">
+              <path
+                className="text-slate-200 dark:text-obsidian-750"
+                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="3.2"
+              />
+              <path
+                className="text-emerald-500 dark:text-holyEmerald-400"
+                d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                fill="none"
+                stroke="currentColor"
+                strokeDasharray={`${khatmahPercentage}, 100`}
+                strokeLinecap="round"
+                strokeWidth="3.2"
+              />
+            </svg>
+            <span className="absolute text-[11px] font-black text-slate-800 dark:text-regalGold-200 font-mono">
+              {toArabicIndic(khatmahPercentage)}٪
+            </span>
+          </div>
+        </div>
+
+        {/* Primary Action: Resume Recitation with Deep Linking to exact saved page */}
+        <button
+          type="button"
+          onClick={handleResumeReadingWird}
+          className="w-full py-2.5 sm:py-3 px-4 rounded-2xl bg-brand-emerald hover:bg-[#033628] dark:bg-gradient-to-r dark:from-holyEmerald-600 dark:via-holyEmerald-500 dark:to-holyEmerald-600 text-white dark:text-obsidian-950 font-black text-xs sm:text-sm flex items-center justify-center gap-2 shadow-md active:scale-[0.98] transition-all cursor-pointer"
+        >
+          <BookOpen className="w-4 h-4 fill-current" />
+          <span>مُتَابَعَةُ القِرَاءَةِ الآن</span>
+        </button>
+      </section>
 
       {/* New Feature 5: Quick Dhikr & Tasbih Section (الأذكار والتسبيح السريع) */}
       <section className="w-full rounded-3xl glass-card bg-white dark:bg-obsidian-900/80 border border-slate-150 dark:border-regalGold-500/20 p-4 sm:p-5 shadow-xs text-right">
