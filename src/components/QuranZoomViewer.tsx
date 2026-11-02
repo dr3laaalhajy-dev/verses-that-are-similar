@@ -11,7 +11,7 @@ interface QuranZoomViewerProps {
   onPageTurn?: (direction: 'next' | 'prev') => void;
   onTap?: () => void;
   onInteraction?: () => void;
-  pageTurnDirection?: 'next' | 'prev';
+  pageTurnDirection?: 'next' | 'prev' | null;
   selectedAyah?: { surah: number; ayah: number } | null;
   onSelectAyah?: (surah: number, ayah: number) => void;
 }
@@ -29,6 +29,7 @@ export const QuranZoomViewer: React.FC<QuranZoomViewerProps> = ({
   selectedAyah,
   onSelectAyah,
 }) => {
+  const effectivePageTurnDirection = pageTurnDirection || 'next';
   const containerRef = useRef<HTMLDivElement>(null);
   const [internalScale, setInternalScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });

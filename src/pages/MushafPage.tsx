@@ -645,7 +645,7 @@ export const MushafPage: React.FC<MushafPageProps> = ({
                                       }
                                     }}
                                     onTap={() => setSelectedAyah(null)}
-                                    pageTurnDirection={pageTurnDirection}
+                                    pageTurnDirection={pageTurnDirection || undefined}
                                     selectedAyah={selectedAyah}
                                     onSelectAyah={(s, a) => setSelectedAyah({ surah: s, ayah: a })}
                                   />
