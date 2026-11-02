@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bell, Check, X, Sparkles, Smartphone, CheckCheck, Clock, User } from 'lucide-react';
+import { Bell, Check, X, Sparkles, Smartphone, CheckCheck, Clock, User, ChevronLeft } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { usePushNotifications } from '../hooks/usePushNotifications';
+import { useApp } from '../contexts/AppContext';
 
 export interface NotificationItem {
   id: string;
   title: string;
   body: string;
+  target_url?: string | null;
   sender_role?: string;
   sender_name?: string;
   created_at: string;
@@ -53,6 +55,7 @@ const getStoredReadMap = (): ReadTimestampsMap => {
 };
 
 export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, userId, buttonClassName }) => {
+  const app = useApp();
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = useState<number>(0);
   const [isOpen, setIsOpen] = useState<boolean>(false);
@@ -148,8 +151,9 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
     }
   };
 
-  // 2. Individual Read: Click a single notification to mark it as read immediately
+  // 2. Individual Read & Deep Link: Click a notification to mark as read and navigate
   const handleItemClick = (item: NotificationItem) => {
+    // 1. Mark as read
     if (isItemUnread(item)) {
       const nowIso = new Date().toISOString();
       setReadMap(prev => {
@@ -162,6 +166,61 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
         return next;
       });
       setUnreadCount(prev => Math.max(0, prev - 1));
+    }
+
+    // 2. Action URL Navigation
+    if (item.target_url && item.target_url.trim()) {
+      setIsOpen(false);
+      const target = item.target_url.trim();
+
+      // Check external URL
+      if (/^https?:\/\//i.test(target)) {
+        window.open(target, '_blank', 'noopener,noreferrer');
+        return;
+      }
+
+      // Broadcast deep link event (e.g. for Mushaf listener or custom components)
+      try {
+        window.postMessage({ type: 'DEEP_LINK_NAVIGATE', url: target }, '*');
+      } catch {}
+
+      // Internal app navigation
+      try {
+        if (target.includes('/mushaf') || target.includes('page=')) {
+          try {
+            const urlObj = new URL(target, window.location.origin);
+            const pageParam = urlObj.searchParams.get('page');
+            if (pageParam && app.setCurrentPage) {
+              const pageNum = parseInt(pageParam, 10);
+              if (!isNaN(pageNum) && pageNum >= 1 && pageNum <= 604) {
+                app.setCurrentPage(pageNum);
+              }
+            }
+          } catch {}
+          if (app.setIsPageModeActive) app.setIsPageModeActive(true);
+          if (app.setView) app.setView('mushaf');
+          return;
+        }
+
+        const cleanPath = target.replace(/^\//, '').split('?')[0].split('#')[0];
+
+        if (cleanPath === 'leaderboard' || cleanPath === 'scores') {
+          if (app.setShowScores) app.setShowScores(true);
+          return;
+        }
+
+        if (cleanPath === 'settings') {
+          if (app.setView) app.setView('settings');
+          else if (app.setShowSettings) app.setShowSettings(true);
+          return;
+        }
+
+        if (app.setView) {
+          app.setView(cleanPath as any);
+        }
+      } catch (err) {
+        console.warn('[NotificationBell] Navigation error:', err);
+      }
     }
   };
 
@@ -475,19 +534,31 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
                         </p>
 
                         {/* البيانات الوصفية في سطر واحد أسفل النص */}
-                        <div className="text-xs text-gray-400 dark:text-slate-500 flex items-center gap-2 mt-2">
-                          <span className="flex items-center gap-1">
-                            <Clock className="w-3 h-3 text-gray-400/80" />
-                            <span>{formatRelativeTime(item.created_at)}</span>
-                          </span>
-                          {item.sender_name && (
-                            <>
-                              <span>•</span>
-                              <span className="flex items-center gap-1">
-                                <User className="w-3 h-3 text-gray-400/80" />
-                                <span>من: {item.sender_name}</span>
-                              </span>
-                            </>
+                        <div className="text-xs text-gray-400 dark:text-slate-500 flex items-center justify-between gap-2 mt-2">
+                          <div className="flex items-center gap-2">
+                            <span className="flex items-center gap-1">
+                              <Clock className="w-3 h-3 text-gray-400/80" />
+                              <span>{formatRelativeTime(item.created_at)}</span>
+                            </span>
+                            {item.sender_name && (
+                              <>
+                                <span>•</span>
+                                <span className="flex items-center gap-1">
+                                  <User className="w-3 h-3 text-gray-400/80" />
+                                  <span>من: {item.sender_name}</span>
+                                </span>
+                              </>
+                            )}
+                          </div>
+
+                          {item.target_url && (
+                            <span
+                              className="flex items-center gap-0.5 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 group-hover:-translate-x-1 transition-transform"
+                              title="انقر للانتقال إلى الرابط"
+                            >
+                              <span>فتح</span>
+                              <ChevronLeft className="w-3.5 h-3.5" />
+                            </span>
                           )}
                         </div>
                       </div>

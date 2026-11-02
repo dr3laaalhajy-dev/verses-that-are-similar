@@ -220,6 +220,7 @@ model Notification {
   id          String   @id @default(uuid())
   title       String
   body        String
+  target_url  String?
   sender_role String?  @default("FOUNDER")
   sender_name String?
   metadata    Json?    @default("{}")

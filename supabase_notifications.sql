@@ -14,6 +14,7 @@ create table if not exists public.notifications (
   id          uuid primary key default gen_random_uuid(),
   title       text not null,
   body        text not null,
+  target_url  text,
   sender_role text default 'FOUNDER',
   sender_name text,
   metadata    jsonb default '{}'::jsonb,
@@ -21,8 +22,9 @@ create table if not exists public.notifications (
   updated_at  timestamptz not null default now()
 );
 
--- التأكد من وجود حقل updated_at في حال كان الجدول منشأ مسبقاً
+-- التأكد من وجود الأعمدة الإضافية في حال كان الجدول منشأ مسبقاً
 alter table public.notifications add column if not exists updated_at timestamptz not null default now();
+alter table public.notifications add column if not exists target_url text;
 
 -- إنشاء فهرس لتسريع استرجاع الإشعارات مرتبة تنازلياً حسب وقت الإنشاء
 create index if not exists idx_notifications_created_at on public.notifications (created_at desc);

@@ -47,13 +47,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // 3. Extract and validate notification payload
-  const { title, body, metadata } = req.body || {};
+  const { title, body, target_url, targetUrl, metadata } = req.body || {};
   if (!title || !title.trim() || !body || !body.trim()) {
     return res.status(400).json({ message: 'يرجى إدخال عنوان الإشعار ونصه بالكامل' });
   }
 
   const cleanTitle = title.trim();
   const cleanBody = body.trim();
+  const cleanTargetUrl = (target_url || targetUrl || '').trim() || null;
   const senderRole = isFounder ? 'FOUNDER' : 'CO_FOUNDER';
   const senderName = currentAdmin.name || currentAdmin.username;
 
@@ -61,6 +62,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const result = await broadcastNotification({
       title: cleanTitle,
       body: cleanBody,
+      targetUrl: cleanTargetUrl,
       senderRole,
       senderName,
       metadata: {

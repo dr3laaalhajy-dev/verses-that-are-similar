@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Bell, Send, CheckCircle2, AlertCircle, Loader2, Users, Smartphone,
   Radio, Clock, ShieldCheck, RefreshCw, Sparkles, MessageSquare,
-  Pencil, Trash2, X, Save
+  Pencil, Trash2, X, Save, Link2, ExternalLink
 } from 'lucide-react';
 import { supabase } from '../../services/supabase';
 
@@ -17,9 +17,11 @@ interface NotificationHistoryItem {
   id: string;
   title: string;
   body: string;
+  target_url?: string | null;
   sender_role?: string;
   sender_name?: string;
   created_at: string;
+  updated_at?: string;
 }
 
 export interface NotificationTemplate {
@@ -57,6 +59,7 @@ export const NotificationAdmin: React.FC<NotificationAdminProps> = ({
 }) => {
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
+  const [targetUrl, setTargetUrl] = useState('');
   const [selectedTemplateIndex, setSelectedTemplateIndex] = useState<string>('');
   const [isSending, setIsSending] = useState(false);
   const [resultMessage, setResultMessage] = useState<{
@@ -73,6 +76,7 @@ export const NotificationAdmin: React.FC<NotificationAdminProps> = ({
   const [editingItem, setEditingItem] = useState<NotificationHistoryItem | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [editBody, setEditBody] = useState('');
+  const [editTargetUrl, setEditTargetUrl] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -80,6 +84,7 @@ export const NotificationAdmin: React.FC<NotificationAdminProps> = ({
     setEditingItem(item);
     setEditTitle(item.title);
     setEditBody(item.body);
+    setEditTargetUrl(item.target_url || '');
   };
 
   const handleSaveEdit = async (e: React.FormEvent) => {
@@ -93,6 +98,7 @@ export const NotificationAdmin: React.FC<NotificationAdminProps> = ({
         id: editingItem.id,
         title: editTitle.trim(),
         body: editBody.trim(),
+        target_url: editTargetUrl.trim() || null,
         updated_at: nowIso
       };
 
@@ -102,6 +108,7 @@ export const NotificationAdmin: React.FC<NotificationAdminProps> = ({
         .update({
           title: updatedData.title,
           body: updatedData.body,
+          target_url: updatedData.target_url,
           updated_at: nowIso
         })
         .eq('id', editingItem.id);
@@ -268,6 +275,7 @@ export const NotificationAdmin: React.FC<NotificationAdminProps> = ({
         body: JSON.stringify({
           title: title.trim(),
           body: body.trim(),
+          target_url: targetUrl.trim() || null,
           metadata: {
             sentAt: new Date().toISOString()
           }
@@ -284,6 +292,7 @@ export const NotificationAdmin: React.FC<NotificationAdminProps> = ({
         });
         setTitle('');
         setBody('');
+        setTargetUrl('');
         setSelectedTemplateIndex('');
         fetchHistoryAndStats();
       } else {
@@ -292,6 +301,7 @@ export const NotificationAdmin: React.FC<NotificationAdminProps> = ({
           const { error: sbErr } = await supabase.from('notifications').insert({
             title: title.trim(),
             body: body.trim(),
+            target_url: targetUrl.trim() || null,
             sender_role: isFounder ? 'FOUNDER' : 'CO_FOUNDER',
             sender_name: isFounder ? 'المؤسس' : 'مساعد المؤسس'
           });
@@ -303,6 +313,7 @@ export const NotificationAdmin: React.FC<NotificationAdminProps> = ({
             });
             setTitle('');
             setBody('');
+            setTargetUrl('');
             setSelectedTemplateIndex('');
             fetchHistoryAndStats();
             return;
@@ -465,6 +476,30 @@ export const NotificationAdmin: React.FC<NotificationAdminProps> = ({
               </span>
             </div>
 
+            {/* رابط التوجيه (اختياري) */}
+            <div>
+              <label className="block text-xs font-black text-slate-700 dark:text-slate-200 mb-1.5 flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <Link2 className="w-3.5 h-3.5 text-amber-500" />
+                  <span>رابط التوجيه (اختياري)</span>
+                </span>
+                <span className="text-[10px] text-slate-400 font-bold">
+                  توجيه فوري عند النقر
+                </span>
+              </label>
+              <input
+                type="text"
+                value={targetUrl}
+                onChange={(e) => setTargetUrl(e.target.value)}
+                placeholder="مثال: /challenges أو /library"
+                className="w-full px-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800 focus:bg-white focus:outline-none focus:border-amber-500 font-bold text-sm text-slate-800 dark:text-slate-100 transition-all text-left placeholder:text-right"
+                dir="ltr"
+              />
+              <span className="text-[10px] text-slate-400 block mt-1 text-right">
+                مسار داخلي مثل: /challenges أو /library أو رابط خارجي https://...
+              </span>
+            </div>
+
             {/* Quick Templates */}
             <div className="pt-1">
               <span className="text-[10px] font-black text-slate-400 block mb-2">
@@ -568,6 +603,12 @@ export const NotificationAdmin: React.FC<NotificationAdminProps> = ({
                   <p className="text-[11px] text-slate-600 dark:text-slate-300 font-medium leading-relaxed">
                     {item.body}
                   </p>
+                  {item.target_url && (
+                    <div className="flex items-center gap-1.5 text-[10px] font-bold text-amber-700 dark:text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-xl border border-amber-300/40 w-fit" dir="ltr">
+                      <ExternalLink className="w-3 h-3 shrink-0" />
+                      <span className="truncate max-w-[220px]">{item.target_url}</span>
+                    </div>
+                  )}
                   <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
                     <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
                       بواسطة: {item.sender_name || (item.sender_role === 'FOUNDER' ? 'المؤسس' : 'مساعد المؤسس')}
@@ -607,6 +648,7 @@ export const NotificationAdmin: React.FC<NotificationAdminProps> = ({
                           setSelectedTemplateIndex('');
                           setTitle(item.title);
                           setBody(item.body);
+                          setTargetUrl(item.target_url || '');
                         }}
                         className="text-[11px] font-bold text-slate-500 hover:text-slate-700 dark:text-slate-400 hover:underline px-1 cursor-pointer"
                         title="إعادة تعبئة حقول الإرسال"
@@ -681,6 +723,21 @@ export const NotificationAdmin: React.FC<NotificationAdminProps> = ({
                     maxLength={350}
                     className="w-full px-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800 focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:border-amber-500 font-bold text-sm text-slate-800 dark:text-slate-100 transition-all leading-relaxed"
                     required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-black text-slate-700 dark:text-slate-200 mb-1.5 flex items-center gap-1.5">
+                    <Link2 className="w-3.5 h-3.5 text-amber-500" />
+                    <span>رابط التوجيه (اختياري)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={editTargetUrl}
+                    onChange={(e) => setEditTargetUrl(e.target.value)}
+                    placeholder="مثال: /challenges أو /library"
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800 focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:border-amber-500 font-bold text-sm text-slate-800 dark:text-slate-100 transition-all text-left placeholder:text-right"
+                    dir="ltr"
                   />
                 </div>
 

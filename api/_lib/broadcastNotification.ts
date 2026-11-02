@@ -9,6 +9,7 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 export interface BroadcastNotificationParams {
   title: string;
   body: string;
+  targetUrl?: string | null;
   senderRole?: string;
   senderName?: string;
   metadata?: Record<string, any>;
@@ -30,12 +31,14 @@ export interface BroadcastNotificationResult {
 export async function broadcastNotification({
   title,
   body,
+  targetUrl = null,
   senderRole = 'SYSTEM',
   senderName = 'تطبيق متين',
   metadata = {}
 }: BroadcastNotificationParams): Promise<BroadcastNotificationResult> {
   const cleanTitle = title.trim();
   const cleanBody = body.trim();
+  const cleanTargetUrl = targetUrl ? targetUrl.trim() : null;
 
   let savedNotification: any = null;
 
@@ -45,6 +48,7 @@ export async function broadcastNotification({
       data: {
         title: cleanTitle,
         body: cleanBody,
+        target_url: cleanTargetUrl,
         sender_role: senderRole,
         sender_name: senderName,
         metadata: metadata || {}
@@ -61,6 +65,7 @@ export async function broadcastNotification({
       .insert({
         title: cleanTitle,
         body: cleanBody,
+        target_url: cleanTargetUrl,
         sender_role: senderRole,
         sender_name: senderName,
         metadata: metadata || {}
@@ -127,12 +132,13 @@ export async function broadcastNotification({
           data: {
             title: cleanTitle,
             body: cleanBody,
-            click_action: '/',
+            url: cleanTargetUrl || '/',
+            click_action: cleanTargetUrl || '/',
             ...(metadata || {})
           },
           webpush: {
             fcmOptions: {
-              link: '/'
+              link: cleanTargetUrl || '/'
             },
             notification: {
               icon: '/logo.png',

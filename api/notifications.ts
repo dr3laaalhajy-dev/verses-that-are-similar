@@ -134,7 +134,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // 5. UPDATE: Edit Notification
   if (req.method === 'PUT' || req.method === 'PATCH' || action === 'update') {
-    const { id, title, body } = req.body || {};
+    const { id, title, body, target_url, targetUrl } = req.body || {};
     const notificationId = id || (req.query.id as string);
     if (!notificationId) {
       return res.status(400).json({ message: 'Notification ID is required' });
@@ -145,6 +145,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const cleanTitle = title.trim();
     const cleanBody = body.trim();
+    const cleanTargetUrl = target_url !== undefined ? (target_url ? target_url.trim() : null) : (targetUrl ? targetUrl.trim() : null);
     const nowIso = new Date().toISOString();
 
     try {
@@ -152,7 +153,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       try {
         await supabase
           .from('notifications')
-          .update({ title: cleanTitle, body: cleanBody, updated_at: nowIso })
+          .update({
+            title: cleanTitle,
+            body: cleanBody,
+            target_url: cleanTargetUrl,
+            updated_at: nowIso
+          })
           .eq('id', notificationId);
       } catch (sbErr) {
         console.warn('[Notifications] Supabase update warning:', sbErr);
@@ -162,7 +168,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       try {
         await (prisma as any).notification.update({
           where: { id: notificationId },
-          data: { title: cleanTitle, body: cleanBody, updated_at: new Date(nowIso) }
+          data: {
+            title: cleanTitle,
+            body: cleanBody,
+            target_url: cleanTargetUrl,
+            updated_at: new Date(nowIso)
+          }
         });
       } catch (prismaErr) {
         console.warn('[Notifications] Prisma update warning:', prismaErr);
@@ -171,7 +182,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({
         success: true,
         message: 'Notification updated successfully',
-        notification: { id: notificationId, title: cleanTitle, body: cleanBody, updated_at: nowIso }
+        notification: {
+          id: notificationId,
+          title: cleanTitle,
+          body: cleanBody,
+          target_url: cleanTargetUrl,
+          updated_at: nowIso
+        }
       });
     } catch (err: any) {
       console.error('[Notifications] Update error:', err);
