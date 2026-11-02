@@ -21,6 +21,34 @@ interface NotificationHistoryItem {
   created_at: string;
 }
 
+export interface NotificationTemplate {
+  title: string;
+  body: string;
+}
+
+export const NOTIFICATION_TEMPLATES: NotificationTemplate[] = [
+  {
+    title: 'يوم الجمعة المبارك ✨',
+    body: 'لا تنسَ قراءة سورة الكهف، والإكثار من الصلاة على النبي ﷺ، والدعاء في ساعة الاستجابة.'
+  },
+  {
+    title: 'موسم طاعة مستمر 🌙',
+    body: 'تذكير بصيام هذا اليوم المبارك، تقبل الله منا ومنكم صالح الأعمال.'
+  },
+  {
+    title: 'وردك اليومي 📖',
+    body: 'لا تنسَ قراءة وردك اليومي من القرآن الكريم وأذكار المسلم المتاحة داخل التطبيق.'
+  },
+  {
+    title: 'تحدي جديد بانتظارك 🏆',
+    body: 'تمت إضافة أسئلة جديدة في تحدي "من أنا؟". ادخل الآن واختبر معلوماتك الإسلامية!'
+  },
+  {
+    title: 'جدد نيتك 🌟',
+    body: 'دقائق قليلة من وقتك في رحاب التطبيق قد تكون سبباً في رفع درجاتك. بادر الآن!'
+  }
+];
+
 export const NotificationAdmin: React.FC<NotificationAdminProps> = ({
   token,
   isFounder,
@@ -28,6 +56,7 @@ export const NotificationAdmin: React.FC<NotificationAdminProps> = ({
 }) => {
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
+  const [selectedTemplateIndex, setSelectedTemplateIndex] = useState<string>('');
   const [isSending, setIsSending] = useState(false);
   const [resultMessage, setResultMessage] = useState<{
     type: 'success' | 'error';
@@ -38,6 +67,16 @@ export const NotificationAdmin: React.FC<NotificationAdminProps> = ({
   const [history, setHistory] = useState<NotificationHistoryItem[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const [tokensCount, setTokensCount] = useState<number | null>(null);
+
+  const handleTemplateChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value;
+    setSelectedTemplateIndex(val);
+    if (val !== '' && NOTIFICATION_TEMPLATES[Number(val)]) {
+      const template = NOTIFICATION_TEMPLATES[Number(val)];
+      setTitle(template.title);
+      setBody(template.body);
+    }
+  };
 
   // Fetch sent notifications and device tokens count
   const fetchHistoryAndStats = async () => {
@@ -129,6 +168,7 @@ export const NotificationAdmin: React.FC<NotificationAdminProps> = ({
         });
         setTitle('');
         setBody('');
+        setSelectedTemplateIndex('');
         fetchHistoryAndStats();
       } else {
         // Fallback: If API had an issue, directly try inserting in Supabase for in-app realtime
@@ -147,6 +187,7 @@ export const NotificationAdmin: React.FC<NotificationAdminProps> = ({
             });
             setTitle('');
             setBody('');
+            setSelectedTemplateIndex('');
             fetchHistoryAndStats();
             return;
           }
@@ -249,6 +290,29 @@ export const NotificationAdmin: React.FC<NotificationAdminProps> = ({
           )}
 
           <form onSubmit={handleSendNotification} className="space-y-4">
+            {/* اختيار قالب جاهز */}
+            <div>
+              <label className="block text-xs font-black text-slate-700 dark:text-slate-200 mb-1.5 flex items-center justify-between">
+                <span>اختر قالباً جاهزاً (اختياري)</span>
+                <span className="text-[10px] text-amber-600 dark:text-amber-400 font-bold flex items-center gap-1">
+                  <Sparkles className="w-3 h-3" />
+                  قوالب إسلامية جاهزة
+                </span>
+              </label>
+              <select
+                value={selectedTemplateIndex}
+                onChange={handleTemplateChange}
+                className="w-full px-4 py-3 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800 focus:bg-white focus:outline-none focus:border-amber-500 font-bold text-sm text-slate-800 dark:text-slate-100 transition-all cursor-pointer"
+              >
+                <option value="">-- كتابة إشعار جديد --</option>
+                {NOTIFICATION_TEMPLATES.map((tmpl, index) => (
+                  <option key={index} value={index}>
+                    {tmpl.title}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <div>
               <label className="block text-xs font-black text-slate-700 dark:text-slate-200 mb-1.5">
                 عنوان التنبيه <span className="text-red-500">*</span>
@@ -291,36 +355,24 @@ export const NotificationAdmin: React.FC<NotificationAdminProps> = ({
                 نماذج جاهزة سريعة:
               </span>
               <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTitle('تحدي قرآني جماعي جديد! 🏆');
-                    setBody('تم فتح غرف تنافسية جديدة الآن، ادخل قاعة الانتظار ونافس حافظي القرآن الكريم.');
-                  }}
-                  className="px-2.5 py-1 text-[11px] font-bold rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-amber-100 hover:text-amber-900 transition-colors text-slate-600 dark:text-slate-300 cursor-pointer"
-                >
-                  غرف التحدي
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTitle('موسم طاعة وسُنّة اليوم 🌿');
-                    setBody('تذكير بسُنن هذا اليوم المبارك، لا تنسَ قراءة وردك اليومي وأذكار المسلم داخل التطبيق.');
-                  }}
-                  className="px-2.5 py-1 text-[11px] font-bold rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-amber-100 hover:text-amber-900 transition-colors text-slate-600 dark:text-slate-300 cursor-pointer"
-                >
-                  سنن وطاعات
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTitle('تحدي "من أنا؟" المطور 💡');
-                    setBody('تمت إضافة أسئلة جديدة عن الصحابة والغزوات وتاريخ الإسلام، هل تستطيع معرفة الإجابة من التلميح الأول؟');
-                  }}
-                  className="px-2.5 py-1 text-[11px] font-bold rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-amber-100 hover:text-amber-900 transition-colors text-slate-600 dark:text-slate-300 cursor-pointer"
-                >
-                  من أنا؟
-                </button>
+                {NOTIFICATION_TEMPLATES.map((tmpl, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => {
+                      setSelectedTemplateIndex(String(idx));
+                      setTitle(tmpl.title);
+                      setBody(tmpl.body);
+                    }}
+                    className={`px-2.5 py-1 text-[11px] font-bold rounded-xl transition-colors cursor-pointer ${
+                      selectedTemplateIndex === String(idx)
+                        ? 'bg-amber-500 text-white shadow-xs'
+                        : 'bg-slate-100 dark:bg-slate-800 hover:bg-amber-100 hover:text-amber-900 text-slate-600 dark:text-slate-300'
+                    }`}
+                  >
+                    {tmpl.title}
+                  </button>
+                ))}
               </div>
             </div>
 
@@ -407,6 +459,7 @@ export const NotificationAdmin: React.FC<NotificationAdminProps> = ({
                     <button
                       type="button"
                       onClick={() => {
+                        setSelectedTemplateIndex('');
                         setTitle(item.title);
                         setBody(item.body);
                       }}
