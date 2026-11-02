@@ -19,26 +19,25 @@ export interface NotificationBellProps {
   buttonClassName?: string;
 }
 
+const STORAGE_KEY = 'read_notification_ids';
+
+const getStoredReadIds = (): Set<string> => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? new Set(parsed) : new Set();
+  } catch {
+    return new Set();
+  }
+};
+
 export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, userId, buttonClassName }) => {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = useState<number>(0);
   const [isOpen, setIsOpen] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [readIds, setReadIds] = useState<Set<string>>(() => {
-    try {
-      const stored = localStorage.getItem('read_notification_ids');
-      return stored ? new Set(JSON.parse(stored)) : new Set<string>();
-    } catch {
-      return new Set<string>();
-    }
-  });
-  const [lastReadTime, setLastReadTime] = useState<string | null>(() => {
-    try {
-      return localStorage.getItem('last_read_notification_time');
-    } catch {
-      return null;
-    }
-  });
+  const [readIds, setReadIds] = useState<Set<string>>(() => getStoredReadIds());
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const { permission, requestPermissionAndRegister, isLoading: isFCMRegistering } = usePushNotifications(userId);
@@ -59,9 +58,20 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
     };
   }, [isOpen]);
 
+  const isItemUnread = (item: NotificationItem): boolean => {
+    return !readIds.has(item.id);
+  };
+
+  const calculateUnread = (items: NotificationItem[], currentReadIds?: Set<string>) => {
+    const ids = currentReadIds || readIds;
+    const count = items.filter(n => !ids.has(n.id)).length;
+    setUnreadCount(count);
+  };
+
   // Fetch initial notifications
   const fetchNotifications = async () => {
     try {
+      const stored = getStoredReadIds();
       // 1. Try Supabase
       const { data, error } = await supabase
         .from('notifications')
@@ -71,7 +81,7 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
 
       if (!error && data && data.length > 0) {
         setNotifications(data);
-        calculateUnread(data);
+        calculateUnread(data, stored);
         setIsLoading(false);
         return;
       }
@@ -81,11 +91,12 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
 
     // 2. Fallback to API route
     try {
+      const stored = getStoredReadIds();
       const res = await fetch('/api/notifications?limit=20');
       const data = await res.json();
       if (res.ok && data.notifications) {
         setNotifications(data.notifications);
-        calculateUnread(data.notifications);
+        calculateUnread(data.notifications, stored);
       }
     } catch (err) {
       console.warn('[NotificationBell] API fetch warn:', err);
@@ -94,68 +105,40 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
     }
   };
 
-  const isItemUnread = (item: NotificationItem) => {
-    try {
-      if (readIds.has(item.id)) return false;
-      if (lastReadTime && new Date(item.created_at).getTime() <= new Date(lastReadTime).getTime()) {
-        return false;
-      }
-      return true;
-    } catch {
-      return false;
-    }
-  };
-
-  const calculateUnread = (items: NotificationItem[]) => {
-    try {
-      const storedIdsStr = localStorage.getItem('read_notification_ids');
-      const currentReadIds = storedIdsStr ? new Set(JSON.parse(storedIdsStr)) : readIds;
-      const lastRead = localStorage.getItem('last_read_notification_time');
-      const lastReadTimeNum = lastRead ? new Date(lastRead).getTime() : 0;
-
-      const unread = items.filter(item => {
-        if (currentReadIds.has(item.id)) return false;
-        if (lastReadTimeNum && new Date(item.created_at).getTime() <= lastReadTimeNum) {
-          return false;
-        }
-        return true;
-      }).length;
-
-      setUnreadCount(unread);
-    } catch {
-      setUnreadCount(0);
-    }
-  };
-
-  // Mark a single notification as read on click
+  // 2. Individual Read: Click a single notification to mark it as read immediately
   const handleItemClick = (item: NotificationItem) => {
-    if (isItemUnread(item)) {
+    if (!readIds.has(item.id)) {
       setReadIds(prev => {
         const next = new Set(prev);
         next.add(item.id);
         try {
-          localStorage.setItem('read_notification_ids', JSON.stringify(Array.from(next)));
-        } catch {}
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(next)));
+        } catch (e) {
+          console.warn('[NotificationBell] Failed to save read IDs to LocalStorage:', e);
+        }
         return next;
       });
       setUnreadCount(prev => Math.max(0, prev - 1));
     }
   };
 
-  // Mark all notifications as read
+  // 3. Mark All As Read: Mark all notifications as read at once & remove red dot
   const markAllAsRead = () => {
-    try {
-      const now = new Date().toISOString();
-      localStorage.setItem('last_read_notification_time', now);
-      setLastReadTime(now);
+    if (notifications.length === 0 || unreadCount === 0) return;
 
-      const allIds = new Set(readIds);
-      notifications.forEach(n => allIds.add(n.id));
-      setReadIds(allIds);
-      localStorage.setItem('read_notification_ids', JSON.stringify(Array.from(allIds)));
+    setReadIds(prev => {
+      const next = new Set(prev);
+      notifications.forEach(n => next.add(n.id));
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(next)));
+      } catch (e) {
+        console.warn('[NotificationBell] Failed to save read IDs to LocalStorage:', e);
+      }
+      return next;
+    });
 
-      setUnreadCount(0);
-    } catch {}
+    // Red dot / badge on the main bell icon disappears immediately
+    setUnreadCount(0);
   };
 
   // Subscribe to Supabase Realtime updates (INSERT, UPDATE, DELETE & broadcast)
@@ -176,6 +159,7 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
             return [newItem, ...prev];
           });
 
+          // Newly inserted item is unread
           setUnreadCount(prev => prev + 1);
 
           // Haptic feedback if available
@@ -205,7 +189,7 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
           const deletedId = (payload.old as { id: string })?.id;
           if (deletedId) {
             setNotifications(prev => prev.filter(n => n.id !== deletedId));
-            if (isItemUnread({ id: deletedId } as any)) {
+            if (!readIds.has(deletedId)) {
               setUnreadCount(prev => Math.max(0, prev - 1));
             }
           }
@@ -228,7 +212,7 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
           const { id } = payload.payload as { id: string };
           if (id) {
             setNotifications(prev => prev.filter(n => n.id !== id));
-            if (isItemUnread({ id } as any)) {
+            if (!readIds.has(id)) {
               setUnreadCount(prev => Math.max(0, prev - 1));
             }
           }
