@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Sparkles, Clock, Users, BookOpen, Trophy, CheckCircle2, ChevronLeft, Gift, Zap
 } from 'lucide-react';
+import { Lottie } from 'lottie-react';
+import dollarCoinsChestAnimation from '../assets/lottie/dollar-coins-chest.json';
 import { useApp } from '../contexts/AppContext';
 
 // Helper: Convert to Arabic-Indic digits
@@ -189,6 +191,73 @@ export const DailyMysteryBox: React.FC<DailyMysteryBoxProps> = ({ className = ''
   const { isRevealed, isCompleted, isClaimed, type, title, target, currentProgress, rewardPoints } = dailyGift;
   const progressPercent = Math.min(100, Math.round((currentProgress / target) * 100));
 
+  const lottieRef = useRef<any>(null);
+  const hasPlayedRef = useRef(false);
+
+  // Set up ref and enhance with goToAndStop / getDuration compatibility
+  const setLottieRef = useCallback(
+    (instance: any) => {
+      if (!instance) return;
+      if (typeof instance.goToAndStop !== 'function') {
+        instance.goToAndStop = (frame: number, isFrame = true) => {
+          if (instance.animationItem?.goToAndStop) {
+            instance.animationItem.goToAndStop(frame, isFrame);
+          } else if (typeof instance.seek === 'function') {
+            instance.seek(frame);
+          }
+        };
+      }
+      if (typeof instance.getDuration !== 'function') {
+        instance.getDuration = (inFrames = true) => {
+          if (instance.animationItem?.getDuration) {
+            return instance.animationItem.getDuration(inFrames);
+          }
+          return inFrames ? (instance.animationItem?.totalFrames || 88) : 88 / 30;
+        };
+      }
+      lottieRef.current = instance;
+
+      // Persist opened state if already claimed on initial load
+      if (isClaimed && !hasPlayedRef.current) {
+        setTimeout(() => {
+          if (typeof instance.goToAndStop === 'function') {
+            const duration = typeof instance.getDuration === 'function' ? instance.getDuration(true) : 88;
+            instance.goToAndStop(duration, true);
+          }
+        }, 0);
+      }
+    },
+    [isClaimed]
+  );
+
+  // Persist opened state when isClaimed is true from a previous session
+  useEffect(() => {
+    if (isClaimed && !hasPlayedRef.current && lottieRef.current) {
+      if (typeof lottieRef.current.goToAndStop === 'function') {
+        const duration =
+          typeof lottieRef.current.getDuration === 'function' ? lottieRef.current.getDuration(true) : 88;
+        lottieRef.current.goToAndStop(duration, true);
+      } else if (lottieRef.current.animationItem?.goToAndStop) {
+        lottieRef.current.animationItem.goToAndStop(88, true);
+      } else if (typeof lottieRef.current.seek === 'function') {
+        lottieRef.current.seek(88);
+      }
+    }
+  }, [isClaimed]);
+
+  const handleClaimReward = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    hasPlayedRef.current = true;
+    if (lottieRef.current) {
+      if (typeof lottieRef.current.play === 'function') {
+        lottieRef.current.play();
+      } else if (lottieRef.current.animationItem?.play) {
+        lottieRef.current.animationItem.play();
+      }
+    }
+    app.claimDailyGiftReward();
+  };
+
   const handleGoToChallenge = () => {
     if (type === 'reading_time') {
       if (app?.setView) app.setView('mushaf');
@@ -215,10 +284,17 @@ export const DailyMysteryBox: React.FC<DailyMysteryBoxProps> = ({ className = ''
             onClick={app.revealDailyGift}
             className="flex flex-col items-center justify-between h-full gap-2 cursor-pointer"
           >
-            {/* Top: 3D Chest with Glow & Pulse */}
+            {/* Top: Lottie Chest with Glow & Pulse */}
             <div className="pt-1">
               <div className="glow-gold rounded-full p-1 animate-pulse transition-transform group-hover:scale-105 duration-300">
-                <TreasureChest3D isOpen={false} sizeClassName="w-14 h-14 sm:w-16 sm:h-16" />
+                <div className="w-14 h-14 sm:w-16 sm:h-16 flex items-center justify-center shrink-0 mx-auto pointer-events-none">
+                  <Lottie
+                    src={dollarCoinsChestAnimation}
+                    loop={false}
+                    autoplay={false}
+                    className="w-full h-full object-contain"
+                  />
+                </div>
               </div>
             </div>
 
@@ -246,90 +322,7 @@ export const DailyMysteryBox: React.FC<DailyMysteryBoxProps> = ({ className = ''
               <span>افتح الصندوق الآن</span>
             </button>
           </motion.div>
-        ) : isClaimed ? (
-          /* ======================================================== */
-          /* 4. CLAIMED / SUCCESS STATE (حالة الإنجاز والاستلام)       */
-          /* ======================================================== */
-          <motion.div
-            key="bento_claimed"
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            transition={{ duration: 0.3 }}
-            className="flex flex-col items-center justify-between h-full gap-2"
-          >
-            {/* Top: Open Chest Icon */}
-            <div className="pt-1">
-              <TreasureChest3D isOpen={true} isClaimed={true} sizeClassName="w-14 h-14 sm:w-16 sm:h-16" />
-            </div>
-
-            {/* Middle: Message */}
-            <div className="px-1 text-center">
-              <div className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 dark:text-holyEmerald-300 bg-emerald-50 dark:bg-holyEmerald-500/15 border border-emerald-200/60 dark:border-holyEmerald-500/30 px-2 py-0.5 rounded-full mb-1">
-                <CheckCircle2 className="w-3 h-3 text-holyEmerald-400" />
-                <span>+{toArabicIndic(rewardPoints)} نقطة</span>
-              </div>
-              <h4 className="text-xs sm:text-sm font-black text-slate-800 dark:text-regalGold-100 font-tajawal leading-snug">
-                تم إنجاز تحدي اليوم
-              </h4>
-              <p className="text-[10px] text-slate-400 dark:text-regalGold-300/60 font-medium mt-0.5">
-                بارك الله فيك وتقبل طاعتك
-              </p>
-            </div>
-
-            {/* Bottom: Countdown */}
-            <div className="w-full px-2 py-1 rounded-xl bg-slate-50 dark:bg-obsidian-950/80 border border-slate-200/60 dark:border-regalGold-500/20 text-center mt-auto">
-              <span className="text-[9px] text-slate-400 dark:text-regalGold-300/70 block">
-                الصندوق القادم خلال:
-              </span>
-              <span className="font-mono font-bold text-[11px] text-slate-800 dark:text-regalGold-200">
-                {timeLeftStr || '٠٠:٠٠:٠٠'}
-              </span>
-            </div>
-          </motion.div>
-        ) : isCompleted ? (
-          /* ======================================================== */
-          /* 3. COMPLETED STATE (حالة الاكتمال: استلم المكافأة الآن)    */
-          /* ======================================================== */
-          <motion.div
-            key="bento_completed"
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.95 }}
-            transition={{ duration: 0.3 }}
-            className="flex flex-col items-center justify-between h-full gap-2"
-          >
-            {/* Top: Glowing Open Chest */}
-            <div className="pt-1">
-              <div className="glow-gold rounded-full p-1 animate-pulse">
-                <TreasureChest3D isOpen={true} sizeClassName="w-14 h-14 sm:w-16 sm:h-16" />
-              </div>
-            </div>
-
-            {/* Middle: Completed Text */}
-            <div className="px-1 text-center">
-              <div className="inline-flex items-center gap-1 text-[10px] font-black text-amber-800 dark:text-regalGold-200 bg-amber-50 dark:bg-regalGold-500/20 px-2 py-0.5 rounded-full mb-1 animate-bounce">
-                <Trophy className="w-3 h-3 text-regalGold-400" />
-                <span>اكتمل التحدي!</span>
-              </div>
-              <h4 className="text-xs sm:text-sm font-black text-slate-800 dark:text-regalGold-100 font-tajawal leading-snug">
-                ما شاء الله! أنجزت المهمة
-              </h4>
-            </div>
-
-            {/* Bottom: Claim Button */}
-            <motion.button
-              type="button"
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.96 }}
-              onClick={app.claimDailyGiftReward}
-              className="w-full py-1.5 sm:py-2 px-3 rounded-xl bg-gradient-to-r from-amber-400 via-regalGold-400 to-amber-500 hover:from-amber-500 text-obsidian-950 font-black text-[11px] sm:text-xs shadow-md glow-gold active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer mt-auto"
-            >
-              <Trophy className="w-3.5 h-3.5 fill-current" />
-              <span>استلم المكافأة (+{toArabicIndic(rewardPoints)})</span>
-            </motion.button>
-          </motion.div>
-        ) : (
+        ) : !isCompleted && !isClaimed ? (
           /* ======================================================== */
           /* 2. IN-PROGRESS STATE (الحالة النشطة: التحدي والتقدم)       */
           /* ======================================================== */
@@ -396,6 +389,91 @@ export const DailyMysteryBox: React.FC<DailyMysteryBoxProps> = ({ className = ''
               <span>{type === 'reading_time' ? 'متابعة القراءة' : 'دخول التحدي'}</span>
               <ChevronLeft className="w-3.5 h-3.5" />
             </button>
+          </motion.div>
+        ) : (
+          /* ======================================================== */
+          /* 3. COMPLETED & CLAIMED STATES (الصندوق ومكافأة اليوم)     */
+          /* ======================================================== */
+          <motion.div
+            key="bento_reward"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.3 }}
+            className="flex flex-col items-center justify-between h-full gap-2"
+          >
+            {/* Top: Animated Lottie Chest */}
+            <div className="pt-1">
+              <div
+                className={`rounded-full p-1 transition-all ${
+                  !isClaimed ? 'glow-gold animate-pulse' : ''
+                }`}
+              >
+                <div className="w-16 h-16 sm:w-20 sm:h-20 flex items-center justify-center shrink-0 mx-auto pointer-events-none">
+                  <Lottie
+                    lottieRef={setLottieRef}
+                    src={dollarCoinsChestAnimation}
+                    loop={false}
+                    autoplay={false}
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Middle & Bottom: Switch between Completed and Claimed */}
+            {!isClaimed ? (
+              <>
+                {/* Middle: Completed Text */}
+                <div className="px-1 text-center">
+                  <div className="inline-flex items-center gap-1 text-[10px] font-black text-amber-800 dark:text-regalGold-200 bg-amber-50 dark:bg-regalGold-500/20 px-2 py-0.5 rounded-full mb-1 animate-bounce">
+                    <Trophy className="w-3 h-3 text-regalGold-400" />
+                    <span>اكتمل التحدي!</span>
+                  </div>
+                  <h4 className="text-xs sm:text-sm font-black text-slate-800 dark:text-regalGold-100 font-tajawal leading-snug">
+                    ما شاء الله! أنجزت المهمة
+                  </h4>
+                </div>
+
+                {/* Bottom: Claim Button */}
+                <motion.button
+                  type="button"
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.96 }}
+                  onClick={handleClaimReward}
+                  className="w-full py-1.5 sm:py-2 px-3 rounded-xl bg-gradient-to-r from-amber-400 via-regalGold-400 to-amber-500 hover:from-amber-500 text-obsidian-950 font-black text-[11px] sm:text-xs shadow-md glow-gold active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer mt-auto"
+                >
+                  <Trophy className="w-3.5 h-3.5 fill-current" />
+                  <span>الحصول على الجائزة (+{toArabicIndic(rewardPoints)})</span>
+                </motion.button>
+              </>
+            ) : (
+              <>
+                {/* Middle: Claimed Message */}
+                <div className="px-1 text-center">
+                  <div className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 dark:text-holyEmerald-300 bg-emerald-50 dark:bg-holyEmerald-500/15 border border-emerald-200/60 dark:border-holyEmerald-500/30 px-2 py-0.5 rounded-full mb-1">
+                    <CheckCircle2 className="w-3 h-3 text-holyEmerald-400" />
+                    <span>+{toArabicIndic(rewardPoints)} نقطة</span>
+                  </div>
+                  <h4 className="text-xs sm:text-sm font-black text-slate-800 dark:text-regalGold-100 font-tajawal leading-snug">
+                    تم إنجاز تحدي اليوم
+                  </h4>
+                  <p className="text-[10px] text-slate-400 dark:text-regalGold-300/60 font-medium mt-0.5">
+                    بارك الله فيك وتقبل طاعتك
+                  </p>
+                </div>
+
+                {/* Bottom: Countdown */}
+                <div className="w-full px-2 py-1 rounded-xl bg-slate-50 dark:bg-obsidian-950/80 border border-slate-200/60 dark:border-regalGold-500/20 text-center mt-auto">
+                  <span className="text-[9px] text-slate-400 dark:text-regalGold-300/70 block">
+                    الصندوق القادم خلال:
+                  </span>
+                  <span className="font-mono font-bold text-[11px] text-slate-800 dark:text-regalGold-200">
+                    {timeLeftStr || '٠٠:٠٠:٠٠'}
+                  </span>
+                </div>
+              </>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
