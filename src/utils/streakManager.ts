@@ -15,6 +15,23 @@ const FULL_DAY_MS = 24 * 60 * 60 * 1000; // 24 hours
 const GRACE_PERIOD_MS = 12 * 60 * 60 * 1000; // 12 hours grace
 const TOTAL_ALLOWABLE_MS = FULL_DAY_MS + GRACE_PERIOD_MS; // 36 hours total
 
+export const getTodayLocalDateStr = (): string => {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+export const getYesterdayLocalDateStr = (): string => {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 /**
  * Calculates the current status and time remaining for the daily streak.
  * Rule:
@@ -48,10 +65,8 @@ export const calculateStreakInfo = (
   if (savedLastPlayedTimeStr && !isNaN(parseInt(savedLastPlayedTimeStr))) {
     lastPlayedTime = parseInt(savedLastPlayedTimeStr);
   } else if (savedLastPlayedDate) {
-    const today = new Date().toISOString().split('T')[0];
-    const yesterdayDate = new Date();
-    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
-    const yesterday = yesterdayDate.toISOString().split('T')[0];
+    const today = getTodayLocalDateStr();
+    const yesterday = getYesterdayLocalDateStr();
 
     if (savedLastPlayedDate === today) {
       lastPlayedTime = now - 2 * 3600 * 1000; // ~2 hours ago

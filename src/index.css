@@ -363,9 +363,15 @@ html.dark .bg-slate-100 {
 
 /* Book pages & Cream backgrounds in dark mode */
 .lib-dark .bg-\[\#fcfaf5\],
-html.dark .bg-\[\#fcfaf5\] {
-  background-color: #121619 !important;
-  border-color: rgba(212, 175, 55, 0.3) !important;
+html.dark .bg-\[\#fcfaf5\],
+.lib-dark .bg-\[\#fdfbf7\],
+html.dark .bg-\[\#fdfbf7\],
+.lib-dark .bg-\[\#FDFBF7\],
+html.dark .bg-\[\#FDFBF7\],
+.lib-dark .bg-brand-sand,
+html.dark .bg-brand-sand {
+  background-color: #151518 !important;
+  border-color: rgba(196, 155, 85, 0.25) !important;
   color: #FDF8ED !important;
 }
 

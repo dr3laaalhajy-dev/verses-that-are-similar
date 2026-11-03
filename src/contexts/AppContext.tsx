@@ -103,7 +103,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (saved && VALID_VIEWS.includes(saved as View)) {
         return saved as View;
       }
-    } catch (e) {}
+    } catch (e) { }
     return 'home';
   });
 
@@ -116,7 +116,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       try {
         sessionStorage.setItem('current_app_view', nextView);
-      } catch (e) {}
+      } catch (e) { }
 
       if (typeof window !== 'undefined' && window.history) {
         const cleanPath = nextView === 'home' ? '/' : `/${nextView}`;
@@ -146,7 +146,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       try {
         sessionStorage.setItem('current_app_view', targetView);
-      } catch (err) {}
+      } catch (err) { }
 
       setViewState(targetView);
 
@@ -170,7 +170,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   const isNativeApp = typeof window !== 'undefined' && (
-    !!(window as any).Capacitor?.isNativePlatform?.() || 
+    !!(window as any).Capacitor?.isNativePlatform?.() ||
     window.location.protocol === 'capacitor:'
   );
 
@@ -200,7 +200,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setShareCopied(true);
         setTimeout(() => setShareCopied(false), 2500);
       }
-    } catch {}
+    } catch { }
   }, []);
 
   // Google Play Testers state & automatic real-time sync
@@ -303,7 +303,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       try {
         localStorage.setItem('mateen_tester_email', clean);
-      } catch {}
+      } catch { }
       if (data.status === 'APPROVED') {
         setTesterStatus('approved');
         setTesterMessage(data.message || 'تهانينا! تم قبول طلبك بنجاح.');
@@ -321,7 +321,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const handleResetTesterForm = () => {
     try {
       localStorage.removeItem('mateen_tester_email');
-    } catch {}
+    } catch { }
     setTesterEmail('');
     setTesterStatus('idle');
     setTesterMessage('');
@@ -344,7 +344,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           hideIslamicVideos: !!parsed.hideIslamicVideos
         };
       }
-    } catch {}
+    } catch { }
     return {
       hideAudioChallenge: true, // Hidden by founder default
       hideCompletionChallenge: false,
@@ -367,7 +367,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setSystemSettings(newSettings);
         try {
           localStorage.setItem('cached_system_settings', JSON.stringify(newSettings));
-        } catch {}
+        } catch { }
       }
     } catch (e) {
       console.warn('Failed to fetch settings (offline fallback active):', e);
@@ -404,7 +404,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
-    } catch {}
+    } catch { }
     return defaultChallenges;
   };
 
@@ -498,7 +498,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const updated = { ...prev, isRevealed: true };
       try {
         localStorage.setItem('quran_daily_mystery_gift', JSON.stringify(updated));
-      } catch (e) {}
+      } catch (e) { }
       return updated;
     });
   }, []);
@@ -516,7 +516,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (isCompleted) {
         try {
           localStorage.setItem('quran_daily_mystery_gift', JSON.stringify(updated));
-        } catch (e) {}
+        } catch (e) { }
       }
       return updated;
     });
@@ -534,7 +534,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
       try {
         localStorage.setItem('quran_daily_mystery_gift', JSON.stringify(updated));
-      } catch (e) {}
+      } catch (e) { }
       return updated;
     });
   }, []);
@@ -548,7 +548,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const nextPoints = current + points;
         try {
           localStorage.setItem('quran_total_points', String(nextPoints));
-        } catch (e) {}
+        } catch (e) { }
         return nextPoints;
       });
 
@@ -560,7 +560,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
       try {
         localStorage.setItem('quran_daily_mystery_gift', JSON.stringify(updated));
-      } catch (e) {}
+      } catch (e) { }
       return updated;
     });
   }, []);
@@ -576,7 +576,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setHijriDate(h);
     setUpcomingOccasions(getUpcomingOccasions(15));
     setNearestOccasion(getNearestOccasion());
-    syncAladhanHijri().catch(() => {});
+    syncAladhanHijri().catch(() => { });
   }, []);
   const [showProfileDecoration, setShowProfileDecoration] = useState(() => localStorage.getItem('quran_show_decoration') !== 'false');
   const [userCertificates, setUserCertificates] = useState<{ category: string, date: string, name: string }[]>(() => JSON.parse(localStorage.getItem('quran_user_certificates') || '[]'));
@@ -688,7 +688,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [pageTurnDirection, setPageTurnDirection] = useState<'next' | 'prev'>('next');
   const [selectedHadith, setSelectedHadith] = useState<Hadith | null>(null);
 
-  const [librarySettings, setLibrarySettings] = useState<{ darkMode: boolean; [key: string]: any }>(() => {
+  const [librarySettings, setLibrarySettings] = useState<{ darkMode: boolean;[key: string]: any }>(() => {
     try {
       const saved = localStorage.getItem('quran_mushaf_settings');
       if (saved) return JSON.parse(saved);
@@ -742,11 +742,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (val && val.id) {
       try {
         localStorage.setItem('activeRoomId', String(val.id));
-      } catch (e) {}
+      } catch (e) { }
     } else if (!val) {
       try {
         localStorage.removeItem('activeRoomId');
-      } catch (e) {}
+      } catch (e) { }
     }
   };
   const prevParticipantsCount = useRef<number>(0);
@@ -765,7 +765,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (!parsed.hideAudioChallenge) return ['audio'];
         return ['islamic'];
       }
-    } catch {}
+    } catch { }
     return ['complete'];
   });
   const [whoAmIQuestionCount, setWhoAmIQuestionCount] = useState<number>(10);
@@ -881,7 +881,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setAllChallenges(data);
           try {
             localStorage.setItem('cached_challenges', JSON.stringify(data));
-          } catch {}
+          } catch { }
         }
         setChallenges(data);
         setChallengesError(null);
@@ -1417,7 +1417,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     resetFullscreenControlsTimer();
     try {
       if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
-        document.documentElement.requestFullscreen().catch(() => {});
+        document.documentElement.requestFullscreen().catch(() => { });
       }
     } catch {
       // ignore
@@ -1431,7 +1431,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     try {
       if (document.fullscreenElement && document.exitFullscreen) {
-        document.exitFullscreen().catch(() => {});
+        document.exitFullscreen().catch(() => { });
       }
     } catch {
       // ignore
@@ -1803,7 +1803,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (window.location.search && !params.get('roomId') && !params.get('code')) {
           try {
             window.history.replaceState({ view: 'home' }, '', '/');
-          } catch {}
+          } catch { }
         }
         return;
       }
@@ -2005,7 +2005,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return sum <= 0;
     }
     for (const skill of ['audio', 'complete', 'surah'] as const) {
-      const isHidden = 
+      const isHidden =
         (skill === 'audio' && systemSettings.hideAudioChallenge) ||
         (skill === 'complete' && systemSettings.hideCompletionChallenge) ||
         (skill === 'surah' && systemSettings.hideSurahChallenge);
@@ -2053,8 +2053,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const res = await fetch('/api/1v1', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          action: 'join', 
+        body: JSON.stringify({
+          action: 'join',
           roomId,
           code: roomId,
           player2Id: playerUsername || playerName,
@@ -2253,7 +2253,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         name: v1RoomName.trim() || 'غرفة التحدي',
         isPrivate: v1IsPrivate,
         password: v1IsPrivate ? v1RoomPassword.trim() : null,
-        gameMode: effectiveGameModes.length === 1 
+        gameMode: effectiveGameModes.length === 1
           ? (effectiveGameModes[0] === 'islamic' ? 'ISLAMIC' : effectiveGameModes[0] === 'audio' ? 'STANDARD' : effectiveGameModes[0] === 'complete' ? 'COMPLETION' : 'SURAH')
           : 'MIXED',
         gameModes: effectiveGameModes.map(m => m === 'islamic' ? 'ISLAMIC' : m === 'audio' ? 'STANDARD' : m === 'complete' ? 'COMPLETION' : 'SURAH'),
@@ -2368,8 +2368,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const roomTime = (currentRoomData?.timePerQuestion && currentRoomData.timePerQuestion > 0)
       ? currentRoomData.timePerQuestion
       : (room?.timePerQuestion && room.timePerQuestion > 0)
-      ? room.timePerQuestion
-      : 0;
+        ? room.timePerQuestion
+        : 0;
     if (roomTime > 0) {
       setSpeedTimeLeft(roomTime);
     }
@@ -2619,18 +2619,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                       questionIndex: data.currentQuestionIndex
                     })
                   })
-                  .then(res => res.json())
-                  .then(advData => {
-                    isAdvancingRef.current = false;
-                    if (advData && advData.currentQuestionIndex > currentChallengeIndex) {
-                      resetQuestionUIState(advData.currentQuestionIndex, advData);
-                      setRoom(advData);
-                    }
-                  })
-                  .catch(err => {
-                    isAdvancingRef.current = false;
-                    console.error('Host advance question error:', err);
-                  });
+                    .then(res => res.json())
+                    .then(advData => {
+                      isAdvancingRef.current = false;
+                      if (advData && advData.currentQuestionIndex > currentChallengeIndex) {
+                        resetQuestionUIState(advData.currentQuestionIndex, advData);
+                        setRoom(advData);
+                      }
+                    })
+                    .catch(err => {
+                      isAdvancingRef.current = false;
+                      console.error('Host advance question error:', err);
+                    });
                 }
               }
 
@@ -2713,7 +2713,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           // التحقق الدقيق من مسار هذا اللاعب تحديداً داخل الغرفة
           const pId = String(data.participants?.find((p: any) => p.name === playerName || p.username === playerUsername)?.id);
           const pProgress = data.playersProgress ? data.playersProgress[pId] : null;
-          
+
           // إذا كان اللاعب قد انسحب (hasLeft = true أو isResigned = true) أو أنهى، يتم إخفاء الشريط تماماً وتنظيف المرجع
           if (pProgress && (pProgress.hasLeft || pProgress.isResigned || pProgress.finishTime)) {
             setActiveRunningRoom(null);
@@ -2721,7 +2721,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             localStorage.removeItem('currentRoomId');
             return;
           }
-          
+
           setActiveRunningRoom(data);
         } else {
           setActiveRunningRoom(null);
@@ -3018,7 +3018,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       try {
         localStorage.removeItem('activeRoomId');
         localStorage.removeItem('currentRoomId');
-      } catch (e) {}
+      } catch (e) { }
 
       setActiveRunningRoom(null);
       setRoom(null);
@@ -3104,7 +3104,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       try {
         localStorage.removeItem('activeRoomId');
         localStorage.removeItem('currentRoomId');
-      } catch (e) {}
+      } catch (e) { }
 
       setActiveRunningRoom(null);
       setSessionCorrect(0);
@@ -3125,7 +3125,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     let interval: any;
     const hasRoomTimer = !!(room && (room.timePerQuestion || 0) > 0);
-    const isActive = room 
+    const isActive = room
       ? (view === 'challenge' && hasRoomTimer && !isComplete && room.status === 'PLAYING')
       : ((view === 'speed_challenge' || (view === 'challenge' && isSpeedMode)) && !isSpeedGameOver && !isComplete && !skillsFeedback);
 
@@ -3980,20 +3980,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       // 1. Proactive sync of achievement flags before fetching rankings
       if (playerUsername || playerName) {
-        const hasSeerah = userCertificates.some(c => c.category === 'seerah') || 
-                          (Boolean(localStorage.getItem('quran_quiz_progress_seerah')) && (() => {
-                            try {
-                              const p = JSON.parse(localStorage.getItem('quran_quiz_progress_seerah') || '{}');
-                              return (p.easy >= 3 || p.hard >= 3);
-                            } catch { return false; }
-                          })());
-        const hasGeneral = userCertificates.some(c => c.category === 'general') || 
-                          (Boolean(localStorage.getItem('quran_quiz_progress_general')) && (() => {
-                            try {
-                              const p = JSON.parse(localStorage.getItem('quran_quiz_progress_general') || '{}');
-                              return (p.easy >= 5 || p.hard >= 5);
-                            } catch { return false; }
-                          })());
+        const hasSeerah = userCertificates.some(c => c.category === 'seerah') ||
+          (Boolean(localStorage.getItem('quran_quiz_progress_seerah')) && (() => {
+            try {
+              const p = JSON.parse(localStorage.getItem('quran_quiz_progress_seerah') || '{}');
+              return (p.easy >= 3 || p.hard >= 3);
+            } catch { return false; }
+          })());
+        const hasGeneral = userCertificates.some(c => c.category === 'general') ||
+          (Boolean(localStorage.getItem('quran_quiz_progress_general')) && (() => {
+            try {
+              const p = JSON.parse(localStorage.getItem('quran_quiz_progress_general') || '{}');
+              return (p.easy >= 5 || p.hard >= 5);
+            } catch { return false; }
+          })());
         const storedFrame = localStorage.getItem('quran_active_frame') || activeFrame;
         // Requirement 1: If user chose "no frame" (null or 'none'), preserve null and do NOT force seerah/general
         const effectiveFrame = (storedFrame === 'seerah' || storedFrame === 'general')
@@ -4627,15 +4627,15 @@ ${versesList}
         setIsAyahCopied(false);
         setCopiedAyahId(null);
       }, 2000);
-    } catch {}
+    } catch { }
   };
 
   const handleShareAyah = (text: string, surahName?: string, ayahNum?: number) => {
     const msg = `﴿${text}﴾ [سورة ${surahName || ''} : ${ayahNum || ''}]`;
     if (navigator.share) {
-      navigator.share({ text: msg }).catch(() => {});
+      navigator.share({ text: msg }).catch(() => { });
     } else {
-      navigator.clipboard.writeText(msg).catch(() => {});
+      navigator.clipboard.writeText(msg).catch(() => { });
     }
   };
 
@@ -4752,7 +4752,7 @@ ${versesList}
     isSpeedMode, setIsSpeedMode,
     speedTimeLeft, setSpeedTimeLeft,
     speedQuestionTime: speedTimeLeft, setSpeedQuestionTime: setSpeedTimeLeft,
-    speedTargetVersesCount: targetVerses.length, setSpeedTargetVersesCount: () => {},
+    speedTargetVersesCount: targetVerses.length, setSpeedTargetVersesCount: () => { },
     speedTotalTimeSpent, setSpeedTotalTimeSpent,
     isSpeedGameOver, setIsSpeedGameOver,
     handleStartSpeedChallenge,
@@ -5045,7 +5045,7 @@ ${versesList}
     adminId, setAdminId,
     canManageUsers, setCanManageUsers,
     handleAdminLogin, handleAdminLogout,
-    showAdminLogin: false, setShowAdminLogin: () => {},
+    showAdminLogin: false, setShowAdminLogin: () => { },
   };
 
   return (
