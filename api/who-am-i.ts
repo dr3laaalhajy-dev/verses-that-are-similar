@@ -283,10 +283,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         for (const conf of categories_config) {
           const reqCount = Math.max(1, Number(conf.count) || 1);
-          // Fetch questions for this category
-          const available = await prisma.whoAmIQuestion.findMany({
-            where: { category: conf.category }
-          });
+          
+          // 1. Try Supabase first so IDs match Supabase who_am_i_rounds FK constraint
+          let available: any[] = [];
+          try {
+            const { data } = await supabase
+              .from('who_am_i_questions')
+              .select('*')
+              .eq('category', conf.category);
+            if (data && data.length > 0) {
+              available = data;
+            }
+          } catch (e) {}
+
+          // 2. Fallback to Prisma
+          if (available.length === 0) {
+            available = await prisma.whoAmIQuestion.findMany({
+              where: { category: conf.category }
+            });
+          }
 
           if (available.length > 0) {
             const shuffled = shuffleArray(available);

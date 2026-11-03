@@ -116,9 +116,26 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
 
   // Fetch initial notifications
   const fetchNotifications = async () => {
+    const stored = getStoredReadMap();
+
+    // 1. Primary: Fetch from backend API (connected to Neon / Prisma notifications table)
     try {
-      const stored = getStoredReadMap();
-      // 1. Try Supabase
+      const res = await fetch('/api/notifications?limit=20');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.notifications && data.notifications.length > 0) {
+          setNotifications(data.notifications);
+          calculateUnread(data.notifications, stored);
+          setIsLoading(false);
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn('[NotificationBell] API fetch warn:', err);
+    }
+
+    // 2. Fallback: Try Supabase in case notifications table is present
+    try {
       const { data, error } = await supabase
         .from('notifications')
         .select('*')
@@ -128,24 +145,9 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
       if (!error && data && data.length > 0) {
         setNotifications(data);
         calculateUnread(data, stored);
-        setIsLoading(false);
-        return;
       }
     } catch (e) {
-      console.warn('[NotificationBell] Supabase fetch warn:', e);
-    }
-
-    // 2. Fallback to API route
-    try {
-      const stored = getStoredReadMap();
-      const res = await fetch('/api/notifications?limit=20');
-      const data = await res.json();
-      if (res.ok && data.notifications) {
-        setNotifications(data.notifications);
-        calculateUnread(data.notifications, stored);
-      }
-    } catch (err) {
-      console.warn('[NotificationBell] API fetch warn:', err);
+      // Fallback silently
     } finally {
       setIsLoading(false);
     }

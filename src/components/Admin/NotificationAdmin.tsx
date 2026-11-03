@@ -488,21 +488,29 @@ export const NotificationAdmin: React.FC<NotificationAdminProps> = ({
   const fetchHistoryAndStats = async () => {
     setIsLoadingHistory(true);
     try {
-      // 1. Fetch recent notifications from Supabase
-      const { data, error } = await supabase
-        .from('notifications')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(15);
-
-      if (!error && data) {
-        setHistory(data);
-      } else {
-        // Fallback to API
+      // 1. Fetch recent notifications from API (Neon/Prisma notifications)
+      let fetchedFromApi = false;
+      try {
         const res = await fetch('/api/notifications?limit=15');
-        const json = await res.json();
-        if (res.ok && json.notifications) {
-          setHistory(json.notifications);
+        if (res.ok) {
+          const json = await res.json();
+          if (json.notifications) {
+            setHistory(json.notifications);
+            fetchedFromApi = true;
+          }
+        }
+      } catch (e) {}
+
+      // Fallback to Supabase if API returned empty
+      if (!fetchedFromApi) {
+        const { data, error } = await supabase
+          .from('notifications')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(15);
+
+        if (!error && data) {
+          setHistory(data);
         }
       }
 

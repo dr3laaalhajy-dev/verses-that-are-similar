@@ -65,13 +65,39 @@ function apiServerPlugin(): Plugin {
           else if (pathname === '/api/player-score') relativePath = 'api/player-score.ts';
           else if (pathname === '/api/admin') relativePath = 'api/admin/index.ts';
           else if (pathname === '/api/settings') relativePath = 'api/settings.ts';
-          else if (pathname === '/api/challenges') relativePath = 'api/challenges/index.ts';
-          else if (pathname === '/api/testers') relativePath = 'api/testers.ts';
-          else if (pathname === '/api/version-control') relativePath = 'api/version-control.ts';
+          else if (pathname === '/api/challenges') relativePath = 'api/challenges.ts';
           else if (pathname.startsWith('/api/challenges/')) {
             const id = pathname.replace('/api/challenges/', '');
             req.query.id = id;
-            relativePath = 'api/challenges/[id].ts';
+            relativePath = 'api/challenges.ts';
+          }
+          else if (pathname === '/api/testers') {
+            req.query.target = 'testers';
+            relativePath = 'api/settings.ts';
+          }
+          else if (pathname === '/api/version-control') {
+            req.query.target = 'version-control';
+            relativePath = 'api/settings.ts';
+          }
+          else if (pathname === '/api/notifications/send') {
+            req.query.action = 'send';
+            relativePath = 'api/notifications.ts';
+          }
+          else if (pathname === '/api/notifications/register-token') {
+            req.query.action = 'register-token';
+            relativePath = 'api/notifications.ts';
+          }
+          else if (pathname === '/api/notifications/cron-friday') {
+            req.query.job = 'friday';
+            relativePath = 'api/cron.ts';
+          }
+          else if (pathname === '/api/notifications/cron-wird') {
+            req.query.job = 'wird';
+            relativePath = 'api/cron.ts';
+          }
+          else if (pathname === '/api/cron/adhkar') {
+            req.query.job = 'adhkar';
+            relativePath = 'api/cron.ts';
           } else {
             const cleanPath = pathname.replace(/^\/api\//, '');
             if (fs.existsSync(path.resolve(__dirname, `api/${cleanPath}.ts`))) {
