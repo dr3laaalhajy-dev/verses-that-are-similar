@@ -10,6 +10,7 @@ import { DailyChallengeEmblem, VideoLibraryIcon } from '../components/IslamicCha
 import { GooglePlayButton } from '../components/GooglePlayTesterModal';
 import { DailyMysteryBox } from '../components/DailyMysteryBox';
 import { useApp } from '../contexts/AppContext';
+import { getNearestOccasion } from '../services/IslamicOccasionsService';
 import { quranData } from '../services/QuranRepository';
 import { pageBoundaries, juzStartPages } from '../services/PageRepository';
 
@@ -99,6 +100,11 @@ export const HomePage: React.FC<HomePageProps> = ({
   const [isAyahPlaying, setIsAyahPlaying] = useState(false);
   const [isTextCopied, setIsTextCopied] = useState(false);
   const [isShareCopied, setIsShareCopied] = useState(false);
+
+  // Active nearest occasion with automatic fallback
+  const activeOccasion = useMemo(() => {
+    return nearestOccasion || app?.nearestOccasion || getNearestOccasion();
+  }, [nearestOccasion, app?.nearestOccasion]);
 
   // Quick Tasbih Dhikr Index State
   const [dhikrIndex, setDhikrIndex] = useState<number>(() => {
@@ -582,7 +588,17 @@ export const HomePage: React.FC<HomePageProps> = ({
             {/* 4. مواسم الطاعات وسنن الأيام */}
             <button
               type="button"
-              onClick={() => setIsOccasionsModalOpen(true)}
+              onClick={() => {
+                if (typeof setIsOccasionsModalOpen === 'function') {
+                  setIsOccasionsModalOpen(true);
+                }
+                if (app?.setIsOccasionsModalOpen) {
+                  app.setIsOccasionsModalOpen(true);
+                }
+                if (app?.setShowIslamicOccasionsModal) {
+                  app.setShowIslamicOccasionsModal(true);
+                }
+              }}
               className="glass-card bg-white dark:bg-obsidian-900/80 p-3.5 sm:p-4 rounded-2xl flex flex-col justify-between border border-slate-150 dark:border-regalGold-500/20 shadow-xs hover:border-amber-300 dark:hover:border-regalGold-500/40 hover:shadow-md transition-all duration-200 text-right group cursor-pointer"
               title="انقر لاستعراض أقرب مواسم الطاعات وسُنن الأيام والأحاديث الواردة فيها"
             >
@@ -596,14 +612,14 @@ export const HomePage: React.FC<HomePageProps> = ({
               </div>
               <div className="mt-2 text-right">
                 <span className="text-sm sm:text-base font-black text-slate-800 dark:text-regalGold-100 leading-tight block truncate group-hover:text-amber-700 dark:group-hover:text-regalGold-300 transition-colors">
-                  {nearestOccasion?.title}
+                  {activeOccasion?.title || 'مواسم الطاعات والسُنن'}
                 </span>
                 <div className="flex items-center gap-1.5 mt-1">
                   <span className="text-[10px] bg-amber-50 dark:bg-regalGold-500/15 text-amber-800 dark:text-regalGold-300 border border-amber-200/60 dark:border-regalGold-500/30 font-bold px-1.5 py-0.2 rounded-md shrink-0">
-                    {nearestOccasion?.timingBadge}
+                    {activeOccasion?.timingBadge || 'سُنّة مباركة'}
                   </span>
                   <span className="text-[10px] text-slate-400 dark:text-regalGold-300/60 font-bold truncate">
-                    {nearestOccasion?.hijriDateText}
+                    {activeOccasion?.hijriDateText || ''}
                   </span>
                 </div>
                 <span className="text-[10px] text-amber-600 dark:text-regalGold-400 font-bold block mt-1 group-hover:underline">

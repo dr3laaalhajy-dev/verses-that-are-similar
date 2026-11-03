@@ -409,9 +409,12 @@ export const GlobalOverlays: React.FC = () => {
       />
 
       <IslamicOccasionsModal
-        isOpen={app.isOccasionsModalOpen}
-        onClose={() => app.setIsOccasionsModalOpen(false)}
-        occasions={app.upcomingOccasions}
+        isOpen={Boolean(app.isOccasionsModalOpen || app.showIslamicOccasionsModal)}
+        onClose={() => {
+          if (app.setIsOccasionsModalOpen) app.setIsOccasionsModalOpen(false);
+          if (app.setShowIslamicOccasionsModal) app.setShowIslamicOccasionsModal(false);
+        }}
+        occasions={app.upcomingOccasions || app.occasionsInfo}
         hijriDate={app.hijriDate}
         initialSelectedId={app.nearestOccasion?.id}
       />

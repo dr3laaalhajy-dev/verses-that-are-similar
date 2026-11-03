@@ -467,3 +467,4 @@ export const DailyMysteryBox: React.FC = () => {
 };
 
 export default DailyMysteryBox;
+
