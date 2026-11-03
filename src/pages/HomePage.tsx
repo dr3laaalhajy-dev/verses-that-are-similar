@@ -522,8 +522,8 @@ export const HomePage: React.FC<HomePageProps> = ({
           <Dashboard streakCount={streak} />
         </div>
 
-        {/* 4 Balanced Compact Cards (2 cols on mobile, 4 cols on desktop) */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3 items-stretch">
+        {/* 2x2 Geometrical Bento Grid: Row 1 (Wird & Gift Box) | Row 2 (Progress & Occasions) */}
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 items-stretch">
           {/* 1. ختمة الورد اليومي (Compact Bento Card) */}
           <div className="glass-card bg-white dark:bg-obsidian-900/80 p-2.5 sm:p-3 rounded-2xl flex flex-col justify-between border border-slate-150 dark:border-regalGold-500/20 shadow-xs hover:border-emerald-300 dark:hover:border-holyEmerald-500/40 hover:shadow-md transition-all duration-200 text-right group h-full">
             {/* Header: Title & Badge */}
