@@ -515,151 +515,155 @@ export const HomePage: React.FC<HomePageProps> = ({
         <div className="h-1 w-20 bg-brand-gold/30 dark:bg-regalGold-500/40 rounded-full mx-auto mt-2" />
       </motion.div>
 
-      {/* Preserved Original Hub: Prayer Times (with Qibla badge) & 2x2 Stats Grid Side-by-Side */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 sm:gap-4 items-stretch px-1">
-        {/* Prayer Times Box (Compact & Balanced with Qibla Badge) */}
-        <div className="lg:col-span-6 flex flex-col">
+      {/* Bento Grid: Full-Width Panoramic Prayer Times + 4 Square/Compact Cards Below */}
+      <div className="space-y-2.5 sm:space-y-3.5 px-1">
+        {/* Full-width Wide Rectangle: Prayer Times Banner */}
+        <div className="w-full">
           <Dashboard streakCount={streak} />
         </div>
 
-        {/* 2x2 Stats Grid (مربعين فوق ومربعين تحت - Exactly preserved & balanced!) */}
-        <div className="lg:col-span-6 flex flex-col justify-between">
-          <div className="grid grid-cols-2 grid-rows-2 gap-2.5 sm:gap-3.5 h-full">
-            {/* 1. ختمة الورد اليومي (Bento Card: Responsive & Stacked) */}
-            <div className="glass-card bg-white dark:bg-obsidian-900/80 p-3.5 sm:p-4 rounded-2xl flex flex-col justify-between border border-slate-150 dark:border-regalGold-500/20 shadow-xs hover:border-emerald-300 dark:hover:border-holyEmerald-500/40 hover:shadow-md transition-all duration-200 text-right group h-full">
-              {/* Header: Title & Badge */}
-              <div className="flex items-center justify-between w-full">
-                <div className="flex items-center gap-1.5">
-                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-emerald-50 dark:bg-holyEmerald-500/15 text-emerald-600 dark:text-holyEmerald-400 border border-emerald-200/60 dark:border-holyEmerald-500/30 flex items-center justify-center shrink-0">
-                    <BookOpen className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                  </div>
-                  <span className="text-[11px] sm:text-xs font-black text-slate-700 dark:text-regalGold-100 font-tajawal">
-                    وِردُ التّلاوَة
-                  </span>
+        {/* 4 Balanced Compact Cards (2 cols on mobile, 4 cols on desktop) */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3 items-stretch">
+          {/* 1. ختمة الورد اليومي (Compact Bento Card) */}
+          <div className="glass-card bg-white dark:bg-obsidian-900/80 p-2.5 sm:p-3 rounded-2xl flex flex-col justify-between border border-slate-150 dark:border-regalGold-500/20 shadow-xs hover:border-emerald-300 dark:hover:border-holyEmerald-500/40 hover:shadow-md transition-all duration-200 text-right group h-full">
+            {/* Header: Title & Badge */}
+            <div className="flex items-center justify-between w-full">
+              <div className="flex items-center gap-1.5">
+                <div className="w-6 h-6 rounded-lg bg-emerald-50 dark:bg-holyEmerald-500/15 text-emerald-600 dark:text-holyEmerald-400 border border-emerald-200/60 dark:border-holyEmerald-500/30 flex items-center justify-center shrink-0">
+                  <BookOpen className="w-3 h-3" />
                 </div>
-                <span className="text-[10px] font-bold text-slate-400 dark:text-regalGold-300/70">
-                  الختمة الحالية
+                <span className="text-[11px] sm:text-xs font-black text-slate-700 dark:text-regalGold-100 font-tajawal">
+                  وِردُ التّلاوَة
                 </span>
               </div>
-
-              {/* Middle: flex justify-between items-center with Surah details on Right & Circular Progress Ring on Left */}
-              <div className="flex items-center justify-between gap-2.5 my-auto py-1">
-                {/* Right: Surah & Ayah / Juz Details */}
-                <div className="flex-1 min-w-0 text-right">
-                  <span className="text-xs sm:text-sm font-black text-slate-800 dark:text-regalGold-100 font-tajawal truncate block">
-                    سُورَةُ {currentSurah.name}
-                  </span>
-                  <span className="text-[10px] font-bold text-emerald-700 dark:text-holyEmerald-400 block mt-0.5 font-mono">
-                    الآيَة {toArabicIndic(currentBoundary.startVerse || 1)}
-                  </span>
-                  <span className="text-[10px] text-slate-400 dark:text-regalGold-300/70 font-semibold block mt-0.5 truncate font-mono">
-                    الجزء {toArabicIndic(currentJuz)} • ص {toArabicIndic(currentPage)}
-                  </span>
-                </div>
-
-                {/* Left: Circular Progress Ring (High Contrast in Light and Dark) */}
-                <div className="relative w-12 h-12 sm:w-13 sm:h-13 flex items-center justify-center shrink-0">
-                  <svg className="w-12 h-12 sm:w-13 sm:h-13 -rotate-90" viewBox="0 0 36 36">
-                    {/* Track */}
-                    <path
-                      className="stroke-slate-200/80 dark:stroke-slate-700/50"
-                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                      fill="none"
-                      strokeWidth="3.2"
-                    />
-                    {/* Progress Fill */}
-                    <path
-                      className="stroke-emerald-500 dark:stroke-holyEmerald-400 transition-all duration-500"
-                      d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                      fill="none"
-                      strokeDasharray={`${Math.min(100, Math.max(0, khatmahPercentage))}, 100`}
-                      strokeLinecap="round"
-                      strokeWidth="3.2"
-                    />
-                  </svg>
-                  <span className="absolute text-[10px] sm:text-[11px] font-black text-slate-800 dark:text-regalGold-200 font-mono">
-                    {toArabicIndic(khatmahPercentage)}٪
-                  </span>
-                </div>
-              </div>
-
-              {/* Bottom: Stacked Action Button */}
-              <button
-                type="button"
-                onClick={handleResumeReadingWird}
-                className="w-full py-1.5 sm:py-2 px-3 rounded-xl bg-brand-emerald hover:bg-[#033628] dark:bg-holyEmerald-600 dark:hover:bg-holyEmerald-500 text-white dark:text-obsidian-950 font-black text-[11px] sm:text-xs flex items-center justify-center gap-1.5 shadow-xs active:scale-95 transition-all cursor-pointer mt-auto"
-              >
-                <BookOpen className="w-3.5 h-3.5 fill-current" />
-                <span>مُتَابَعَةُ القِرَاءَةِ</span>
-              </button>
+              <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 dark:text-regalGold-300/70">
+                الختمة الحالية
+              </span>
             </div>
 
-            {/* 2. صندوق الهدية اليومية (In place of نقاط المهارة) */}
-            <DailyMysteryBox className="h-full" />
-
-            {/* 3. التقدم الكلي */}
-            <div className="glass-card bg-white dark:bg-obsidian-900/80 p-3.5 sm:p-4 rounded-2xl flex flex-col justify-between border border-slate-150 dark:border-regalGold-500/20 shadow-xs hover:border-teal-300 dark:hover:border-holyEmerald-500/40 hover:shadow-md transition-all duration-200 h-full">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] sm:text-xs font-black text-slate-400 dark:text-regalGold-300/70 uppercase tracking-wider">
-                  التقدم الكلي
+            {/* Middle: flex justify-between items-center with Surah details on Right & Compact Circular Ring on Left */}
+            <div className="flex items-center justify-between gap-2 my-auto py-1">
+              {/* Right: Surah & Ayah / Juz Details */}
+              <div className="flex-1 min-w-0 text-right">
+                <span className="text-xs sm:text-[13px] font-black text-slate-800 dark:text-regalGold-100 font-tajawal truncate block">
+                  سُورَةُ {currentSurah.name}
                 </span>
-                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-teal-50 dark:bg-holyEmerald-500/15 text-teal-600 dark:text-holyEmerald-400 flex items-center justify-center shrink-0">
-                  <CheckCircle2 className="w-4 h-4 text-teal-600 dark:text-holyEmerald-400" />
-                </div>
+                <span className="text-[9px] sm:text-[10px] font-bold text-emerald-700 dark:text-holyEmerald-400 block mt-0.5 font-mono">
+                  الآيَة {toArabicIndic(currentBoundary.startVerse || 1)}
+                </span>
+                <span className="text-[9px] text-slate-400 dark:text-regalGold-300/70 font-semibold block mt-0.5 truncate font-mono">
+                  الجزء {toArabicIndic(currentJuz)} • ص {toArabicIndic(currentPage)}
+                </span>
               </div>
-              <div className="mt-3 text-right">
-                <span className="text-2xl sm:text-3xl font-black text-slate-800 dark:text-regalGold-100 tabular-nums leading-tight block">
-                  {toArabicIndic(completedChallengeIds.size)}
-                </span>
-                <span className="text-[10px] text-slate-400 dark:text-regalGold-300/60 font-bold block mt-0.5">
-                  تحدياً مكتملاً
+
+              {/* Left: Compact Circular Progress Ring */}
+              <div className="relative w-9 h-9 sm:w-10 sm:h-10 flex items-center justify-center shrink-0">
+                <svg className="w-9 h-9 sm:w-10 sm:h-10 -rotate-90" viewBox="0 0 36 36">
+                  {/* Track */}
+                  <path
+                    className="stroke-slate-200/80 dark:stroke-slate-700/50"
+                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                    fill="none"
+                    strokeWidth="3.4"
+                  />
+                  {/* Progress Fill */}
+                  <path
+                    className="stroke-emerald-500 dark:stroke-holyEmerald-400 transition-all duration-500"
+                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                    fill="none"
+                    strokeDasharray={`${Math.min(100, Math.max(0, khatmahPercentage))}, 100`}
+                    strokeLinecap="round"
+                    strokeWidth="3.4"
+                  />
+                </svg>
+                <span className="absolute text-[8px] sm:text-[9px] font-black text-slate-800 dark:text-regalGold-200 font-mono">
+                  {toArabicIndic(khatmahPercentage)}٪
                 </span>
               </div>
             </div>
 
-            {/* 4. مواسم الطاعات وسنن الأيام */}
+            {/* Bottom: Action Button */}
             <button
               type="button"
-              onClick={() => {
-                if (typeof setIsOccasionsModalOpen === 'function') {
-                  setIsOccasionsModalOpen(true);
-                }
-                if (app?.setIsOccasionsModalOpen) {
-                  app.setIsOccasionsModalOpen(true);
-                }
-                if (app?.setShowIslamicOccasionsModal) {
-                  app.setShowIslamicOccasionsModal(true);
-                }
-              }}
-              className="glass-card bg-white dark:bg-obsidian-900/80 p-3.5 sm:p-4 rounded-2xl flex flex-col justify-between border border-slate-150 dark:border-regalGold-500/20 shadow-xs hover:border-amber-300 dark:hover:border-regalGold-500/40 hover:shadow-md transition-all duration-200 text-right group cursor-pointer h-full"
-              title="انقر لاستعراض أقرب مواسم الطاعات وسُنن الأيام والأحاديث الواردة فيها"
+              onClick={handleResumeReadingWird}
+              className="w-full py-1.5 px-2.5 rounded-xl bg-brand-emerald hover:bg-[#033628] dark:bg-holyEmerald-600 dark:hover:bg-holyEmerald-500 text-white dark:text-obsidian-950 font-black text-[10px] sm:text-[11px] flex items-center justify-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer mt-auto"
             >
-              <div className="flex items-center justify-between w-full">
-                <span className="text-[11px] sm:text-xs font-black text-slate-400 dark:text-regalGold-300/70 uppercase tracking-wider">
-                  مواسم الطاعات
-                </span>
-                <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-amber-50 dark:bg-regalGold-500/15 text-amber-600 dark:text-regalGold-400 flex items-center justify-center shrink-0">
-                  <Moon className="w-4 h-4 text-amber-500 dark:text-regalGold-400 fill-amber-500 dark:fill-regalGold-400" />
-                </div>
-              </div>
-              <div className="mt-2 text-right">
-                <span className="text-sm sm:text-base font-black text-slate-800 dark:text-regalGold-100 leading-tight block truncate group-hover:text-amber-700 dark:group-hover:text-regalGold-300 transition-colors">
-                  {activeOccasion?.title || 'مواسم الطاعات والسُنن'}
-                </span>
-                <div className="flex items-center gap-1.5 mt-1">
-                  <span className="text-[10px] bg-amber-50 dark:bg-regalGold-500/15 text-amber-800 dark:text-regalGold-300 border border-amber-200/60 dark:border-regalGold-500/30 font-bold px-1.5 py-0.2 rounded-md shrink-0">
-                    {activeOccasion?.timingBadge || 'سُنّة مباركة'}
-                  </span>
-                  <span className="text-[10px] text-slate-400 dark:text-regalGold-300/60 font-bold truncate">
-                    {activeOccasion?.hijriDateText || ''}
-                  </span>
-                </div>
-                <span className="text-[10px] text-amber-600 dark:text-regalGold-400 font-bold block mt-1 group-hover:underline">
-                  استعراض السُنن والأحاديث 🌙
-                </span>
-              </div>
+              <BookOpen className="w-3 h-3 fill-current" />
+              <span>مُتَابَعَةُ القِرَاءَةِ</span>
             </button>
           </div>
+
+          {/* 2. صندوق الهدية اليومية (Compact Bento Card) */}
+          <DailyMysteryBox className="h-full" />
+
+          {/* 3. التقدم الكلي (Compact Bento Card) */}
+          <div className="glass-card bg-white dark:bg-obsidian-900/80 p-2.5 sm:p-3 rounded-2xl flex flex-col justify-between border border-slate-150 dark:border-regalGold-500/20 shadow-xs hover:border-teal-300 dark:hover:border-holyEmerald-500/40 hover:shadow-md transition-all duration-200 h-full">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] sm:text-[11px] font-black text-slate-400 dark:text-regalGold-300/70 uppercase tracking-wider">
+                التقدم الكلي
+              </span>
+              <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-teal-50 dark:bg-holyEmerald-500/15 text-teal-600 dark:text-holyEmerald-400 flex items-center justify-center shrink-0">
+                <CheckCircle2 className="w-3.5 h-3.5 text-teal-600 dark:text-holyEmerald-400" />
+              </div>
+            </div>
+            <div className="my-auto py-1 text-right">
+              <span className="text-xl sm:text-2xl font-black text-slate-800 dark:text-regalGold-100 tabular-nums leading-tight block">
+                {toArabicIndic(completedChallengeIds.size)}
+              </span>
+              <span className="text-[9px] sm:text-[10px] text-slate-400 dark:text-regalGold-300/60 font-bold block mt-0.5">
+                تحدياً مكتملاً
+              </span>
+            </div>
+            <div className="w-full h-1 bg-slate-100 dark:bg-obsidian-950/80 rounded-full overflow-hidden mt-auto">
+              <div
+                className="h-full bg-teal-500 dark:bg-holyEmerald-400 rounded-full"
+                style={{ width: `${Math.min(100, completedChallengeIds.size * 5)}%` }}
+              />
+            </div>
+          </div>
+
+          {/* 4. مواسم الطاعات وسنن الأيام (Compact Bento Card) */}
+          <button
+            type="button"
+            onClick={() => {
+              if (typeof setIsOccasionsModalOpen === 'function') {
+                setIsOccasionsModalOpen(true);
+              }
+              if (app?.setIsOccasionsModalOpen) {
+                app.setIsOccasionsModalOpen(true);
+              }
+              if (app?.setShowIslamicOccasionsModal) {
+                app.setShowIslamicOccasionsModal(true);
+              }
+            }}
+            className="glass-card bg-white dark:bg-obsidian-900/80 p-2.5 sm:p-3 rounded-2xl flex flex-col justify-between border border-slate-150 dark:border-regalGold-500/20 shadow-xs hover:border-amber-300 dark:hover:border-regalGold-500/40 hover:shadow-md transition-all duration-200 text-right group cursor-pointer h-full"
+            title="انقر لاستعراض أقرب مواسم الطاعات وسُنن الأيام والأحاديث الواردة فيها"
+          >
+            <div className="flex items-center justify-between w-full">
+              <span className="text-[10px] sm:text-[11px] font-black text-slate-400 dark:text-regalGold-300/70 uppercase tracking-wider">
+                مواسم الطاعات
+              </span>
+              <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg bg-amber-50 dark:bg-regalGold-500/15 text-amber-600 dark:text-regalGold-400 flex items-center justify-center shrink-0">
+                <Moon className="w-3.5 h-3.5 text-amber-500 dark:text-regalGold-400 fill-amber-500 dark:fill-regalGold-400" />
+              </div>
+            </div>
+            <div className="my-auto py-1 text-right">
+              <span className="text-xs sm:text-[13px] font-black text-slate-800 dark:text-regalGold-100 leading-tight block truncate group-hover:text-amber-700 dark:group-hover:text-regalGold-300 transition-colors">
+                {activeOccasion?.title || 'مواسم الطاعات والسُنن'}
+              </span>
+              <div className="flex items-center gap-1 mt-0.5">
+                <span className="text-[9px] bg-amber-50 dark:bg-regalGold-500/15 text-amber-800 dark:text-regalGold-300 border border-amber-200/60 dark:border-regalGold-500/30 font-bold px-1.5 py-0.2 rounded-md shrink-0">
+                  {activeOccasion?.timingBadge || 'سُنّة مباركة'}
+                </span>
+                <span className="text-[9px] text-slate-400 dark:text-regalGold-300/60 font-bold truncate">
+                  {activeOccasion?.hijriDateText || ''}
+                </span>
+              </div>
+            </div>
+            <span className="text-[9px] sm:text-[10px] text-amber-600 dark:text-regalGold-400 font-bold block mt-auto group-hover:underline">
+              استعراض السُنن والأحاديث 🌙
+            </span>
+          </button>
         </div>
       </div>
 
