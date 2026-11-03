@@ -8,6 +8,7 @@ import { View } from '../types/challenges';
 import Dashboard from '../components/Dashboard';
 import { DailyChallengeEmblem, VideoLibraryIcon } from '../components/IslamicChallengeEmblems';
 import { GooglePlayButton } from '../components/GooglePlayTesterModal';
+import { DailyMysteryBox } from '../components/DailyMysteryBox';
 import { useApp } from '../contexts/AppContext';
 import { quranData } from '../services/QuranRepository';
 import { pageBoundaries, juzStartPages } from '../services/PageRepository';
@@ -662,6 +663,9 @@ export const HomePage: React.FC<HomePageProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Daily Mystery Box: صندوق الهدية اليومية والتحقق الذكي */}
+      <DailyMysteryBox />
 
       {/* New Feature 3: Daily Khatmah Tracker Card (بطاقة الورد اليومي) - Positioned directly below Stats Ribbon & above Quick Tasbih */}
       <section className="w-full rounded-3xl glass-card bg-white dark:bg-obsidian-900/80 border border-slate-150 dark:border-regalGold-500/20 p-4 sm:p-5 shadow-xs text-right relative overflow-hidden">

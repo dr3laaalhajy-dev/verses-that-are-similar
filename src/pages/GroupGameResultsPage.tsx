@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Trophy, Zap } from 'lucide-react';
 import { View } from '../types/challenges';
 import WhoAmIGame from '../components/WhoAmIGame';
 import { LiveReactionsOverlay } from '../components/LiveReactionsOverlay';
+import { useApp } from '../contexts/AppContext';
 
 export interface GroupGameResultsPageProps {
   room: any;
@@ -24,6 +25,14 @@ export const GroupGameResultsPage: React.FC<GroupGameResultsPageProps> = ({
   onCancelRoom,
   onWithdraw
 }) => {
+  const app = useApp();
+
+  // Smart Verification for Daily Mystery Gift: Record completed match when game finishes
+  useEffect(() => {
+    if (room?.status === 'FINISHED') {
+      app?.recordDailyGiftRoomMatch?.();
+    }
+  }, [room?.status, app]);
   if (room?.gameMode === 'WHO_AM_I') {
     return (
       <motion.div

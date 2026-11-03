@@ -43,6 +43,20 @@ export interface ToastNotification {
   message: string;
 }
 
+export interface DailyMysteryGift {
+  id: string;
+  date: string;
+  isRevealed: boolean;
+  type: 'reading_time' | 'room_challenge';
+  title: string;
+  description: string;
+  target: number;
+  currentProgress: number;
+  isCompleted: boolean;
+  isClaimed: boolean;
+  rewardPoints: number;
+}
+
 type ToastListener = (t: ToastNotification) => void;
 const toastListeners = new Set<ToastListener>();
 
@@ -411,6 +425,145 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [playerUsername, setPlayerUsername] = useState<string | null>(localStorage.getItem('quran_player_username'));
   const [totalPoints, setTotalPoints] = useState<number>(() => Number(localStorage.getItem('quran_total_points')) || 0);
   const [cups, setCups] = useState(() => parseInt(localStorage.getItem('quran_total_cups') || localStorage.getItem('quran_cups') || '0'));
+
+  // ==========================================
+  // Daily Mystery Gift (صندوق الهدية اليومية والتحقق الذكي)
+  // ==========================================
+  const getTodayDateKey = (): string => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const [dailyGift, setDailyGift] = useState<DailyMysteryGift>(() => {
+    const todayKey = getTodayDateKey();
+    try {
+      const saved = localStorage.getItem('quran_daily_mystery_gift');
+      if (saved) {
+        const parsed: DailyMysteryGift = JSON.parse(saved);
+        if (parsed && parsed.date === todayKey) {
+          return parsed;
+        }
+      }
+    } catch (e) {
+      console.error('Error reading quran_daily_mystery_gift from localStorage:', e);
+    }
+
+    const dayNum = new Date().getDate();
+    // Alternating challenge: even days reading_time (300s = 5m), odd days room_challenge (1 match)
+    const isReadingTime = dayNum % 2 === 0;
+
+    return {
+      id: `mystery_${todayKey}`,
+      date: todayKey,
+      isRevealed: false,
+      type: isReadingTime ? 'reading_time' : 'room_challenge',
+      title: isReadingTime ? 'اقرأ القرآن الكريم لمدة 5 دقائق' : 'أكمل تحدياً في غرف التنافس',
+      description: isReadingTime
+        ? 'عطّر وقتك بآيات الذكر الحكيم عبر تصفح وتدبر المصحف الشريف'
+        : 'شارك في مسابقة جماعية داخل غرف التنافس وأكمل المباراة للنهاية',
+      target: isReadingTime ? 300 : 1,
+      currentProgress: 0,
+      isCompleted: false,
+      isClaimed: false,
+      rewardPoints: isReadingTime ? 100 : 150,
+    };
+  });
+
+  const dailyGiftRef = useRef(dailyGift);
+  useEffect(() => {
+    dailyGiftRef.current = dailyGift;
+  }, [dailyGift]);
+
+  // Periodic LocalStorage persistence every 5 seconds (safeguards against unexpected close)
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (dailyGiftRef.current) {
+        try {
+          localStorage.setItem('quran_daily_mystery_gift', JSON.stringify(dailyGiftRef.current));
+        } catch (e) {
+          console.error('Failed to auto-save daily gift:', e);
+        }
+      }
+    }, 5000);
+
+    return () => clearInterval(timer);
+  }, []);
+
+  const revealDailyGift = useCallback(() => {
+    setDailyGift(prev => {
+      if (prev.isRevealed) return prev;
+      const updated = { ...prev, isRevealed: true };
+      try {
+        localStorage.setItem('quran_daily_mystery_gift', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+  }, []);
+
+  const incrementDailyGiftReadingTime = useCallback((seconds: number = 1) => {
+    setDailyGift(prev => {
+      if (!prev.isRevealed || prev.type !== 'reading_time' || prev.isCompleted) return prev;
+      const nextProgress = Math.min(prev.target, prev.currentProgress + seconds);
+      const isCompleted = nextProgress >= prev.target;
+      const updated = {
+        ...prev,
+        currentProgress: nextProgress,
+        isCompleted
+      };
+      if (isCompleted) {
+        try {
+          localStorage.setItem('quran_daily_mystery_gift', JSON.stringify(updated));
+        } catch (e) {}
+      }
+      return updated;
+    });
+  }, []);
+
+  const recordDailyGiftRoomMatch = useCallback(() => {
+    setDailyGift(prev => {
+      if (!prev.isRevealed || prev.type !== 'room_challenge' || prev.isCompleted) return prev;
+      const nextProgress = Math.min(prev.target, prev.currentProgress + 1);
+      const isCompleted = nextProgress >= prev.target;
+      const updated = {
+        ...prev,
+        currentProgress: nextProgress,
+        isCompleted
+      };
+      try {
+        localStorage.setItem('quran_daily_mystery_gift', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+  }, []);
+
+  const claimDailyGiftReward = useCallback(() => {
+    setDailyGift(prev => {
+      if (!prev.isCompleted || prev.isClaimed) return prev;
+      const points = prev.rewardPoints || 100;
+
+      setTotalPoints(current => {
+        const nextPoints = current + points;
+        try {
+          localStorage.setItem('quran_total_points', String(nextPoints));
+        } catch (e) {}
+        return nextPoints;
+      });
+
+      toast.success(`🎉 مبارك! تم استلام مكافأة صندوق اليوم (+${points} نقطة)!`);
+
+      const updated = {
+        ...prev,
+        isClaimed: true
+      };
+      try {
+        localStorage.setItem('quran_daily_mystery_gift', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+  }, []);
 
   // Islamic Occasions & Sunan (مواسم الطاعات وسنن الأيام)
   const [isOccasionsModalOpen, setIsOccasionsModalOpen] = useState(false);
@@ -2273,6 +2426,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (res.ok && data) {
           setRoom(data);
           if (data.status === 'FINISHED') {
+            recordDailyGiftRoomMatch();
             setView('group_game');
           } else if (data.currentQuestionIndex > currentChallengeIndex) {
             resetQuestionUIState(data.currentQuestionIndex, data);
@@ -2316,6 +2470,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
           // If room finished, switch to group_game results
           if (data.status === 'FINISHED') {
+            recordDailyGiftRoomMatch();
             setRoom(data);
             if (view !== 'group_game') {
               setView('group_game');
@@ -3481,6 +3636,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             if (data && data.status) {
               setRoom(data);
               if (data.status === 'FINISHED') {
+                recordDailyGiftRoomMatch();
                 setView('group_game');
               }
             }
@@ -3509,6 +3665,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (data && data.status) {
             setRoom(data);
             if (data.status === 'FINISHED') {
+              recordDailyGiftRoomMatch();
               setView('group_game');
             } else if (data.currentQuestionIndex !== undefined && data.currentQuestionIndex > currentChallengeIndex) {
               resetQuestionUIState(data.currentQuestionIndex, data);
@@ -3655,6 +3812,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (data && data.status) {
             setRoom(data);
             if (data.status === 'FINISHED') {
+              recordDailyGiftRoomMatch();
               setView('group_game');
             }
           }
@@ -3683,6 +3841,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (data && data.status) {
           setRoom(data);
           if (data.status === 'FINISHED') {
+            recordDailyGiftRoomMatch();
             setView('group_game');
           } else if (data.currentQuestionIndex !== undefined && data.currentQuestionIndex > currentChallengeIndex) {
             resetQuestionUIState(data.currentQuestionIndex, data);
@@ -3768,6 +3927,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (data && data.status) {
             setRoom(data);
             if (data.status === 'FINISHED') {
+              recordDailyGiftRoomMatch();
               setView('group_game');
             }
           }
@@ -3796,6 +3956,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (data && data.status) {
           setRoom(data);
           if (data.status === 'FINISHED') {
+            recordDailyGiftRoomMatch();
             setView('group_game');
           } else if (data.currentQuestionIndex !== undefined && data.currentQuestionIndex > currentChallengeIndex) {
             resetQuestionUIState(data.currentQuestionIndex, data);
@@ -4881,6 +5042,13 @@ ${versesList}
     handlePrivateRoomSubmit: () => { if (privateRoomModal.room) handleJoinV1(privateRoomModal.room.id, privateRoomModal.password); },
     privateRoomError: privateRoomModal.error,
     isPrivateSubmitting: isJoiningRoom,
+
+    // Daily Mystery Gift
+    dailyGift,
+    revealDailyGift,
+    incrementDailyGiftReadingTime,
+    recordDailyGiftRoomMatch,
+    claimDailyGiftReward,
 
     // Google Play Tester state
     testerEmail, setTesterEmail,

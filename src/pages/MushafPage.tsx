@@ -12,6 +12,7 @@ import { juzStartPages, surahStartPages, pageBoundaries } from "../services/Page
 import QuranZoomViewer from "../components/QuranZoomViewer";
 import AyahActionSheet from "../components/AyahActionSheet";
 import UserWirdModal from "../components/UserWirdModal";
+import { useApp } from "../contexts/AppContext";
 
 // أسماء الأجزاء الثلاثين باللغة العربية
 const JUZ_NAMES_ARABIC = [
@@ -93,11 +94,37 @@ export const MushafPage: React.FC<MushafPageProps> = ({
   setSelectedAyah,
   setView
 }) => {
+  const app = useApp();
   const mushafContainerRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [areFsControlsVisible, setAreFsControlsVisible] = useState(false);
   const fsControlsTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [isWirdModalOpen, setIsWirdModalOpen] = useState(false);
+
+  // Smart Verification for Daily Mystery Gift: Active Reading Time Tracker
+  useEffect(() => {
+    const dailyGift = app?.dailyGift;
+    if (!dailyGift?.isRevealed || dailyGift?.type !== 'reading_time' || dailyGift?.isCompleted) {
+      return;
+    }
+
+    const intervalId = setInterval(() => {
+      // Pause if tab is inactive or hidden
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        app?.incrementDailyGiftReadingTime?.(1);
+      }
+    }, 1000);
+
+    // CRITICAL CLEANUP: Stop tracking immediately when user exits MushafPage (Unmount)
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [
+    app?.dailyGift?.isRevealed,
+    app?.dailyGift?.type,
+    app?.dailyGift?.isCompleted,
+    app?.incrementDailyGiftReadingTime
+  ]);
 
   const resetFsControlsTimer = useCallback(() => {
     setAreFsControlsVisible(true);
@@ -872,6 +899,25 @@ export const MushafPage: React.FC<MushafPageProps> = ({
 
                                   {/* رقم الصفحة وزر ملء الشاشة الموحد الوحيد */}
                                   <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                                    {/* مؤشر تحدي القراءة اليومي (Daily Mystery Gift Tracker) */}
+                                    {app?.dailyGift?.isRevealed && app?.dailyGift?.type === 'reading_time' && (
+                                      <div
+                                        className={`px-2 py-1 rounded-xl border text-[11px] sm:text-xs font-mono font-bold flex items-center gap-1.5 transition-all shadow-xs ${
+                                          app.dailyGift.isCompleted
+                                            ? 'bg-holyEmerald-500/20 border-holyEmerald-500/40 text-holyEmerald-300'
+                                            : 'bg-regalGold-500/15 border-regalGold-500/30 text-regalGold-300'
+                                        }`}
+                                        title={app.dailyGift.isCompleted ? 'اكتمل تحدي قراءة اليوم' : 'تحدي القراءة اليومي نشط'}
+                                      >
+                                        <Clock className={`w-3.5 h-3.5 ${app.dailyGift.isCompleted ? 'text-holyEmerald-400' : 'text-regalGold-400 animate-pulse'}`} />
+                                        <span>
+                                          {app.dailyGift.isCompleted
+                                            ? 'اكتمل التحدي!'
+                                            : `${toArabicIndic(String(Math.floor(app.dailyGift.currentProgress / 60)).padStart(2, '0'))}:${toArabicIndic(String(app.dailyGift.currentProgress % 60).padStart(2, '0'))}`}
+                                        </span>
+                                      </div>
+                                    )}
+
                                     <div className={`px-2.5 py-1 rounded-xl border text-[11px] sm:text-xs font-mono font-bold flex items-center gap-1 ${
                                       librarySettings.darkMode
                                         ? 'bg-obsidian-950/80 border-regalGold-500/25 text-regalGold-300'
