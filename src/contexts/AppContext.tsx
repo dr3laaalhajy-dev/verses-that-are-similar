@@ -614,7 +614,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return 'none';
   };
 
-  const userAchievement = activeFrame || getActiveAchievement();
+  // Requirement 1: If user selects "no frame" (null or 'none'), do NOT fallback to achievements
+  const userAchievement = (activeFrame === 'seerah' || activeFrame === 'general')
+    ? activeFrame
+    : (activeFrame === null || activeFrame === 'none' || activeFrame === '')
+      ? 'none'
+      : getActiveAchievement();
   const safeAchievement = userAchievement && achievementStyles[userAchievement] ? userAchievement : 'none';
   const currentStyle = achievementStyles[safeAchievement];
   const isElite = safeAchievement !== 'none';
@@ -1116,6 +1121,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           localStorage.setItem('quran_active_frame', p.activeFrame);
           localStorage.setItem('quran_name_decorated', 'true');
           localStorage.setItem('quran_show_decoration', 'true');
+        } else {
+          setActiveFrame(null);
+          setIsNameDecorated(false);
+          setShowProfileDecoration(false);
+          localStorage.removeItem('quran_active_frame');
+          localStorage.removeItem('quran_name_decorated');
+          localStorage.removeItem('quran_show_decoration');
+        }
+
+        // Requirement 2: Sync completed challenges to certificates
+        if (p.seerahCompleted || p.generalCompleted) {
+          setUserCertificates(prev => {
+            const certs = [...prev];
+            if (p.seerahCompleted && !certs.some(c => c.category === 'seerah')) {
+              certs.push({ category: 'seerah', date: 'مُعتمدة', name: p.name });
+            }
+            if (p.generalCompleted && !certs.some(c => c.category === 'general')) {
+              certs.push({ category: 'general', date: 'مُعتمدة', name: p.name });
+            }
+            localStorage.setItem('quran_user_certificates', JSON.stringify(certs));
+            return certs;
+          });
         }
       }
     } catch (err: any) {
@@ -1669,9 +1696,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const hasSeerah = userCertificates.some(c => c.category === 'seerah');
     const hasGeneral = userCertificates.some(c => c.category === 'general');
+    // Requirement 1: Keep null if user chose "no frame"
     const effectiveFrame = (activeFrame === 'seerah' || activeFrame === 'general')
       ? activeFrame
-      : (hasGeneral ? 'general' : (hasSeerah ? 'seerah' : null));
+      : null;
 
     // Sync completion status with backend
     fetch('/api/player-score', {
@@ -3449,28 +3477,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (room) {
           setView('group_game'); // Show leaderboard at end
         } else {
-          // Award a cup if the session was completed with correct answers!
-          if (sessionCorrect > 0) {
-            setCups(prev => {
-              const nextCups = prev + 1;
-              localStorage.setItem('quran_total_cups', nextCups.toString());
-              localStorage.setItem('quran_cups', nextCups.toString());
-              return nextCups;
-            });
-            if (playerUsername || playerName) {
-              fetch('/api/player-score', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  username: playerUsername,
-                  name: playerName,
-                  cups: 1,
-                  totalCups: cups + 1,
-                  totalPoints: totalPoints
-                })
-              }).catch(err => console.error('Failed to sync cup on session complete:', err));
-            }
-          }
+          // Requirement 4: Cups are earned strictly in group rooms, not solo sessions
           setView('skills_results');
         }
       }
@@ -3988,9 +3995,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                             } catch { return false; }
                           })());
         const storedFrame = localStorage.getItem('quran_active_frame') || activeFrame;
+        // Requirement 1: If user chose "no frame" (null or 'none'), preserve null and do NOT force seerah/general
         const effectiveFrame = (storedFrame === 'seerah' || storedFrame === 'general')
           ? storedFrame
-          : (storedFrame === 'none' ? 'none' : (hasSeerah ? 'seerah' : (hasGeneral ? 'general' : null)));
+          : null;
 
         try {
           const scoreRes = await fetch('/api/player-score', {
@@ -4177,17 +4185,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const saveScore = (challenge: string, score: number) => {
     const challengeKey = challengeMode === 'daily' ? `[يومي] ${challenge}` : challenge;
-    let newCups = cups;
 
     setBestScores(prev => {
       const currentBest = prev[challengeKey] || 0;
       const updated = { ...prev };
       if (score > currentBest) {
-        const cupThreshold = Math.min(50, targetVerses.length * 8);
-        if (score >= cupThreshold && currentBest < cupThreshold) {
-          newCups = cups + 1;
-          setCups(newCups);
-        }
+        // Requirement 4: Cups are earned strictly in group rooms, not solo threshold
         updated[challengeKey] = score;
         localStorage.setItem('quran_game_scores', JSON.stringify(updated));
         return updated;
@@ -4211,13 +4214,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setTotalPoints(newPoints);
     localStorage.setItem('quran_total_points', newPoints.toString());
 
-    let newCupsCount = cups;
-    if (isNewCompletion) {
-      newCupsCount = cups + 1;
-      setCups(newCupsCount);
-      localStorage.setItem('quran_total_cups', newCupsCount.toString());
-      localStorage.setItem('quran_cups', newCupsCount.toString());
-    }
+    // Requirement 4: Cups are strictly earned from group rooms only
+    const newCupsCount = cups;
 
     // Sync with backend using player username / name
     fetch('/api/player-score', {
@@ -4228,7 +4226,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         name: playerName,
         points: pointsToAdd,
         totalPoints: newPoints,
-        cups: isNewCompletion ? 1 : 0,
+        cups: 0,
         totalCups: newCupsCount,
         challengeId: currentChallenge?.id,
         roomId: room?.id,
@@ -4281,36 +4279,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, []);
 
-  // Retroactive Cup Synchronization
-  useEffect(() => {
-    if (challenges.length > 0 && Object.keys(bestScores).length > 0) {
-      const calculatedCups = challenges.reduce((total, c) => {
-        const score = bestScores[c.keyword] || 0;
-        const verses = Array.isArray(c.verses) ? c.verses : [];
-        const threshold = Math.min(50, verses.length * 8);
-        return score >= threshold ? total + 1 : total;
-      }, 0);
-
-      if (calculatedCups > cups) {
-        setCups(calculatedCups);
-        // Sync with backend using current state
-        const newPoints = totalPoints;
-        fetch('/api/player-score', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            username: playerUsername,
-            name: playerName,
-            points: newPoints,
-            cups: calculatedCups,
-            roomId: room?.id,
-            score: newPoints
-          })
-        })
-          .catch(err => console.error('Failed to sync retroactive cups:', err));
-      }
-    }
-  }, [challenges, bestScores, cups, totalPoints, playerUsername, playerName]);
+  // Requirement 4: Cups are earned strictly in group rooms. Solo retroactive cup sync disabled.
 
 
   const handleDifficultyChange = (newDiff: Difficulty) => {

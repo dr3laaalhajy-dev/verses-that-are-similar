@@ -166,6 +166,12 @@ export const GroupGameResultsPage: React.FC<GroupGameResultsPageProps> = ({
 
                       {/* Bonus Badges Breakdown */}
                       <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-slate-100 text-[10px] font-black">
+                        {idx < 4 && (
+                          <span className="bg-amber-100 text-amber-900 px-2 py-0.5 rounded-md flex items-center gap-1 border border-amber-300 shadow-xs">
+                            <Trophy className="w-3 h-3 text-amber-600 fill-amber-600" />
+                            <span>+{4 - idx} {idx === 3 ? 'كأس' : idx === 2 ? 'كأسين' : 'كؤوس'}</span>
+                          </span>
+                        )}
                         {p.speedBonusCount > 0 && (
                           <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded-md flex items-center gap-1 border border-amber-200">
                             <Zap className="w-3 h-3 text-amber-600 fill-amber-600" />

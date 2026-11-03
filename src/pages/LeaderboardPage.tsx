@@ -137,15 +137,16 @@ export const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
                           // INDIVIDUAL PLAYER ACHIEVEMENT LOGIC (Global visibility)
                           const getPlayerAchievement = (p: any) => {
                             if (p.activeFrame === 'seerah' || p.activeFrame === 'general') return p.activeFrame;
-                            if (p.activeFrame === 'none') return 'none';
-                            if (p.seerahCompleted) return 'seerah';
-                            if (p.generalCompleted) return 'general';
+                            if (p.activeFrame === 'none' || p.activeFrame === null || p.activeFrame === '') return 'none';
+                            // Only fallback to completed flags if activeFrame is strictly undefined
+                            if (p.activeFrame === undefined && p.seerahCompleted) return 'seerah';
+                            if (p.activeFrame === undefined && p.generalCompleted) return 'general';
                             return 'none';
                           };
 
                           // Use individual player data for everyone in the list, and ensure current player uses active userAchievement
-                          const achievement = (isCurrentPlayer && userAchievement && userAchievement !== 'none')
-                            ? userAchievement
+                          const achievement = isCurrentPlayer
+                            ? (userAchievement && userAchievement !== 'none' ? userAchievement : 'none')
                             : getPlayerAchievement(player);
                           const style = achievementStyles[achievement];
 

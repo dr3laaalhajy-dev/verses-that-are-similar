@@ -216,6 +216,38 @@ const IslamicQuiz: React.FC<{
             };
             setUnlockedLevels(updatedProgress);
             syncProgress(updatedProgress);
+
+            // Requirement 2: Unlock and sync certificate with database
+            const certCategory = isSeerah ? 'seerah' : 'general';
+            try {
+              const savedCerts = JSON.parse(localStorage.getItem('quran_user_certificates') || '[]');
+              if (!savedCerts.some((c: any) => c.category === certCategory)) {
+                const newCert = {
+                  category: certCategory,
+                  date: new Date().toLocaleDateString('ar-SA'),
+                  name: localStorage.getItem('quran_player_name') || 'البطل القرآني'
+                };
+                savedCerts.push(newCert);
+                localStorage.setItem('quran_user_certificates', JSON.stringify(savedCerts));
+              }
+
+              const pName = localStorage.getItem('quran_player_name');
+              const pUsername = localStorage.getItem('quran_player_username');
+              if (pName || pUsername) {
+                fetch('/api/player-score', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    name: pName,
+                    username: pUsername,
+                    seerahCompleted: isSeerah ? true : undefined,
+                    generalCompleted: isGeneral ? true : undefined
+                  })
+                }).catch(err => console.error('Failed to sync certificate status to DB:', err));
+              }
+            } catch (e) {
+              console.error('Error unlocking certificate:', e);
+            }
           } else if (selectedGroup === currentMaxUnlocked && currentMaxUnlocked < maxGroups) {
             const updatedProgress = {
               ...unlockedLevels,
@@ -880,6 +912,20 @@ const IslamicQuiz: React.FC<{
           <p className="text-base text-slate-600 font-bold mb-8 leading-relaxed">{message}</p>
 
           <div className="flex flex-col gap-3 mt-4">
+            {isPassed && selectedGroup === (isSeerah ? 3 : 5) && (
+              <button
+                onClick={() => {
+                  if (onShowCertificate) {
+                    onShowCertificate(isSeerah ? 'seerah' : 'general');
+                  }
+                }}
+                className="flex items-center justify-center gap-2 py-3.5 bg-gradient-to-r from-amber-500 to-amber-600 text-white rounded-2xl font-black text-base hover:from-amber-600 hover:to-amber-700 transition-all shadow-xl shadow-amber-200"
+              >
+                <Award className="w-5 h-5 text-yellow-200" />
+                <span>🎉 عرض وتحميل وسام الشهادة المعتمد</span>
+              </button>
+            )}
+
             {isPassed && (
               <button
                 onClick={() => handleReviewGroup(selectedGroup)}

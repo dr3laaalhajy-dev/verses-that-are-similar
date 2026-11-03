@@ -90,6 +90,7 @@ async function getFullRoom(roomId: string) {
     const pProg = progress[String(p.id)] || {}
     return {
       ...p,
+      activeFrame: (p.activeFrame === 'seerah' || p.activeFrame === 'general') ? p.activeFrame : null,
       isOnline: pProg.isOnline !== false,
       lastSeen: pProg.lastSeen || 0,
       score: pProg.score || 0
@@ -478,9 +479,9 @@ function finalizeRoomScores(room: any, playersProgress: Record<string, any>) {
 
   const winnerId = ranked.length > 0 ? ranked[0].id : null
 
-  // 5. Award trophies to Top 3 positions: 1st (+3), 2nd (+2), 3rd (+1)
-  const TROPHY_REWARDS = [3, 2, 1];
-  for (let i = 0; i < Math.min(3, ranked.length); i++) {
+  // 5. Award trophies to Top 4 positions: 1st (+4), 2nd (+3), 3rd (+2), 4th (+1), 5th+ (0)
+  const TROPHY_REWARDS = [4, 3, 2, 1];
+  for (let i = 0; i < Math.min(4, ranked.length); i++) {
     const pIdStr = String(ranked[i].id);
     if (updatedProgress[pIdStr]) {
       updatedProgress[pIdStr].trophiesAwarded = TROPHY_REWARDS[i];
@@ -500,8 +501,9 @@ async function applyRoomTrophies(tx: any, room: any, progress: Record<string, an
     .filter(p => !isNaN(p.id) && p.id > 0)
     .sort((a, b) => b.score - a.score || a.finishTime - b.finishTime);
 
-  const rewards = [3, 2, 1];
-  for (let i = 0; i < Math.min(3, ranked.length); i++) {
+  // Exclusive group room cups distribution: 1st (4), 2nd (3), 3rd (2), 4th (1), 5th+ (0)
+  const rewards = [4, 3, 2, 1];
+  for (let i = 0; i < Math.min(4, ranked.length); i++) {
     const targetId = ranked[i].id;
     const cups = rewards[i];
     try {
@@ -517,15 +519,16 @@ async function applyRoomTrophies(tx: any, room: any, progress: Record<string, an
 
 function evaluateQuestionScores(
   playersProgress: Record<string, any>,
-  currentAnswers: Record<string, { playerId: number; name: string; isCorrect: boolean; timestamp: number }>
+  currentAnswers: Record<string, { playerId: number; name: string; isCorrect: boolean; timestamp: number }>,
+  firstCorrectUserId?: number | null
 ) {
   // 1. Filter only correct answers and sort by timestamp ascending (fastest first)
   const correctSubmissions = Object.values(currentAnswers)
-    .filter(ans => ans.isCorrect === true)
+    .filter(ans => ans && (ans as any).isCorrect === true && typeof (ans as any).playerId === 'number')
     .sort((a, b) => (Number(a.timestamp) || 0) - (Number(b.timestamp) || 0))
 
-  // 2. Top 4 fastest correct answers receive the speed bonus point (+1)!
-  const top4PlayerIds = new Set(correctSubmissions.slice(0, 4).map(s => s.playerId))
+  // The speed bonus is strictly awarded ONLY to the single first player who answered correctly
+  const effectiveFirstCorrectUserId = firstCorrectUserId ?? (correctSubmissions.length > 0 ? correctSubmissions[0].playerId : null)
 
   const updatedProgress: Record<string, any> = { ...playersProgress }
 
@@ -543,12 +546,13 @@ function evaluateQuestionScores(
     let earnedSpeedBonus = false
 
     if (ans && ans.isCorrect) {
-      roundPoints += 1 // 1 base point per correct answer (updated from 10)
+      roundPoints += 1 // 1 base point per correct answer
       pData.correctCount += 1
       pData.basePoints += 1
 
-      if (top4PlayerIds.has(numId)) {
-        roundPoints += 1 // Speed bonus point (+1) for top 4 correct
+      // Speed bonus: Awarded ONLY if this player was the first to answer correctly
+      if (effectiveFirstCorrectUserId !== null && numId === effectiveFirstCorrectUserId) {
+        roundPoints += 1 // Speed bonus point (+1)
         earnedSpeedBonus = true
         pData.speedBonusCount += 1
       }
@@ -592,7 +596,8 @@ async function advanceRoomToNextQuestionTx(tx: any, room: any, currentAnswers: R
     }
   }
 
-  const updatedProgress = evaluateQuestionScores(playersProgress, completeAnswers)
+  const firstCorrectId = (room.currentAnswers as any)?._firstCorrectUserId || (completeAnswers as any)?._firstCorrectUserId;
+  const updatedProgress = evaluateQuestionScores(playersProgress, completeAnswers, firstCorrectId)
 
   const nextIndex = (room.currentQuestionIndex || 0) + 1
   const isFinished = nextIndex >= room.questionCount
@@ -764,13 +769,10 @@ async function handleSubmitAnswer(req: VercelRequest, res: VercelResponse) {
             pData.correctCount = (pData.correctCount || 0) + 1
             pData.basePoints = (pData.correctCount || 0) * 1
 
-            const qCorrect = Object.values(currentAnswers[qKey])
-              .filter((a: any) => a.isCorrect === true)
-              .sort((a: any, b: any) => (Number(a.timestamp) || 0) - (Number(b.timestamp) || 0))
-
-            const isTop4 = qCorrect.slice(0, 4).some((a: any) => a.playerId === player.id)
-            if (isTop4) {
-              pData.speedBonusCount = (pData.speedBonusCount || 0) + 1
+            // Requirement 5: Track firstCorrectUserId per question on server
+            if (!currentAnswers[qKey]._firstCorrectUserId) {
+              currentAnswers[qKey]._firstCorrectUserId = player.id;
+              pData.speedBonusCount = (pData.speedBonusCount || 0) + 1;
             }
           } else {
             pData.basePoints = (pData.correctCount || 0) * 1
@@ -822,6 +824,11 @@ async function handleSubmitAnswer(req: VercelRequest, res: VercelResponse) {
             isCorrect: Boolean(isCorrect),
             timestamp: subTime,
             questionIndex: Number(questionIndex)
+          }
+
+          // Requirement 5: Atomically record firstCorrectUserId on the server
+          if (Boolean(isCorrect) && !currentAnswers._firstCorrectUserId) {
+            currentAnswers._firstCorrectUserId = player.id;
           }
         }
 

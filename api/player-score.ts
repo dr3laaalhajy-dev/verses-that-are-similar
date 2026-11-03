@@ -168,7 +168,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (seerahCompleted !== undefined) updateData.seerahCompleted = Boolean(seerahCompleted);
     if (generalCompleted !== undefined) updateData.generalCompleted = Boolean(generalCompleted);
     if (quranCompleted !== undefined) updateData.quranCompleted = Boolean(quranCompleted);
-    if (activeFrame !== undefined) updateData.activeFrame = activeFrame ? String(activeFrame) : null;
+    if (activeFrame !== undefined) updateData.activeFrame = (activeFrame && activeFrame !== 'none' && activeFrame !== '') ? String(activeFrame) : null;
     if (req.body.equippedNameColor !== undefined) updateData.equippedNameColor = req.body.equippedNameColor ? String(req.body.equippedNameColor) : null;
     if (req.body.ownedCosmetics !== undefined && Array.isArray(req.body.ownedCosmetics)) updateData.ownedCosmetics = req.body.ownedCosmetics;
     if (req.body.powerUps !== undefined && typeof req.body.powerUps === 'object') updateData.powerUps = req.body.powerUps;

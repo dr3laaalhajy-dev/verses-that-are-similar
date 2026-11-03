@@ -314,17 +314,18 @@ export const AppRouter: React.FC = () => {
             app.setShowCertificate(true);
           }}
           onSelectFrame={(frame) => {
-            app.setActiveFrame(frame);
-            if (frame) {
+            const cleanFrame = (frame === 'seerah' || frame === 'general') ? frame : null;
+            app.setActiveFrame(cleanFrame);
+            if (cleanFrame) {
               app.setIsNameDecorated(true);
               app.setShowProfileDecoration(true);
-              localStorage.setItem('quran_active_frame', frame);
+              localStorage.setItem('quran_active_frame', cleanFrame);
               localStorage.setItem('quran_name_decorated', 'true');
               localStorage.setItem('quran_show_decoration', 'true');
             } else {
               app.setIsNameDecorated(false);
               app.setShowProfileDecoration(false);
-              localStorage.setItem('quran_active_frame', 'none');
+              localStorage.removeItem('quran_active_frame');
               localStorage.removeItem('quran_name_decorated');
               localStorage.removeItem('quran_show_decoration');
             }
@@ -336,7 +337,7 @@ export const AppRouter: React.FC = () => {
                 body: JSON.stringify({
                   name: app.playerName,
                   username: app.playerUsername,
-                  activeFrame: frame || 'none'
+                  activeFrame: cleanFrame
                 })
               }).then(() => app.syncLeaderboard()).catch(err => console.error('Frame select sync failed:', err));
             }

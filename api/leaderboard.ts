@@ -51,7 +51,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           seerahCompleted: player.seerahCompleted,
           generalCompleted: player.generalCompleted,
           quranCompleted: player.quranCompleted,
-          activeFrame: player.activeFrame,
+          activeFrame: (player.activeFrame === 'seerah' || player.activeFrame === 'general') ? player.activeFrame : null,
           equippedNameColor: player.equippedNameColor
         })
       } else {
@@ -64,9 +64,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         existing.streak = existing.streakCount
         existing.seerahCompleted = existing.seerahCompleted || player.seerahCompleted
         existing.generalCompleted = existing.generalCompleted || player.generalCompleted
-        if (player.activeFrame) {
-          existing.activeFrame = player.activeFrame
-        }
+        existing.activeFrame = (player.activeFrame === 'seerah' || player.activeFrame === 'general') ? player.activeFrame : null;
         if (player.equippedNameColor) {
           existing.equippedNameColor = player.equippedNameColor
         }

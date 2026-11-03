@@ -5,7 +5,8 @@ import './WhoAmIGame.css';
 
 const PHASE_SECONDS = 20;
 const TOTAL_SECONDS = 40;
-const POINTS: Record<number, number> = { 1: 10, 2: 5 };
+// Unified Global Points System: 1 correct answer = 1 skill point
+const POINTS: Record<number, number> = { 1: 1, 2: 1 };
 
 export interface Player {
   id: string;
@@ -296,7 +297,7 @@ export default function WhoAmIGame({
   // نظام VAR: اعتماد الإجابة (للقائد فقط)
   const override = async (a: any) => {
     if (!isLeader) return;
-    const pts = POINTS[a.phase] || 5;
+    const pts = POINTS[a.phase] || 1;
     const { error } = await supabase
       .from('who_am_i_answers')
       .update({ is_correct: true, points: pts, overridden: true })

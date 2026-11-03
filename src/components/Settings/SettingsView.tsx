@@ -1113,7 +1113,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           {/* Certificates Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {allCertificatesMeta.map((certMeta) => {
-              const claimed = userCertificates.find((c) => c.category === certMeta.category);
+              // Requirement 2: Read from actual challenge completion state
+              const certificateFromStore = userCertificates.find((c) => c.category === certMeta.category);
+              const isChallengeActuallyCompleted = certMeta.category === 'seerah' ? isSeerahUnlocked : isGeneralUnlocked;
+              const claimed = certificateFromStore || (isChallengeActuallyCompleted ? { category: certMeta.category, date: 'مُعتمدة ومُنجزة', name: playerName } : null);
 
               return (
                 <div
