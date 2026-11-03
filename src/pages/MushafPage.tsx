@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect, useRef } from "react";
+import React, { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import { normalizeArabicText } from "../utils/arabic";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -95,7 +95,35 @@ export const MushafPage: React.FC<MushafPageProps> = ({
 }) => {
   const mushafContainerRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [areFsControlsVisible, setAreFsControlsVisible] = useState(false);
+  const fsControlsTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [isWirdModalOpen, setIsWirdModalOpen] = useState(false);
+
+  const resetFsControlsTimer = useCallback(() => {
+    setAreFsControlsVisible(true);
+    if (fsControlsTimerRef.current) {
+      clearTimeout(fsControlsTimerRef.current);
+    }
+    fsControlsTimerRef.current = setTimeout(() => {
+      setAreFsControlsVisible(false);
+    }, 3500);
+  }, []);
+
+  useEffect(() => {
+    if (isFullscreen) {
+      resetFsControlsTimer();
+    } else {
+      setAreFsControlsVisible(true);
+      if (fsControlsTimerRef.current) {
+        clearTimeout(fsControlsTimerRef.current);
+      }
+    }
+    return () => {
+      if (fsControlsTimerRef.current) {
+        clearTimeout(fsControlsTimerRef.current);
+      }
+    };
+  }, [isFullscreen, resetFsControlsTimer]);
   const [internalZoomScale, setInternalZoomScale] = useState<number>(1);
 
   // حساب معلومات السورة والجزء ديناميكياً بناءً على رقم الصفحة الحالية
@@ -616,128 +644,116 @@ export const MushafPage: React.FC<MushafPageProps> = ({
                              وضع القراءة النشط: يظهر فقط شريط الفلاتر والبحث والمصحف
                              ======================================================== */
                           <>
-                            {/* Header Title & Search Bar with Buttons Side-by-Side */}
-                            <div className={`flex flex-col gap-4 p-4 md:p-6 rounded-2xl md:rounded-3xl border shadow-sm transition-colors ${librarySettings.darkMode ? 'bg-slate-900/90 border-slate-800 text-slate-100' : 'bg-white/70 border-white/80 text-slate-900'
+                            {/* شريط الأدوات والبحث المدمج المنظم (بدون تكرار وبدون زر ملء شاشة مكرر) */}
+                            {!isFullscreen && (
+                              <div className={`p-2.5 sm:p-3 rounded-2xl border shadow-sm transition-colors ${
+                                librarySettings.darkMode ? 'bg-slate-900/90 border-slate-800 text-slate-100' : 'bg-white/85 border-slate-200 text-slate-900'
                               }`}>
-                              <div className="flex items-center justify-between gap-4">
-                                <h2 className={`text-xl md:text-3xl font-black flex items-center gap-2 md:gap-3 ${librarySettings.darkMode ? 'text-emerald-400' : 'text-brand-emerald'
-                                  }`}>
-                                  <BookOpen className="w-6 h-6 md:w-8 md:h-8 text-brand-gold" />
-                                  {`المصحف الشريف - الصفحة ${currentPage}`}
-                                </h2>
-
-                                <button
-                                  onClick={() => {
-                                    setIsPageModeActive(false);
-                                    setIsSurahMenuOpen(false);
-                                    setIsJuzMenuOpen(false);
-                                  }}
-                                  className={`px-3 py-1.5 rounded-xl border transition-all text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer ${librarySettings.darkMode ? 'bg-slate-800 border-slate-700 text-slate-200 hover:text-emerald-400' : 'bg-white border-slate-200 text-slate-600 hover:text-brand-emerald'
-                                    }`}
-                                  title="دليل ومزايا المصحف"
-                                >
-                                  <ArrowRight className="w-4 h-4 text-brand-emerald" />
-                                  <span>دليل المصحف</span>
-                                </button>
-                              </div>
-
-                              {/* Row 1: Search Form + Settings + Fullscreen */}
-                              <div className="flex flex-col sm:flex-row items-center gap-2 md:gap-3 w-full">
-                                <form
-                                  onSubmit={(e) => {
-                                    e.preventDefault();
-                                    if (searchQuery.trim()) {
-                                      setIsSearchSubmitted(true);
-                                    }
-                                  }}
-                                  className="flex items-center gap-2 w-full sm:flex-1 min-w-0"
-                                >
-                                  <div className="relative flex-1 min-w-0">
-                                    <Search className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 text-slate-400" />
-                                    <input
-                                      type="text"
-                                      placeholder="ابحث عن آية أو كلمة..."
-                                      value={searchQuery}
-                                      onChange={(e) => {
-                                        setSearchQuery(e.target.value);
-                                        if (e.target.value === '') setIsSearchSubmitted(false);
-                                      }}
-                                      className={`w-full pr-9 sm:pr-10 pl-3 sm:pl-4 py-2 sm:py-2.5 md:py-3.5 rounded-2xl border shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-emerald/20 transition-all font-bold text-xs sm:text-sm md:text-base ${librarySettings.darkMode ? 'bg-slate-800 border-slate-700 text-slate-100 placeholder-slate-400' : 'bg-white border-slate-200 text-slate-900'
+                                <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-2.5 w-full">
+                                  {/* نموذج البحث السريع */}
+                                  <form
+                                    onSubmit={(e) => {
+                                      e.preventDefault();
+                                      if (searchQuery.trim()) {
+                                        setIsSearchSubmitted(true);
+                                      }
+                                    }}
+                                    className="flex items-center gap-1.5 w-full sm:flex-1 min-w-0"
+                                  >
+                                    <div className="relative flex-1 min-w-0">
+                                      <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                      <input
+                                        type="text"
+                                        placeholder="ابحث عن آية أو كلمة..."
+                                        value={searchQuery}
+                                        onChange={(e) => {
+                                          setSearchQuery(e.target.value);
+                                          if (e.target.value === '') setIsSearchSubmitted(false);
+                                        }}
+                                        className={`w-full pr-8 pl-3 py-1.5 sm:py-2 rounded-xl border text-xs sm:text-sm font-bold shadow-2xs focus:outline-none focus:ring-1 focus:ring-brand-emerald/30 transition-all ${
+                                          librarySettings.darkMode
+                                            ? 'bg-slate-800 border-slate-700 text-slate-100 placeholder-slate-400'
+                                            : 'bg-slate-50 border-slate-200 text-slate-900'
                                         }`}
-                                    />
-                                  </div>
-                                  <button
-                                    type="submit"
-                                    className="px-3.5 sm:px-4 md:px-6 py-2 sm:py-2.5 md:py-3.5 bg-brand-emerald text-white rounded-2xl font-black hover:bg-brand-emerald/90 transition-all shadow-md active:scale-95 whitespace-nowrap text-xs sm:text-sm md:text-base shrink-0 cursor-pointer"
-                                  >
-                                    بحث
-                                  </button>
-                                </form>
+                                      />
+                                    </div>
+                                    <button
+                                      type="submit"
+                                      className="px-3 sm:px-4 py-1.5 sm:py-2 bg-brand-emerald hover:bg-brand-emerald/90 text-white rounded-xl font-black text-xs transition-all shadow-xs active:scale-95 shrink-0 cursor-pointer"
+                                    >
+                                      بحث
+                                    </button>
+                                  </form>
 
-                                <div className="flex items-center gap-2 w-full sm:w-auto justify-end shrink-0">
-                                  {/* Settings button */}
-                                  <button
-                                    onClick={() => setIsSettingsOpen(true)}
-                                    className={`flex-1 sm:flex-none px-3 sm:px-3.5 md:px-4 py-2 sm:py-2.5 md:py-3.5 rounded-2xl border transition-all shadow-sm flex items-center justify-center gap-1.5 font-bold text-xs md:text-sm whitespace-nowrap cursor-pointer ${librarySettings.darkMode ? 'bg-slate-800 border-slate-700 text-slate-200 hover:text-emerald-400' : 'bg-white border-slate-200 text-slate-600 hover:text-brand-emerald'
+                                  {/* أزرار السور والأجزاء والإعدادات والعودة للدليل */}
+                                  <div className="flex items-center gap-1.5 w-full sm:w-auto justify-end shrink-0">
+                                    <button
+                                      onClick={() => {
+                                        setIsSurahMenuOpen(!isSurahMenuOpen);
+                                        setIsJuzMenuOpen(false);
+                                      }}
+                                      className={`flex-1 sm:flex-none px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-2xs cursor-pointer ${
+                                        isSurahMenuOpen
+                                          ? 'bg-brand-emerald text-white border-brand-emerald'
+                                          : librarySettings.darkMode
+                                            ? 'bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700'
+                                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
                                       }`}
-                                    title="إعدادات المصحف"
-                                  >
-                                    <Settings className="w-4 h-4 text-brand-emerald" />
-                                    <span>الإعدادات</span>
-                                  </button>
+                                      title="تصفح بالسور (114 سورة)"
+                                    >
+                                      <BookOpen className="w-3.5 h-3.5 text-brand-gold" />
+                                      <span>السور</span>
+                                    </button>
 
-                                  {/* Fullscreen button */}
-                                  <button
-                                    type="button"
-                                    onClick={handleToggleFullscreen}
-                                    className={`flex-1 sm:flex-none px-3 sm:px-3.5 md:px-4 py-2 sm:py-2.5 md:py-3.5 rounded-2xl border transition-all shadow-sm flex items-center justify-center gap-1.5 font-bold text-xs md:text-sm whitespace-nowrap cursor-pointer ${
-                                      isFullscreen
-                                        ? 'bg-holyEmerald-600 border-holyEmerald-500 text-white'
-                                        : librarySettings.darkMode
-                                          ? 'bg-slate-800 border-slate-700 text-slate-200 hover:text-emerald-400'
-                                          : 'bg-white border-slate-200 text-slate-600 hover:text-brand-emerald'
-                                    }`}
-                                    title={isFullscreen ? 'الخروج من ملء الشاشة' : 'ملء الشاشة'}
-                                  >
-                                    {isFullscreen ? (
-                                      <Minimize2 className="w-4 h-4 text-regalGold-400" />
-                                    ) : (
-                                      <Maximize2 className="w-4 h-4 text-brand-gold" />
-                                    )}
-                                    <span>{isFullscreen ? 'إنهاء ملء الشاشة' : 'ملء الشاشة'}</span>
-                                  </button>
+                                    <button
+                                      onClick={() => {
+                                        setIsJuzMenuOpen(!isJuzMenuOpen);
+                                        setIsSurahMenuOpen(false);
+                                      }}
+                                      className={`flex-1 sm:flex-none px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-2xs cursor-pointer ${
+                                        isJuzMenuOpen
+                                          ? 'bg-brand-emerald text-white border-brand-emerald'
+                                          : librarySettings.darkMode
+                                            ? 'bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700'
+                                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                                      }`}
+                                      title="تصفح بالأجزاء (30 جزء)"
+                                    >
+                                      <ListFilter className="w-3.5 h-3.5 text-brand-gold" />
+                                      <span>الأجزاء</span>
+                                    </button>
+
+                                    <button
+                                      onClick={() => setIsSettingsOpen(true)}
+                                      className={`p-1.5 sm:p-2 rounded-xl border text-xs font-bold transition-all shadow-2xs cursor-pointer ${
+                                        librarySettings.darkMode
+                                          ? 'bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700'
+                                          : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                                      }`}
+                                      title="إعدادات المصحف"
+                                    >
+                                      <Settings className="w-4 h-4 text-brand-emerald" />
+                                    </button>
+
+                                    <button
+                                      onClick={() => {
+                                        setIsPageModeActive(false);
+                                        setIsSurahMenuOpen(false);
+                                        setIsJuzMenuOpen(false);
+                                      }}
+                                      className={`p-1.5 sm:p-2 rounded-xl border text-xs font-bold transition-all shadow-2xs cursor-pointer ${
+                                        librarySettings.darkMode
+                                          ? 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
+                                          : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                                      }`}
+                                      title="دليل ومزايا المصحف"
+                                    >
+                                      <ArrowRight className="w-4 h-4 text-brand-emerald" />
+                                    </button>
+                                  </div>
                                 </div>
                               </div>
-
-                              {/* Row 2: Surah & Juz Buttons directly Underneath Search & Settings */}
-                              <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-2.5 w-full pt-1">
-                                <button
-                                  onClick={() => {
-                                    setIsSurahMenuOpen(!isSurahMenuOpen);
-                                    setIsJuzMenuOpen(false);
-                                  }}
-                                  className={`w-full sm:flex-1 py-2.5 md:py-3 rounded-2xl border transition-all font-bold text-xs md:text-sm flex items-center justify-center gap-2 shadow-xs whitespace-nowrap cursor-pointer ${isSurahMenuOpen ? 'bg-brand-emerald text-white border-brand-emerald' : (librarySettings.darkMode ? 'bg-slate-800 text-slate-200 border-slate-700 hover:bg-emerald-600 hover:text-white' : 'bg-white text-slate-700 border-slate-200 hover:bg-brand-emerald/5 hover:text-brand-emerald')
-                                    }`}
-                                  title="تصفح بالسور"
-                                >
-                                  <BookOpen className="w-4 h-4 text-brand-gold" />
-                                  <span>تصفح بالسور (114 سورة)</span>
-                                </button>
-
-                                <button
-                                  onClick={() => {
-                                    setIsJuzMenuOpen(!isJuzMenuOpen);
-                                    setIsSurahMenuOpen(false);
-                                  }}
-                                  className={`w-full sm:flex-1 py-2.5 md:py-3 rounded-2xl border transition-all font-bold text-xs md:text-sm flex items-center justify-center gap-2 shadow-xs whitespace-nowrap cursor-pointer ${isJuzMenuOpen ? 'bg-brand-emerald text-white border-brand-emerald' : (librarySettings.darkMode ? 'bg-slate-800 text-slate-200 border-slate-700 hover:bg-emerald-600 hover:text-white' : 'bg-white text-slate-700 border-slate-200 hover:bg-brand-emerald/5 hover:text-brand-emerald')
-                                    }`}
-                                  title="تصفح بالأجزاء"
-                                >
-                                  <ListFilter className="w-4 h-4 text-brand-gold" />
-                                  <span>تصفح بالأجزاء (30 جزء)</span>
-                                </button>
-                              </div>
-                            </div>
+                            )}
 
                             {/* Surah Dropdown Popup Menu */}
                             <AnimatePresence>
@@ -823,78 +839,90 @@ export const MushafPage: React.FC<MushafPageProps> = ({
                             <div
                               ref={mushafContainerRef}
                               id="mushaf-reader-container"
+                              onMouseMove={isFullscreen ? resetFsControlsTimer : undefined}
+                              onTouchStart={isFullscreen ? resetFsControlsTimer : undefined}
                               className={`w-full flex flex-col items-center transition-all ${
                                 isFullscreen
-                                  ? 'fixed inset-0 z-[100] w-screen h-screen bg-[#070E0E] p-2 sm:p-4 overflow-y-auto justify-between'
+                                  ? 'fixed inset-0 z-[100] w-screen h-screen bg-[#070E0E] p-0 overflow-hidden justify-center'
                                   : 'gap-3 sm:gap-4'
                               }`}
                             >
-                              {/* شريط معلومات الصفحة العلوي (Surah & Juz Header) */}
-                              <div className={`w-full max-w-3xl mx-auto flex items-center justify-between px-3 sm:px-4 py-2 sm:py-2.5 rounded-2xl backdrop-blur-xl border shadow-lg transition-all ${
-                                librarySettings.darkMode
-                                  ? 'bg-obsidian-900/90 border-regalGold-500/25 text-slate-100 shadow-obsidian-950/60'
-                                  : 'bg-white/95 border-emerald-500/30 text-slate-800 shadow-slate-200/60'
-                              }`}>
-                                {/* اسم السورة واسم ورقم الجزء */}
-                                <div className="flex items-center gap-2 sm:gap-2.5">
-                                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-holyEmerald-600/20 border border-holyEmerald-500/30 flex items-center justify-center text-holyEmerald-400 shrink-0 shadow-xs">
-                                    <BookOpen className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-regalGold-400" />
-                                  </div>
-                                  <div className="flex items-center gap-1.5 sm:gap-2">
-                                    <span className="font-quran text-sm sm:text-base md:text-lg font-bold text-regalGold-400 whitespace-nowrap">
-                                      سورة {pageInfo.surahName}
-                                    </span>
-                                    <span className="text-xs text-regalGold-500/60">•</span>
-                                    <span className="text-xs sm:text-sm font-bold text-slate-300 dark:text-slate-200 whitespace-nowrap">
-                                      الجزء {pageInfo.juzName}
-                                    </span>
-                                  </div>
-                                </div>
-
-                                {/* رقم الصفحة وزر ملء الشاشة */}
-                                <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-                                  <div className={`px-2.5 py-1 rounded-xl border text-[11px] sm:text-xs font-mono font-bold flex items-center gap-1 ${
-                                    librarySettings.darkMode
-                                      ? 'bg-obsidian-950/80 border-regalGold-500/25 text-regalGold-300'
-                                      : 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                                  }`}>
-                                    <span className="text-[10px] text-regalGold-500">صفحة</span>
-                                    <span>{toArabicIndic(pageInfo.pageNum)}</span>
+                              {/* شريط معلومات الصفحة العلوي المدمج (Surah & Juz Header) - مخفي في ملء الشاشة */}
+                              {!isFullscreen && (
+                                <div className={`w-full max-w-3xl mx-auto flex items-center justify-between px-3 sm:px-4 py-2 sm:py-2.5 rounded-2xl backdrop-blur-xl border shadow-lg transition-all ${
+                                  librarySettings.darkMode
+                                    ? 'bg-obsidian-900/90 border-regalGold-500/25 text-slate-100 shadow-obsidian-950/60'
+                                    : 'bg-white/95 border-emerald-500/30 text-slate-800 shadow-slate-200/60'
+                                }`}>
+                                  {/* اسم السورة واسم ورقم الجزء */}
+                                  <div className="flex items-center gap-2 sm:gap-2.5">
+                                    <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-holyEmerald-600/20 border border-holyEmerald-500/30 flex items-center justify-center text-holyEmerald-400 shrink-0 shadow-xs">
+                                      <BookOpen className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-regalGold-400" />
+                                    </div>
+                                    <div className="flex items-center gap-1.5 sm:gap-2">
+                                      <span className="font-quran text-sm sm:text-base md:text-lg font-bold text-regalGold-400 whitespace-nowrap">
+                                        سورة {pageInfo.surahName}
+                                      </span>
+                                      <span className="text-xs text-regalGold-500/60">•</span>
+                                      <span className="text-xs sm:text-sm font-bold text-slate-300 dark:text-slate-200 whitespace-nowrap">
+                                        الجزء {pageInfo.juzName}
+                                      </span>
+                                    </div>
                                   </div>
 
-                                  <button
-                                    type="button"
-                                    onClick={handleToggleFullscreen}
-                                    className={`p-1.5 sm:p-2 rounded-xl border transition-all cursor-pointer active:scale-95 ${
+                                  {/* رقم الصفحة وزر ملء الشاشة الموحد الوحيد */}
+                                  <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                                    <div className={`px-2.5 py-1 rounded-xl border text-[11px] sm:text-xs font-mono font-bold flex items-center gap-1 ${
                                       librarySettings.darkMode
-                                        ? 'bg-obsidian-950/80 border-regalGold-500/25 text-regalGold-400 hover:bg-holyEmerald-600 hover:text-white'
-                                        : 'bg-slate-100 border-slate-200 text-slate-700 hover:bg-emerald-600 hover:text-white'
-                                    }`}
-                                    title={isFullscreen ? 'الخروج من وضع ملء الشاشة' : 'ملء الشاشة'}
-                                  >
-                                    {isFullscreen ? (
-                                      <Minimize2 className="w-4 h-4 text-regalGold-400" />
-                                    ) : (
-                                      <Maximize2 className="w-4 h-4 text-regalGold-400" />
-                                    )}
-                                  </button>
-                                </div>
-                              </div>
-                              <div
-                                className="w-full p-0 sm:p-1 md:p-2 border-0 md:border-2 md:border-brand-gold/30 md:rounded-[2.5rem] md:shadow-2xl transition-all relative group overflow-visible md:overflow-hidden"
-                                style={{
-                                  backgroundColor: librarySettings.darkMode ? '#0B132B' : '#fcfaf5',
-                                  color: librarySettings.darkMode ? '#e2e8f0' : '#1e293b',
-                                  backgroundImage: librarySettings.darkMode
-                                    ? 'radial-gradient(circle at center, rgba(16, 185, 129, 0.08) 0%, rgba(11, 19, 43, 0.95) 75%)'
-                                    : 'radial-gradient(circle at center, rgba(217, 119, 6, 0.05) 0%, transparent 75%)',
-                                }}
-                              >
-                                {/* Decorative Inner Gold Border Line for Desktop */}
-                                <div className="hidden md:block absolute inset-2 rounded-[2rem] border border-brand-gold/20 pointer-events-none" />
+                                        ? 'bg-obsidian-950/80 border-regalGold-500/25 text-regalGold-300'
+                                        : 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                                    }`}>
+                                      <span className="text-[10px] text-regalGold-500">صفحة</span>
+                                      <span>{toArabicIndic(pageInfo.pageNum)}</span>
+                                    </div>
 
-                                {/* Full-Width Mobile & Desktop Image with 2D Pan, Pinch-Zoom & Page Flip */}
-                                <div className="w-full flex flex-col items-center p-0 relative z-10 min-h-[50vh] sm:min-h-[70vh]">
+                                    <button
+                                      type="button"
+                                      onClick={handleToggleFullscreen}
+                                      className={`p-1.5 sm:p-2 rounded-xl border transition-all cursor-pointer active:scale-95 ${
+                                        librarySettings.darkMode
+                                          ? 'bg-obsidian-950/80 border-regalGold-500/25 text-regalGold-400 hover:bg-holyEmerald-600 hover:text-white'
+                                          : 'bg-slate-100 border-slate-200 text-slate-700 hover:bg-emerald-600 hover:text-white'
+                                      }`}
+                                      title="ملء الشاشة"
+                                    >
+                                      <Maximize2 className="w-4 h-4 text-regalGold-400" />
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* إطار صفحة المصحف */}
+                              <div
+                                className={`w-full transition-all relative ${
+                                  isFullscreen
+                                    ? 'h-full flex items-center justify-center p-0 m-0 border-0 rounded-none bg-transparent'
+                                    : 'p-0 sm:p-1 md:p-2 border-0 md:border-2 md:border-brand-gold/30 md:rounded-[2.5rem] md:shadow-2xl overflow-visible md:overflow-hidden'
+                                }`}
+                                style={
+                                  isFullscreen
+                                    ? { backgroundColor: librarySettings.darkMode ? '#070E0E' : '#fcfaf5' }
+                                    : {
+                                        backgroundColor: librarySettings.darkMode ? '#0B132B' : '#fcfaf5',
+                                        color: librarySettings.darkMode ? '#e2e8f0' : '#1e293b',
+                                        backgroundImage: librarySettings.darkMode
+                                          ? 'radial-gradient(circle at center, rgba(16, 185, 129, 0.08) 0%, rgba(11, 19, 43, 0.95) 75%)'
+                                          : 'radial-gradient(circle at center, rgba(217, 119, 6, 0.05) 0%, transparent 75%)',
+                                      }
+                                }
+                              >
+                                {!isFullscreen && (
+                                  <div className="hidden md:block absolute inset-2 rounded-[2rem] border border-brand-gold/20 pointer-events-none" />
+                                )}
+
+                                <div className={`w-full flex flex-col items-center p-0 relative z-10 ${
+                                  isFullscreen ? 'h-full justify-center' : 'min-h-[50vh] sm:min-h-[70vh]'
+                                }`}>
                                   <QuranZoomViewer
                                     pageNumber={currentPage}
                                     darkMode={librarySettings.darkMode}
@@ -908,7 +936,13 @@ export const MushafPage: React.FC<MushafPageProps> = ({
                                         handlePrevPage();
                                       }
                                     }}
-                                    onTap={() => setSelectedAyah(null)}
+                                    onTap={() => {
+                                      if (selectedAyah) {
+                                        setSelectedAyah(null);
+                                      } else if (isFullscreen) {
+                                        setAreFsControlsVisible((prev) => !prev);
+                                      }
+                                    }}
                                     pageTurnDirection={pageTurnDirection || undefined}
                                     selectedAyah={selectedAyah}
                                     onSelectAyah={(s, a) => setSelectedAyah({ surah: s, ayah: a })}
@@ -916,71 +950,134 @@ export const MushafPage: React.FC<MushafPageProps> = ({
                                 </div>
                               </div>
 
-                              {/* Controls Area Completely OUTSIDE & BELOW Image Frame Container */}
-                              <div className={`flex flex-col items-center gap-2 py-2 px-2 sm:py-2.5 sm:px-3 w-full max-w-2xl backdrop-blur-xl border rounded-2xl shadow-md mt-2 transition-colors ${librarySettings.darkMode
-                                  ? 'bg-slate-900/95 border-slate-800 text-slate-100'
-                                  : 'bg-white/85 border-slate-200/90 text-slate-800'
+                              {/* شريط التحكم السفلي المدمج المنظم (3 أقسام: يمين - وسط - يسار) */}
+                              <div
+                                onMouseEnter={() => {
+                                  if (fsControlsTimerRef.current) {
+                                    clearTimeout(fsControlsTimerRef.current);
+                                  }
+                                }}
+                                onMouseLeave={() => {
+                                  if (isFullscreen) {
+                                    resetFsControlsTimer();
+                                  }
+                                }}
+                                className={`transition-all duration-300 ${
+                                  isFullscreen
+                                    ? `fixed bottom-4 sm:bottom-6 left-1/2 -translate-x-1/2 z-50 w-[95%] max-w-2xl px-3 py-2 sm:px-4 sm:py-2.5 rounded-2xl backdrop-blur-2xl border shadow-2xl ${
+                                        areFsControlsVisible
+                                          ? 'opacity-95 translate-y-0 pointer-events-auto'
+                                          : 'opacity-0 translate-y-4 pointer-events-none'
+                                      } ${
+                                        librarySettings.darkMode
+                                          ? 'bg-obsidian-950/90 border-regalGold-500/30 text-slate-100 shadow-obsidian-950/80'
+                                          : 'bg-white/95 border-emerald-500/30 text-slate-800 shadow-slate-300/60'
+                                      }`
+                                    : `relative mt-2 w-full max-w-3xl mx-auto px-3 py-2 sm:px-4 sm:py-2.5 rounded-2xl backdrop-blur-xl border shadow-md ${
+                                        librarySettings.darkMode
+                                          ? 'bg-slate-900/95 border-slate-800 text-slate-100'
+                                          : 'bg-white/95 border-slate-200/90 text-slate-800'
+                                      }`
+                                } flex items-center justify-between gap-2 sm:gap-4`}
+                              >
+                                {/* جهة اليمين: زر الورد اليومي + زر العودة للفهرس */}
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  <button
+                                    onClick={() => {
+                                      setIsPageModeActive(false);
+                                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                                    }}
+                                    className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-bold transition-all active:scale-95 cursor-pointer ${
+                                      librarySettings.darkMode
+                                        ? 'bg-slate-800/80 hover:bg-slate-700 border-slate-700 text-slate-200'
+                                        : 'bg-slate-100 hover:bg-slate-200 border-slate-200 text-slate-700'
+                                    }`}
+                                    title="العودة لدليل وفهرس المصحف"
+                                  >
+                                    <RotateCcw className="w-3.5 h-3.5 text-brand-gold" />
+                                    <span className="hidden sm:inline">الفهرس</span>
+                                  </button>
+
+                                  <button
+                                    onClick={() => setIsWirdModalOpen(true)}
+                                    className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl border text-xs font-bold transition-all active:scale-95 cursor-pointer ${
+                                      librarySettings.darkMode
+                                        ? 'bg-amber-950/40 hover:bg-amber-900/50 border-amber-800/80 text-amber-300'
+                                        : 'bg-amber-50 hover:bg-amber-100 border-amber-200 text-amber-800'
+                                    }`}
+                                    title="تخصيص الورد اليومي"
+                                  >
+                                    <Clock className="w-3.5 h-3.5 text-amber-500" />
+                                    <span className="hidden sm:inline">الورد</span>
+                                  </button>
+                                </div>
+
+                                {/* المنتصف: أزرار التقليب ومؤشر رقم الصفحة */}
+                                <div className={`flex items-center gap-1 p-1 rounded-xl border shadow-2xs shrink-0 ${
+                                  librarySettings.darkMode ? 'bg-slate-800/90 border-slate-700/80' : 'bg-slate-100/90 border-slate-200/80'
                                 }`}>
-                                {/* Single Row: Page Navigation + Zoom Controls Side-by-Side */}
-                                <div className="flex flex-wrap sm:flex-nowrap items-center justify-center gap-1.5 sm:gap-3 w-full">
-                                  {/* Page Navigation Group */}
-                                  <div className={`flex items-center gap-1 p-1 rounded-xl border shadow-xs shrink-0 ${librarySettings.darkMode ? 'bg-slate-800/90 border-slate-700/80' : 'bg-slate-100/90 border-slate-200/80'
+                                  <button
+                                    onClick={handlePrevPage}
+                                    disabled={currentPage <= 1}
+                                    className={`p-1.5 sm:p-2 rounded-lg text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-2xs shrink-0 active:scale-95 ${
+                                      librarySettings.darkMode ? 'bg-slate-700 hover:bg-emerald-600' : 'bg-emerald-700 hover:bg-emerald-800'
+                                    }`}
+                                    title="الصفحة السابقة"
+                                  >
+                                    <ChevronRight className="w-4 h-4" />
+                                  </button>
+
+                                  <div className="flex items-center gap-1 px-1 sm:px-2">
+                                    <input
+                                      type="text"
+                                      inputMode="numeric"
+                                      value={currentPage}
+                                      onChange={(e) => {
+                                        const val = e.target.value.replace(/[^0-9]/g, '');
+                                        if (val === '') return;
+                                        const num = parseInt(val, 10);
+                                        if (!isNaN(num) && num >= 1 && num <= 604) {
+                                          setCurrentPage(num);
+                                          setSelectedAyah(null);
+                                        }
+                                      }}
+                                      className={`w-10 sm:w-12 border rounded text-center text-xs sm:text-sm font-black focus:outline-none focus:ring-1 focus:ring-brand-emerald/30 shadow-2xs py-0.5 ${
+                                        librarySettings.darkMode ? 'bg-slate-900 border-slate-700 text-emerald-400' : 'bg-white border-slate-300 text-brand-emerald'
+                                      }`}
+                                    />
+                                    <span className={`text-[10px] sm:text-xs font-bold shrink-0 ${
+                                      librarySettings.darkMode ? 'text-slate-400' : 'text-slate-500'
                                     }`}>
-                                    <button
-                                      onClick={handlePrevPage}
-                                      disabled={currentPage <= 1}
-                                      className={`p-1.5 sm:p-2 rounded-lg text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-2xs shrink-0 active:scale-95 ${librarySettings.darkMode ? 'bg-slate-700 hover:bg-emerald-600' : 'bg-emerald-700 hover:bg-emerald-800'
-                                        }`}
-                                      title="الصفحة السابقة"
-                                    >
-                                      <ChevronRight className="w-4 h-4" />
-                                    </button>
-
-                                    <div className="flex items-center gap-1 px-1">
-                                      <input
-                                        type="text"
-                                        inputMode="numeric"
-                                        value={currentPage}
-                                        onChange={(e) => {
-                                          const val = e.target.value.replace(/[^0-9]/g, '');
-                                          if (val === '') return;
-                                          const num = parseInt(val, 10);
-                                          if (!isNaN(num) && num >= 1 && num <= 604) {
-                                            setCurrentPage(num);
-                                            setSelectedAyah(null);
-                                          }
-                                        }}
-                                        className={`w-10 sm:w-12 border rounded text-center text-xs sm:text-sm font-black focus:outline-none focus:ring-1 focus:ring-brand-emerald/30 shadow-2xs py-0.5 ${librarySettings.darkMode ? 'bg-slate-900 border-slate-700 text-emerald-400' : 'bg-white border-slate-300 text-brand-emerald'
-                                          }`}
-                                      />
-                                      <span className={`text-[10px] sm:text-xs font-bold shrink-0 ${librarySettings.darkMode ? 'text-slate-400' : 'text-slate-500'}`}>من 604</span>
-                                    </div>
-
-                                    <button
-                                      onClick={handleNextPage}
-                                      disabled={currentPage >= 604}
-                                      className={`p-1.5 sm:p-2 rounded-lg text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-2xs shrink-0 active:scale-95 ${librarySettings.darkMode ? 'bg-slate-700 hover:bg-emerald-600' : 'bg-emerald-700 hover:bg-emerald-800'
-                                        }`}
-                                      title="الصفحة التالية"
-                                    >
-                                      <ChevronLeft className="w-4 h-4" />
-                                    </button>
+                                      من 604
+                                    </span>
                                   </div>
 
-                                  {/* Separator Divider */}
-                                  <div className={`w-px h-6 shrink-0 ${librarySettings.darkMode ? 'bg-slate-700' : 'bg-slate-300/80'}`} />
+                                  <button
+                                    onClick={handleNextPage}
+                                    disabled={currentPage >= 604}
+                                    className={`p-1.5 sm:p-2 rounded-lg text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-2xs shrink-0 active:scale-95 ${
+                                      librarySettings.darkMode ? 'bg-slate-700 hover:bg-emerald-600' : 'bg-emerald-700 hover:bg-emerald-800'
+                                    }`}
+                                    title="الصفحة التالية"
+                                  >
+                                    <ChevronLeft className="w-4 h-4" />
+                                  </button>
+                                </div>
 
-                                  {/* Zoom Controls Group */}
-                                  <div className={`flex items-center gap-1 p-1 rounded-xl border shadow-xs shrink-0 ${librarySettings.darkMode ? 'bg-slate-800/90 border-slate-700/80' : 'bg-slate-100/90 border-slate-200/80'
-                                    }`}>
+                                {/* جهة اليسار: أزرار التكبير/التصغير ونسبة التكبير (+ زر الخروج من ملء الشاشة) */}
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  <div className={`flex items-center gap-1 p-1 rounded-xl border shadow-2xs shrink-0 ${
+                                    librarySettings.darkMode ? 'bg-slate-800/90 border-slate-700/80' : 'bg-slate-100/90 border-slate-200/80'
+                                  }`}>
                                     <button
                                       onClick={() => updateZoomScale(prev => {
                                         const current = (typeof prev === 'number' && Number.isFinite(prev) && prev > 0) ? prev : 1;
                                         return Math.min(2.5, Number((current + 0.1).toFixed(1)));
                                       })}
                                       disabled={safeZoomScale >= 2.5}
-                                      className={`p-1.5 sm:p-2 rounded-lg text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-2xs shrink-0 active:scale-95 ${librarySettings.darkMode ? 'bg-slate-700 hover:bg-emerald-600' : 'bg-emerald-700 hover:bg-emerald-800'
-                                        }`}
+                                      className={`p-1.5 sm:p-2 rounded-lg text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-2xs shrink-0 active:scale-95 ${
+                                        librarySettings.darkMode ? 'bg-slate-700 hover:bg-emerald-600' : 'bg-emerald-700 hover:bg-emerald-800'
+                                      }`}
                                       title="تكبير الصفحة"
                                     >
                                       <ZoomIn className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
@@ -988,10 +1085,11 @@ export const MushafPage: React.FC<MushafPageProps> = ({
 
                                     <button
                                       onClick={() => updateZoomScale(1)}
-                                      className={`px-2 py-1 rounded border text-[10px] sm:text-xs font-black transition-colors shadow-2xs shrink-0 ${safeZoomScale === 1
+                                      className={`px-1.5 sm:px-2 py-1 rounded border text-[10px] sm:text-xs font-black transition-colors shadow-2xs shrink-0 ${
+                                        safeZoomScale === 1
                                           ? (librarySettings.darkMode ? 'bg-emerald-900/60 border-emerald-500 text-emerald-400' : 'bg-emerald-50 border-emerald-300 text-brand-emerald font-black')
                                           : (librarySettings.darkMode ? 'bg-slate-900 border-slate-700 text-slate-200 hover:text-emerald-400' : 'bg-white border-slate-300 text-slate-800 hover:text-brand-emerald')
-                                        }`}
+                                      }`}
                                       title="إعادة تعيين 100%"
                                     >
                                       {Math.round(safeZoomScale * 100)}%
@@ -1003,67 +1101,31 @@ export const MushafPage: React.FC<MushafPageProps> = ({
                                         return Math.max(0.6, Number((current - 0.1).toFixed(1)));
                                       })}
                                       disabled={safeZoomScale <= 0.6}
-                                      className={`p-1.5 sm:p-2 rounded-lg text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-2xs shrink-0 active:scale-95 ${librarySettings.darkMode ? 'bg-slate-700 hover:bg-emerald-600' : 'bg-emerald-700 hover:bg-emerald-800'
-                                        }`}
+                                      className={`p-1.5 sm:p-2 rounded-lg text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all shadow-2xs shrink-0 active:scale-95 ${
+                                        librarySettings.darkMode ? 'bg-slate-700 hover:bg-emerald-600' : 'bg-emerald-700 hover:bg-emerald-800'
+                                      }`}
                                       title="تصغير الصفحة"
                                     >
                                       <ZoomOut className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                                     </button>
                                   </div>
 
-                                  {/* Fullscreen Button in Controls */}
-                                  <button
-                                    type="button"
-                                    onClick={handleToggleFullscreen}
-                                    className={`p-1.5 sm:p-2 rounded-lg text-white transition-all shadow-2xs shrink-0 active:scale-95 cursor-pointer ${
-                                      isFullscreen
-                                        ? 'bg-holyEmerald-600 hover:bg-holyEmerald-700'
-                                        : librarySettings.darkMode
-                                          ? 'bg-slate-700 hover:bg-emerald-600'
-                                          : 'bg-emerald-700 hover:bg-emerald-800'
-                                    }`}
-                                    title={isFullscreen ? 'الخروج من ملء الشاشة' : 'ملء الشاشة'}
-                                  >
-                                    {isFullscreen ? (
-                                      <Minimize2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-regalGold-400" />
-                                    ) : (
-                                      <Maximize2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-brand-gold" />
-                                    )}
-                                  </button>
-                                </div>
-
-                                {/* Row 2: Index Return + Wird Buttons */}
-                                <div className="flex flex-wrap items-center justify-center gap-2">
-                                  <button
-                                    onClick={() => {
-                                      setIsPageModeActive(false);
-                                      window.scrollTo({ top: 0, behavior: 'smooth' });
-                                    }}
-                                    className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-white transition-all font-bold text-xs shadow-sm border active:scale-95 cursor-pointer ${librarySettings.darkMode ? 'bg-slate-800 hover:bg-emerald-600 border-slate-700' : 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 border-emerald-500/60'
-                                      }`}
-                                    title="العودة لدليل وفهرس المصحف"
-                                  >
-                                    <RotateCcw className="w-3.5 h-3.5 text-brand-gold" />
-                                    <span>العودة لدليل وفهرس المصحف</span>
-                                  </button>
-
-                                  <button
-                                    onClick={() => setIsWirdModalOpen(true)}
-                                    className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl transition-all font-black text-xs shadow-sm border active:scale-95 cursor-pointer ${
-                                      librarySettings.darkMode
-                                        ? 'bg-amber-950/40 text-amber-300 border-amber-800 hover:bg-amber-900/60'
-                                        : 'bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100'
-                                    }`}
-                                    title="تخصيص الورد اليومي والتذكير"
-                                  >
-                                    <Clock className="w-3.5 h-3.5 text-amber-600" />
-                                    <span>الورد اليومي 📖</span>
-                                  </button>
+                                  {/* زر الخروج من ملء الشاشة في وضع ملء الشاشة */}
+                                  {isFullscreen && (
+                                    <button
+                                      type="button"
+                                      onClick={handleToggleFullscreen}
+                                      className="p-2 sm:p-2.5 rounded-xl border bg-holyEmerald-600 hover:bg-holyEmerald-700 border-holyEmerald-500 text-white transition-all shadow-md shrink-0 active:scale-95 cursor-pointer"
+                                      title="الخروج من وضع ملء الشاشة"
+                                    >
+                                      <Minimize2 className="w-4 h-4 text-regalGold-400" />
+                                    </button>
+                                  )}
                                 </div>
                               </div>
 
-                              {/* Generous Bottom Spacer */}
-                              <div className="h-28 sm:h-36 w-full shrink-0" />
+                              {/* فاصل سفلي في الوضع العادي فقط */}
+                              {!isFullscreen && <div className="h-24 sm:h-32 w-full shrink-0" />}
                             </div>
                           </>
                         )}
