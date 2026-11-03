@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Gamepad2, Play, Trophy, Star, CheckCircle2, Moon, Flame, Zap, ArrowLeft,
-  Volume2, VolumeX, BookOpen, Share2, Check, Sparkles, ChevronLeft
+  Volume2, VolumeX, BookOpen, Share2, Check, Sparkles, ChevronLeft, Copy
 } from 'lucide-react';
 import { View } from '../types/challenges';
 import Dashboard from '../components/Dashboard';
@@ -19,7 +19,7 @@ export interface HomePageProps {
   isElite: boolean;
   isNameDecorated: boolean;
   currentStyle: any;
-  motivationalQuote: string | null;
+  motivationalQuote: any;
   streak: number;
   cups: number;
   totalPoints: number;
@@ -96,7 +96,8 @@ export const HomePage: React.FC<HomePageProps> = ({
   // Audio Playback for Ayah of the Day
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isAyahPlaying, setIsAyahPlaying] = useState(false);
-  const [isAyahCopied, setIsAyahCopied] = useState(false);
+  const [isTextCopied, setIsTextCopied] = useState(false);
+  const [isShareCopied, setIsShareCopied] = useState(false);
 
   // Quick Tasbih Dhikr Index State
   const [dhikrIndex, setDhikrIndex] = useState<number>(() => {
@@ -134,8 +135,29 @@ export const HomePage: React.FC<HomePageProps> = ({
     } catch {}
   }, [tasbihCount, dhikrIndex]);
 
+  // Extract content object details (text, audioUrl, type, etc.)
+  const currentContent = useMemo(() => {
+    if (!motivationalQuote) return null;
+    if (typeof motivationalQuote === 'object') {
+      return {
+        text: (motivationalQuote as any).text || (motivationalQuote as any).quote || '',
+        audioUrl: (motivationalQuote as any).audioUrl || (motivationalQuote as any).audio || undefined,
+        type: (motivationalQuote as any).type || ((motivationalQuote as any).audioUrl ? 'ayah' : 'hadith'),
+        surahNumber: (motivationalQuote as any).surahNumber,
+        ayahNumber: (motivationalQuote as any).ayahNumber,
+        surahName: (motivationalQuote as any).surahName,
+      };
+    }
+    return {
+      text: motivationalQuote,
+      audioUrl: undefined,
+      type: 'hadith',
+    };
+  }, [motivationalQuote]);
+
   const defaultAyahText = "وَنُنَزِّلُ مِنَ الْقُرْآنِ مَا هُوَ شِفَاءٌ وَرَحْمَةٌ لِّلْمُؤْمِنِينَ";
-  const activeAyahText = motivationalQuote || defaultAyahText;
+  const activeDisplayText = currentContent?.text || motivationalQuote || defaultAyahText;
+  const hasAudio = Boolean(currentContent?.audioUrl);
 
   // Cleanup audio on unmount
   useEffect(() => {
@@ -155,10 +177,11 @@ export const HomePage: React.FC<HomePageProps> = ({
       }
       setIsAyahPlaying(false);
     } else {
+      const audioUrl = currentContent?.audioUrl;
+      if (!audioUrl) return;
       try {
-        if (!audioRef.current) {
-          // Recitation of Al-Isra Ayah 82 (Mishary Alafasy)
-          audioRef.current = new Audio('https://everyayah.com/data/Alafasy_128kbps/017082.mp3');
+        if (!audioRef.current || audioRef.current.src !== audioUrl) {
+          audioRef.current = new Audio(audioUrl);
           audioRef.current.onended = () => setIsAyahPlaying(false);
           audioRef.current.onerror = () => setIsAyahPlaying(false);
         }
@@ -173,29 +196,62 @@ export const HomePage: React.FC<HomePageProps> = ({
     }
   };
 
-  const handleOpenAyahTafsir = () => {
-    if (app.handleOpenTafsir) {
-      app.handleOpenTafsir(17, 82, activeAyahText);
+  const handleCopyText = async () => {
+    const textToCopy = activeDisplayText;
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(textToCopy);
+      } else {
+        const textArea = document.createElement('textarea');
+        textArea.value = textToCopy;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+      }
+      setIsTextCopied(true);
+      setTimeout(() => setIsTextCopied(false), 2000);
+    } catch (err) {
+      console.warn('Failed to copy text:', err);
     }
   };
 
-  const handleShareCurrentAyah = async () => {
-    const textToShare = `﴿ ${activeAyahText} ﴾\nسُورَةُ الإِسْرَاءِ • الآيَةُ ٨٢\nتطبيق متين لعلوم القرآن الكريم`;
+  const handleOpenAyahTafsir = () => {
+    if (app.handleOpenTafsir) {
+      app.handleOpenTafsir(currentContent?.surahNumber || 17, currentContent?.ayahNumber || 82, activeDisplayText);
+    }
+  };
+
+  const handleShare = async () => {
+    const shareData = {
+      title: 'تطبيق متين',
+      text: 'حمّل تطبيق متين لعلوم القرآن الكريم وابدأ تحدياتك اليومية!',
+      url: 'https://your-app-url.com'
+    };
+
     if (typeof navigator !== 'undefined' && navigator.share) {
       try {
-        await navigator.share({
-          title: 'آية اليوم وتدبر',
-          text: textToShare
-        });
+        await navigator.share(shareData);
         return;
       } catch {
         // Fallback to clipboard
       }
     }
+
     try {
-      await navigator.clipboard.writeText(textToShare);
-      setIsAyahCopied(true);
-      setTimeout(() => setIsAyahCopied(false), 2000);
+      const fallbackText = `${shareData.title}\n${shareData.text}\n${shareData.url}`;
+      if (typeof navigator !== 'undefined' && navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(fallbackText);
+      } else {
+        const textArea = document.createElement('textarea');
+        textArea.value = fallbackText;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+      }
+      setIsShareCopied(true);
+      setTimeout(() => setIsShareCopied(false), 2000);
     } catch {
       // ignore
     }
@@ -372,51 +428,74 @@ export const HomePage: React.FC<HomePageProps> = ({
               className="font-uthmani text-lg md:text-2xl lg:text-3xl text-emerald-950 dark:text-transparent dark:bg-clip-text dark:bg-gradient-to-r dark:from-regalGold-200 dark:via-regalGold-400 dark:to-regalGold-200 font-bold leading-relaxed"
               dir="rtl"
             >
-              "{motivationalQuote}"
+              "{activeDisplayText}"
             </h3>
 
-            {/* New Feature 1: Action Buttons under Ayah (Play, Tafsir, Share) */}
+            {/* Action Buttons under Quote (Play if audioUrl, or Copy Text, Tafsir, Share App) */}
             <div className="flex items-center justify-center gap-2 pt-2.5 mt-1 flex-wrap">
-              <button
-                type="button"
-                onClick={handleTogglePlayAyah}
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl border transition-all text-xs font-bold shadow-xs active:scale-95 cursor-pointer ${
-                  isAyahPlaying
-                    ? 'bg-holyEmerald-500/30 border-holyEmerald-400 text-holyEmerald-200'
-                    : 'bg-white dark:bg-obsidian-850 hover:bg-slate-50 dark:hover:bg-obsidian-800 border-slate-200 dark:border-regalGold-500/25 text-slate-700 dark:text-regalGold-200'
-                }`}
-              >
-                {isAyahPlaying ? (
-                  <VolumeX className="w-3.5 h-3.5 text-holyEmerald-300" />
-                ) : (
-                  <Volume2 className="w-3.5 h-3.5 text-emerald-600 dark:text-holyEmerald-400" />
-                )}
-                <span>{isAyahPlaying ? 'إيقاف التلاوة' : 'استماع للآية'}</span>
-                <span className="flex items-center gap-0.5 h-3 mr-0.5">
-                  <span className={`w-0.5 h-1.5 bg-holyEmerald-500 dark:bg-holyEmerald-400 rounded-full ${isAyahPlaying ? 'animate-pulse' : 'opacity-40'}`} />
-                  <span className={`w-0.5 h-3 bg-holyEmerald-500 dark:bg-holyEmerald-400 rounded-full ${isAyahPlaying ? 'animate-pulse' : 'opacity-40'}`} />
-                  <span className={`w-0.5 h-2 bg-holyEmerald-500 dark:bg-holyEmerald-400 rounded-full ${isAyahPlaying ? 'animate-pulse' : 'opacity-40'}`} />
-                </span>
-              </button>
+              {hasAudio ? (
+                <button
+                  type="button"
+                  onClick={handleTogglePlayAyah}
+                  className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl border transition-all text-xs font-bold shadow-xs active:scale-95 cursor-pointer ${
+                    isAyahPlaying
+                      ? 'bg-holyEmerald-500/30 border-holyEmerald-400 text-holyEmerald-200'
+                      : 'bg-white dark:bg-obsidian-850 hover:bg-slate-50 dark:hover:bg-obsidian-800 border-slate-200 dark:border-regalGold-500/25 text-slate-700 dark:text-regalGold-200'
+                  }`}
+                  title={isAyahPlaying ? 'إيقاف الاستماع' : 'استماع'}
+                >
+                  {isAyahPlaying ? (
+                    <VolumeX className="w-3.5 h-3.5 text-holyEmerald-300" />
+                  ) : (
+                    <Volume2 className="w-3.5 h-3.5 text-emerald-600 dark:text-holyEmerald-400" />
+                  )}
+                  <span>{isAyahPlaying ? 'إيقاف' : 'استماع'}</span>
+                  <span className="flex items-center gap-0.5 h-3 mr-0.5">
+                    <span className={`w-0.5 h-1.5 bg-holyEmerald-500 dark:bg-holyEmerald-400 rounded-full ${isAyahPlaying ? 'animate-pulse' : 'opacity-40'}`} />
+                    <span className={`w-0.5 h-3 bg-holyEmerald-500 dark:bg-holyEmerald-400 rounded-full ${isAyahPlaying ? 'animate-pulse' : 'opacity-40'}`} />
+                    <span className={`w-0.5 h-2 bg-holyEmerald-500 dark:bg-holyEmerald-400 rounded-full ${isAyahPlaying ? 'animate-pulse' : 'opacity-40'}`} />
+                  </span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleCopyText}
+                  className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl border transition-all text-xs font-bold shadow-xs active:scale-95 cursor-pointer ${
+                    isTextCopied
+                      ? 'bg-holyEmerald-500/25 border-holyEmerald-400 text-holyEmerald-300'
+                      : 'bg-white dark:bg-obsidian-850 hover:bg-slate-50 dark:hover:bg-obsidian-800 border-slate-200 dark:border-regalGold-500/25 text-slate-700 dark:text-regalGold-200'
+                  }`}
+                  title="نسخ النص"
+                >
+                  {isTextCopied ? (
+                    <Check className="w-3.5 h-3.5 text-holyEmerald-400" />
+                  ) : (
+                    <Copy className="w-3.5 h-3.5 text-emerald-600 dark:text-regalGold-400" />
+                  )}
+                  <span>{isTextCopied ? 'تم النسخ' : 'نسخ النص'}</span>
+                </button>
+              )}
+
+              {(currentContent?.type === 'ayah' || currentContent?.surahNumber || hasAudio) && (
+                <button
+                  type="button"
+                  onClick={handleOpenAyahTafsir}
+                  className="px-3 py-1.5 rounded-xl bg-white dark:bg-obsidian-850 hover:bg-slate-50 dark:hover:bg-obsidian-800 border border-slate-200 dark:border-regalGold-500/25 text-slate-700 dark:text-regalGold-200 active:scale-95 transition-colors flex items-center gap-1.5 text-xs font-bold cursor-pointer shadow-xs"
+                  title="عرض التفسير الميسر للآية الكريمة"
+                >
+                  <BookOpen className="w-3.5 h-3.5 text-emerald-600 dark:text-regalGold-400" />
+                  <span>التفسير</span>
+                </button>
+              )}
 
               <button
                 type="button"
-                onClick={handleOpenAyahTafsir}
-                className="px-3 py-1.5 rounded-xl bg-white dark:bg-obsidian-850 hover:bg-slate-50 dark:hover:bg-obsidian-800 border border-slate-200 dark:border-regalGold-500/25 text-slate-700 dark:text-regalGold-200 active:scale-95 transition-colors flex items-center gap-1.5 text-xs font-bold cursor-pointer shadow-xs"
-                title="عرض التفسير الميسر للآية الكريمة"
-              >
-                <BookOpen className="w-3.5 h-3.5 text-emerald-600 dark:text-regalGold-400" />
-                <span>التفسير</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleShareCurrentAyah}
+                onClick={handleShare}
                 className="w-8 h-8 rounded-xl bg-white dark:bg-obsidian-850 hover:bg-slate-50 dark:hover:bg-obsidian-800 border border-slate-200 dark:border-regalGold-500/25 text-slate-700 dark:text-regalGold-200 flex items-center justify-center active:scale-95 transition-colors cursor-pointer shadow-xs"
-                aria-label="مشاركة"
-                title="مشاركة الآية الكريمة"
+                aria-label="مشاركة التطبيق"
+                title="مشاركة تطبيق متين"
               >
-                {isAyahCopied ? (
+                {isShareCopied ? (
                   <Check className="w-3.5 h-3.5 text-holyEmerald-400" />
                 ) : (
                   <Share2 className="w-3.5 h-3.5" />
