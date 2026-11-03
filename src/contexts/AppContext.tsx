@@ -19,7 +19,7 @@ import { GoogleGenAI } from '@google/genai';
 import { supabase } from '../services/supabase';
 import { getRandomIslamicRoomQuestions, getTargetedIslamicQuestions, getTotalIslamicAvailableCount, getIslamicTopicAvailableCount } from '../utils/islamicChallengeHelper';
 import { islamicCategoriesList } from '../data/islamicCategories';
-import { calculateStreakInfo, StreakInfo } from '../utils/streakManager';
+import { calculateStreakInfo, StreakInfo, getTodayLocalDateStr } from '../utils/streakManager';
 import { LeaderboardUser, compareLeaderboardUsers, calculateHiddenRankingScore } from '../utils/leaderboardRanking';
 import { generateCompletionChallenges } from '../services/challengeGenerator';
 import { defaultChallenges } from '../data/defaultChallenges';
@@ -1660,11 +1660,62 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => clearInterval(interval);
   }, []);
 
+  const incrementStreak = useCallback(() => {
+    const today = getTodayLocalDateStr();
+    const nowTime = Date.now();
+    const savedLastPlayed = localStorage.getItem('quran_last_played') || lastPlayedDate || '';
+    const savedLastPlayedTimeStr = localStorage.getItem('quran_last_played_time');
+    const currentStreakVal = parseInt(localStorage.getItem('quran_streak') || String(streak || 0), 10);
+
+    const currentInfo = calculateStreakInfo(currentStreakVal, savedLastPlayed, savedLastPlayedTimeStr);
+
+    let newStreak = currentInfo.streak;
+
+    if (currentInfo.status === 'zero' || newStreak === 0) {
+      newStreak = 1;
+    } else if (currentInfo.status === 'warning') {
+      newStreak = currentInfo.streak + 1;
+    } else if (currentInfo.status === 'active') {
+      if (savedLastPlayed !== today) {
+        newStreak = currentInfo.streak + 1;
+      }
+    } else {
+      newStreak = Math.max(1, currentStreakVal + 1);
+    }
+
+    setStreak(newStreak);
+    setLastPlayedDate(today);
+    setDailyCompleted(true);
+    localStorage.setItem('quran_streak', newStreak.toString());
+    localStorage.setItem('quran_last_played', today);
+    localStorage.setItem('quran_last_played_time', nowTime.toString());
+    localStorage.setItem('quran_daily_completed', today);
+
+    const updatedInfo = calculateStreakInfo(newStreak, today, nowTime.toString());
+    setStreakInfo(updatedInfo);
+
+    if (playerUsername || playerName) {
+      fetch('/api/player-score', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: playerUsername,
+          name: playerName,
+          streak: newStreak,
+          streakCount: newStreak,
+          totalPoints: totalPoints
+        })
+      }).catch(err => console.error('Failed to sync streak to backend:', err));
+    }
+
+    return newStreak;
+  }, [streak, lastPlayedDate, playerUsername, playerName, totalPoints]);
+
   const updateStatsAfterWin = useCallback(() => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = getTodayLocalDateStr();
     const nowTime = Date.now();
     const savedLastPlayedTimeStr = localStorage.getItem('quran_last_played_time');
-    const savedStreak = parseInt(localStorage.getItem('quran_streak') || streak.toString());
+    const savedStreak = parseInt(localStorage.getItem('quran_streak') || streak.toString(), 10);
 
     const currentInfo = calculateStreakInfo(savedStreak, lastPlayedDate, savedLastPlayedTimeStr);
 
@@ -1739,14 +1790,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [streak, lastPlayedDate, totalPoints, score]);
 
   useEffect(() => {
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = getTodayLocalDateStr();
     const savedDaily = localStorage.getItem('quran_daily_completed');
     if (savedDaily === todayStr) {
       setDailyCompleted(true);
     } else {
       setDailyCompleted(false);
     }
-  }, []);
+  }, [view]);
 
   // Check for 1v1 room ID in URL on mount
   useEffect(() => {
@@ -3593,7 +3644,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
 
         if (challengeMode === 'daily') {
-          setSkillsFeedback(false);
+          // Requirement 2: Trigger central streak increment immediately upon solving daily question
+          incrementStreak();
+          setSkillsFeedback(true);
+          setTimeout(() => {
+            setSkillsFeedback(false);
+            setChallengeMode('normal');
+            setView('home');
+          }, 2000);
           return;
         }
       } else {
@@ -4150,6 +4208,95 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setIsSyncing(false);
     }
   }, [playerName, playerUsername, cups, totalPoints, streak, completedChallengeIds, activeFrame, userCertificates]);
+
+  const handlePlayerLogout = useCallback(() => {
+    try {
+      setPlayerName(null);
+      setPlayerUsername(null);
+      setActiveFrame(null);
+      setIsNameDecorated(false);
+      setShowProfileDecoration(false);
+      setUserCertificates([]);
+
+      localStorage.removeItem('quran_player_name');
+      localStorage.removeItem('quran_player_username');
+      localStorage.removeItem('quran_device_id');
+      localStorage.removeItem('quran_username_changed_at');
+      localStorage.removeItem('quran_active_frame');
+      localStorage.removeItem('quran_name_decorated');
+      localStorage.removeItem('quran_show_decoration');
+      localStorage.removeItem('quran_user_certificates');
+
+      setView('home');
+      syncLeaderboard();
+    } catch (err) {
+      console.error('Error during player logout:', err);
+      setView('home');
+    }
+  }, [syncLeaderboard]);
+
+  const handleDeletePlayerAccount = useCallback(async (password: string) => {
+    const identifier = (playerUsername || playerName || '').trim();
+    if (!identifier) {
+      throw new Error('تعذر تحديد الحساب الحالي.');
+    }
+
+    const res = await fetch('/api/player-register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'delete-account',
+        username: identifier,
+        password: password.trim()
+      })
+    });
+
+    let data: any = {};
+    try {
+      data = await res.json();
+    } catch {
+      data = {};
+    }
+
+    if (!res.ok) {
+      throw new Error(data.error || data.message || 'فشل حذف الحساب. يرجى التحقق من كلمة المرور.');
+    }
+
+    // Complete cleanup from state and storage
+    setPlayerName(null);
+    setPlayerUsername(null);
+    setActiveFrame(null);
+    setIsNameDecorated(false);
+    setShowProfileDecoration(false);
+    setUserCertificates([]);
+    setTotalPoints(0);
+    setCups(0);
+    setStreak(0);
+    setStreakInfo(null);
+    setDailyCompleted(false);
+
+    localStorage.removeItem('quran_player_name');
+    localStorage.removeItem('quran_player_username');
+    localStorage.removeItem('quran_device_id');
+    localStorage.removeItem('quran_username_changed_at');
+    localStorage.removeItem('quran_active_frame');
+    localStorage.removeItem('quran_name_decorated');
+    localStorage.removeItem('quran_show_decoration');
+    localStorage.removeItem('quran_user_certificates');
+    localStorage.removeItem('quran_total_points');
+    localStorage.removeItem('quran_cups');
+    localStorage.removeItem('quran_streak');
+    localStorage.removeItem('quran_last_played');
+    localStorage.removeItem('quran_last_played_time');
+    localStorage.removeItem('quran_daily_completed');
+    localStorage.removeItem('quran_daily_mystery_gift');
+    localStorage.removeItem('quran_quiz_progress_seerah');
+    localStorage.removeItem('quran_quiz_progress_general');
+
+    setView('home');
+    syncLeaderboard();
+    return data;
+  }, [playerName, playerUsername, syncLeaderboard]);
 
   useEffect(() => {
     localStorage.setItem('quran_total_points', totalPoints.toString());
@@ -4763,6 +4910,7 @@ ${versesList}
     dailyChallengeOffset, setDailyChallengeOffset,
     handleStartDaily,
     handleStartDailyChallenge,
+    incrementStreak,
     incompleteChallenge, setIncompleteChallenge,
     completedChallengeIds, setCompletedChallengeIds,
     allTargetVerses, setAllTargetVerses,
@@ -4939,6 +5087,9 @@ ${versesList}
     hasAgreedToPrivacy, setHasAgreedToPrivacy,
     handlePlayerAuth,
     handlePlayerAuthSubmit: handlePlayerAuth,
+    handlePlayerLogout,
+    signOut: handlePlayerLogout,
+    handleDeletePlayerAccount,
 
     // Library & Mushaf
     activeListTab, setActiveListTab,

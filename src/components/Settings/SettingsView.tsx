@@ -1,5 +1,8 @@
+"use client";
+
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useApp } from '../../contexts/AppContext';
 import {
   ChevronRight,
   ChevronLeft,
@@ -70,6 +73,30 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   canAccessAdmin,
   onOpenAdminPanel
 }) => {
+  const app = useApp();
+
+  const handleLogoutClick = () => {
+    try {
+      if (typeof onLogout === 'function') {
+        onLogout();
+      } else if (app?.signOut) {
+        app.signOut();
+      } else if (app?.handlePlayerLogout) {
+        app.handlePlayerLogout();
+      } else {
+        localStorage.removeItem('quran_player_name');
+        localStorage.removeItem('quran_player_username');
+        localStorage.removeItem('quran_device_id');
+        if (typeof onBackToHome === 'function') onBackToHome();
+        else window.location.href = '/';
+      }
+    } catch (err) {
+      console.error('Error during logout:', err);
+      if (typeof onBackToHome === 'function') onBackToHome();
+      else window.location.href = '/';
+    }
+  };
+
   // 1. Profile State
   const [nameInput, setNameInput] = useState(playerName || '');
   const [usernameInput, setUsernameInput] = useState(playerUsername ? playerUsername.replace(/^@+/, '') : '');
@@ -291,7 +318,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     e.preventDefault();
     setDeleteAccountError(null);
 
-    const identifier = (playerUsername || playerName || '').trim();
+    const identifier = (playerUsername || playerName || app?.playerUsername || app?.playerName || '').trim();
     if (!identifier) {
       setDeleteAccountError('تعذر تحديد الحساب الحالي.');
       return;
@@ -304,31 +331,57 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
     setIsDeletingAccount(true);
     try {
-      const res = await fetch('/api/player-register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'delete-account',
-          username: identifier,
-          password: deletePasswordInput.trim()
-        })
-      });
+      if (app?.handleDeletePlayerAccount) {
+        await app.handleDeletePlayerAccount(deletePasswordInput.trim());
+      } else {
+        const res = await fetch('/api/player-register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'delete-account',
+            username: identifier,
+            password: deletePasswordInput.trim()
+          })
+        });
 
-      const data = await res.json();
-      if (!res.ok) {
-        setDeleteAccountError(data.error || 'فشل حذف الحساب. يرجى التحقق من كلمة المرور.');
-        setIsDeletingAccount(false);
-        return;
+        const data = await res.json();
+        if (!res.ok) {
+          setDeleteAccountError(data.error || data.message || 'فشل حذف الحساب. يرجى التحقق من كلمة المرور.');
+          setIsDeletingAccount(false);
+          return;
+        }
+
+        localStorage.removeItem('quran_player_name');
+        localStorage.removeItem('quran_player_username');
+        localStorage.removeItem('quran_device_id');
+        localStorage.removeItem('quran_username_changed_at');
+        localStorage.removeItem('quran_active_frame');
+        localStorage.removeItem('quran_name_decorated');
+        localStorage.removeItem('quran_show_decoration');
+        localStorage.removeItem('quran_user_certificates');
+        localStorage.removeItem('quran_total_points');
+        localStorage.removeItem('quran_cups');
+        localStorage.removeItem('quran_streak');
+        localStorage.removeItem('quran_last_played');
+        localStorage.removeItem('quran_last_played_time');
+        localStorage.removeItem('quran_daily_completed');
+        localStorage.removeItem('quran_daily_mystery_gift');
       }
 
       setShowDeleteAccountModal(false);
-      localStorage.removeItem('quran_player_name');
-      localStorage.removeItem('quran_player_username');
-      localStorage.removeItem('quran_device_id');
-      localStorage.removeItem('quran_username_changed_at');
-      onLogout();
-    } catch {
-      setDeleteAccountError('حدث خطأ في الاتصال بالخادم. يرجى التحقق من اتصالك بالإنترنت.');
+
+      if (typeof onLogout === 'function') {
+        onLogout();
+      } else if (app?.signOut) {
+        app.signOut();
+      } else if (typeof onBackToHome === 'function') {
+        onBackToHome();
+      } else {
+        window.location.href = '/';
+      }
+    } catch (err: any) {
+      console.error('Delete account error:', err);
+      setDeleteAccountError(err.message || 'حدث خطأ في الاتصال بالخادم. يرجى التحقق من اتصالك بالإنترنت.');
     } finally {
       setIsDeletingAccount(false);
     }
@@ -1299,7 +1352,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
             <button
               type="button"
-              onClick={onLogout}
+              onClick={handleLogoutClick}
               className="flex-1 sm:flex-none flex items-center gap-2 px-5 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-black text-xs sm:text-sm transition-all active:scale-95 justify-center cursor-pointer border border-slate-200"
             >
               <LogOut className="w-4 h-4 text-slate-500" />
@@ -1390,31 +1443,31 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               initial={{ scale: 0.9, opacity: 0, y: 15 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.9, opacity: 0, y: 15 }}
-              className="bg-white rounded-3xl p-6 sm:p-7 max-w-md w-full shadow-2xl border border-red-200 text-center relative overflow-hidden"
+              className="bg-white dark:bg-[#151518] rounded-3xl p-6 sm:p-7 max-w-md w-full shadow-2xl border border-red-200 dark:border-red-900/40 text-center relative overflow-hidden"
             >
-              <div className="w-14 h-14 bg-red-50 rounded-2xl flex items-center justify-center mx-auto mb-4 text-red-600 border border-red-200">
+              <div className="w-14 h-14 bg-red-50 dark:bg-red-950/40 rounded-2xl flex items-center justify-center mx-auto mb-4 text-red-600 border border-red-200 dark:border-red-900/50">
                 <Trash2 className="w-7 h-7" />
               </div>
 
               <h3 className="text-lg sm:text-xl font-black text-red-600 mb-2">
-                حذف الحساب والبيانات نهائياً
+                هل أنت متأكد من حذف حسابك نهائياً؟
               </h3>
 
-              <div className="p-4 bg-red-50/70 border border-red-200/80 rounded-2xl mb-4 text-right">
-                <p className="text-xs sm:text-sm font-bold text-red-950 leading-relaxed">
-                  تحذير: سيتم حذف حسابك <span className="font-mono text-red-700" dir="ltr">@{playerUsername || playerName}</span> وكافة النقاط والكؤوس ومراحل التحديات وسجلاتك نهائياً من قاعدة البيانات ولا يمكن استرجاعها مطلقاً.
+              <div className="p-4 bg-red-50/70 dark:bg-red-950/30 border border-red-200/80 dark:border-red-900/40 rounded-2xl mb-4 text-right">
+                <p className="text-xs sm:text-sm font-bold text-red-950 dark:text-red-200 leading-relaxed">
+                  تحذير: سيتم حذف حسابك <span className="font-mono text-red-700 dark:text-red-400 font-black" dir="ltr">@{playerUsername || playerName}</span> وكافة النقاط والكؤوس ومراحل التحديات وسجلاتك نهائياً من قاعدة البيانات ولا يمكن استرجاعها مطلقاً.
                 </p>
               </div>
 
               {deleteAccountError && (
-                <div className="mb-4 p-3 bg-red-100 text-red-700 text-xs font-bold rounded-xl border border-red-200 text-right">
+                <div className="mb-4 p-3 bg-red-100 dark:bg-red-950/50 text-red-700 dark:text-red-300 text-xs font-bold rounded-xl border border-red-200 dark:border-red-800/40 text-right">
                   {deleteAccountError}
                 </div>
               )}
 
               <form onSubmit={handleDeleteAccount} className="space-y-4 text-right">
                 <div>
-                  <label className="block text-xs font-black text-slate-700 mb-1.5">
+                  <label className="block text-xs font-black text-slate-700 dark:text-gray-200 mb-1.5">
                     أدخل كلمة المرور لتأكيد الحذف:
                   </label>
                   <div className="relative">
@@ -1424,12 +1477,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       onChange={(e) => setDeletePasswordInput(e.target.value)}
                       placeholder="كلمة مرور حسابك"
                       required
-                      className="w-full px-4 py-3 pl-11 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 font-bold text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
+                      className="w-full px-4 py-3 pl-11 rounded-xl bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-700 text-slate-800 dark:text-gray-100 font-bold text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-red-400"
                     />
                     <button
                       type="button"
                       onClick={() => setShowDeletePass(!showDeletePass)}
-                      className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-gray-200 cursor-pointer"
                     >
                       {showDeletePass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
@@ -1448,7 +1501,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     type="button"
                     onClick={() => setShowDeleteAccountModal(false)}
                     disabled={isDeletingAccount}
-                    className="py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs sm:text-sm transition-all cursor-pointer"
+                    className="py-3 px-4 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-slate-700 dark:text-gray-200 rounded-xl font-bold text-xs sm:text-sm transition-all cursor-pointer"
                   >
                     إلغاء وتراجع
                   </button>
