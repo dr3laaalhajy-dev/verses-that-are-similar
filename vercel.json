@@ -6,7 +6,7 @@
     },
     {
       "path": "/api/notifications/cron-wird",
-      "schedule": "0 * * * *"
+      "schedule": "0 0 * * *"
     },
     {
       "path": "/api/cron/adhkar?type=morning",
