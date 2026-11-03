@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useRef, useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Download, X, Award, CheckCircle2, User, Share2, Info, Sparkles, Calendar, Edit3, ShieldCheck } from 'lucide-react';
@@ -143,14 +145,52 @@ const CertificateGenerator: React.FC<CertificateGeneratorProps> = ({ onClose, on
   };
 
   const downloadImage = () => {
-    if (!canvasRef.current) return;
+    if (!canvasRef.current) {
+      console.error('Download certificate failed: canvasRef is null or element not mounted in DOM');
+      return;
+    }
     setIsDownloading(true);
     try {
-      const link = document.createElement('a');
+      const canvas = canvasRef.current;
       const cleanName = (userName.trim() || 'البطل').replace(/\s+/g, '_');
-      link.download = `وسام_${category === 'seerah' ? 'السيرة_النبوية' : 'الثقافة_الإسلامية'}_${cleanName}.jpg`;
-      link.href = canvasRef.current.toDataURL('image/jpeg', 0.96);
-      link.click();
+      const fileName = `وسام_${category === 'seerah' ? 'السيرة_النبوية' : 'الثقافة_الإسلامية'}_${cleanName}.jpg`;
+
+      if (canvas.toBlob) {
+        canvas.toBlob((blob) => {
+          try {
+            if (!blob) {
+              const dataUrl = canvas.toDataURL('image/jpeg', 0.96);
+              const link = document.createElement('a');
+              link.download = fileName;
+              link.href = dataUrl;
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+              return;
+            }
+            const blobUrl = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.download = fileName;
+            link.href = blobUrl;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 2500);
+          } catch (blobErr) {
+            console.error('Error handling certificate blob:', blobErr);
+          }
+        }, 'image/jpeg', 0.96);
+      } else {
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.96);
+        const link = document.createElement('a');
+        link.download = fileName;
+        link.href = dataUrl;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+    } catch (err) {
+      console.error('Error downloading certificate:', err);
     } finally {
       setTimeout(() => setIsDownloading(false), 1200);
     }

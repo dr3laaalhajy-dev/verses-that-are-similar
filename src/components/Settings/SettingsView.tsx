@@ -1220,7 +1220,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
                         <button
                           type="button"
-                          onClick={() => onOpenCertificate(certMeta.category)}
+                          onClick={() => {
+                            try {
+                              if (typeof onOpenCertificate === 'function') {
+                                onOpenCertificate(certMeta.category);
+                              } else if (app?.setSelectedCategory && app?.setShowCertificate) {
+                                app.setSelectedCategory(certMeta.category);
+                                app.setShowCertificate(true);
+                              }
+                            } catch (err) {
+                              console.error('Error opening certificate:', err);
+                            }
+                          }}
                           className="w-full flex items-center justify-center gap-1.5 py-2.5 px-3 bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-700 hover:to-yellow-700 active:scale-95 text-white rounded-xl font-bold text-xs shadow-sm shadow-amber-600/20 transition-all cursor-pointer"
                         >
                           <Eye className="w-3.5 h-3.5" />
