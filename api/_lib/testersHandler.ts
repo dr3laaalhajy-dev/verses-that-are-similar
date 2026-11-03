@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { prisma } from './_lib/prisma.js';
-import { handleCors } from './_lib/cors.js';
+import { prisma } from './prisma.js';
+import { handleCors } from './cors.js';
 
 const INTERNAL_TEST_URL = 'https://play.google.com/apps/testing/com.mateen.game';
 

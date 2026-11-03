@@ -40,7 +40,6 @@ async function runRefund() {
       points: true,
       streak: true,
       ownedCosmetics: true,
-      equippedTitle: true,
       equippedNameColor: true,
     },
   });
@@ -75,7 +74,7 @@ async function runRefund() {
       }
     }
 
-    const needsRefund = ownedList.length > 0 || player.equippedTitle !== null || player.equippedNameColor !== null;
+    const needsRefund = ownedList.length > 0 || player.equippedNameColor !== null;
 
     if (needsRefund) {
       refundedPlayersCount++;
@@ -86,7 +85,7 @@ async function runRefund() {
       console.log(`  Items owned: [${ownedList.join(', ')}]`);
       console.log(`  Points: ${player.points} -> ${newPoints} (+${refundPoints})`);
       console.log(`  Streak: ${player.streak} -> ${newStreak} (+${refundStreak})`);
-      console.log(`  Clearing equippedTitle and equippedNameColor`);
+      console.log(`  Clearing equippedNameColor`);
 
       await prisma.player.update({
         where: { id: player.id },
@@ -94,7 +93,6 @@ async function runRefund() {
           points: newPoints,
           streak: newStreak,
           ownedCosmetics: [],
-          equippedTitle: null,
           equippedNameColor: null,
         },
       });
@@ -112,3 +110,4 @@ runRefund()
   .finally(async () => {
     await prisma.$disconnect();
   });
+
