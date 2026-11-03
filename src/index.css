@@ -15,7 +15,7 @@
   --color-brand-sand: #fdfbf7;
 
   /* Luxury Obsidian Palette (Eye-Friendly Off-Black) */
-  --color-obsidian-950: #121619;
+  --color-obsidian-950: #151518;
   --color-obsidian-900: #181D21;
   --color-obsidian-850: #1E2428;
   --color-obsidian-800: #242B30;
@@ -232,24 +232,25 @@
   background-repeat: repeat;
 }
 
-/* Dark Mode Arabesque Overlay - Muted Gold (%238B7547) on Off-Black (#121619) */
+/* Dark Mode Arabesque Overlay - Elegant Gold (#D4AF37) Pattern on Off-Black Charcoal (#151518) */
 .dark-arabesque-overlay,
 .dark .bg-islamic-pattern,
 .lib-dark .bg-islamic-pattern,
 .dark .arabesque-overlay,
 .lib-dark .arabesque-overlay {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'%3E%3Cg fill='%238B7547' fill-opacity='0.035' stroke='%238B7547' stroke-width='0.75' stroke-opacity='0.04'%3E%3Cpath d='M40 0L40 80M0 40L80 40M0 0L80 80M0 80L80 0'/%3E%3Cpolygon points='40,16 64,40 40,64 16,40'/%3E%3Cpolygon points='40,8 72,40 40,72 8,40'/%3E%3Crect x='28' y='28' width='24' height='24' transform='rotate(45 40 40)'/%3E%3C/g%3E%3C/svg%3E");
+  background-color: #151518;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'%3E%3Cg fill='%23D4AF37' fill-opacity='0.18' stroke='%23D4AF37' stroke-width='0.85' stroke-opacity='0.22'%3E%3Cpath d='M40 0L40 80M0 40L80 40M0 0L80 80M0 80L80 0'/%3E%3Cpolygon points='40,16 64,40 40,64 16,40'/%3E%3Cpolygon points='40,8 72,40 40,72 8,40'/%3E%3Crect x='28' y='28' width='24' height='24' transform='rotate(45 40 40)'/%3E%3C/g%3E%3C/svg%3E");
   background-repeat: repeat;
 }
 
 /* Girih Geometric Patterns */
 .bg-girih-pattern {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'%3E%3Cg fill='%238B7547' fill-opacity='0.035' stroke='%238B7547' stroke-width='0.75' stroke-opacity='0.04'%3E%3Cpath d='M40 0L40 80M0 40L80 40M0 0L80 80M0 80L80 0'/%3E%3Cpolygon points='40,16 64,40 40,64 16,40'/%3E%3Cpolygon points='40,8 72,40 40,72 8,40'/%3E%3Crect x='28' y='28' width='24' height='24' transform='rotate(45 40 40)'/%3E%3C/g%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'%3E%3Cg fill='%23D4AF37' fill-opacity='0.18' stroke='%23D4AF37' stroke-width='0.85' stroke-opacity='0.22'%3E%3Cpath d='M40 0L40 80M0 40L80 40M0 0L80 80M0 80L80 0'/%3E%3Cpolygon points='40,16 64,40 40,64 16,40'/%3E%3Cpolygon points='40,8 72,40 40,72 8,40'/%3E%3Crect x='28' y='28' width='24' height='24' transform='rotate(45 40 40)'/%3E%3C/g%3E%3C/svg%3E");
   background-repeat: repeat;
 }
 
 .girih-overlay {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'%3E%3Cg fill='%238B7547' fill-opacity='0.035' stroke='%238B7547' stroke-width='0.75' stroke-opacity='0.04'%3E%3Cpath d='M40 0L40 80M0 40L80 40M0 0L80 80M0 80L80 0'/%3E%3Cpolygon points='40,16 64,40 40,64 16,40'/%3E%3Cpolygon points='40,8 72,40 40,72 8,40'/%3E%3Crect x='28' y='28' width='24' height='24' transform='rotate(45 40 40)'/%3E%3C/g%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'%3E%3Cg fill='%23D4AF37' fill-opacity='0.18' stroke='%23D4AF37' stroke-width='0.85' stroke-opacity='0.22'%3E%3Cpath d='M40 0L40 80M0 40L80 40M0 0L80 80M0 80L80 0'/%3E%3Cpolygon points='40,16 64,40 40,64 16,40'/%3E%3Cpolygon points='40,8 72,40 40,72 8,40'/%3E%3Crect x='28' y='28' width='24' height='24' transform='rotate(45 40 40)'/%3E%3C/g%3E%3C/svg%3E");
   background-repeat: repeat;
 }
 
@@ -301,11 +302,11 @@
 .lib-dark,
 html.dark,
 body.dark {
-  background-color: #121619 !important; /* Off-Black Obsidian Base (#121619) */
+  background-color: #151518 !important; /* Off-Black Obsidian Base (#151518) */
   color: #FDF8ED !important; /* Regal Gold 100 */
   
   /* Override Mushaf Variables in Dark Mode */
-  --mushaf-bg: #121619;
+  --mushaf-bg: #151518;
   --mushaf-text: #FDF8ED;
   --mushaf-border: rgba(212, 175, 55, 0.35);
   --mushaf-frame-opacity: 0.25;

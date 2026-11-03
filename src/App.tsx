@@ -46,7 +46,7 @@ function AppContent() {
 
   return (
     <div
-      className={`min-h-screen relative font-sans selection:bg-holyEmerald-500/20 ${app.librarySettings?.darkMode ? 'lib-dark bg-[#121619] text-regalGold-100' : 'bg-slate-50 text-slate-900'}`}
+      className={`min-h-screen relative font-sans selection:bg-holyEmerald-500/20 ${app.librarySettings?.darkMode ? 'lib-dark bg-[#151518] text-regalGold-100' : 'bg-slate-50 text-slate-900'}`}
       dir="rtl"
     >
       <div
