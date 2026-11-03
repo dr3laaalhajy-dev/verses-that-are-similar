@@ -651,7 +651,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isPowerUpUsedThisQuestion, setIsPowerUpUsedThisQuestion] = useState(false);
   const [eliminatedOptionIndices, setEliminatedOptionIndices] = useState<number[]>([]);
 
-  // Cosmetics Store State
+  // Cosmetics State
   const [showCosmeticStore, setShowCosmeticStore] = useState(false);
   const [ownedCosmetics, setOwnedCosmetics] = useState<string[]>(() => {
     try {
@@ -663,12 +663,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [equippedNameColor, setEquippedNameColor] = useState<string | null>(() => {
     return localStorage.getItem('quran_equipped_name_color') || null;
   });
-  const [equippedTitle, setEquippedTitle] = useState<string | null>(() => {
-    return localStorage.getItem('quran_equipped_title') || null;
-  });
-  const [equippedEffect, setEquippedEffect] = useState<string | null>(() => {
-    return localStorage.getItem('quran_equipped_effect') || null;
-  });
+  const [equippedTitle, setEquippedTitle] = useState<string | null>(null);
+  const [equippedEffect, setEquippedEffect] = useState<string | null>(null);
   const [selectedSurahId, setSelectedSurahId] = useState<number | null>(null);
   const [selectedAdhkarCategoryId, setSelectedAdhkarCategoryId] = useState<string | null>(null);
   const [adhkarProgress, setAdhkarProgress] = useState<Record<string, number>>({});

@@ -84,7 +84,6 @@ export const AppRouter: React.FC = () => {
     <AnimatePresence mode="wait">
       {app.showScores ? (
         <LeaderboardPage
-          setShowCosmeticStore={app.setShowCosmeticStore}
           syncLeaderboard={app.syncLeaderboard}
           isSyncing={app.isSyncing}
           totalUsersCount={app.totalUsersCount}
@@ -95,7 +94,6 @@ export const AppRouter: React.FC = () => {
           userAchievement={app.userAchievement}
           achievementStyles={app.achievementStyles}
           equippedNameColor={app.equippedNameColor}
-          equippedTitle={app.equippedTitle}
         />
       ) : app.view === "group_create" ? (
         <GroupCreatePage
@@ -139,10 +137,8 @@ export const AppRouter: React.FC = () => {
       ) : app.view === "group_waiting" ? (
         <GroupWaitingPage
           room={app.room}
-          setShowCosmeticStore={app.setShowCosmeticStore}
           playerUsername={app.playerUsername}
           playerName={app.playerName}
-          equippedTitle={app.equippedTitle}
           equippedNameColor={app.equippedNameColor}
           handleStartRoomV1={app.handleStartRoomV1}
           v1IsStartingRoom={app.v1IsStartingRoom}

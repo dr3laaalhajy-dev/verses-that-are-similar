@@ -9,7 +9,6 @@ import { useApp } from '../../contexts/AppContext';
 import ConfirmModal from '../ConfirmModal';
 import { LibrarySettingsModal } from '../LibrarySettingsModal';
 import { StreakModal } from '../StreakModal';
-import { CosmeticStoreModal } from '../CosmeticStoreModal';
 import IslamicOccasionsModal from '../IslamicOccasionsModal';
 import { AppDownloadModal } from '../AppDownloadModal';
 import { GooglePlayTesterModal, GooglePlayLogo } from '../GooglePlayTesterModal';
@@ -368,43 +367,6 @@ export const GlobalOverlays: React.FC = () => {
         onStartChallenge={() => {
           app.setIsStreakModalOpen(false);
           app.handleStartDaily();
-        }}
-      />
-
-      <CosmeticStoreModal
-        isOpen={app.showCosmeticStore}
-        onClose={() => app.setShowCosmeticStore(false)}
-        totalPoints={app.totalPoints}
-        setTotalPoints={app.setTotalPoints}
-        streakCount={app.streak}
-        setStreakCount={app.setStreak}
-        ownedCosmetics={app.ownedCosmetics}
-        setOwnedCosmetics={app.setOwnedCosmetics}
-        equippedBorder={app.activeFrame}
-        setEquippedBorder={app.setActiveFrame}
-        equippedNameColor={app.equippedNameColor}
-        setEquippedNameColor={app.setEquippedNameColor}
-        equippedTitle={app.equippedTitle}
-        setEquippedTitle={app.setEquippedTitle}
-        onSaveToServer={() => {
-          if (app.playerName) {
-            fetch('/api/player-score', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                name: app.playerName,
-                username: app.playerUsername,
-                equippedNameColor: app.equippedNameColor,
-                equippedTitle: app.equippedTitle,
-                activeFrame: app.activeFrame,
-                ownedCosmetics: app.ownedCosmetics,
-                powerUps: {
-                  freezeTime: app.freezeTimeCount,
-                  deleteTwo: app.deleteTwoCount
-                }
-              })
-            }).catch(() => {});
-          }
         }}
       />
 

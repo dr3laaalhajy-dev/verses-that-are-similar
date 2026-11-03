@@ -1,14 +1,14 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import {
-  ShoppingBag, Users, Lock, Globe, Loader2, Trash2, ArrowRight, LogOut
+  Users, Lock, Globe, Loader2, Trash2, ArrowRight, LogOut
 } from 'lucide-react';
 import { View } from '../types/challenges';
 import { LiveReactionsOverlay } from '../components/LiveReactionsOverlay';
 
 export interface GroupWaitingPageProps {
   room: any;
-  setShowCosmeticStore: (show: boolean) => void;
+  setShowCosmeticStore?: (show: boolean) => void;
   playerUsername: string | null;
   playerName: string | null;
   equippedTitle?: string;
@@ -23,10 +23,8 @@ export interface GroupWaitingPageProps {
 
 export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
   room,
-  setShowCosmeticStore,
   playerUsername,
   playerName,
-  equippedTitle,
   equippedNameColor,
   handleStartRoomV1,
   v1IsStartingRoom,
@@ -44,15 +42,7 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
       className="w-full max-w-lg mx-auto py-4 sm:py-6 md:py-8 px-3 sm:px-4 min-h-screen pb-36 sm:pb-40"
     >
       <div className="glass p-4 sm:p-6 md:p-8 rounded-3xl border-orange-100 shadow-xl text-center relative flex flex-col">
-        <div className="flex items-center justify-between mb-4 sm:mb-6">
-          <button
-            type="button"
-            onClick={() => setShowCosmeticStore(true)}
-            className="px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-black text-xs transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
-          >
-            <ShoppingBag className="w-3.5 h-3.5" />
-            <span>متجر التميز</span>
-          </button>
+        <div className="flex items-center justify-end mb-4 sm:mb-6">
           <div className="flex items-center gap-2.5 sm:gap-3">
             <div className="text-right">
               <h2 className="text-lg sm:text-2xl font-black text-slate-800">قاعة الانتظار</h2>
@@ -111,7 +101,6 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
           <div className="grid grid-cols-2 gap-2 sm:gap-2.5">
             {(room?.participants || []).map((p: any, i: number) => {
               const isMe = p?.id === (playerUsername || playerName) || p?.name === playerName;
-              const titleToDisplay = isMe ? (equippedTitle || p?.equippedTitle) : p?.equippedTitle;
               const nameColorToDisplay = isMe ? (equippedNameColor || p?.equippedNameColor) : p?.equippedNameColor;
               return (
                 <motion.div
@@ -125,11 +114,6 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
                   </div>
                   <div className="flex-1 min-w-0 text-right">
                     <div className="flex items-center gap-1.5 justify-end">
-                      {titleToDisplay && (
-                        <span className="text-[9px] font-black px-1.5 py-0.2 rounded-md bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-300/60 dark:border-amber-700/60 shrink-0">
-                          {titleToDisplay}
-                        </span>
-                      )}
                       <span
                         className="font-bold text-slate-700 text-xs sm:text-sm truncate"
                         style={nameColorToDisplay ? { color: nameColorToDisplay } : undefined}

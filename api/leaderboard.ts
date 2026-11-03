@@ -23,7 +23,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         generalCompleted: true,
         quranCompleted: true,
         activeFrame: true,
-        equippedTitle: true,
         equippedNameColor: true
       } as any
     })
@@ -53,9 +52,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           generalCompleted: player.generalCompleted,
           quranCompleted: player.quranCompleted,
           activeFrame: player.activeFrame,
-          equippedTitle: player.equippedTitle || (player as any).selectedTitle || (player as any).title || null,
-          selectedTitle: player.equippedTitle || (player as any).selectedTitle || (player as any).title || null,
-          title: player.equippedTitle || (player as any).selectedTitle || (player as any).title || null,
           equippedNameColor: player.equippedNameColor
         })
       } else {
@@ -70,12 +66,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         existing.generalCompleted = existing.generalCompleted || player.generalCompleted
         if (player.activeFrame) {
           existing.activeFrame = player.activeFrame
-        }
-        const resolvedTitle = player.equippedTitle || (player as any).selectedTitle || (player as any).title
-        if (resolvedTitle) {
-          existing.equippedTitle = resolvedTitle
-          ;(existing as any).selectedTitle = resolvedTitle
-          ;(existing as any).title = resolvedTitle
         }
         if (player.equippedNameColor) {
           existing.equippedNameColor = player.equippedNameColor

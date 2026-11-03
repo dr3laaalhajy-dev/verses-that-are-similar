@@ -1,9 +1,9 @@
 import React from "react";
 import { motion } from "framer-motion";
-import { Trophy, ShoppingBag, RotateCcw, Users, Sparkles } from "lucide-react";
+import { Trophy, RotateCcw, Users, Sparkles } from "lucide-react";
 
 export interface LeaderboardPageProps {
-  setShowCosmeticStore: (show: boolean) => void;
+  setShowCosmeticStore?: (show: boolean) => void;
   syncLeaderboard: () => void;
   isSyncing: boolean;
   totalUsersCount: number;
@@ -18,7 +18,6 @@ export interface LeaderboardPageProps {
 }
 
 export const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
-  setShowCosmeticStore,
   syncLeaderboard,
   isSyncing,
   totalUsersCount,
@@ -61,15 +60,6 @@ export const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
                       </div>
 
                       <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => setShowCosmeticStore(true)}
-                          title="متجر التميز والمظهر"
-                          className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-black text-xs transition-all shadow-xs active:scale-95 cursor-pointer flex items-center gap-1.5"
-                        >
-                          <ShoppingBag className="w-3.5 h-3.5" />
-                          <span className="hidden sm:inline">متجر التميز</span>
-                          <span className="sm:hidden">المتجر</span>
-                        </button>
                         <button
                           onClick={() => syncLeaderboard()}
                           disabled={isSyncing}
@@ -249,11 +239,6 @@ export const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
                                     >
                                       {player.name}
                                     </span>
-                                    {(isCurrentPlayer ? (equippedTitle || player.equippedTitle || player.selectedTitle || player.title) : (player.equippedTitle || player.selectedTitle || player.title)) && (
-                                      <span className="text-[9px] font-black px-1.5 py-0.2 rounded-md bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-300/60 dark:border-amber-700/60">
-                                        {isCurrentPlayer ? (equippedTitle || player.equippedTitle || player.selectedTitle || player.title) : (player.equippedTitle || player.selectedTitle || player.title)}
-                                      </span>
-                                    )}
                                     {isCurrentPlayer && (
                                       <span className="text-[9px] font-black px-1.5 py-0.2 rounded-md bg-emerald-600 text-white shadow-xs">
                                         أنت
