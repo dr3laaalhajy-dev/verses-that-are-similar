@@ -259,14 +259,14 @@ export const DailyMysteryBox: React.FC<DailyMysteryBoxProps> = ({ className = ''
               exit={{ scale: 0.95, opacity: 0 }}
               transition={{ duration: 0.3, ease: 'easeOut' }}
               onClick={(e) => e.stopPropagation()}
-              className="bg-[#FDFBF7] border border-amber-200/80 rounded-3xl p-5 shadow-2xl max-w-xs w-full mx-4 relative text-center overflow-hidden flex flex-col justify-between gap-3.5 transition-all duration-300 transform"
+              className="bg-[#FDFBF7] dark:bg-[#151518] border border-amber-200/80 dark:border-[#C49B55]/20 rounded-3xl p-5 shadow-2xl max-w-xs w-full mx-4 relative text-center overflow-hidden flex flex-col justify-between gap-3.5 transition-all duration-300 transform"
               dir="rtl"
             >
               {/* Close Button */}
               <button
                 type="button"
                 onClick={() => setIsModalOpen(false)}
-                className="absolute top-3.5 left-3.5 p-1.5 text-gray-500 hover:text-gray-800 rounded-full hover:bg-stone-200/60 transition-colors cursor-pointer"
+                className="absolute top-3.5 left-3.5 p-1.5 text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-[#C49B55] rounded-full hover:bg-stone-200/60 dark:hover:bg-zinc-800/60 transition-colors cursor-pointer"
                 title="إغلاق"
               >
                 <X className="w-4 h-4" />
@@ -274,10 +274,10 @@ export const DailyMysteryBox: React.FC<DailyMysteryBoxProps> = ({ className = ''
 
               {/* Modal Top: Title */}
               <div className="flex items-center justify-center gap-1.5 pt-0.5">
-                <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
-                  <Gift className="w-3.5 h-3.5 text-amber-600" />
+                <div className="w-7 h-7 rounded-lg bg-amber-100 dark:bg-[#C49B55]/15 text-amber-700 dark:text-[#C49B55] flex items-center justify-center shrink-0">
+                  <Gift className="w-3.5 h-3.5 text-amber-600 dark:text-[#C49B55]" />
                 </div>
-                <h3 className="text-sm sm:text-base font-black text-slate-800 font-tajawal">
+                <h3 className="text-sm sm:text-base font-black text-slate-800 dark:text-[#C49B55] font-tajawal">
                   صندوق الهدية اليومية
                 </h3>
               </div>
@@ -304,14 +304,14 @@ export const DailyMysteryBox: React.FC<DailyMysteryBoxProps> = ({ className = ''
                 /* حالة الإغلاق قبل الكشف */
                 <div className="space-y-2.5">
                   <div>
-                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-800 bg-amber-100/80 px-2.5 py-0.5 rounded-full mb-1">
-                      <Sparkles className="w-3 h-3 text-amber-600" />
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-800 dark:text-[#C49B55] bg-amber-100/80 dark:bg-[#C49B55]/15 border border-transparent dark:border-[#C49B55]/20 px-2.5 py-0.5 rounded-full mb-1">
+                      <Sparkles className="w-3 h-3 text-amber-600 dark:text-[#C49B55]" />
                       <span>مكافأة يومية مفاجئة</span>
                     </span>
-                    <h4 className="text-xs sm:text-sm font-black text-slate-800 font-tajawal">
+                    <h4 className="text-xs sm:text-sm font-black text-slate-800 dark:text-gray-200 font-tajawal">
                       صندوق اليوم: اضغط لكشف التحدي
                     </h4>
-                    <p className="text-[11px] text-slate-600 font-medium mt-0.5">
+                    <p className="text-[11px] text-slate-600 dark:text-gray-400 font-medium mt-0.5">
                       أكمل التحدي اليومي واكسب نقاطاً إضافية في رصيدك
                     </p>
                   </div>
@@ -329,24 +329,24 @@ export const DailyMysteryBox: React.FC<DailyMysteryBoxProps> = ({ className = ''
                 /* حالة الاكتمال والاستلام */
                 <div className="space-y-2.5">
                   <div>
-                    <div className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-100/80 border border-emerald-300 px-2.5 py-0.5 rounded-full mb-1">
-                      <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                    <div className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 dark:text-emerald-300 bg-emerald-100/80 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-600/30 px-2.5 py-0.5 rounded-full mb-1">
+                      <CheckCircle2 className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
                       <span>+{toArabicIndic(rewardPoints)} نقطة مكتسبة</span>
                     </div>
-                    <h4 className="text-xs sm:text-sm font-black text-slate-800 font-tajawal">
+                    <h4 className="text-xs sm:text-sm font-black text-slate-800 dark:text-gray-200 font-tajawal">
                       تم إنجاز تحدي اليوم بنجاح
                     </h4>
-                    <p className="text-[11px] text-slate-600 font-medium mt-0.5">
+                    <p className="text-[11px] text-slate-600 dark:text-gray-400 font-medium mt-0.5">
                       بارك الله فيك وتقبل طاعتك
                     </p>
                   </div>
 
                   {/* Countdown to next chest */}
-                  <div className="w-full p-2 rounded-xl bg-white border border-gray-200 shadow-sm text-center">
-                    <span className="text-[9px] text-slate-500 block">
+                  <div className="w-full p-2 rounded-xl bg-white dark:bg-zinc-900/80 border border-gray-200 dark:border-[#C49B55]/20 shadow-sm text-center">
+                    <span className="text-[9px] text-slate-500 dark:text-gray-400 block">
                       الصندوق القادم متاح خلال:
                     </span>
-                    <span className="font-mono font-black text-xs sm:text-sm text-slate-800 mt-0.5 block">
+                    <span className="font-mono font-black text-xs sm:text-sm text-slate-800 dark:text-gray-200 mt-0.5 block">
                       {timeLeftStr || '٠٠:٠٠:٠٠'}
                     </span>
                   </div>
@@ -354,7 +354,7 @@ export const DailyMysteryBox: React.FC<DailyMysteryBoxProps> = ({ className = ''
                   <button
                     type="button"
                     onClick={() => setIsModalOpen(false)}
-                    className="w-full py-2 px-3 rounded-xl bg-white hover:bg-stone-100 text-slate-700 font-bold text-xs border border-gray-200 shadow-sm transition-all cursor-pointer"
+                    className="w-full py-2 px-3 rounded-xl bg-white hover:bg-stone-100 dark:bg-zinc-900/80 dark:hover:bg-zinc-800 text-slate-700 dark:text-gray-200 font-bold text-xs border border-gray-200 dark:border-[#C49B55]/20 shadow-sm transition-all cursor-pointer"
                   >
                     إغلاق
                   </button>
@@ -363,14 +363,14 @@ export const DailyMysteryBox: React.FC<DailyMysteryBoxProps> = ({ className = ''
                 /* حالة إكمال التحدي وجاهزية الاستلام */
                 <div className="space-y-2.5">
                   <div>
-                    <div className="inline-flex items-center gap-1 text-[10px] font-black text-amber-900 bg-amber-100/90 border border-amber-300 px-2.5 py-0.5 rounded-full mb-1 animate-bounce">
-                      <Trophy className="w-3 h-3 text-amber-600" />
+                    <div className="inline-flex items-center gap-1 text-[10px] font-black text-amber-900 dark:text-amber-200 bg-amber-100/90 dark:bg-amber-950/50 border border-amber-300 dark:border-amber-600/30 px-2.5 py-0.5 rounded-full mb-1 animate-bounce">
+                      <Trophy className="w-3 h-3 text-amber-600 dark:text-amber-400" />
                       <span>اكتمل التحدي! ما شاء الله</span>
                     </div>
-                    <h4 className="text-xs sm:text-sm font-black text-slate-800 font-tajawal">
+                    <h4 className="text-xs sm:text-sm font-black text-slate-800 dark:text-gray-200 font-tajawal">
                       أنجزت مهمة اليوم بنجاح!
                     </h4>
-                    <p className="text-[11px] text-slate-600 font-medium mt-0.5">
+                    <p className="text-[11px] text-slate-600 dark:text-gray-400 font-medium mt-0.5">
                       انقر بالأسفل لفتح الصندوق واستلام مكافأتك
                     </p>
                   </div>
@@ -390,26 +390,26 @@ export const DailyMysteryBox: React.FC<DailyMysteryBoxProps> = ({ className = ''
                 /* حالة التحدي النشط (In-Progress) */
                 <div className="space-y-2.5">
                   <div>
-                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-800 bg-amber-100/80 px-2.5 py-0.5 rounded-full mb-1">
-                      <Sparkles className="w-3 h-3 text-amber-600" />
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-800 dark:text-[#C49B55] bg-amber-100/80 dark:bg-[#C49B55]/15 border border-transparent dark:border-[#C49B55]/20 px-2.5 py-0.5 rounded-full mb-1">
+                      <Sparkles className="w-3 h-3 text-amber-600 dark:text-[#C49B55]" />
                       <span>المكافأة: +{toArabicIndic(rewardPoints)} نقطة</span>
                     </span>
-                    <h4 className="text-xs sm:text-sm font-black text-slate-800 font-tajawal mt-0.5">
+                    <h4 className="text-xs sm:text-sm font-black text-slate-800 dark:text-gray-200 font-tajawal mt-0.5">
                       {title}
                     </h4>
                   </div>
 
                   {/* Progress Bar & Counters */}
-                  <div className="p-2.5 bg-white rounded-xl border border-gray-200 shadow-sm space-y-1">
+                  <div className="p-2.5 bg-white dark:bg-zinc-900/80 rounded-xl border border-gray-200 dark:border-[#C49B55]/20 shadow-sm space-y-1">
                     <div className="flex items-center justify-between text-[11px] font-bold">
-                      <span className="text-slate-500">التقدم:</span>
-                      <span className="font-mono text-emerald-600 font-black">
+                      <span className="text-slate-500 dark:text-gray-400">التقدم:</span>
+                      <span className="font-mono text-emerald-600 dark:text-emerald-400 font-black">
                         {type === 'reading_time'
-                           ? `${formatMinutesSeconds(currentProgress)} / ${formatMinutesSeconds(target)}`
+                          ? `${formatMinutesSeconds(currentProgress)} / ${formatMinutesSeconds(target)}`
                           : `${toArabicIndic(currentProgress)} / ${toArabicIndic(target)}`}
                       </span>
                     </div>
-                    <div className="w-full h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                    <div className="w-full h-1.5 rounded-full bg-slate-100 dark:bg-zinc-800 overflow-hidden">
                       <motion.div
                         className="h-full rounded-full bg-gradient-to-r from-amber-400 via-amber-500 to-emerald-500"
                         initial={{ width: 0 }}
@@ -418,7 +418,7 @@ export const DailyMysteryBox: React.FC<DailyMysteryBoxProps> = ({ className = ''
                       />
                     </div>
                     <div className="text-left">
-                      <span className="text-[9px] font-mono font-bold text-slate-500">
+                      <span className="text-[9px] font-mono font-bold text-slate-500 dark:text-gray-400">
                         {toArabicIndic(progressPercent)}٪
                       </span>
                     </div>
