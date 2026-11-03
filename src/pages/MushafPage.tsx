@@ -163,11 +163,13 @@ export const MushafPage: React.FC<MushafPageProps> = ({
 
   useEffect(() => {
     const onFullscreenChange = () => {
-      const activeElement = document.fullscreenElement;
-      const isTargetFullscreen = !!activeElement && (
-        activeElement === mushafContainerRef.current ||
-        activeElement.id === 'mushaf-reader-container' ||
-        mushafContainerRef.current?.contains(activeElement)
+      const activeElement = document.fullscreenElement || (document as any).webkitFullscreenElement;
+      const isTargetFullscreen = Boolean(
+        activeElement && (
+          activeElement === mushafContainerRef.current ||
+          activeElement.id === 'mushaf-reader-container' ||
+          Boolean(mushafContainerRef.current?.contains(activeElement as Node))
+        )
       );
       setIsFullscreen(isTargetFullscreen);
     };

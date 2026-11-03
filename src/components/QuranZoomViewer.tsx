@@ -22,7 +22,7 @@ const pageFlipVariants: Variants = {
     filter: 'brightness(1) drop-shadow(0 8px 18px rgba(0,0,0,0.12))',
     transition: {
       duration: 0.42,
-      ease: [0.22, 1, 0.36, 1] as const,
+      ease: [0.22, 1, 0.36, 1] as [number, number, number, number],
     },
   },
   exit: (direction: 'next' | 'prev') => ({
@@ -34,7 +34,7 @@ const pageFlipVariants: Variants = {
     filter: 'brightness(0.65) drop-shadow(0 20px 35px rgba(0,0,0,0.45))',
     transition: {
       duration: 0.38,
-      ease: [0.22, 1, 0.36, 1] as const,
+      ease: [0.22, 1, 0.36, 1] as [number, number, number, number],
     },
   }),
 };
@@ -337,11 +337,10 @@ export const QuranZoomViewer: React.FC<QuranZoomViewerProps> = ({
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onWheel={handleWheel}
-      className={`relative w-full h-full flex items-center justify-center select-none ${
-        isFullscreen
+      className={`relative w-full h-full flex items-center justify-center select-none ${isFullscreen
           ? (isZoomed ? 'touch-none overflow-hidden cursor-grab active:cursor-grabbing' : 'touch-pan-y overflow-hidden cursor-default')
           : (isZoomed ? 'touch-none overflow-hidden cursor-grab active:cursor-grabbing' : 'touch-pan-y overflow-visible cursor-default')
-      }`}
+        }`}
     >
       {/* 3D Realistic Perspective Page Container */}
       <div
@@ -370,11 +369,10 @@ export const QuranZoomViewer: React.FC<QuranZoomViewerProps> = ({
               src={`/quran-pages/${pageNumber.toString().padStart(3, '0')}.png`}
               alt={`صفحة ${pageNumber}`}
               draggable={false}
-              className={`block pointer-events-none select-none transition-filter duration-300 ${
-                isFullscreen
+              className={`block pointer-events-none select-none transition-filter duration-300 ${isFullscreen
                   ? 'w-auto h-auto max-h-[100dvh] max-w-full object-contain drop-shadow-2xl'
                   : 'w-full sm:w-auto h-auto max-h-[75vh] sm:max-h-[85vh] max-w-full object-contain shadow-none md:shadow-xl rounded-none md:rounded-2xl'
-              }`}
+                }`}
               style={{
                 filter: darkMode
                   ? 'invert(0.92) hue-rotate(180deg) brightness(0.88) contrast(1.12)'
@@ -390,11 +388,10 @@ export const QuranZoomViewer: React.FC<QuranZoomViewerProps> = ({
                 animate={{ opacity: 0 }}
                 exit={{ opacity: 0.75 }}
                 transition={{ duration: 0.38, ease: 'easeOut' }}
-                className={`absolute inset-0 pointer-events-none rounded-none md:rounded-2xl z-20 ${
-                  effectivePageTurnDirection === 'next'
+                className={`absolute inset-0 pointer-events-none rounded-none md:rounded-2xl z-20 ${effectivePageTurnDirection === 'next'
                     ? 'bg-gradient-to-r from-black/35 via-transparent to-black/15'
                     : 'bg-gradient-to-l from-black/35 via-transparent to-black/15'
-                }`}
+                  }`}
               />
             )}
 
