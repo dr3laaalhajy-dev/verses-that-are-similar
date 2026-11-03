@@ -391,13 +391,13 @@ export const HomePage: React.FC<HomePageProps> = ({
         </motion.div>
       )}
 
-      {/* 1. Premium Welcome Header Section (Preserved Original Centered Header + Streak Pill + Ayah Actions) */}
+      {/* 1. Premium Welcome Header Section (Preserved Original Centered Header + Ayah Actions) */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         className="flex flex-col items-center justify-center text-center space-y-4 mb-2"
       >
-        <div className="flex items-center justify-center gap-3 flex-wrap">
+        <div className="flex items-center justify-center">
           <h1 className="text-3xl md:text-5xl font-black text-slate-800 dark:text-transparent dark:bg-clip-text dark:bg-gradient-to-r dark:from-regalGold-100 dark:via-regalGold-300 dark:to-regalGold-200 tracking-tight">
             السلام عليكم يا{' '}
             <span
@@ -410,17 +410,6 @@ export const HomePage: React.FC<HomePageProps> = ({
               {playerName || 'يا ضيفنا الكريم'}
             </span>
           </h1>
-
-          {/* New Feature 1: Streak Pill integrated beside greeting */}
-          <button
-            type="button"
-            onClick={() => app.setShowStreakModal?.(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-700 dark:text-regalGold-300 text-xs sm:text-sm font-black shadow-xs hover:scale-105 active:scale-95 transition-all cursor-pointer"
-            title="انقر لعرض تفاصيل شعلة الحفظ والالتزام اليومي"
-          >
-            <span className="text-sm">🔥</span>
-            <span>{streak > 0 ? `${toArabicIndic(streak)} أيام ممتدة` : 'ابدأ سلسلتك 🔥'}</span>
-          </button>
         </div>
 
         {/* Motivational Quote / Hadith */}
