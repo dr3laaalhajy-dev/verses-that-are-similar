@@ -870,7 +870,7 @@ export const MushafPage: React.FC<MushafPageProps> = ({
                               onTouchStart={isFullscreen ? resetFsControlsTimer : undefined}
                               className={`w-full flex flex-col items-center transition-all ${
                                 isFullscreen
-                                  ? 'fixed inset-0 z-[100] w-screen h-screen bg-[#070E0E] p-0 overflow-hidden justify-center'
+                                  ? 'fixed inset-0 z-[100] w-screen h-screen bg-[#121619] p-0 overflow-hidden justify-center'
                                   : 'gap-3 sm:gap-4'
                               }`}
                             >
@@ -952,7 +952,7 @@ export const MushafPage: React.FC<MushafPageProps> = ({
                                 }`}
                                 style={
                                   isFullscreen
-                                    ? { backgroundColor: librarySettings.darkMode ? '#070E0E' : '#fcfaf5' }
+                                    ? { backgroundColor: librarySettings.darkMode ? '#121619' : '#fcfaf5' }
                                     : {
                                         backgroundColor: librarySettings.darkMode ? '#0B132B' : '#fcfaf5',
                                         color: librarySettings.darkMode ? '#e2e8f0' : '#1e293b',

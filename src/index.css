@@ -14,13 +14,13 @@
   --color-brand-gold: #d4af37;
   --color-brand-sand: #fdfbf7;
 
-  /* Luxury Obsidian Palette */
-  --color-obsidian-950: #070E0E;
-  --color-obsidian-900: #0B1616;
-  --color-obsidian-850: #0F1D1D;
-  --color-obsidian-800: #142525;
-  --color-obsidian-700: #1E3636;
-  --color-obsidian-600: #2A4B4B;
+  /* Luxury Obsidian Palette (Eye-Friendly Off-Black) */
+  --color-obsidian-950: #121619;
+  --color-obsidian-900: #181D21;
+  --color-obsidian-850: #1E2428;
+  --color-obsidian-800: #242B30;
+  --color-obsidian-700: #2E363D;
+  --color-obsidian-600: #3D4750;
 
   /* Regal Gold Palette */
   --color-regalGold-100: #FDF8ED;
@@ -218,22 +218,39 @@
 
 
 .glass-dark {
-  background: rgba(7, 14, 14, 0.92);
+  background: rgba(18, 22, 25, 0.92);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid rgba(212, 175, 55, 0.2);
   box-shadow: 0 12px 35px 0 rgba(0, 0, 0, 0.5);
 }
 
+/* Islamic Geometric Patterns & Arabesque Overlays */
+.bg-islamic-pattern,
+.arabesque-overlay {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'%3E%3Cg fill='%23D4AF37' fill-opacity='0.04' stroke='%23064E3B' stroke-width='0.75' stroke-opacity='0.06'%3E%3Cpath d='M40 0L40 80M0 40L80 40M0 0L80 80M0 80L80 0'/%3E%3Cpolygon points='40,16 64,40 40,64 16,40'/%3E%3Cpolygon points='40,8 72,40 40,72 8,40'/%3E%3Crect x='28' y='28' width='24' height='24' transform='rotate(45 40 40)'/%3E%3C/g%3E%3C/svg%3E");
+  background-repeat: repeat;
+}
+
+/* Dark Mode Arabesque Overlay - Muted Gold (%238B7547) on Off-Black (#121619) */
+.dark-arabesque-overlay,
+.dark .bg-islamic-pattern,
+.lib-dark .bg-islamic-pattern,
+.dark .arabesque-overlay,
+.lib-dark .arabesque-overlay {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'%3E%3Cg fill='%238B7547' fill-opacity='0.035' stroke='%238B7547' stroke-width='0.75' stroke-opacity='0.04'%3E%3Cpath d='M40 0L40 80M0 40L80 40M0 0L80 80M0 80L80 0'/%3E%3Cpolygon points='40,16 64,40 40,64 16,40'/%3E%3Cpolygon points='40,8 72,40 40,72 8,40'/%3E%3Crect x='28' y='28' width='24' height='24' transform='rotate(45 40 40)'/%3E%3C/g%3E%3C/svg%3E");
+  background-repeat: repeat;
+}
+
 /* Girih Geometric Patterns */
 .bg-girih-pattern {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'%3E%3Cg fill='none' stroke='%23D4AF37' stroke-width='0.75' stroke-opacity='0.08'%3E%3Cpath d='M40 0L40 80M0 40L80 40M0 0L80 80M0 80L80 0'/%3E%3Cpolygon points='40,16 64,40 40,64 16,40'/%3E%3Cpolygon points='40,8 72,40 40,72 8,40'/%3E%3Crect x='28' y='28' width='24' height='24' transform='rotate(45 40 40)'/%3E%3C/g%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'%3E%3Cg fill='%238B7547' fill-opacity='0.035' stroke='%238B7547' stroke-width='0.75' stroke-opacity='0.04'%3E%3Cpath d='M40 0L40 80M0 40L80 40M0 0L80 80M0 80L80 0'/%3E%3Cpolygon points='40,16 64,40 40,64 16,40'/%3E%3Cpolygon points='40,8 72,40 40,72 8,40'/%3E%3Crect x='28' y='28' width='24' height='24' transform='rotate(45 40 40)'/%3E%3C/g%3E%3C/svg%3E");
+  background-repeat: repeat;
 }
 
 .girih-overlay {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'%3E%3Cg fill='none' stroke='%23D4AF37' stroke-width='0.75' stroke-opacity='0.06'%3E%3Cpath d='M40 0L40 80M0 40L80 40M0 0L80 80M0 80L80 0'/%3E%3Cpolygon points='40,16 64,40 40,64 16,40'/%3E%3Cpolygon points='40,8 72,40 40,72 8,40'/%3E%3Crect x='28' y='28' width='24' height='24' transform='rotate(45 40 40)'/%3E%3C/g%3E%3C/svg%3E");
-  mask-image: radial-gradient(circle at 50% 30%, black 40%, transparent 85%);
-  -webkit-mask-image: radial-gradient(circle at 50% 30%, black 40%, transparent 85%);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80' viewBox='0 0 80 80'%3E%3Cg fill='%238B7547' fill-opacity='0.035' stroke='%238B7547' stroke-width='0.75' stroke-opacity='0.04'%3E%3Cpath d='M40 0L40 80M0 40L80 40M0 0L80 80M0 80L80 0'/%3E%3Cpolygon points='40,16 64,40 40,64 16,40'/%3E%3Cpolygon points='40,8 72,40 40,72 8,40'/%3E%3Crect x='28' y='28' width='24' height='24' transform='rotate(45 40 40)'/%3E%3C/g%3E%3C/svg%3E");
+  background-repeat: repeat;
 }
 
 /* Glassmorphism Luxury Obsidian Cards */
@@ -247,7 +264,7 @@
 
 .dark .glass-card,
 .lib-dark .glass-card {
-  background: rgba(11, 22, 22, 0.82) !important;
+  background: rgba(24, 29, 33, 0.85) !important;
   backdrop-filter: blur(20px) !important;
   -webkit-backdrop-filter: blur(20px) !important;
   border: 1px solid rgba(212, 175, 55, 0.2) !important;
@@ -282,12 +299,13 @@
 
 /* Luxury Obsidian Dark Theme & Global Dark Mode Support */
 .lib-dark,
-html.dark {
-  background-color: #070E0E !important; /* Obsidian 950 */
+html.dark,
+body.dark {
+  background-color: #121619 !important; /* Off-Black Obsidian Base (#121619) */
   color: #FDF8ED !important; /* Regal Gold 100 */
   
   /* Override Mushaf Variables in Dark Mode */
-  --mushaf-bg: #070E0E;
+  --mushaf-bg: #121619;
   --mushaf-text: #FDF8ED;
   --mushaf-border: rgba(212, 175, 55, 0.35);
   --mushaf-frame-opacity: 0.25;
@@ -330,21 +348,21 @@ html.dark .text-emerald-700 {
   color: #34D399 !important; /* Holy Emerald 400 */
 }
 
-/* Backgrounds in dark mode: Luxurious Obsidian */
+/* Backgrounds in dark mode: Luxurious Off-Black Obsidian */
 .lib-dark .bg-white,
 .lib-dark .bg-slate-50,
 .lib-dark .bg-slate-100,
 html.dark .bg-white,
 html.dark .bg-slate-50,
 html.dark .bg-slate-100 {
-  background-color: #0B1616 !important; /* Obsidian 900 */
+  background-color: #181D21 !important; /* Elevated Obsidian */
   border-color: rgba(212, 175, 55, 0.2) !important;
 }
 
 /* Book pages & Cream backgrounds in dark mode */
 .lib-dark .bg-\[\#fcfaf5\],
 html.dark .bg-\[\#fcfaf5\] {
-  background-color: #070E0E !important;
+  background-color: #121619 !important;
   border-color: rgba(212, 175, 55, 0.3) !important;
   color: #FDF8ED !important;
 }
@@ -352,7 +370,7 @@ html.dark .bg-\[\#fcfaf5\] {
 /* Opacity variants of white and slate in dark mode: converts light opacity backgrounds to Obsidian */
 .lib-dark [class*="bg-white/"],
 html.dark [class*="bg-white/"] {
-  background-color: rgba(11, 22, 22, 0.85) !important;
+  background-color: rgba(24, 29, 33, 0.85) !important;
   border-color: rgba(212, 175, 55, 0.2) !important;
 }
 
@@ -360,14 +378,14 @@ html.dark [class*="bg-white/"] {
 html.dark [class*="bg-slate-50/"],
 .lib-dark [class*="bg-slate-100/"],
 html.dark [class*="bg-slate-100/"] {
-  background-color: rgba(15, 29, 29, 0.85) !important;
+  background-color: rgba(30, 36, 40, 0.85) !important;
   border-color: rgba(212, 175, 55, 0.2) !important;
 }
 
 /* Admin Sidebar in Dark Mode */
 .lib-dark aside,
 html.dark aside {
-  background-color: #070E0E !important;
+  background-color: #121619 !important;
   border-color: rgba(212, 175, 55, 0.2) !important;
   color: #FDF8ED !important;
 }

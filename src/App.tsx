@@ -46,11 +46,11 @@ function AppContent() {
 
   return (
     <div
-      className={`min-h-screen relative font-sans selection:bg-holyEmerald-500/20 ${app.librarySettings?.darkMode ? 'lib-dark bg-obsidian-950 text-regalGold-100' : 'bg-slate-50 text-slate-900'}`}
+      className={`min-h-screen relative font-sans selection:bg-holyEmerald-500/20 ${app.librarySettings?.darkMode ? 'lib-dark bg-[#121619] text-regalGold-100' : 'bg-slate-50 text-slate-900'}`}
       dir="rtl"
     >
       <div
-        className={`absolute inset-0 z-0 pointer-events-none transition-opacity duration-700 ${app.librarySettings?.darkMode ? 'girih-overlay opacity-25' : 'mix-blend-multiply opacity-10'}`}
+        className={`absolute inset-0 z-0 pointer-events-none transition-opacity duration-700 ${app.librarySettings?.darkMode ? 'dark-arabesque-overlay opacity-100' : 'bg-islamic-pattern mix-blend-multiply opacity-10'}`}
         style={app.librarySettings?.darkMode ? undefined : {
           backgroundImage: `url('/islamic_pattern.png')`,
           backgroundSize: '400px',
