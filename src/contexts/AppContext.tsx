@@ -4792,6 +4792,7 @@ ${versesList}
     timeLeft, setTimeLeft,
     challengeMode, setChallengeMode,
     dailyChallengeOffset, setDailyChallengeOffset,
+    handleStartDaily,
     handleStartDailyChallenge,
     incompleteChallenge, setIncompleteChallenge,
     completedChallengeIds, setCompletedChallengeIds,

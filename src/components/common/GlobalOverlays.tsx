@@ -366,7 +366,11 @@ export const GlobalOverlays: React.FC = () => {
         streakInfo={app.streakInfo}
         onStartChallenge={() => {
           app.setIsStreakModalOpen(false);
-          app.handleStartDaily();
+          if (typeof app.handleStartDaily === 'function') {
+            app.handleStartDaily();
+          } else if (typeof app.handleStartDailyChallenge === 'function') {
+            app.handleStartDailyChallenge();
+          }
         }}
       />
 
