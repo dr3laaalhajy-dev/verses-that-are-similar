@@ -506,9 +506,60 @@ export const HomePage: React.FC<HomePageProps> = ({
 
       {/* Bento Grid: Full-Width Panoramic Prayer Times + 4 Square/Compact Cards Below */}
       <div className="space-y-2.5 sm:space-y-3.5 px-1">
-        {/* Full-width Wide Rectangle: Prayer Times Banner */}
-        <div className="w-full">
-          <Dashboard streakCount={streak} />
+        {/* Vertical Flex Stack: Prayer Times Banner + Stats Ribbon directly below */}
+        <div className="flex flex-col gap-4 w-full">
+          <div className="w-full">
+            <Dashboard streakCount={streak} />
+          </div>
+
+          {/* Stats Ribbon (Horizontal Glass Strip) */}
+          <div
+            onClick={() => {
+              app.setShowScores(true);
+            }}
+            className="glass-card w-full rounded-2xl bg-white dark:bg-obsidian-900/80 border border-slate-150 dark:border-regalGold-500/20 p-3 sm:p-3.5 flex items-center justify-between text-center shadow-xs hover:border-amber-300 dark:hover:border-regalGold-500/40 transition-all cursor-pointer group select-none"
+            title="انقر لفتح لوحة المتصدرين وقائمة الشرف"
+          >
+            <div className="flex items-center gap-2 sm:gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-amber-50 dark:bg-regalGold-500/15 text-amber-600 dark:text-regalGold-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                <Trophy className="w-4 h-4 text-amber-500 dark:text-regalGold-400" />
+              </div>
+              <div className="text-right">
+                <span className="text-sm sm:text-base font-black text-slate-800 dark:text-regalGold-100 font-tajawal tabular-nums block leading-tight">
+                  {toArabicIndic(cups)}
+                </span>
+                <span className="block text-[10px] font-bold text-slate-400 dark:text-regalGold-300/70">كؤوس وبطولات</span>
+              </div>
+            </div>
+
+            <div className="w-px h-7 bg-slate-200 dark:bg-regalGold-500/20" />
+
+            <div className="flex items-center gap-2 sm:gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-holyEmerald-500/15 text-emerald-600 dark:text-holyEmerald-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                <Star className="w-4 h-4 text-emerald-600 dark:text-holyEmerald-400 fill-emerald-600 dark:fill-holyEmerald-400" />
+              </div>
+              <div className="text-right">
+                <span className="text-sm sm:text-base font-black text-slate-800 dark:text-regalGold-100 font-tajawal tabular-nums block leading-tight">
+                  {toArabicIndic(totalPoints)}
+                </span>
+                <span className="block text-[10px] font-bold text-slate-400 dark:text-regalGold-300/70">نقطة مهارة</span>
+              </div>
+            </div>
+
+            <div className="w-px h-7 bg-slate-200 dark:bg-regalGold-500/20" />
+
+            <div className="flex items-center gap-2 sm:gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-holyEmerald-500/15 text-emerald-600 dark:text-holyEmerald-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-holyEmerald-400" />
+              </div>
+              <div className="text-right">
+                <span className="text-sm sm:text-base font-black text-emerald-700 dark:text-holyEmerald-300 font-tajawal tabular-nums block leading-tight">
+                  #٤
+                </span>
+                <span className="block text-[10px] font-bold text-slate-400 dark:text-regalGold-300/70">في المتصدرين</span>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* 2x2 Geometrical Bento Grid: Row 1 (Wird & Gift Box) | Row 2 (Progress & Occasions) */}
@@ -653,55 +704,6 @@ export const HomePage: React.FC<HomePageProps> = ({
               استعراض السُنن والأحاديث 🌙
             </span>
           </button>
-        </div>
-      </div>
-
-      {/* New Feature 4: Stats Ribbon (Horizontal Glass Strip) */}
-      <div
-        onClick={() => {
-          app.setShowScores(true);
-        }}
-        className="glass-card w-full rounded-2xl bg-white dark:bg-obsidian-900/80 border border-slate-150 dark:border-regalGold-500/20 p-3 sm:p-3.5 flex items-center justify-around text-center shadow-xs hover:border-amber-300 dark:hover:border-regalGold-500/40 transition-all cursor-pointer group select-none"
-        title="انقر لفتح لوحة المتصدرين وقائمة الشرف"
-      >
-        <div className="flex items-center gap-2 sm:gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-amber-50 dark:bg-regalGold-500/15 text-amber-600 dark:text-regalGold-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-            <Trophy className="w-4 h-4 text-amber-500 dark:text-regalGold-400" />
-          </div>
-          <div className="text-right">
-            <span className="text-sm sm:text-base font-black text-slate-800 dark:text-regalGold-100 font-tajawal tabular-nums block leading-tight">
-              {toArabicIndic(cups)}
-            </span>
-            <span className="block text-[10px] font-bold text-slate-400 dark:text-regalGold-300/70">كؤوس وبطولات</span>
-          </div>
-        </div>
-
-        <div className="w-px h-7 bg-slate-200 dark:bg-regalGold-500/20" />
-
-        <div className="flex items-center gap-2 sm:gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-holyEmerald-500/15 text-emerald-600 dark:text-holyEmerald-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-            <Star className="w-4 h-4 text-emerald-600 dark:text-holyEmerald-400 fill-emerald-600 dark:fill-holyEmerald-400" />
-          </div>
-          <div className="text-right">
-            <span className="text-sm sm:text-base font-black text-slate-800 dark:text-regalGold-100 font-tajawal tabular-nums block leading-tight">
-              {toArabicIndic(totalPoints)}
-            </span>
-            <span className="block text-[10px] font-bold text-slate-400 dark:text-regalGold-300/70">نقطة مهارة</span>
-          </div>
-        </div>
-
-        <div className="w-px h-7 bg-slate-200 dark:bg-regalGold-500/20" />
-
-        <div className="flex items-center gap-2 sm:gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-emerald-50 dark:bg-holyEmerald-500/15 text-emerald-600 dark:text-holyEmerald-400 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
-            <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-holyEmerald-400" />
-          </div>
-          <div className="text-right">
-            <span className="text-sm sm:text-base font-black text-emerald-700 dark:text-holyEmerald-300 font-tajawal tabular-nums block leading-tight">
-              #٤
-            </span>
-            <span className="block text-[10px] font-bold text-slate-400 dark:text-regalGold-300/70">في المتصدرين</span>
-          </div>
         </div>
       </div>
 
