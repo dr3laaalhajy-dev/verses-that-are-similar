@@ -45,7 +45,7 @@ function categoryMatchesTab(cat?: { id?: string; title?: string } | null, tabId 
   switch (tabId) {
     case 'daily':
       return (
-        id === 'morning' || id === 'evening' || id === 'hisn_1' || id === 'hisn_2' || id === 'hisn_3' || id === 'hisn_27' ||
+        id === 'morning' || id === 'evening' || id === 'hisn_2' || id === 'hisn_3' || id === 'hisn_27' ||
         t.includes('صباح') || t.includes('مساء') || t.includes('نوم') || t.includes('استيقاظ') || t.includes('اليوم')
       );
     case 'prayer':
@@ -87,136 +87,103 @@ function categoryMatchesTab(cat?: { id?: string; title?: string } | null, tabId 
 
 // Category visual metadata helper
 interface CategoryMeta {
-  isHighlighted: boolean;
-  cardClasses: string;
   iconBg: string;
   iconNode: React.ReactNode;
-  tag?: string;
 }
 
 function getCategoryMeta(cat?: { id?: string; title?: string; icon?: string } | null): CategoryMeta {
   if (!cat) {
     return {
-      isHighlighted: false,
-      cardClasses: 'bg-white dark:bg-obsidian-900/90 border-gray-100 dark:border-slate-800 shadow-2xs',
-      iconBg: 'bg-slate-100 text-slate-600',
-      iconNode: <BookOpen className="w-6 h-6" />
+      iconBg: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
+      iconNode: <BookOpen className="w-5 h-5 sm:w-6 sm:h-6" />
     };
   }
   const id = (cat.id || '').toLowerCase();
   const t = (cat.title || '').toLowerCase();
 
-  // 1. Highlighted Primary Categories
+  // 1. Primary Categories (distinct contextual icon wrappers, unified card background)
   if (id === 'morning' || t.includes('الصباح')) {
     return {
-      isHighlighted: true,
-      cardClasses: 'bg-gradient-to-l from-amber-500/10 via-amber-100/35 to-white dark:from-amber-950/40 dark:via-obsidian-900 dark:to-obsidian-900 border-amber-200/90 dark:border-amber-700/60 hover:border-amber-400 shadow-2xs',
       iconBg: 'bg-amber-100 text-amber-600 dark:bg-amber-950/60 dark:text-amber-400',
-      iconNode: <Sun className="w-6 h-6" />,
-      tag: 'رئيسي'
+      iconNode: <Sun className="w-5 h-5 sm:w-6 sm:h-6" />
     };
   }
 
   if (id === 'evening' || t.includes('المساء')) {
     return {
-      isHighlighted: true,
-      cardClasses: 'bg-gradient-to-l from-indigo-500/10 via-indigo-100/35 to-white dark:from-indigo-950/40 dark:via-obsidian-900 dark:to-obsidian-900 border-indigo-200/90 dark:border-indigo-700/60 hover:border-indigo-400 shadow-2xs',
       iconBg: 'bg-indigo-100 text-indigo-600 dark:bg-indigo-950/60 dark:text-indigo-400',
-      iconNode: <Moon className="w-6 h-6" />,
-      tag: 'رئيسي'
+      iconNode: <Moon className="w-5 h-5 sm:w-6 sm:h-6" />
     };
   }
 
   if (id === 'hisn_27' || (t.includes('بعد السلام') && t.includes('صلاة'))) {
     return {
-      isHighlighted: true,
-      cardClasses: 'bg-gradient-to-l from-emerald-500/10 via-emerald-100/35 to-white dark:from-emerald-950/40 dark:via-obsidian-900 dark:to-obsidian-900 border-emerald-200/90 dark:border-emerald-700/60 hover:border-emerald-400 shadow-2xs',
       iconBg: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400',
-      iconNode: <Compass className="w-6 h-6" />,
-      tag: 'دبر كل صلاة'
+      iconNode: <Compass className="w-5 h-5 sm:w-6 sm:h-6" />
     };
   }
 
   if (id === 'hisn_2' || t.includes('نوم')) {
     return {
-      isHighlighted: true,
-      cardClasses: 'bg-gradient-to-l from-purple-500/10 via-purple-100/25 to-white dark:from-purple-950/40 dark:via-obsidian-900 dark:to-obsidian-900 border-purple-200/80 dark:border-purple-800/50 hover:border-purple-300 shadow-2xs',
       iconBg: 'bg-purple-100 text-purple-600 dark:bg-purple-950/60 dark:text-purple-400',
-      iconNode: <Moon className="w-6 h-6" />,
-      tag: 'قبل النوم'
+      iconNode: <Moon className="w-5 h-5 sm:w-6 sm:h-6" />
     };
   }
 
   // 2. Regular Categories with contextual icons and wrappers
   if (t.includes('صلاة') || t.includes('مسجد') || t.includes('آذان') || t.includes('تشهد')) {
     return {
-      isHighlighted: false,
-      cardClasses: 'bg-white dark:bg-obsidian-900/90 border-gray-100 dark:border-slate-800 hover:border-emerald-200 shadow-2xs',
       iconBg: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400',
-      iconNode: <Compass className="w-6 h-6" />
+      iconNode: <Compass className="w-5 h-5 sm:w-6 sm:h-6" />
     };
   }
 
   if (t.includes('شيطان') || t.includes('كرب') || t.includes('هم') || t.includes('حزن') || t.includes('يعصم')) {
     return {
-      isHighlighted: false,
-      cardClasses: 'bg-white dark:bg-obsidian-900/90 border-gray-100 dark:border-slate-800 hover:border-rose-200 shadow-2xs',
       iconBg: 'bg-rose-50 text-rose-600 dark:bg-rose-950/50 dark:text-rose-400',
-      iconNode: <Shield className="w-6 h-6" />
+      iconNode: <Shield className="w-5 h-5 sm:w-6 sm:h-6" />
     };
   }
 
   if (t.includes('سفر') || t.includes('ركوب')) {
     return {
-      isHighlighted: false,
-      cardClasses: 'bg-white dark:bg-obsidian-900/90 border-gray-100 dark:border-slate-800 hover:border-teal-200 shadow-2xs',
       iconBg: 'bg-teal-50 text-teal-600 dark:bg-teal-950/50 dark:text-teal-400',
-      iconNode: <Plane className="w-6 h-6" />
+      iconNode: <Plane className="w-5 h-5 sm:w-6 sm:h-6" />
     };
   }
 
   if (t.includes('منزل') || t.includes('خلاء') || t.includes('ثوب')) {
     return {
-      isHighlighted: false,
-      cardClasses: 'bg-white dark:bg-obsidian-900/90 border-gray-100 dark:border-slate-800 hover:border-blue-200 shadow-2xs',
       iconBg: 'bg-blue-50 text-blue-600 dark:bg-blue-950/50 dark:text-blue-400',
-      iconNode: <Home className="w-6 h-6" />
+      iconNode: <Home className="w-5 h-5 sm:w-6 sm:h-6" />
     };
   }
 
   if (t.includes('طعام') || t.includes('إفطار') || t.includes('أكل')) {
     return {
-      isHighlighted: false,
-      cardClasses: 'bg-white dark:bg-obsidian-900/90 border-gray-100 dark:border-slate-800 hover:border-amber-200 shadow-2xs',
       iconBg: 'bg-amber-50 text-amber-600 dark:bg-amber-950/50 dark:text-amber-400',
-      iconNode: <Utensils className="w-6 h-6" />
+      iconNode: <Utensils className="w-5 h-5 sm:w-6 sm:h-6" />
     };
   }
 
   if (t.includes('مطر') || t.includes('ريح') || t.includes('رعد')) {
     return {
-      isHighlighted: false,
-      cardClasses: 'bg-white dark:bg-obsidian-900/90 border-gray-100 dark:border-slate-800 hover:border-cyan-200 shadow-2xs',
       iconBg: 'bg-cyan-50 text-cyan-600 dark:bg-cyan-950/50 dark:text-cyan-400',
-      iconNode: <CloudRain className="w-6 h-6" />
+      iconNode: <CloudRain className="w-5 h-5 sm:w-6 sm:h-6" />
     };
   }
 
   if (t.includes('سلام') || t.includes('أحبك') || t.includes('معروف')) {
     return {
-      isHighlighted: false,
-      cardClasses: 'bg-white dark:bg-obsidian-900/90 border-gray-100 dark:border-slate-800 hover:border-pink-200 shadow-2xs',
       iconBg: 'bg-pink-50 text-pink-600 dark:bg-pink-950/50 dark:text-pink-400',
-      iconNode: <Heart className="w-6 h-6" />
+      iconNode: <Heart className="w-5 h-5 sm:w-6 sm:h-6" />
     };
   }
 
   // Default clean card style
   return {
-    isHighlighted: false,
-    cardClasses: 'bg-white dark:bg-obsidian-900/90 border-gray-100 dark:border-slate-800 hover:border-emerald-200 shadow-2xs',
     iconBg: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
-    iconNode: <BookOpen className="w-6 h-6" />
+    iconNode: <BookOpen className="w-5 h-5 sm:w-6 sm:h-6" />
   };
 }
 
@@ -260,13 +227,18 @@ export const AdhkarPage: React.FC<AdhkarPageProps> = ({
   }, [selectedAdhkarCategoryId, setSelectedAdhkarCategoryId]);
 
   const activeCategory = selectedAdhkarCategoryId 
-    ? (adhkarData[selectedAdhkarCategoryId] || adhkarData[resolveAdhkarCategoryId(selectedAdhkarCategoryId)] || adhkarData['hisn_1'])
+    ? (adhkarData[selectedAdhkarCategoryId] || adhkarData[resolveAdhkarCategoryId(selectedAdhkarCategoryId)] || adhkarData['morning'])
     : null;
 
-  // Filtered categories based on Search Query and Active Tab
+  // Filtered categories based on Search Query and Active Tab (no duplicate morning/evening or combined cards)
   const displayedCategories = useMemo(() => {
     const rawCategories = Object.values(adhkarData).filter(
-      cat => !cat.id.includes('_morning') && !cat.id.includes('_evening')
+      cat =>
+        cat.id !== 'hisn_1' &&
+        !cat.id.startsWith('hisn_1_') &&
+        !cat.id.includes('_morning') &&
+        !cat.id.includes('_evening') &&
+        cat.title !== 'أذكار الصباح والمساء'
     );
 
     const q = adhkarSearchQuery.trim().toLowerCase();
@@ -391,7 +363,7 @@ export const AdhkarPage: React.FC<AdhkarPageProps> = ({
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
               {displayedCategories.map((cat) => {
                 const meta = getCategoryMeta(cat);
                 return (
@@ -406,39 +378,23 @@ export const AdhkarPage: React.FC<AdhkarPageProps> = ({
                         window.history.pushState({ view: 'adhkar', category: cat.id }, '', `/adhkar/${cat.id}`);
                       }
                     }}
-                    className={`w-full p-4 sm:p-5 rounded-2xl border relative overflow-hidden text-right flex items-center justify-between gap-3 sm:gap-4 transition-all duration-300 cursor-pointer shadow-2xs group ${meta.cardClasses}`}
+                    className="w-full p-3.5 sm:p-4 rounded-2xl border border-gray-150/80 dark:border-slate-800 bg-white dark:bg-obsidian-900 hover:border-emerald-300 dark:hover:border-emerald-600/50 shadow-2xs hover:shadow-xs relative overflow-hidden text-right flex items-center justify-between gap-2.5 transition-all duration-200 cursor-pointer group"
                   >
-                    {/* Subtle Geometric Islamic Corner Watermark (opacity 5%) */}
-                    <div className="absolute -left-3 -bottom-3 w-24 h-24 bg-[url('/islamic_pattern.png')] dark:bg-[url('/islamic_pattern_dark.png')] bg-contain bg-no-repeat opacity-[0.05] dark:opacity-[0.03] pointer-events-none" />
+                    {/* Subtle Geometric Islamic Corner Watermark (opacity 3%) */}
+                    <div className="absolute -left-2 -bottom-2 w-16 h-16 bg-[url('/islamic_pattern.png')] dark:bg-[url('/islamic_pattern_dark.png')] bg-contain bg-no-repeat opacity-[0.03] pointer-events-none" />
 
-                    {/* Right Side: Circular Icon Wrapper + Title */}
-                    <div className="flex items-center gap-3 sm:gap-3.5 min-w-0 z-10">
-                      <div className={`w-12 h-12 sm:w-13 sm:h-13 rounded-full flex items-center justify-center shrink-0 shadow-2xs transition-transform duration-300 group-hover:scale-105 ${meta.iconBg}`}>
+                    {/* Right Side: Circular/Rounded Icon Wrapper + Title */}
+                    <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 z-10 flex-1">
+                      <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 shadow-2xs transition-transform duration-200 group-hover:scale-105 ${meta.iconBg}`}>
                         {meta.iconNode}
                       </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <h3 className="text-base sm:text-lg font-bold text-gray-800 dark:text-slate-100 truncate leading-snug">
-                            {cat.title}
-                          </h3>
-                        </div>
-                        <p className="text-xs text-gray-400 dark:text-gray-400 font-medium mt-0.5">
-                          {cat.items?.length || 0} أذكار مأثورة
-                        </p>
-                      </div>
+                      <h3 className="text-xs sm:text-sm font-bold text-gray-800 dark:text-slate-100 truncate leading-snug">
+                        {cat.title}
+                      </h3>
                     </div>
 
-                    {/* Left Side: Tag badge & arrow */}
-                    <div className="flex items-center gap-2 shrink-0 z-10">
-                      {meta.tag && (
-                        <span className="hidden sm:inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-800 dark:text-amber-300 border border-amber-500/25">
-                          {meta.tag}
-                        </span>
-                      )}
-                      <div className="w-8 h-8 rounded-full bg-gray-50/80 dark:bg-slate-800/60 flex items-center justify-center text-gray-400 group-hover:text-emerald-700 transition-colors">
-                        <ChevronLeft className="w-4 h-4" />
-                      </div>
-                    </div>
+                    {/* Left Side: Clean Arrow (no container box, no square shadow) */}
+                    <ChevronLeft className="w-4 h-4 text-gray-300 dark:text-gray-600 group-hover:text-emerald-600 group-hover:-translate-x-0.5 transition-all shrink-0 z-10" />
                   </motion.button>
                 );
               })}
