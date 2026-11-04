@@ -433,3 +433,4 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
 };
 
 export default PublicProfileModal;
+

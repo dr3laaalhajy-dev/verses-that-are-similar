@@ -1726,6 +1726,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return newStreak;
   }, [streak, lastPlayedDate, playerUsername, playerName, totalPoints]);
 
+  /**
+   * Centralized point awarding function - strictly +1 point per correct answer across all challenges.
+   */
+  const addPoint = useCallback((metadata?: { challengeId?: number; roomId?: string }) => {
+    let nextVal = 0;
+    setTotalPoints(prev => {
+      nextVal = prev + 1;
+      try {
+        localStorage.setItem('quran_total_points', String(nextVal));
+      } catch (e) {}
+      return nextVal;
+    });
+
+    if (playerUsername || playerName) {
+      fetch('/api/player-score', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: playerUsername,
+          name: playerName,
+          points: 1, // Strictly 1 point
+          totalPoints: nextVal,
+          challengeId: metadata?.challengeId,
+          roomId: metadata?.roomId
+        })
+      }).catch(err => console.error('Failed to sync point to backend:', err));
+    }
+
+    return nextVal;
+  }, [playerUsername, playerName]);
+
   const updateStatsAfterWin = useCallback(() => {
     const today = getTodayLocalDateStr();
     const nowTime = Date.now();
@@ -1756,10 +1787,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const updatedInfo = calculateStreakInfo(newStreak, today, nowTime.toString());
     setStreakInfo(updatedInfo);
 
-    const newTotalPoints = totalPoints + score;
-    setTotalPoints(newTotalPoints);
-    localStorage.setItem('quran_total_points', newTotalPoints.toString());
-
     const hasSeerah = userCertificates.some(c => c.category === 'seerah');
     const hasGeneral = userCertificates.some(c => c.category === 'general');
     // Requirement 1: Keep null if user chose "no frame"
@@ -1774,8 +1801,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       body: JSON.stringify({
         username: playerUsername,
         name: playerName,
-        score: newTotalPoints,
-        totalPoints: newTotalPoints,
+        score: totalPoints,
+        totalPoints: totalPoints,
         streak: newStreak,
         streakCount: newStreak,
         totalCups: cups,
@@ -3709,27 +3736,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (isCorrect) {
         setSessionCorrect(prev => prev + 1);
 
-        const earnedPoints = 1; // نقطة واحدة (1) بدلاً من 10 نقاط
-        setTotalPoints(prev => {
-          const next = prev + earnedPoints;
-          localStorage.setItem('quran_total_points', next.toString());
-          return next;
-        });
-
-        if (playerUsername || playerName) {
-          fetch('/api/player-score', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              username: playerUsername,
-              name: playerName,
-              points: earnedPoints,
-              totalPoints: totalPoints + earnedPoints,
-              challengeId: currentQuestion?.id,
-              roomId: room?.id
-            })
-          }).catch(err => console.error('Failed to sync score:', err));
-        }
+        // توحيد منح النقاط: نقطة واحدة فقط (+1) عبر الدالة المركزية
+        addPoint({ challengeId: currentQuestion?.id, roomId: room?.id });
 
         if (view === 'group_game') {
           syncGroupProgress(false, sessionCorrect + 1);
@@ -3901,27 +3909,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (isFullyCorrect) {
       setSessionCorrect(prev => prev + 1);
 
-      const earnedPoints = 1; // نقطة واحدة (1) بدلاً من 10 نقاط
-      setTotalPoints(prev => {
-        const next = prev + earnedPoints;
-        localStorage.setItem('quran_total_points', next.toString());
-        return next;
-      });
-
-      if (playerUsername || playerName) {
-        fetch('/api/player-score', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            username: playerUsername,
-            name: playerName,
-            points: earnedPoints,
-            totalPoints: totalPoints + earnedPoints,
-            challengeId: currentQuestion?.id,
-            roomId: room?.id
-          })
-        }).catch(err => console.error('Failed to sync score:', err));
-      }
+      // توحيد منح النقاط: نقطة واحدة فقط (+1) عبر الدالة المركزية
+      addPoint({ challengeId: currentQuestion?.id, roomId: room?.id });
 
       if (view === 'group_game') {
         syncGroupProgress(false, sessionCorrect + 1);
@@ -4469,28 +4458,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     }
 
-    const pointsToAdd = score > 0 ? score : 1;
-    const newPoints = totalPoints + pointsToAdd;
-    setTotalPoints(newPoints);
-    localStorage.setItem('quran_total_points', newPoints.toString());
-
     // Requirement 4: Cups are strictly earned from group rooms only
     const newCupsCount = cups;
 
-    // Sync with backend using player username / name
+    // Sync with backend using player username / name without duplicate point increments
     fetch('/api/player-score', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         username: playerUsername,
         name: playerName,
-        points: pointsToAdd,
-        totalPoints: newPoints,
+        totalPoints: totalPoints,
         cups: 0,
         totalCups: newCupsCount,
         challengeId: currentChallenge?.id,
         roomId: room?.id,
-        score: newPoints,
+        score: totalPoints,
         seerahCompleted: (getActiveAchievement() === 'seerah'),
         generalCompleted: (getActiveAchievement() === 'general'),
         quranCompleted: (completedChallengeIds.size >= 15)
@@ -4740,8 +4723,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         startListening();
       }, 400);
 
-      const pointsEarned = 1; // نقطة واحدة (1) بدلاً من 10 نقاط
-      setScore(prev => prev + pointsEarned);
+      addPoint({ challengeId: currentChallenge?.id, roomId: room?.id });
+      setScore(prev => prev + 1);
     }
   }, [transcript, targetVerses, matchedIds, KEYWORD, difficulty, wordStates, stopListening, resetTranscript, startListening, keywordWordCount, distinguishingWordCounts]);
 
@@ -5164,6 +5147,7 @@ ${versesList}
     playerUsername, setPlayerUsername,
     cups, setCups,
     totalPoints, setTotalPoints,
+    addPoint,
     streak, setStreak,
     streakInfo,
     motivationalQuote, setMotivationalQuote,

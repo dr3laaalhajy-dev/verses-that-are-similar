@@ -242,3 +242,4 @@ class FriendsRealtimeService {
 
 export const friendsRealtimeService = new FriendsRealtimeService();
 export default friendsRealtimeService;
+

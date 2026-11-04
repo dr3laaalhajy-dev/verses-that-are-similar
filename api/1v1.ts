@@ -546,13 +546,12 @@ function evaluateQuestionScores(
     let earnedSpeedBonus = false
 
     if (ans && ans.isCorrect) {
-      roundPoints += 1 // 1 base point per correct answer
+      roundPoints = 1 // نقطة واحدة فقط لكل إجابة صحيحة
       pData.correctCount += 1
       pData.basePoints += 1
 
-      // Speed bonus: Awarded ONLY if this player was the first to answer correctly
+      // Speed bonus: إحصائية للسرعة مع الحفاظ على النقاط كنقطة واحدة (+1)
       if (effectiveFirstCorrectUserId !== null && numId === effectiveFirstCorrectUserId) {
-        roundPoints += 1 // Speed bonus point (+1)
         earnedSpeedBonus = true
         pData.speedBonusCount += 1
       }

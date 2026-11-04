@@ -1676,6 +1676,9 @@ export default function AdminDashboard({
     if (!editingUser) return;
     setIsSavingUser(true);
     try {
+      const parsedPoints = Math.max(0, parseInt(String(editUserPoints), 10) || 0);
+      const parsedCups = Math.max(0, parseInt(String(editUserCups), 10) || 0);
+
       const res = await fetch('/api/admin?action=users', {
         method: 'POST',
         headers: {
@@ -1684,11 +1687,11 @@ export default function AdminDashboard({
         },
         body: JSON.stringify({
           subAction: 'update-info',
-          id: editingUser.id,
-          name: editUserName,
-          username: editUserUsername,
-          points: editUserPoints,
-          cups: editUserCups
+          id: Number(editingUser.id),
+          name: editUserName.trim(),
+          username: editUserUsername.replace(/^@+/, '').trim(),
+          points: parsedPoints,
+          cups: parsedCups
         })
       });
       const data = await res.json();
@@ -1697,8 +1700,8 @@ export default function AdminDashboard({
         ...u,
         name: editUserName.trim(),
         username: editUserUsername.replace(/^@+/, '').trim(),
-        points: Number(editUserPoints),
-        cups: Number(editUserCups)
+        points: parsedPoints,
+        cups: parsedCups
       } : u));
       setEditingUser(null);
       showAlert('نجاح', data.message || 'تم تحديث بيانات المستخدم بنجاح', () => fetchUsers(usersSearch));

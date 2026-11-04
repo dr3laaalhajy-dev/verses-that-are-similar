@@ -419,13 +419,20 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, currentAdmin
         }
       }
 
+      const parsedPoints = (points !== undefined && points !== null && !isNaN(Number(points)))
+        ? Math.max(0, parseInt(String(points), 10))
+        : undefined;
+      const parsedCups = (cups !== undefined && cups !== null && !isNaN(Number(cups)))
+        ? Math.max(0, parseInt(String(cups), 10))
+        : undefined;
+
       const updated = await prisma.player.update({
         where: { id: player.id },
         data: {
           ...(cleanN ? { name: cleanN } : {}),
           ...(cleanU ? { username: cleanU } : {}),
-          ...(points !== undefined ? { points: Number(points) } : {}),
-          ...(cups !== undefined ? { cups: Number(cups) } : {})
+          ...(parsedPoints !== undefined ? { points: parsedPoints } : {}),
+          ...(parsedCups !== undefined ? { cups: parsedCups } : {})
         }
       });
       return res.status(200).json({ success: true, message: 'تم تحديث بيانات المستخدم بنجاح', player: updated });

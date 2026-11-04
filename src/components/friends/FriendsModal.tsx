@@ -519,3 +519,4 @@ export const FriendsModal: React.FC<FriendsModalProps> = ({
 };
 
 export default FriendsModal;
+
