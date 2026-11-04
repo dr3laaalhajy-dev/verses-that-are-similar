@@ -2,11 +2,17 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Users, Lock, Globe, Loader2, Trash2, ArrowRight, LogOut,
-  UserPlus, ChevronDown, ChevronUp, Check, Swords, Sparkles
+  UserPlus, ChevronDown, ChevronUp, Check, Swords, Sparkles, Clock, X
 } from 'lucide-react';
 import { View } from '../types/challenges';
 import { LiveReactionsOverlay } from '../components/LiveReactionsOverlay';
 import { friendsRealtimeService } from '../services/friendsRealtimeService';
+import { useApp } from '../contexts/AppContext';
+
+export interface FriendInviteStateItem {
+  status: 'idle' | 'sent' | 'declined' | 'accepted';
+  cooldownRemaining?: number;
+}
 
 export interface GroupWaitingPageProps {
   room: any;
@@ -35,17 +41,93 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
   setRoom,
   setIsResignModalOpen
 }) => {
+  const app = useApp();
   const [isInviteDropdownOpen, setIsInviteDropdownOpen] = useState(false);
   const [friendsList, setFriendsList] = useState<any[]>([]);
   const [isLoadingFriends, setIsLoadingFriends] = useState(false);
-  const [sentInvites, setSentInvites] = useState<{ [id: string]: boolean }>({});
   const [sendingInviteId, setSendingInviteId] = useState<string | number | null>(null);
+
+  // Requirement 4: Sender State per friend ID (inviteStatuses[friendId]) tracking idle, sent (10s), declined (30s), accepted
+  const [inviteStatuses, setInviteStatuses] = useState<Record<string | number, FriendInviteStateItem>>({});
 
   useEffect(() => {
     const unsub = friendsRealtimeService.onPresenceChange(() => {
       // triggers re-render when presence changes
     });
     return () => unsub();
+  }, []);
+
+  // Listen for real-time invite responses (invite_ignored, invite_declined, invite_accepted)
+  useEffect(() => {
+    const identifiers = [
+      playerUsername,
+      playerName,
+      app?.uniquePlayerId,
+      app?.playerId ? String(app.playerId) : null
+    ].filter(Boolean) as string[];
+
+    const unsubscribe = friendsRealtimeService.subscribeToInviteResponses(
+      identifiers,
+      (response) => {
+        if (!response || !response.friendId) return;
+        const fId = response.friendId;
+
+        // Requirement 2: In case of ignore (10s timeout), reset invite button back to idle immediately
+        if (response.event === 'invite_ignored') {
+          setInviteStatuses(prev => ({
+            ...prev,
+            [fId]: { status: 'idle' as const }
+          }));
+        }
+        // Requirement 2: In case of explicit decline, disable button, show 'تم الرفض' with 30s cooldown timer
+        else if (response.event === 'invite_declined') {
+          setInviteStatuses(prev => ({
+            ...prev,
+            [fId]: { status: 'declined' as const, cooldownRemaining: 30 }
+          }));
+        }
+        // Requirement 3: In case of acceptance, immediately change button to 'تم القبول'
+        else if (response.event === 'invite_accepted') {
+          setInviteStatuses(prev => ({
+            ...prev,
+            [fId]: { status: 'accepted' as const }
+          }));
+        }
+      }
+    );
+
+    return () => {
+      unsubscribe();
+    };
+  }, [playerUsername, playerName, app?.uniquePlayerId, app?.playerId]);
+
+  // 1-second interval ticker managing cooldown timers per friend
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setInviteStatuses(prev => {
+        let hasChanges = false;
+        const next: Record<string | number, FriendInviteStateItem> = {};
+
+        for (const [idKey, item] of Object.entries(prev)) {
+          if (item.cooldownRemaining !== undefined && item.cooldownRemaining > 0) {
+            hasChanges = true;
+            const newRemaining = item.cooldownRemaining - 1;
+            if (newRemaining <= 0) {
+              // Cooldown expired: return to idle
+              next[idKey] = { status: 'idle' as const };
+            } else {
+              next[idKey] = { ...item, cooldownRemaining: newRemaining };
+            }
+          } else {
+            next[idKey] = item;
+          }
+        }
+
+        return hasChanges ? next : prev;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
   }, []);
 
   const fetchFriends = async () => {
@@ -86,12 +168,15 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
 
     setSendingInviteId(friend.id);
     try {
+      const senderTarget = app?.uniquePlayerId || playerUsername || playerName || String(app?.playerId || '');
       await friendsRealtimeService.sendRoomInvite(friendTarget, {
         roomId: room.id,
         roomCode: room.code,
         roomName: room.name || 'غرفة التحدي',
         hostName: playerName || 'صديقك',
         hostUsername: playerUsername || undefined,
+        senderTarget: senderTarget,
+        senderId: app?.playerId,
         isPrivate: room.isPrivate,
         password: room.password,
         isInvite: true,
@@ -99,7 +184,12 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
         gameMode: room.gameMode,
         timestamp: Date.now()
       });
-      setSentInvites(prev => ({ ...prev, [friend.id]: true }));
+
+      // Requirement 1 & 2: Set sent status with 10-second initial timeout timer
+      setInviteStatuses(prev => ({
+        ...prev,
+        [friend.id]: { status: 'sent' as const, cooldownRemaining: 10 }
+      }));
     } catch (e) {
       console.error('Failed to send room invite:', e);
     } finally {
@@ -213,8 +303,13 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
                   ) : (
                     <div className="space-y-1.5 max-h-48 overflow-y-auto">
                       {onlineFriends.map((friend) => {
-                        const isSent = !!sentInvites[friend.id];
+                        const fStatus = inviteStatuses[friend.id] || { status: 'idle' };
                         const isSending = sendingInviteId === friend.id;
+                        const isIdle = fStatus.status === 'idle' && !isSending;
+                        const isSent = fStatus.status === 'sent';
+                        const isDeclined = fStatus.status === 'declined';
+                        const isAccepted = fStatus.status === 'accepted';
+
                         return (
                           <div
                             key={friend.id}
@@ -235,21 +330,43 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
                             <button
                               type="button"
                               onClick={() => handleSendInvite(friend)}
-                              disabled={isSent || isSending}
-                              className={`px-3 py-1 rounded-lg text-xs font-black shadow-xs transition-all active:scale-95 flex items-center gap-1 cursor-pointer ${
-                                isSent
-                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-300'
-                                  : 'bg-amber-500 hover:bg-amber-600 text-white'
+                              disabled={!isIdle}
+                              className={`px-3 py-1 rounded-lg text-xs font-black shadow-xs transition-all active:scale-95 flex items-center gap-1 ${
+                                isAccepted
+                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-300 cursor-default'
+                                  : isDeclined
+                                  ? 'bg-red-50 text-red-600 border border-red-200 dark:bg-red-950/40 dark:text-red-400 cursor-not-allowed'
+                                  : isSent
+                                  ? 'bg-amber-50 text-amber-800 border border-amber-200 dark:bg-amber-950/50 dark:text-amber-300 cursor-default'
+                                  : 'bg-amber-500 hover:bg-amber-600 text-white cursor-pointer'
                               }`}
                             >
                               {isSending ? (
-                                <Loader2 className="w-3 h-3 animate-spin" />
+                                <>
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                  <span>جاري الإرسال...</span>
+                                </>
+                              ) : isAccepted ? (
+                                <>
+                                  <Check className="w-3 h-3 text-emerald-600" />
+                                  <span>تم القبول ✓</span>
+                                </>
+                              ) : isDeclined ? (
+                                <>
+                                  <X className="w-3 h-3 text-red-500" />
+                                  <span>تم الرفض ({fStatus.cooldownRemaining || 30}ث)</span>
+                                </>
                               ) : isSent ? (
-                                <Check className="w-3 h-3 text-emerald-600" />
+                                <>
+                                  <Clock className="w-3 h-3 text-amber-600 animate-pulse" />
+                                  <span>تم الإرسال ({fStatus.cooldownRemaining || 10}ث)</span>
+                                </>
                               ) : (
-                                <Swords className="w-3 h-3" />
+                                <>
+                                  <Swords className="w-3 h-3" />
+                                  <span>إرسال دعوة</span>
+                                </>
                               )}
-                              <span>{isSent ? 'تم الإرسال ✓' : 'إرسال دعوة'}</span>
                             </button>
                           </div>
                         );

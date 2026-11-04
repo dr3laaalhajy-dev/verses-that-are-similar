@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Swords, X, Play, ShieldAlert, Sparkles, Loader2, AlertCircle } from 'lucide-react';
-import type { RoomInvitePayload } from '../../services/friendsRealtimeService';
+import { Swords, X, Play, Clock, Sparkles, Loader2, AlertCircle } from 'lucide-react';
+import { friendsRealtimeService, type RoomInvitePayload } from '../../services/friendsRealtimeService';
 
 export interface RoomInviteModalProps {
   invite: RoomInvitePayload | null;
@@ -23,12 +23,87 @@ export const RoomInviteModal: React.FC<RoomInviteModalProps> = ({
 }) => {
   const [isJoining, setIsJoining] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [timeLeft, setTimeLeft] = useState(10);
+  const hasRespondedRef = useRef(false);
+
+  // Requirement 1: 10-second timeout timer.
+  // When 10s elapses without action, dismiss modal and send socket event 'invite_ignored' to the sender.
+  useEffect(() => {
+    if (!invite) return;
+    setTimeLeft(10);
+    hasRespondedRef.current = false;
+
+    const interval = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          if (!hasRespondedRef.current) {
+            hasRespondedRef.current = true;
+            handleTimeout();
+          }
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [invite?.roomId, invite?.timestamp]);
 
   if (!invite) return null;
 
+  const getSenderTarget = () => {
+    return invite.senderTarget || invite.hostUsername || invite.hostName;
+  };
+
+  const getMyFriendId = () => {
+    return currentPlayer?.id || currentPlayer?.uniquePlayerId || currentPlayer?.username || currentPlayer?.name || '';
+  };
+
+  const handleTimeout = async () => {
+    const senderTarget = getSenderTarget();
+    if (senderTarget) {
+      friendsRealtimeService.sendInviteResponse(senderTarget, 'invite_ignored', {
+        roomId: invite.roomId,
+        friendId: getMyFriendId(),
+        friendName: currentPlayer?.name || undefined
+      }).catch(err => console.warn('Failed to send invite_ignored event:', err));
+    }
+    onDecline();
+  };
+
+  const handleDeclineClick = async () => {
+    if (hasRespondedRef.current) return;
+    hasRespondedRef.current = true;
+
+    // Requirement 2: Declined event sent when user clicks 'إلغاء'
+    const senderTarget = getSenderTarget();
+    if (senderTarget) {
+      friendsRealtimeService.sendInviteResponse(senderTarget, 'invite_declined', {
+        roomId: invite.roomId,
+        friendId: getMyFriendId(),
+        friendName: currentPlayer?.name || undefined
+      }).catch(err => console.warn('Failed to send invite_declined event:', err));
+    }
+    onDecline();
+  };
+
   const handleAcceptInviteClick = async () => {
+    if (hasRespondedRef.current) return;
+    hasRespondedRef.current = true;
+
     setIsJoining(true);
     setErrorMessage(null);
+
+    // Requirement 3: Send 'invite_accepted' event to the sender
+    const senderTarget = getSenderTarget();
+    if (senderTarget) {
+      friendsRealtimeService.sendInviteResponse(senderTarget, 'invite_accepted', {
+        roomId: invite.roomId,
+        friendId: getMyFriendId(),
+        friendName: currentPlayer?.name || undefined
+      }).catch(err => console.warn('Failed to send invite_accepted event:', err));
+    }
 
     try {
       const token = localStorage.getItem('quran_admin_token') || localStorage.getItem('quran_auth_token') || '';
@@ -69,6 +144,7 @@ export const RoomInviteModal: React.FC<RoomInviteModalProps> = ({
       onAccept(data.room || data);
     } catch (err: any) {
       console.error('Error joining invited room:', err);
+      hasRespondedRef.current = false;
       if (err?.message === 'Failed to fetch') {
         setErrorMessage('تعذر الاتصال بالخادم، يرجى التحقق من اتصال الإنترنت');
       } else {
@@ -107,6 +183,23 @@ export const RoomInviteModal: React.FC<RoomInviteModalProps> = ({
             <p className="text-xs text-slate-400 font-bold">
               {invite.roomName || 'غرفة التنافس القرآني'}
             </p>
+          </div>
+
+          {/* 10-Second Countdown Visual Bar & Timer Badge */}
+          <div className="space-y-1.5 pt-1">
+            <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 dark:text-slate-400 px-1">
+              <span>مهلة الرد:</span>
+              <span className="font-mono font-black text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-md border border-amber-200 dark:border-amber-700/50 flex items-center gap-1">
+                <Clock className="w-3 h-3 text-amber-500 animate-pulse" />
+                <span>{timeLeft} ثوانٍ</span>
+              </span>
+            </div>
+            <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden">
+              <div
+                className="bg-gradient-to-r from-amber-500 to-orange-500 h-full transition-all duration-1000 ease-linear rounded-full"
+                style={{ width: `${Math.max(0, (timeLeft / 10) * 100)}%` }}
+              />
+            </div>
           </div>
 
           {/* Room Details Badge */}
@@ -151,11 +244,12 @@ export const RoomInviteModal: React.FC<RoomInviteModalProps> = ({
             </button>
 
             <button
-              onClick={onDecline}
+              onClick={handleDeclineClick}
               disabled={isJoining}
-              className="py-3 px-4 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-2xl text-xs font-bold transition-all cursor-pointer"
+              className="py-3 px-5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1"
             >
-              <span>تجاهل</span>
+              <X className="w-3.5 h-3.5 text-slate-400" />
+              <span>إلغاء</span>
             </button>
           </div>
         </motion.div>
