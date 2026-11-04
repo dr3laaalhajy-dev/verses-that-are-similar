@@ -18,7 +18,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     case 'check-active': return handleCheckActive(req, res)
     case 'presence': return handlePresence(req, res)
     case 'cancel-room': return handleCancelRoom(req, res)
-    case 'resign': return handleResign(req, res)
+    case 'resign':
+    case 'withdraw':
+    case 'leaveRoom':
+    case 'leave':
+      return handleResign(req, res)
     case 'reaction': return handleReaction(req, res)
     default:
       return res.status(400).json({ message: 'Invalid action' })
@@ -441,15 +445,48 @@ async function handleAvailableCounts(req: VercelRequest, res: VercelResponse) {
   }
 }
 
-function finalizeRoomScores(room: any, playersProgress: Record<string, any>) {
-  const totalQuestions = room.questionCount || 1
+function calculateResults(room: any, playersProgress: Record<string, any>) {
+  const totalQuestions = room.questionCount || room.totalQuestions || 1
   const updatedProgress: Record<string, any> = { ...playersProgress }
 
-  // 1. Calculate base points, accuracy, and high accuracy bonus (> 90%)
+  // 1. Enforce Strict Zero Reward Policy:
+  // player.answersCount === room.totalQuestions (or roundHistory.length === totalQuestions or progress === 100)
+  // Any player marked as abandoned, resigned, or who did not complete all questions is disqualified: 0 cups, 0 points!
   for (const [pIdStr, pData] of Object.entries(updatedProgress)) {
+    if (pIdStr === '__lastReaction' || !pData || typeof pData !== 'object') continue
+
+    const isAbandoned = Boolean(
+      pData.status === 'abandoned' ||
+      pData.isAbandoned === true ||
+      pData.isResigned === true ||
+      pData.hasLeft === true ||
+      pData.isDisqualified === true
+    )
+
+    const answersCount = typeof pData.answersCount === 'number'
+      ? pData.answersCount
+      : (Array.isArray(pData.roundHistory) ? pData.roundHistory.length : (pData.progress === 100 ? totalQuestions : 0))
+
+    const completedAllQuestions = !isAbandoned && (answersCount >= totalQuestions || pData.progress === 100)
+
+    if (isAbandoned || !completedAllQuestions) {
+      // Disqualified from rankings: 0 cups and 0 points
+      pData.isDisqualified = true
+      pData.isAbandoned = true
+      pData.status = isAbandoned ? 'abandoned' : 'incomplete'
+      pData.score = 0
+      pData.finalTotalScore = 0
+      pData.basePoints = 0
+      pData.speedBonusCount = 0
+      pData.accuracyBonus = 0
+      pData.completionBonus = 0
+      pData.trophiesAwarded = 0
+      continue
+    }
+
     const correctCount = typeof pData.correctCount === 'number' ? pData.correctCount : 0
     const speedBonusCount = typeof pData.speedBonusCount === 'number' ? pData.speedBonusCount : 0
-    const basePoints = correctCount * 1 // 1 point per correct answer
+    const basePoints = correctCount * 1 // Strictly 1 point per correct answer
     const accuracy = totalQuestions > 0 ? (correctCount / totalQuestions) : 0
     const accuracyBonus = accuracy > 0.90 ? 15 : 0 // Bonus +15 for >90% accuracy
 
@@ -461,10 +498,9 @@ function finalizeRoomScores(room: any, playersProgress: Record<string, any>) {
   }
 
   // 2. Award Conditional Early Completion Bonus (+10 pts)
-  // The first player to finish with accuracy > 70% gets +10 points.
-  // If the fastest player's accuracy <= 70%, bonus passes to the next fastest with accuracy > 70%.
+  // Strictly to the first qualified (non-disqualified) finisher with accuracy > 70%
   const finishers = Object.entries(updatedProgress)
-    .filter(([_, p]) => p.finishTime && typeof p.finishTime === 'number')
+    .filter(([pIdStr, p]) => pIdStr !== '__lastReaction' && !p.isDisqualified && !p.isAbandoned && p.finishTime && typeof p.finishTime === 'number')
     .sort(([_, a], [__, b]) => (a.finishTime || 0) - (b.finishTime || 0))
 
   for (const [_, p] of finishers) {
@@ -477,14 +513,22 @@ function finalizeRoomScores(room: any, playersProgress: Record<string, any>) {
   }
 
   // 3. Compute final total score
-  for (const [_, pData] of Object.entries(updatedProgress)) {
+  for (const [pIdStr, pData] of Object.entries(updatedProgress)) {
+    if (pIdStr === '__lastReaction' || !pData || typeof pData !== 'object') continue
+    if (pData.isDisqualified || pData.isAbandoned) {
+      pData.score = 0
+      pData.finalTotalScore = 0
+      pData.trophiesAwarded = 0
+      continue
+    }
     const total = (pData.basePoints || 0) + (pData.speedBonusCount || 0) + (pData.accuracyBonus || 0) + (pData.completionBonus || 0)
     pData.score = total
     pData.finalTotalScore = total
   }
 
-  // 4. Determine winner by highest final total score (tie-break by finishTime)
+  // 4. Determine winner by highest final total score among qualified players only!
   const ranked = Object.entries(updatedProgress)
+    .filter(([pIdStr, p]) => pIdStr !== '__lastReaction' && !p.isDisqualified && !p.isAbandoned && p.status !== 'abandoned')
     .map(([id, p]: [string, any]) => ({
       id: parseInt(id),
       score: p.finalTotalScore || 0,
@@ -494,40 +538,69 @@ function finalizeRoomScores(room: any, playersProgress: Record<string, any>) {
 
   const winnerId = ranked.length > 0 ? ranked[0].id : null
 
-  // 5. Award trophies to Top 4 positions: 1st (+4), 2nd (+3), 3rd (+2), 4th (+1), 5th+ (0)
-  const TROPHY_REWARDS = [4, 3, 2, 1];
+  // 5. Award trophies strictly to qualified finishers in Top 4 positions: 1st (+4), 2nd (+3), 3rd (+2), 4th (+1), 5th+ (0)
+  const TROPHY_REWARDS = [4, 3, 2, 1]
   for (let i = 0; i < Math.min(4, ranked.length); i++) {
-    const pIdStr = String(ranked[i].id);
+    const pIdStr = String(ranked[i].id)
     if (updatedProgress[pIdStr]) {
-      updatedProgress[pIdStr].trophiesAwarded = TROPHY_REWARDS[i];
+      updatedProgress[pIdStr].trophiesAwarded = TROPHY_REWARDS[i]
+    }
+  }
+
+  // Ensure all disqualified or abandoned players have 0 trophies and 0 score
+  for (const [pIdStr, pData] of Object.entries(updatedProgress)) {
+    if (pIdStr === '__lastReaction' || !pData || typeof pData !== 'object') continue
+    if (pData.isDisqualified || pData.isAbandoned || pData.status === 'abandoned') {
+      pData.trophiesAwarded = 0
+      pData.score = 0
+      pData.finalTotalScore = 0
     }
   }
 
   return { updatedProgress, winnerId }
 }
 
+const finalizeRoomScores = calculateResults
+
 async function applyRoomTrophies(tx: any, room: any, progress: Record<string, any>) {
+  const totalQuestions = room.questionCount || room.totalQuestions || 1
   const ranked = Object.entries(progress)
+    .filter(([id, p]: [string, any]) => {
+      if (id === '__lastReaction' || !p || typeof p !== 'object') return false
+      const isAbandoned = Boolean(
+        p.status === 'abandoned' ||
+        p.isAbandoned === true ||
+        p.isResigned === true ||
+        p.hasLeft === true ||
+        p.isDisqualified === true
+      )
+      if (isAbandoned) return false
+      const answersCount = typeof p.answersCount === 'number'
+        ? p.answersCount
+        : (Array.isArray(p.roundHistory) ? p.roundHistory.length : (p.progress === 100 ? totalQuestions : 0))
+      return answersCount >= totalQuestions || p.progress === 100
+    })
     .map(([id, p]: [string, any]) => ({
       id: parseInt(id),
       score: p.finalTotalScore || p.score || 0,
       finishTime: p.finishTime || Infinity
     }))
     .filter(p => !isNaN(p.id) && p.id > 0)
-    .sort((a, b) => b.score - a.score || a.finishTime - b.finishTime);
+    .sort((a, b) => b.score - a.score || a.finishTime - b.finishTime)
 
   // Exclusive group room cups distribution: 1st (4), 2nd (3), 3rd (2), 4th (1), 5th+ (0)
-  const rewards = [4, 3, 2, 1];
+  // Awarded exclusively to qualified finishers who completed all questions
+  const rewards = [4, 3, 2, 1]
   for (let i = 0; i < Math.min(4, ranked.length); i++) {
-    const targetId = ranked[i].id;
-    const cups = rewards[i];
+    const targetId = ranked[i].id
+    const cups = rewards[i]
     try {
       await tx.player.update({
         where: { id: targetId },
         data: { cups: { increment: cups } }
-      });
+      })
     } catch (e) {
-      console.error(`Failed to award ${cups} trophies to player ${targetId}:`, e);
+      console.error(`Failed to award ${cups} trophies to player ${targetId}:`, e)
     }
   }
 }
@@ -556,6 +629,7 @@ function evaluateQuestionScores(
     if (typeof pData.speedBonusCount !== 'number') pData.speedBonusCount = 0
     if (typeof pData.basePoints !== 'number') pData.basePoints = 0
     if (!Array.isArray(pData.roundHistory)) pData.roundHistory = []
+    pData.answersCount = (pData.answersCount || 0) + 1
 
     let roundPoints = 0
     let earnedSpeedBonus = false
@@ -793,6 +867,7 @@ async function handleSubmitAnswer(req: VercelRequest, res: VercelResponse) {
           }
 
           const qNum = Number(questionIndex)
+          pData.answersCount = (pData.answersCount || 0) + 1
           pData.progress = Math.round(((qNum + 1) / room.questionCount) * 100)
           pData.playerCurrentQuestionIndex = qNum + 1
           pData.lastSeen = Date.now()
@@ -804,9 +879,9 @@ async function handleSubmitAnswer(req: VercelRequest, res: VercelResponse) {
           }
         }
 
-        const totalParticipants = Object.keys(playersProgress).length
+        const totalParticipants = Object.keys(playersProgress).filter(k => k !== '__lastReaction').length
         const allFinished = totalParticipants > 0 &&
-          Object.values(playersProgress).every((p: any) => p.finishTime)
+          Object.values(playersProgress).every((p: any) => p && (p.finishTime || p.isAbandoned || p.status === 'abandoned' || p.isResigned))
 
         const { updatedProgress, winnerId } = finalizeRoomScores(room, playersProgress)
 
@@ -936,14 +1011,18 @@ async function handleSubmitProgress(req: VercelRequest, res: VercelResponse) {
       const finishTime = Date.now()
       playersProgress[player.id].finishTime = playersProgress[player.id].finishTime || finishTime
       playersProgress[player.id].progress = 100
+      playersProgress[player.id].answersCount = room.questionCount || 5
 
-      // If everyone finished, set room status to FINISHED and run final scoring
-      const allFinished = Object.values(playersProgress).every((p: any) => p.finishTime)
-      const { updatedProgress, winnerId } = finalizeRoomScores(room, playersProgress)
+      // If everyone finished or abandoned, set room status to FINISHED and run final scoring
+      const allFinished = Object.entries(playersProgress)
+        .filter(([k]) => k !== '__lastReaction')
+        .every(([_, p]: [string, any]) => p && (p.finishTime || p.isAbandoned || p.status === 'abandoned' || p.isResigned))
+      const { updatedProgress, winnerId } = calculateResults(room, playersProgress)
       updateData.playersProgress = updatedProgress
 
       if (allFinished) {
         updateData.status = 'FINISHED'
+        await applyRoomTrophies(prisma, room, updatedProgress)
       }
       if (winnerId) {
         updateData.winnerId = winnerId
@@ -1159,95 +1238,186 @@ async function handleCancelRoom(req: VercelRequest, res: VercelResponse) {
 }
 
 async function handleResign(req: VercelRequest, res: VercelResponse) {
-  const { roomId, playerId } = req.body
-  if (!roomId || !playerId) return res.status(400).json({ error: 'Room ID and Player ID required' })
+  const { roomId, id, playerId, playerUsername, playerName } = req.body || {}
+  const targetRoomId = String(roomId || id || '').trim()
+  const targetPlayerId = playerId || playerUsername || playerName || req.headers['x-player-id']
+  if (!targetRoomId || !targetPlayerId) {
+    return res.status(400).json({ error: 'Room ID and Player ID required' })
+  }
 
   try {
-    const player = await findPlayer(playerId)
+    const player = await findPlayer(targetPlayerId, playerName)
     if (!player) return res.status(404).json({ error: 'Player not found' })
 
     const room = await prisma.room.findUnique({
-      where: { id: String(roomId) }
+      where: { id: targetRoomId }
     })
     if (!room) return res.status(404).json({ error: 'Room not found' })
 
+    // If room is already FINISHED or CANCELLED, return current state
+    if (room.status === 'FINISHED' || room.status === 'CANCELLED') {
+      const fullRoom = await getFullRoom(room.id)
+      return res.status(200).json(fullRoom)
+    }
+
     let playersProgress = (room.playersProgress as any) || {}
-    if (!playersProgress[player.id]) {
-      playersProgress[player.id] = { name: player.name }
-    }
+    const isHost = player.id === room.player1Id
 
-    const currentScore = playersProgress[player.id].score || 0
-    // 1. حفظ نقاط اللاعب الحالية التي جمعها في التحدي وإضافتها إلى رصيده الكلي في قاعدة البيانات
-    if (currentScore > 0) {
-      await prisma.player.update({
-        where: { id: player.id },
-        data: { points: { increment: currentScore } }
-      }).catch(err => console.error('Error saving resigned player points:', err))
-    }
+    // -------------------------------------------------------------------------
+    // 1. قبل بدء التحدي (status === 'WAITING'):
+    // إذا انسحب المالك، تُلغى الغرفة.
+    // إذا انسحب ضيف (ليس المالك)، يُحذف فقط من الغرفة والمشاركين،
+    // ويُبلّغ المتواجدون، وتظل الغرفة في حالة WAITING دون إنهائها أبداً.
+    // -------------------------------------------------------------------------
+    if (room.status === 'WAITING') {
+      if (isHost) {
+        await prisma.room.update({
+          where: { id: room.id },
+          data: { status: 'CANCELLED' }
+        })
+        const fullRoom = await getFullRoom(room.id)
+        return res.status(200).json(fullRoom)
+      } else {
+        // حذف الضيف المنسحب من مصفوفة التقدم والمشاركين
+        delete playersProgress[String(player.id)]
+        delete playersProgress[player.id]
 
-    // 2. تحديث حالة اللاعب داخل الغرفة: hasLeft = true و isOnline = false
-    playersProgress[player.id].progress = 100
-    playersProgress[player.id].finishTime = Date.now()
-    playersProgress[player.id].isResigned = true
-    playersProgress[player.id].hasLeft = true
-    playersProgress[player.id].isOnline = false
+        // إعادة ضبط player2Id إذا كان الضيف هو player2
+        let newPlayer2Id = room.player2Id
+        if (room.player2Id === player.id) {
+          const remainingGuestIds = Object.keys(playersProgress)
+            .map(gid => parseInt(gid))
+            .filter(gid => !isNaN(gid) && gid !== room.player1Id)
+          newPlayer2Id = remainingGuestIds.length > 0 ? remainingGuestIds[0] : null
+        }
 
-    const updateData: any = { playersProgress }
+        // إشعار المتواجدين بحدث خروج المتسابق (Socket/Realtime Event)
+        const leaveNotification = {
+          type: 'LEAVE',
+          action: 'player_left',
+          playerId: player.id,
+          playerName: player.name,
+          timestamp: Date.now()
+        }
+        playersProgress.__lastReaction = leaveNotification
 
-    // 3. فحص اللاعبين النشطين (Active Players):
-    const remainingActivePlayers = Object.entries(playersProgress).filter(([id, p]: [string, any]) => {
-      return id !== String(player.id) && p && !p.hasLeft && p.isOnline !== false && !p.isResigned
-    })
-
-    // إذا لم يتبق أي لاعب نشط، ننهي الغرفة
-    if (remainingActivePlayers.length === 0) {
-      updateData.status = 'FINISHED'
-    }
-
-    // تحديد الفائز من بين اللاعبين
-    const finishedPlayers = Object.entries(playersProgress)
-      .map(([id, p]: [string, any]) => ({ id: parseInt(id), score: p.score || 0, finishTime: p.finishTime }))
-      .sort((a, b) => b.score - a.score || (a.finishTime || 0) - (b.finishTime || 0))
-
-    if (finishedPlayers.length > 0) {
-      updateData.winnerId = finishedPlayers[0].id
-    }
-
-    // 4. مشغل إعادة الفحص الفوري (Immediate Check Trigger):
-    // في وضع التزامن SYNC: إذا كان باقي اللاعبين النشطين قد أجابوا بالفعل على السؤال الحالي،
-    // ننتقل فوراً للسؤال التالي دون أي تأخير ولا نتركهم معلقين ينتظرون المنسحب!
-    if (room.status === 'PLAYING' && (room as any).transitionMode !== 'ASYNC' && remainingActivePlayers.length > 0) {
-      const curQ = room.currentQuestionIndex || 0
-      const curAnswers: Record<string, any> = (room.currentAnswers as any) || {}
-
-      const allRemainingAnswered = remainingActivePlayers.every(([id]) => {
-        const a = curAnswers[id]
-        return a && (a.questionIndex === undefined || a.questionIndex === curQ)
-      })
-
-      if (allRemainingAnswered) {
-        await prisma.$transaction(async (tx) => {
-          await tx.room.update({
-            where: { id: String(roomId) },
-            data: updateData
-          })
-          const freshRoom = await tx.room.findUnique({ where: { id: String(roomId) } })
-          if (freshRoom && freshRoom.status === 'PLAYING') {
-            await advanceRoomToNextQuestionTx(tx, freshRoom, curAnswers)
+        // الحفاظ على حالة الغرفة كـ WAITING حصراً وعدم إنهائها أبداً
+        await prisma.room.update({
+          where: { id: room.id },
+          data: {
+            playersProgress,
+            player2Id: newPlayer2Id,
+            status: 'WAITING',
+            lastReaction: leaveNotification
           }
         })
-        const fullRoom = await getFullRoom(String(roomId))
+
+        const fullRoom = await getFullRoom(room.id)
         return res.status(200).json(fullRoom)
       }
     }
 
+    // -------------------------------------------------------------------------
+    // 2. أثناء التحدي (status === 'PLAYING'):
+    // إذا انسحب أي لاعب، يُحوّل إلى abandoned (منسحب) ولا يُنهى التحدي للبقية.
+    // قانون الحرمان الصارم من الجوائز (Zero Reward Policy):
+    // 0 كؤوس و 0 نقاط واستبعاد تام من الترتيب، ومنع ثغرة تجميع النقاط والهروب.
+    // التحدي ينتهي فقط عندما ينهي اللاعبون المتبقون جميع الأسئلة.
+    // -------------------------------------------------------------------------
+    const abandonTime = Date.now()
+    playersProgress[player.id] = {
+      ...(playersProgress[player.id] || {}),
+      name: player.name,
+      isAbandoned: true,
+      status: 'abandoned',
+      isResigned: true,
+      hasLeft: true,
+      isOnline: false,
+      isDisqualified: true,
+      finishTime: abandonTime,
+      score: 0,
+      finalTotalScore: 0,
+      basePoints: 0,
+      speedBonusCount: 0,
+      accuracyBonus: 0,
+      completionBonus: 0,
+      trophiesAwarded: 0
+    }
+
+    // إشعار المتواجدين بانسحاب اللاعب أثناء اللعب
+    const abandonNotification = {
+      type: 'ABANDON',
+      action: 'player_abandoned',
+      playerId: player.id,
+      playerName: player.name,
+      timestamp: abandonTime
+    }
+    playersProgress.__lastReaction = abandonNotification
+
+    // فحص اللاعبين النشطين المتبقين (الذين لم ينسحبوا)
+    const remainingActivePlayers = Object.entries(playersProgress).filter(([id, p]: [string, any]) => {
+      if (id === '__lastReaction' || id === String(player.id)) return false
+      const isPlayerAbandoned = Boolean(
+        p?.isAbandoned ||
+        p?.status === 'abandoned' ||
+        p?.isResigned ||
+        p?.hasLeft
+      )
+      return !isPlayerAbandoned
+    })
+
+    const updateData: any = {
+      playersProgress,
+      lastReaction: abandonNotification
+    }
+
+    // التحدي ينتهي فقط إذا لم يتبق أي لاعب نشط
+    if (remainingActivePlayers.length === 0) {
+      updateData.status = 'FINISHED'
+      const finalized = calculateResults(room, playersProgress)
+      updateData.playersProgress = finalized.updatedProgress
+      updateData.winnerId = finalized.winnerId
+    } else {
+      // لا ننهي التحدي للبقية أبداً ويستمر اللعب
+      updateData.status = 'PLAYING'
+
+      // في وضع التزامن SYNC: إذا كان باقي اللاعبين النشطين قد أجابوا بالفعل على السؤال الحالي،
+      // ننتقل فوراً للسؤال التالي دون تركهم معلقين بانتظار المنسحب
+      if ((room as any).transitionMode !== 'ASYNC') {
+        const curQ = room.currentQuestionIndex || 0
+        const curAnswers: Record<string, any> = (room.currentAnswers as any) || {}
+
+        const allRemainingAnswered = remainingActivePlayers.length > 0 && remainingActivePlayers.every(([id]) => {
+          const a = curAnswers[id]
+          return a && (a.questionIndex === undefined || a.questionIndex === curQ)
+        })
+
+        if (allRemainingAnswered) {
+          await prisma.$transaction(async (tx) => {
+            await tx.room.update({
+              where: { id: room.id },
+              data: updateData
+            })
+            const freshRoom = await tx.room.findUnique({ where: { id: room.id } })
+            if (freshRoom && freshRoom.status === 'PLAYING') {
+              await advanceRoomToNextQuestionTx(tx, freshRoom, curAnswers)
+            }
+          })
+          const fullRoom = await getFullRoom(room.id)
+          return res.status(200).json(fullRoom)
+        }
+      }
+    }
+
     await prisma.room.update({
-      where: { id: String(roomId) },
+      where: { id: room.id },
       data: updateData
     })
-    const fullRoom = await getFullRoom(String(roomId))
+
+    const fullRoom = await getFullRoom(room.id)
     return res.status(200).json(fullRoom)
   } catch (err: any) {
+    console.error('Error in handleResign:', err)
     return res.status(500).json({ error: err.message })
   }
 }

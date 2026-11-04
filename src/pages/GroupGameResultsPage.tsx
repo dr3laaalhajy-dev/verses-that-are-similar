@@ -95,17 +95,25 @@ export const GroupGameResultsPage: React.FC<GroupGameResultsPageProps> = ({
                   .map((p: any) => {
                     const prog = room?.playersProgress?.[p.id] || {};
                     const totalQ = room?.questionCount || 1;
-                    const correctCount = prog.correctCount || 0;
-                    const accuracy = prog.accuracy ?? Math.round((correctCount / totalQ) * 100);
-                    const score = prog.finalTotalScore ?? prog.score ?? 0;
-                    const basePoints = prog.basePoints ?? (correctCount * 1);
-                    const speedBonusCount = prog.speedBonusCount || 0;
-                    const completionBonus = prog.completionBonus || 0;
-                    const accuracyBonus = prog.accuracyBonus || 0;
-                    const isFinished = !!prog.finishTime;
+                    const isAbandoned = Boolean(
+                      prog.isAbandoned ||
+                      prog.status === 'abandoned' ||
+                      prog.isResigned ||
+                      prog.isDisqualified ||
+                      prog.hasLeft
+                    );
+                    const correctCount = isAbandoned ? 0 : (prog.correctCount || 0);
+                    const accuracy = isAbandoned ? 0 : (prog.accuracy ?? Math.round((correctCount / totalQ) * 100));
+                    const score = isAbandoned ? 0 : (prog.finalTotalScore ?? prog.score ?? 0);
+                    const basePoints = isAbandoned ? 0 : (prog.basePoints ?? (correctCount * 1));
+                    const speedBonusCount = isAbandoned ? 0 : (prog.speedBonusCount || 0);
+                    const completionBonus = isAbandoned ? 0 : (prog.completionBonus || 0);
+                    const accuracyBonus = isAbandoned ? 0 : (prog.accuracyBonus || 0);
+                    const isFinished = !isAbandoned && !!prog.finishTime;
 
                     return {
                       ...p,
+                      isAbandoned,
                       finishTime: prog.finishTime,
                       score,
                       basePoints,
@@ -118,6 +126,7 @@ export const GroupGameResultsPage: React.FC<GroupGameResultsPageProps> = ({
                     };
                   })
                   .sort((a: any, b: any) => {
+                    if (a.isAbandoned !== b.isAbandoned) return a.isAbandoned ? 1 : -1;
                     if (b.score !== a.score) return b.score - a.score;
                     return (a.finishTime || Infinity) - (b.finishTime || Infinity);
                   })
@@ -128,65 +137,89 @@ export const GroupGameResultsPage: React.FC<GroupGameResultsPageProps> = ({
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: idx * 0.1 }}
                       className={`flex flex-col gap-2 p-3.5 md:p-4 rounded-2xl border ${
-                        idx === 0
-                          ? 'bg-gradient-to-r from-amber-50 to-orange-50/60 border-amber-300 shadow-md ring-2 ring-amber-400/20'
-                          : 'bg-white border-slate-200/80 shadow-xs'
+                        p.isAbandoned
+                          ? 'bg-red-50/50 border-red-200/60 opacity-80'
+                          : idx === 0
+                            ? 'bg-gradient-to-r from-amber-50 to-orange-50/60 border-amber-300 shadow-md ring-2 ring-amber-400/20'
+                            : 'bg-white border-slate-200/80 shadow-xs'
                       }`}
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2.5">
                           <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-black text-sm ${
-                            idx === 0 ? 'bg-amber-500 text-white shadow-xs' : idx === 1 ? 'bg-slate-300 text-slate-700' : idx === 2 ? 'bg-amber-700 text-white' : 'bg-slate-100 text-slate-500'
+                            p.isAbandoned
+                              ? 'bg-red-100 text-red-600 font-bold text-xs'
+                              : idx === 0 ? 'bg-amber-500 text-white shadow-xs' : idx === 1 ? 'bg-slate-300 text-slate-700' : idx === 2 ? 'bg-amber-700 text-white' : 'bg-slate-100 text-slate-500'
                           }`}>
-                            {idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : idx + 1}
+                            {p.isAbandoned ? '✕' : idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : idx + 1}
                           </div>
                           <div className="flex flex-col items-start">
                             <span className="font-black text-slate-800 text-sm">
                               {p.name} {(p.name === playerName || (p.username && p.username === playerUsername)) && '(أنت)'}
                             </span>
                             <div className="flex items-center gap-2 text-[10px] text-slate-400 font-bold">
-                              <span>{p.correctCount}/{room?.questionCount || 0} صحيحة</span>
-                              <span>•</span>
-                              <span className={`font-black ${p.accuracy >= 90 ? 'text-emerald-600' : p.accuracy >= 70 ? 'text-amber-600' : 'text-slate-500'}`}>
-                                دقة {p.accuracy}%
-                              </span>
+                              {p.isAbandoned ? (
+                                <span className="text-red-500 font-black">مستبعد (انسحب من التحدي)</span>
+                              ) : (
+                                <>
+                                  <span>{p.correctCount}/{room?.questionCount || 0} صحيحة</span>
+                                  <span>•</span>
+                                  <span className={`font-black ${p.accuracy >= 90 ? 'text-emerald-600' : p.accuracy >= 70 ? 'text-amber-600' : 'text-slate-500'}`}>
+                                    دقة {p.accuracy}%
+                                  </span>
+                                </>
+                              )}
                             </div>
                           </div>
                         </div>
 
                         <div className="text-left flex flex-col items-end">
-                          <span className="text-sm md:text-base text-brand-emerald font-black bg-brand-emerald/10 px-2.5 py-0.5 rounded-lg border border-brand-emerald/20">
+                          <span className={`text-sm md:text-base font-black px-2.5 py-0.5 rounded-lg border ${
+                            p.isAbandoned
+                              ? 'text-red-500 bg-red-100/50 border-red-200'
+                              : 'text-brand-emerald bg-brand-emerald/10 border-brand-emerald/20'
+                          }`}>
                             {p.score} نقطة
                           </span>
-                          <span className="text-[10px] text-slate-400 font-bold mt-0.5">
-                            الأساسية: {p.basePoints}
-                          </span>
+                          {!p.isAbandoned && (
+                            <span className="text-[10px] text-slate-400 font-bold mt-0.5">
+                              الأساسية: {p.basePoints}
+                            </span>
+                          )}
                         </div>
                       </div>
 
-                      {/* Bonus Badges Breakdown */}
+                      {/* Bonus Badges Breakdown / Disqualification Notice */}
                       <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-slate-100 text-[10px] font-black">
-                        {idx < 4 && (
-                          <span className="bg-amber-100 text-amber-900 px-2 py-0.5 rounded-md flex items-center gap-1 border border-amber-300 shadow-xs">
-                            <Trophy className="w-3 h-3 text-amber-600 fill-amber-600" />
-                            <span>+{4 - idx} {idx === 3 ? 'كأس' : idx === 2 ? 'كأسين' : 'كؤوس'}</span>
+                        {p.isAbandoned ? (
+                          <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded-md flex items-center gap-1 border border-red-200 shadow-xs">
+                            <span>🚫 حرمان تام من الجوائز (0 كؤوس و 0 نقاط)</span>
                           </span>
-                        )}
-                        {p.speedBonusCount > 0 && (
-                          <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded-md flex items-center gap-1 border border-amber-200">
-                            <Zap className="w-3 h-3 text-amber-600 fill-amber-600" />
-                            <span>+{p.speedBonusCount} بونص سرعة</span>
-                          </span>
-                        )}
-                        {p.completionBonus > 0 && (
-                          <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md flex items-center gap-1 border border-emerald-200">
-                            <span>🏆 +{p.completionBonus} إنهاء أول مشروط (دقة &gt; 70%)</span>
-                          </span>
-                        )}
-                        {p.accuracyBonus > 0 && (
-                          <span className="bg-purple-100 text-purple-800 px-2 py-0.5 rounded-md flex items-center gap-1 border border-purple-200">
-                            <span>🎯 +{p.accuracyBonus} تمكن فائق (دقة &gt; 90%)</span>
-                          </span>
+                        ) : (
+                          <>
+                            {idx < 4 && (
+                              <span className="bg-amber-100 text-amber-900 px-2 py-0.5 rounded-md flex items-center gap-1 border border-amber-300 shadow-xs">
+                                <Trophy className="w-3 h-3 text-amber-600 fill-amber-600" />
+                                <span>+{4 - idx} {idx === 3 ? 'كأس' : idx === 2 ? 'كأسين' : 'كؤوس'}</span>
+                              </span>
+                            )}
+                            {p.speedBonusCount > 0 && (
+                              <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded-md flex items-center gap-1 border border-amber-200">
+                                <Zap className="w-3 h-3 text-amber-600 fill-amber-600" />
+                                <span>+{p.speedBonusCount} بونص سرعة</span>
+                              </span>
+                            )}
+                            {p.completionBonus > 0 && (
+                              <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md flex items-center gap-1 border border-emerald-200">
+                                <span>🏆 +{p.completionBonus} إنهاء أول مشروط (دقة &gt; 70%)</span>
+                              </span>
+                            )}
+                            {p.accuracyBonus > 0 && (
+                              <span className="bg-purple-100 text-purple-800 px-2 py-0.5 rounded-md flex items-center gap-1 border border-purple-200">
+                                <span>🎯 +{p.accuracyBonus} تمكن فائق (دقة &gt; 90%)</span>
+                              </span>
+                            )}
+                          </>
                         )}
                       </div>
                     </motion.div>
@@ -212,25 +245,45 @@ export const GroupGameResultsPage: React.FC<GroupGameResultsPageProps> = ({
             <div className="w-full max-w-md bg-white rounded-2xl shadow-lg border border-slate-100 overflow-hidden">
               {/* قائمة اللاعبين الحية */}
               {(room?.participants || [])
-                .map((p: any) => ({
-                  ...p,
-                  score: room?.playersProgress?.[p.id]?.score || 0,
-                  hasFinished: !!room?.playersProgress?.[p.id]?.finishTime
-                }))
-                .sort((a: any, b: any) => b.score - a.score)
+                .map((p: any) => {
+                  const prog = room?.playersProgress?.[p.id] || {};
+                  const isAbandoned = Boolean(
+                    prog.isAbandoned ||
+                    prog.status === 'abandoned' ||
+                    prog.isResigned ||
+                    prog.isDisqualified ||
+                    prog.hasLeft
+                  );
+                  return {
+                    ...p,
+                    isAbandoned,
+                    score: isAbandoned ? 0 : (prog.score || 0),
+                    hasFinished: !isAbandoned && !!prog.finishTime
+                  };
+                })
+                .sort((a: any, b: any) => {
+                  if (a.isAbandoned !== b.isAbandoned) return a.isAbandoned ? 1 : -1;
+                  return b.score - a.score;
+                })
                 .map((player: any, index: number) => {
                   const isMe = (player.name === playerName || (player.username && player.username === playerUsername));
                   return (
                     <div key={player.id} className={`flex items-center justify-between p-3.5 border-b border-slate-50 last:border-0 ${isMe ? 'bg-emerald-50/50' : ''}`}>
                       <div className="flex items-center gap-3">
-                        <span className="font-black text-slate-300 w-5 text-sm">{index + 1}</span>
-                        <span className={`font-black text-sm ${isMe ? 'text-brand-emerald' : 'text-slate-700'}`}>{player.name} {isMe && '(أنت)'}</span>
+                        <span className="font-black text-slate-300 w-5 text-sm">{player.isAbandoned ? '✕' : index + 1}</span>
+                        <span className={`font-black text-sm ${player.isAbandoned ? 'text-slate-400 line-through' : isMe ? 'text-brand-emerald' : 'text-slate-700'}`}>
+                          {player.name} {isMe && '(أنت)'}
+                        </span>
                       </div>
 
                       <div className="flex items-center gap-4">
-                        <span className="text-brand-emerald font-black tabular-nums text-sm">{player.score} نقطة</span>
-                        {/* حالة اللاعب: انتهى أم لا يزال في التحدي */}
-                        {player.hasFinished ? (
+                        <span className={`font-black tabular-nums text-sm ${player.isAbandoned ? 'text-slate-400' : 'text-brand-emerald'}`}>
+                          {player.score} نقطة
+                        </span>
+                        {/* حالة اللاعب: انسحب أم أنهى أم لا يزال في التحدي */}
+                        {player.isAbandoned ? (
+                          <span className="text-[9px] bg-red-100 text-red-600 px-2 py-0.5 rounded-md font-black">انسحب (مستبعد)</span>
+                        ) : player.hasFinished ? (
                           <span className="text-[9px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-md font-black uppercase">أنهى</span>
                         ) : (
                           <span className="text-[9px] bg-orange-100 text-orange-600 px-2 py-0.5 rounded-md font-black uppercase flex items-center gap-1 animate-pulse">

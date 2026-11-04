@@ -2641,7 +2641,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             participantsList.forEach((p: any) => {
               const pIdStr = String(p.id);
               const pProgress = data.playersProgress ? data.playersProgress[pIdStr] : null;
-              const isWithdrawn = Boolean(p.hasLeft || (pProgress && pProgress.hasLeft) || p.isResigned || (pProgress && pProgress.isResigned) || p.isOnline === false);
+              const isWithdrawn = Boolean(
+                p.hasLeft || (pProgress && pProgress.hasLeft) ||
+                p.isResigned || (pProgress && pProgress.isResigned) ||
+                p.isAbandoned || (pProgress && pProgress.isAbandoned) ||
+                p.status === 'abandoned' || (pProgress && pProgress.status === 'abandoned') ||
+                p.isOnline === false
+              );
 
               if (isWithdrawn && !notifiedWithdrawnPlayersRef.current.has(pIdStr)) {
                 notifiedWithdrawnPlayersRef.current.add(pIdStr);
@@ -2684,8 +2690,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
               if (isHost && !isAdvancingRef.current) {
                 const participants = data.participants || [];
-                // Active players: exclude those who left (hasLeft) or resigned (isResigned) or went offline (isOnline === false)
-                const activeParticipants = participants.filter((p: any) => p.isOnline !== false && !p.hasLeft && !p.isResigned);
+                // Active players: exclude those who left (hasLeft), resigned (isResigned), abandoned (isAbandoned), or went offline
+                const activeParticipants = participants.filter((p: any) => {
+                  const pProg = data.playersProgress ? data.playersProgress[String(p.id)] : null;
+                  return p.isOnline !== false && !p.hasLeft && !p.isResigned && !p.isAbandoned && p.status !== 'abandoned' &&
+                    (!pProg || (!pProg.hasLeft && !pProg.isResigned && !pProg.isAbandoned && pProg.status !== 'abandoned'));
+                });
                 const activeCount = activeParticipants.length;
                 const currentAnswers = data.currentAnswers || {};
 
@@ -2807,8 +2817,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const pId = String(data.participants?.find((p: any) => p.name === playerName || p.username === playerUsername)?.id);
           const pProgress = data.playersProgress ? data.playersProgress[pId] : null;
 
-          // إذا كان اللاعب قد انسحب (hasLeft = true أو isResigned = true) أو أنهى، يتم إخفاء الشريط تماماً وتنظيف المرجع
-          if (pProgress && (pProgress.hasLeft || pProgress.isResigned || pProgress.finishTime)) {
+          // إذا كان اللاعب قد انسحب (hasLeft = true أو isResigned = true أو isAbandoned) أو أنهى، يتم إخفاء الشريط تماماً وتنظيف المرجع
+          if (pProgress && (pProgress.hasLeft || pProgress.isResigned || pProgress.isAbandoned || pProgress.status === 'abandoned' || pProgress.finishTime)) {
             setActiveRunningRoom(null);
             localStorage.removeItem('activeRoomId');
             localStorage.removeItem('currentRoomId');
