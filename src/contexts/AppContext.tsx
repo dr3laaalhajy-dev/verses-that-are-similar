@@ -1911,6 +1911,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (typeOrCategory) {
           const resolvedCategory = resolveAdhkarCategoryId(typeOrCategory);
           setSelectedAdhkarCategoryId(resolvedCategory);
+        } else {
+          setSelectedAdhkarCategoryId(null);
         }
         setIsMushafFullscreen(false);
         setShowScores(false);
@@ -1921,6 +1923,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // If user is at root '/', stay on home or saved view; do not force mushaf
       if (path === '/' || path === '') {
         const savedView = sessionStorage.getItem('current_app_view');
+        setSelectedAdhkarCategoryId(null);
         setIsMushafFullscreen(false);
         setShowScores(false);
         if (savedView && VALID_VIEWS.includes(savedView as View) && savedView !== 'home') {

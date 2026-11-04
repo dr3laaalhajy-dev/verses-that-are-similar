@@ -5,10 +5,11 @@ import { MainLayout } from './components/layout/MainLayout';
 import { GlobalOverlays } from './components/common/GlobalOverlays';
 import AdminDashboard from './components/Admin/AdminDashboard';
 import AdminLogin from './components/Admin/AdminLogin';
-import { router } from './services/router';
+import { useRouter } from './services/router';
 
 function AppContent() {
   const app = useApp();
+  const router = useRouter();
 
   // Requirement 2 & 3: Notification Action Listeners (Push & Local) with router.push direct navigation
   useEffect(() => {

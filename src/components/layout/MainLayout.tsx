@@ -440,9 +440,9 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
         </main>
       </PullToRefresh>
 
-      {/* Fixed Bottom Navigation Bar - High Priority z-[100] Layer */}
+      {/* Fixed Bottom Navigation Bar - High Priority z-50 Layer */}
       {(!app.isMushafFullscreen || app.view !== 'mushaf') && (
-        <nav className="fixed bottom-0 left-0 right-0 z-[100] bg-[#064e3b]/95 dark:bg-obsidian-950/95 border-t border-white/15 dark:border-regalGold-500/20 shadow-2xl backdrop-blur-2xl py-2 px-2 sm:px-6 transition-colors duration-500 select-none">
+        <nav className="fixed bottom-0 left-0 right-0 w-full z-50 bg-[#064e3b]/95 dark:bg-obsidian-950/95 border-t border-white/15 dark:border-regalGold-500/20 shadow-2xl backdrop-blur-2xl py-2 px-2 sm:px-6 transition-colors duration-500 select-none">
           <div className="max-w-lg mx-auto flex items-center justify-around">
             {/* 1. الرئيسية */}
             <Link

@@ -74,5 +74,11 @@ export const router = {
   }
 };
 
+/**
+ * useRouter Hook
+ * Compatible with next/navigation standard router hook
+ */
+export const useRouter = () => router;
+
 export default router;
 

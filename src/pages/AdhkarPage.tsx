@@ -293,7 +293,7 @@ export const AdhkarPage: React.FC<AdhkarPageProps> = ({
       initial={{ opacity: 0, y: 15 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -15 }}
-      className="w-full max-w-5xl mx-auto space-y-6 sm:space-y-8 transition-all duration-500 pb-36 sm:pb-48 px-3 sm:px-4"
+      className="w-full max-w-5xl mx-auto space-y-6 sm:space-y-8 transition-all duration-500 pb-24 px-3 sm:px-4"
     >
       {/* 1. Header Area */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2">
