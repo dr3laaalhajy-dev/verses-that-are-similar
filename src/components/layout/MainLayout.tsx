@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Trophy, Sun, Moon, Info, Lock, ArrowRight, BookOpen, LogOut, Trash2,
   UserPlus, Key, User, AtSign, ArrowLeft, LogIn, Home, Zap, Settings,
-  ChevronRight, ChevronLeft, X
+  ChevronRight, ChevronLeft, X, Users
 } from 'lucide-react';
 import { useApp } from '../../contexts/AppContext';
 import DailyAyah from '../DailyAyah';
@@ -91,6 +91,20 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                 userId={app.playerUsername || app.playerName}
                 buttonClassName="relative h-10 px-3 flex items-center justify-center gap-2 rounded-xl bg-white/10 hover:bg-white/20 dark:bg-obsidian-900/70 dark:hover:bg-obsidian-850 text-white dark:text-regalGold-200 border border-white/10 dark:border-regalGold-500/20 transition-all text-xs sm:text-sm font-bold shadow-md hover:scale-105 active:scale-95 cursor-pointer"
               />
+
+              {/* Friends & Challenge Invites System Button */}
+              {app.playerName && (
+                <button
+                  type="button"
+                  onClick={() => app.setIsFriendsModalOpen(true)}
+                  className="relative h-10 px-2.5 sm:px-3 flex items-center justify-center gap-1.5 rounded-xl bg-white/10 hover:bg-white/20 dark:bg-obsidian-900/70 dark:hover:bg-obsidian-850 text-white dark:text-regalGold-200 border border-white/10 dark:border-regalGold-500/20 transition-all text-xs sm:text-sm font-bold shadow-md hover:scale-105 active:scale-95 cursor-pointer"
+                  title="نظام الأصدقاء والتحديات"
+                  aria-label="الأصدقاء"
+                >
+                  <Users className="w-4 h-4 text-brand-gold dark:text-regalGold-400" />
+                  <span className="hidden sm:inline">الأصدقاء</span>
+                </button>
+              )}
 
               {app.playerName && (
                 <div

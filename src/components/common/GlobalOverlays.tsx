@@ -16,6 +16,9 @@ import AyahActionSheet from '../AyahActionSheet';
 import { PrivacyModal } from '../PrivacyModal';
 import IslamicRoomConfigModal from '../IslamicRoomConfigModal';
 import CertificateGenerator from '../CertificateGenerator';
+import { FriendsModal } from '../friends/FriendsModal';
+import { PublicProfileModal } from '../profile/PublicProfileModal';
+import { RoomInviteModal } from '../friends/RoomInviteModal';
 
 export const GlobalOverlays: React.FC = () => {
   const app = useApp();
@@ -689,6 +692,40 @@ export const GlobalOverlays: React.FC = () => {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* 8. Friends System Modal */}
+      <FriendsModal
+        isOpen={app.isFriendsModalOpen}
+        onClose={() => app.setIsFriendsModalOpen(false)}
+        currentPlayer={{
+          id: app.playerId,
+          name: app.playerName,
+          username: app.playerUsername,
+          uniquePlayerId: app.uniquePlayerId
+        }}
+        onOpenPlayerProfile={app.handleOpenPlayerProfile}
+        isInRoomLobby={app.view === 'group_waiting'}
+      />
+
+      {/* 9. Public Profile Modal */}
+      <PublicProfileModal
+        isOpen={!!app.selectedProfilePlayer}
+        onClose={app.handleClosePlayerProfile}
+        targetPlayer={app.selectedProfilePlayer}
+        currentViewer={{
+          id: app.playerId,
+          name: app.playerName,
+          username: app.playerUsername,
+          uniquePlayerId: app.uniquePlayerId
+        }}
+      />
+
+      {/* 10. Real-time Central Room Invite Modal */}
+      <RoomInviteModal
+        invite={app.incomingRoomInvite}
+        onAccept={app.handleAcceptRoomInvite}
+        onDecline={app.handleDeclineRoomInvite}
+      />
     </>
   );
 };

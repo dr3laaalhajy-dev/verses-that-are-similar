@@ -16,8 +16,10 @@ export const TROPHY_WEIGHT = 20;
 export const STREAK_WEIGHT = 5;
 
 export interface LeaderboardUser {
+  id?: number;
   name: string;
   username?: string | null;
+  uniquePlayerId?: string | null;
   totalPoints: number;
   trophiesCount: number;
   streakCount: number;

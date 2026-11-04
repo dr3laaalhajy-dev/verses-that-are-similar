@@ -15,6 +15,7 @@ export interface LeaderboardPageProps {
   achievementStyles: any;
   equippedNameColor?: string;
   equippedTitle?: string;
+  onOpenPlayerProfile?: (player: any) => void;
 }
 
 export const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
@@ -28,7 +29,8 @@ export const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
   userAchievement,
   achievementStyles,
   equippedNameColor,
-  equippedTitle
+  equippedTitle,
+  onOpenPlayerProfile
 }) => {
   return (
                   <motion.div
@@ -173,7 +175,11 @@ export const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
                                   : 'bg-white dark:bg-slate-900 border-slate-150 dark:border-slate-800 hover:border-amber-300 dark:hover:border-amber-500 shadow-xs'
                               } ${isCurrentPlayer ? 'ring-1.5 ring-emerald-500 border-emerald-400 bg-emerald-50/40 dark:bg-emerald-950/40' : ''}`}
                             >
-                              <div className="flex items-center gap-2.5 sm:gap-3.5 min-w-0">
+                              <div
+                                onClick={() => onOpenPlayerProfile?.(player)}
+                                className="flex items-center gap-2.5 sm:gap-3.5 min-w-0 cursor-pointer hover:opacity-85 transition-opacity"
+                                title="عرض الملف الشخصي"
+                              >
                                 {/* Rank Badge */}
                                 <div className="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center shrink-0">
                                   {isRank1 ? (

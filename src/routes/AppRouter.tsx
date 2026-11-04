@@ -94,6 +94,7 @@ export const AppRouter: React.FC = () => {
           userAchievement={app.userAchievement}
           achievementStyles={app.achievementStyles}
           equippedNameColor={app.equippedNameColor}
+          onOpenPlayerProfile={app.handleOpenPlayerProfile}
         />
       ) : app.view === "group_create" ? (
         <GroupCreatePage

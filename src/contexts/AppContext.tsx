@@ -17,6 +17,7 @@ import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
 import { motion, AnimatePresence } from 'framer-motion';
 import { GoogleGenAI } from '@google/genai';
 import { supabase } from '../services/supabase';
+import { friendsRealtimeService } from '../services/friendsRealtimeService';
 import { getRandomIslamicRoomQuestions, getTargetedIslamicQuestions, getTotalIslamicAvailableCount, getIslamicTopicAvailableCount } from '../utils/islamicChallengeHelper';
 import { islamicCategoriesList } from '../data/islamicCategories';
 import { calculateStreakInfo, StreakInfo, getTodayLocalDateStr } from '../utils/streakManager';
@@ -423,8 +424,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [playerName, setPlayerName] = useState<string | null>(localStorage.getItem('quran_player_name'));
   const [playerUsername, setPlayerUsername] = useState<string | null>(localStorage.getItem('quran_player_username'));
+  const [uniquePlayerId, setUniquePlayerId] = useState<string | null>(() => localStorage.getItem('quran_unique_player_id'));
   const [totalPoints, setTotalPoints] = useState<number>(() => Number(localStorage.getItem('quran_total_points')) || 0);
   const [cups, setCups] = useState(() => parseInt(localStorage.getItem('quran_total_cups') || localStorage.getItem('quran_cups') || '0'));
+
+  // Friends & Profile State
+  const [isFriendsModalOpen, setIsFriendsModalOpen] = useState(false);
+  const [selectedProfilePlayer, setSelectedProfilePlayer] = useState<any | null>(null);
+  const [incomingRoomInvite, setIncomingRoomInvite] = useState<any | null>(null);
 
   // ==========================================
   // Daily Mystery Gift (صندوق الهدية اليومية والتحقق الذكي)
@@ -1054,6 +1061,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setPlayerUsername(p.username);
         localStorage.setItem('quran_player_name', p.name);
         if (p.username) localStorage.setItem('quran_player_username', p.username);
+        if (p.uniquePlayerId) {
+          setUniquePlayerId(p.uniquePlayerId);
+          localStorage.setItem('quran_unique_player_id', p.uniquePlayerId);
+        }
       } else {
         // Login mode
         const cleanIdentifier = usernameInput.trim().replace(/^@+/, '');
@@ -1097,6 +1108,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setPlayerUsername(p.username);
         localStorage.setItem('quran_player_name', p.name);
         if (p.username) localStorage.setItem('quran_player_username', p.username);
+        if (p.uniquePlayerId) {
+          setUniquePlayerId(p.uniquePlayerId);
+          localStorage.setItem('quran_unique_player_id', p.uniquePlayerId);
+        }
 
         // Sync player stats from database
         if (p.points !== undefined) {
@@ -2933,6 +2948,101 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, [room?.id]);
 
+  // Realtime Presence & Friend Invites Setup
+  useEffect(() => {
+    if (!playerName && !playerUsername) {
+      friendsRealtimeService.stopPresence();
+      return;
+    }
+
+    // Auto-fetch uniquePlayerId if not stored locally
+    if (!uniquePlayerId) {
+      const ident = playerUsername || playerName;
+      fetch(`/api/player-score?username=${encodeURIComponent(ident || '')}&name=${encodeURIComponent(playerName || '')}`)
+        .then(res => res.json())
+        .then(p => {
+          if (p?.uniquePlayerId) {
+            setUniquePlayerId(p.uniquePlayerId);
+            localStorage.setItem('quran_unique_player_id', p.uniquePlayerId);
+          }
+        })
+        .catch(() => {});
+    }
+
+    // Start Presence tracking
+    friendsRealtimeService.startPresence({
+      uniquePlayerId,
+      username: playerUsername,
+      name: playerName,
+      activeFrame: userAchievement
+    });
+
+    // Subscribe to incoming room invites
+    const identifiers = [uniquePlayerId, playerUsername, playerName].filter(Boolean) as string[];
+    const unsubscribeInvites = friendsRealtimeService.subscribeToInvites(
+      identifiers,
+      (invite) => {
+        // Ignore invites sent by self
+        const myName = (playerName || '').trim().toLowerCase();
+        const myUser = (playerUsername || '').trim().toLowerCase().replace(/^@+/, '');
+        const hostN = (invite.hostName || '').trim().toLowerCase();
+        const hostU = (invite.hostUsername || '').trim().toLowerCase().replace(/^@+/, '');
+        if ((hostN && hostN === myName) || (hostU && hostU === myUser)) {
+          return;
+        }
+        setIncomingRoomInvite(invite);
+      }
+    );
+
+    return () => {
+      unsubscribeInvites();
+    };
+  }, [playerName, playerUsername, uniquePlayerId, userAchievement]);
+
+  const handleAcceptRoomInvite = useCallback(async (invite: any) => {
+    setIncomingRoomInvite(null);
+    if (!invite?.roomId) return;
+
+    try {
+      const res = await fetch('/api/1v1', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'join',
+          roomId: invite.roomId,
+          player2Id: playerUsername || playerName,
+          player2Name: playerName,
+          password: invite.isPrivate ? invite.password : undefined
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.room) {
+        setRoom(data.room);
+        setView('group_waiting');
+      } else {
+        setToastMessage({
+          id: String(Date.now()),
+          type: 'error',
+          message: data.error || 'تعذر الانضمام للغرفة، ربما بدأت المباراة أو أُلغيت الغرفة'
+        });
+      }
+    } catch (e) {
+      console.error('Error accepting room invite:', e);
+    }
+  }, [playerUsername, playerName]);
+
+  const handleDeclineRoomInvite = useCallback(() => {
+    setIncomingRoomInvite(null);
+  }, []);
+
+  const handleOpenPlayerProfile = useCallback((player: any) => {
+    setSelectedProfilePlayer(player);
+  }, []);
+
+  const handleClosePlayerProfile = useCallback(() => {
+    setSelectedProfilePlayer(null);
+  }, []);
+
   const handleResumeActiveRoom = (targetRoom: any) => {
     if (!targetRoom) return;
     setRoom(targetRoom);
@@ -4213,13 +4323,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       setPlayerName(null);
       setPlayerUsername(null);
+      setUniquePlayerId(null);
       setActiveFrame(null);
       setIsNameDecorated(false);
       setShowProfileDecoration(false);
       setUserCertificates([]);
+      friendsRealtimeService.stopPresence();
 
       localStorage.removeItem('quran_player_name');
       localStorage.removeItem('quran_player_username');
+      localStorage.removeItem('quran_unique_player_id');
       localStorage.removeItem('quran_device_id');
       localStorage.removeItem('quran_username_changed_at');
       localStorage.removeItem('quran_active_frame');
@@ -5203,6 +5316,16 @@ ${versesList}
     canManageUsers, setCanManageUsers,
     handleAdminLogin, handleAdminLogout,
     showAdminLogin: false, setShowAdminLogin: () => { },
+
+    // Friends, Profile & Live Invites
+    uniquePlayerId, setUniquePlayerId,
+    isFriendsModalOpen, setIsFriendsModalOpen,
+    selectedProfilePlayer, setSelectedProfilePlayer,
+    incomingRoomInvite, setIncomingRoomInvite,
+    handleAcceptRoomInvite,
+    handleDeclineRoomInvite,
+    handleOpenPlayerProfile,
+    handleClosePlayerProfile,
   };
 
   return (

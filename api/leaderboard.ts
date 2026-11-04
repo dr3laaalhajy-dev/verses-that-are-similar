@@ -14,8 +14,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const players: any[] = await prisma.player.findMany({
       select: {
+        id: true,
         name: true,
         username: true,
+        uniquePlayerId: true,
         points: true,
         cups: true,
         streak: true,
@@ -40,8 +42,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       if (!playerMap.has(normalized)) {
         playerMap.set(normalized, {
+          id: player.id,
           name: player.name,
           username: player.username,
+          uniquePlayerId: player.uniquePlayerId,
           totalPoints: pPoints,
           trophiesCount: pCups,
           streakCount: pStreak,
@@ -56,6 +60,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         })
       } else {
         const existing = playerMap.get(normalized)!
+        if (!existing.uniquePlayerId && player.uniquePlayerId) {
+          existing.uniquePlayerId = player.uniquePlayerId;
+        }
+        if (!existing.id && player.id) {
+          existing.id = player.id;
+        }
         existing.totalPoints = Math.max(existing.totalPoints || 0, pPoints)
         existing.points = existing.totalPoints
         existing.trophiesCount = Math.max(existing.trophiesCount || 0, pCups)

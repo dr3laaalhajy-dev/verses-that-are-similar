@@ -461,8 +461,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <h3 className="font-black text-slate-800 text-sm sm:text-base">
                   البيانات الشخصية واسم الحساب
                 </h3>
-                <p className="text-xs text-slate-400 font-bold mt-0.5">
-                  {nameInput || playerName || 'المستخدم'} {playerUsername ? `(@${playerUsername.replace(/^@+/, '')})` : ''}
+                <p className="text-xs text-slate-400 font-bold mt-0.5 flex items-center gap-1.5 flex-wrap">
+                  <span>{nameInput || playerName || 'المستخدم'} {playerUsername ? `(@${playerUsername.replace(/^@+/, '')})` : ''}</span>
+                  {(app?.uniquePlayerId || localStorage.getItem('quran_unique_player_id')) && (
+                    <span className="font-mono text-amber-800 bg-amber-50 border border-amber-200/60 px-2 py-0.2 rounded-md text-[11px] font-black">
+                      {app?.uniquePlayerId || localStorage.getItem('quran_unique_player_id')}
+                    </span>
+                  )}
                 </p>
               </div>
             </div>

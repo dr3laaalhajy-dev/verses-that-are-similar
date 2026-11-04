@@ -50,6 +50,7 @@ model Challenge {
 
 model Player {
   id                    Int      @id @default(autoincrement())
+  uniquePlayerId        String?  @unique
   deviceId              String?  @unique
   name                  String
   username              String?  @unique
@@ -74,6 +75,33 @@ model Player {
   rooms1                Room[]   @relation("Player1Rooms")
   rooms2                Room[]   @relation("Player2Rooms")
   wonRooms              Room[]   @relation("WinnerRooms")
+
+  // Friends Relations
+  sentFriendRequests     Friendship[] @relation("SentFriendRequests")
+  receivedFriendRequests Friendship[] @relation("ReceivedFriendRequests")
+}
+
+enum FriendshipStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
+model Friendship {
+  id          Int              @id @default(autoincrement())
+  requesterId Int
+  addresseeId Int
+  status      FriendshipStatus @default(PENDING)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  requester   Player           @relation("SentFriendRequests", fields: [requesterId], references: [id], onDelete: Cascade)
+  addressee   Player           @relation("ReceivedFriendRequests", fields: [addresseeId], references: [id], onDelete: Cascade)
+
+  @@unique([requesterId, addresseeId])
+  @@index([requesterId])
+  @@index([addresseeId])
+  @@map("friendships")
 }
 
 model Room {

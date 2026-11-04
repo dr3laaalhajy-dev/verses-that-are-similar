@@ -1,20 +1,23 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { prisma } from './_lib/prisma.js'
+import { getOrGenerateUniquePlayerId } from './_lib/uniquePlayerId.js'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
 
   // Handle GET request to retrieve player stats
   if (req.method === 'GET') {
-    const { playerId, username, name } = req.query;
+    const { playerId, username, name, uniquePlayerId } = req.query;
     const cleanU = String(username || '').trim().replace(/^@+/, '');
     const cleanN = String(name || '').trim();
+    const cleanUnique = String(uniquePlayerId || '').trim().toUpperCase();
     const numId = Number(playerId);
 
     try {
       let player = await prisma.player.findFirst({
         where: {
           OR: [
+            ...(cleanUnique ? [{ uniquePlayerId: cleanUnique }] : []),
             ...(cleanU ? [{ username: cleanU }, { username: '@' + cleanU }] : []),
             ...(cleanN ? [{ name: { equals: cleanN, mode: 'insensitive' as const } }] : []),
             ...(Number.isInteger(numId) && numId > 0 ? [{ id: numId }] : [])
@@ -24,6 +27,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       if (!player) {
         return res.status(404).json({ message: 'Player not found' });
+      }
+
+      if (!player.uniquePlayerId) {
+        try {
+          const uid = await getOrGenerateUniquePlayerId(player.id);
+          player.uniquePlayerId = uid;
+        } catch (e) {
+          console.error('Failed to set uniquePlayerId for player:', e);
+        }
       }
 
       return res.status(200).json(player);

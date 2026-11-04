@@ -1,10 +1,12 @@
-import React from 'react';
-import { motion } from 'framer-motion';
+import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Users, Lock, Globe, Loader2, Trash2, ArrowRight, LogOut
+  Users, Lock, Globe, Loader2, Trash2, ArrowRight, LogOut,
+  UserPlus, ChevronDown, ChevronUp, Check, Swords, Sparkles
 } from 'lucide-react';
 import { View } from '../types/challenges';
 import { LiveReactionsOverlay } from '../components/LiveReactionsOverlay';
+import { friendsRealtimeService } from '../services/friendsRealtimeService';
 
 export interface GroupWaitingPageProps {
   room: any;
@@ -33,6 +35,74 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
   setRoom,
   setIsResignModalOpen
 }) => {
+  const [isInviteDropdownOpen, setIsInviteDropdownOpen] = useState(false);
+  const [friendsList, setFriendsList] = useState<any[]>([]);
+  const [isLoadingFriends, setIsLoadingFriends] = useState(false);
+  const [sentInvites, setSentInvites] = useState<{ [id: string]: boolean }>({});
+  const [sendingInviteId, setSendingInviteId] = useState<string | number | null>(null);
+
+  useEffect(() => {
+    const unsub = friendsRealtimeService.onPresenceChange(() => {
+      // triggers re-render when presence changes
+    });
+    return () => unsub();
+  }, []);
+
+  const fetchFriends = async () => {
+    setIsLoadingFriends(true);
+    try {
+      const viewerParam = playerUsername || playerName || '';
+      const res = await fetch(`/api/friends?action=list&viewerId=${encodeURIComponent(viewerParam)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setFriendsList(data.friends || []);
+      }
+    } catch (e) {
+      console.error('Error fetching friends for invite:', e);
+    } finally {
+      setIsLoadingFriends(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchFriends();
+  }, [playerUsername, playerName]);
+
+  // Online friends who are not already in this room
+  const participantsNames = (room?.participants || []).map((p: any) => (p?.name || '').trim().toLowerCase());
+  const participantsUsernames = (room?.participants || []).map((p: any) => (p?.username || '').trim().toLowerCase().replace(/^@+/, ''));
+
+  const onlineFriends = friendsList.filter(f => {
+    const isOnline = friendsRealtimeService.isPlayerOnline(f);
+    const fName = (f.name || '').trim().toLowerCase();
+    const fUser = (f.username || '').trim().toLowerCase().replace(/^@+/, '');
+    const alreadyInRoom = participantsNames.includes(fName) || participantsUsernames.includes(fUser);
+    return isOnline && !alreadyInRoom;
+  });
+
+  const handleSendInvite = async (friend: any) => {
+    const friendTarget = friend.uniquePlayerId || friend.username || friend.name;
+    if (!friendTarget || !room?.id) return;
+
+    setSendingInviteId(friend.id);
+    try {
+      await friendsRealtimeService.sendRoomInvite(friendTarget, {
+        roomId: room.id,
+        roomCode: room.code,
+        roomName: room.name || 'غرفة التحدي',
+        hostName: playerName || 'صديقك',
+        hostUsername: playerUsername || undefined,
+        isPrivate: room.isPrivate,
+        gameMode: room.gameMode,
+        timestamp: Date.now()
+      });
+      setSentInvites(prev => ({ ...prev, [friend.id]: true }));
+    } catch (e) {
+      console.error('Failed to send room invite:', e);
+    } finally {
+      setSendingInviteId(null);
+    }
+  };
   return (
     <motion.div
       key="group_waiting"
@@ -91,6 +161,102 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
             <span>الغرفة ظاهرة في قائمة الغرف المتاحة ليتمكن الجميع من الدخول</span>
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse inline-block" />
           </p>
+        </div>
+
+        {/* Friends Invite Dropdown (Online friends exclusively) */}
+        <div className="mb-4 sm:mb-6 text-right">
+          <div className="bg-gradient-to-r from-amber-500/10 via-emerald-500/10 to-transparent p-3 rounded-2xl border border-amber-200/50 dark:border-amber-700/40">
+            <button
+              type="button"
+              onClick={() => setIsInviteDropdownOpen(!isInviteDropdownOpen)}
+              className="w-full flex items-center justify-between text-xs sm:text-sm font-black text-slate-800 dark:text-slate-100 cursor-pointer"
+            >
+              <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
+                {isInviteDropdownOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                <span className="text-[11px] font-bold">
+                  {isInviteDropdownOpen ? 'إخفاء' : 'عرض الأصدقاء المتصلين'}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span>{onlineFriends.length} متصل الآن</span>
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <UserPlus className="w-4 h-4 text-amber-600" />
+                  <span>دعوة صديق للتحدي</span>
+                </span>
+              </div>
+            </button>
+
+            <AnimatePresence>
+              {isInviteDropdownOpen && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="mt-3 pt-3 border-t border-slate-200/60 dark:border-slate-700/60 overflow-hidden space-y-2"
+                >
+                  {isLoadingFriends ? (
+                    <div className="py-4 text-center">
+                      <Loader2 className="w-4 h-4 animate-spin text-amber-600 mx-auto mb-1" />
+                      <p className="text-[11px] text-slate-400 font-bold">جاري البحث عن الأصدقاء المتصلين...</p>
+                    </div>
+                  ) : onlineFriends.length === 0 ? (
+                    <div className="py-3 text-center text-[11px] text-slate-400 font-bold">
+                      لا يوجد أصدقاء متصلون حالياً ⚪
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                      {onlineFriends.map((friend) => {
+                        const isSent = !!sentInvites[friend.id];
+                        const isSending = sendingInviteId === friend.id;
+                        return (
+                          <div
+                            key={friend.id}
+                            className="p-2 sm:p-2.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 flex items-center justify-between gap-2 shadow-xs"
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="relative shrink-0">
+                                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-emerald-600 to-teal-700 text-white font-black text-xs flex items-center justify-center">
+                                  {(friend.name || 'ل').charAt(0).toUpperCase()}
+                                </div>
+                                <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 border border-white dark:border-slate-800" />
+                              </div>
+                              <span className="font-bold text-xs text-slate-800 dark:text-slate-100 truncate">
+                                {friend.name}
+                              </span>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => handleSendInvite(friend)}
+                              disabled={isSent || isSending}
+                              className={`px-3 py-1 rounded-lg text-xs font-black shadow-xs transition-all active:scale-95 flex items-center gap-1 cursor-pointer ${
+                                isSent
+                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-300'
+                                  : 'bg-amber-500 hover:bg-amber-600 text-white'
+                              }`}
+                            >
+                              {isSending ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                              ) : isSent ? (
+                                <Check className="w-3 h-3 text-emerald-600" />
+                              ) : (
+                                <Swords className="w-3 h-3" />
+                              )}
+                              <span>{isSent ? 'تم الإرسال ✓' : 'إرسال دعوة'}</span>
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
 
         <div className="space-y-3 mb-6">

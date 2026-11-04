@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { prisma } from './_lib/prisma.js'
 import { handleCors } from './_lib/cors.js'
+import { getOrGenerateUniquePlayerId } from './_lib/uniquePlayerId.js'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (handleCors(req, res)) return;
@@ -65,6 +66,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(401).json({
           error: 'كلمة المرور غير صحيحة'
         });
+      }
+
+      if (!player.uniquePlayerId) {
+        try {
+          const uid = await getOrGenerateUniquePlayerId(player.id);
+          player.uniquePlayerId = uid;
+        } catch (e) {
+          console.error('Failed to set uniquePlayerId for player:', e);
+        }
       }
 
       return res.status(200).json({
@@ -340,11 +350,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
+    let newUniqueId: string | undefined;
+    try {
+      newUniqueId = await getOrGenerateUniquePlayerId();
+    } catch (e) {
+      console.error('Failed to generate uniquePlayerId:', e);
+    }
+
     const player = await prisma.player.create({
       data: {
         name: trimmedName,
         username: cleanUsername,
-        password: userPass
+        password: userPass,
+        uniquePlayerId: newUniqueId
       }
     });
 
