@@ -93,10 +93,18 @@ async function getFullRoom(roomId: string) {
 
   const playersWithPresence = players.map(p => {
     const pProg = progress[String(p.id)] || {}
+    const isAbandoned = Boolean(
+      pProg.isAbandoned ||
+      pProg.status === 'abandoned' ||
+      pProg.isResigned ||
+      pProg.hasLeft
+    )
     return {
       ...p,
       activeFrame: (p.activeFrame === 'seerah' || p.activeFrame === 'general') ? p.activeFrame : null,
       isOnline: pProg.isOnline !== false,
+      isAbandoned,
+      status: isAbandoned ? 'abandoned' : (pProg.status || 'joined'),
       lastSeen: pProg.lastSeen || 0,
       score: pProg.score || 0
     }

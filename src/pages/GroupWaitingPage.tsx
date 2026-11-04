@@ -150,15 +150,18 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
     fetchFriends();
   }, [playerUsername, playerName]);
 
-  // Online friends who are not already in this room
-  const participantsNames = (room?.participants || []).map((p: any) => (p?.name || '').trim().toLowerCase());
-  const participantsUsernames = (room?.participants || []).map((p: any) => (p?.username || '').trim().toLowerCase().replace(/^@+/, ''));
+  // Online friends who are not currently active in this room (Allow re-inviting abandoned/left players)
+  const activeParticipants = (room?.participants || []).filter((p: any) => !p.isAbandoned && p.status !== 'abandoned' && !p.hasLeft);
+  const participantsNames = activeParticipants.map((p: any) => (p?.name || '').trim().toLowerCase());
+  const participantsUsernames = activeParticipants.map((p: any) => (p?.username || '').trim().toLowerCase().replace(/^@+/, ''));
+  const participantsIds = activeParticipants.map((p: any) => String(p?.id || ''));
 
   const onlineFriends = friendsList.filter(f => {
     const isOnline = friendsRealtimeService.isPlayerOnline(f);
     const fName = (f.name || '').trim().toLowerCase();
     const fUser = (f.username || '').trim().toLowerCase().replace(/^@+/, '');
-    const alreadyInRoom = participantsNames.includes(fName) || participantsUsernames.includes(fUser);
+    const fId = String(f.id || '');
+    const alreadyInRoom = participantsNames.includes(fName) || participantsUsernames.includes(fUser) || participantsIds.includes(fId);
     return isOnline && !alreadyInRoom;
   });
 

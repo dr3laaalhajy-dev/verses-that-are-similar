@@ -425,6 +425,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [playerName, setPlayerName] = useState<string | null>(localStorage.getItem('quran_player_name'));
   const [playerUsername, setPlayerUsername] = useState<string | null>(localStorage.getItem('quran_player_username'));
   const [uniquePlayerId, setUniquePlayerId] = useState<string | null>(() => localStorage.getItem('quran_unique_player_id'));
+  const [playerId, setPlayerId] = useState<number | string | null>(() => localStorage.getItem('quran_player_id'));
   const [totalPoints, setTotalPoints] = useState<number>(() => Number(localStorage.getItem('quran_total_points')) || 0);
   const [cups, setCups] = useState(() => parseInt(localStorage.getItem('quran_total_cups') || localStorage.getItem('quran_cups') || '0'));
 
@@ -2998,8 +2999,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
 
-    // Auto-fetch uniquePlayerId if not stored locally
-    if (!uniquePlayerId) {
+    // Auto-fetch uniquePlayerId & id if not stored locally
+    if (!uniquePlayerId || !playerId) {
       const ident = playerUsername || playerName;
       fetch(`/api/player-score?username=${encodeURIComponent(ident || '')}&name=${encodeURIComponent(playerName || '')}`)
         .then(res => res.json())
@@ -3007,6 +3008,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (p?.uniquePlayerId) {
             setUniquePlayerId(p.uniquePlayerId);
             localStorage.setItem('quran_unique_player_id', p.uniquePlayerId);
+          }
+          if (p?.id) {
+            setPlayerId(p.id);
+            localStorage.setItem('quran_player_id', String(p.id));
           }
         })
         .catch(() => {});
@@ -3021,7 +3026,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     // Subscribe to incoming room invites
-    const identifiers = [uniquePlayerId, playerUsername, playerName].filter(Boolean) as string[];
+    const identifiers = [
+      uniquePlayerId,
+      playerUsername,
+      playerName,
+      playerId ? String(playerId) : null,
+      playerId ? `user_${playerId}` : null
+    ].filter(Boolean) as string[];
     const unsubscribeInvites = friendsRealtimeService.subscribeToInvites(
       identifiers,
       (invite) => {
@@ -3040,7 +3051,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => {
       unsubscribeInvites();
     };
-  }, [playerName, playerUsername, uniquePlayerId, userAchievement]);
+  }, [playerName, playerUsername, uniquePlayerId, playerId, userAchievement]);
 
   const handleAcceptRoomInvite = useCallback(async (roomOrInvite: any) => {
     setIncomingRoomInvite(null);
@@ -4393,6 +4404,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           localStorage.setItem('quran_unique_player_id', user.uniquePlayerId);
         }
         if (user.id) {
+          setPlayerId(user.id);
           localStorage.setItem('quran_player_id', String(user.id));
         }
         if (typeof user.points === 'number') {
@@ -5325,6 +5337,7 @@ ${versesList}
     isSyncing, setIsSyncing,
     totalUsersCount, setTotalUsersCount,
     userLeaderboardRank, setUserLeaderboardRank,
+    playerId, setPlayerId,
     playerName, setPlayerName,
     playerUsername, setPlayerUsername,
     cups, setCups,
@@ -5488,6 +5501,10 @@ ${versesList}
     isFriendsModalOpen, setIsFriendsModalOpen,
     selectedProfilePlayer, setSelectedProfilePlayer,
     incomingRoomInvite, setIncomingRoomInvite,
+    inviteData: incomingRoomInvite, setInviteData: setIncomingRoomInvite,
+    isInviteModalOpen: Boolean(incomingRoomInvite), setIsInviteModalOpen: (open: boolean) => {
+      if (!open) setIncomingRoomInvite(null);
+    },
     handleAcceptRoomInvite,
     handleDeclineRoomInvite,
     handleOpenPlayerProfile,
