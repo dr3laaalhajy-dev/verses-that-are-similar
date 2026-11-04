@@ -36,10 +36,11 @@ const ADHKAR_TABS: AdhkarTab[] = [
 ];
 
 // Helper to match category to active tab
-function categoryMatchesTab(cat: { id: string; title: string }, tabId: string): boolean {
+function categoryMatchesTab(cat?: { id?: string; title?: string } | null, tabId = 'all'): boolean {
   if (tabId === 'all') return true;
-  const t = cat.title.toLowerCase();
-  const id = cat.id.toLowerCase();
+  if (!cat) return false;
+  const t = (cat.title || '').toLowerCase();
+  const id = (cat.id || '').toLowerCase();
 
   switch (tabId) {
     case 'daily':
@@ -93,9 +94,17 @@ interface CategoryMeta {
   tag?: string;
 }
 
-function getCategoryMeta(cat: { id: string; title: string; icon?: string }): CategoryMeta {
-  const id = cat.id.toLowerCase();
-  const t = cat.title.toLowerCase();
+function getCategoryMeta(cat?: { id?: string; title?: string; icon?: string } | null): CategoryMeta {
+  if (!cat) {
+    return {
+      isHighlighted: false,
+      cardClasses: 'bg-white dark:bg-obsidian-900/90 border-gray-100 dark:border-slate-800 shadow-2xs',
+      iconBg: 'bg-slate-100 text-slate-600',
+      iconNode: <BookOpen className="w-6 h-6" />
+    };
+  }
+  const id = (cat.id || '').toLowerCase();
+  const t = (cat.title || '').toLowerCase();
 
   // 1. Highlighted Primary Categories
   if (id === 'morning' || t.includes('الصباح')) {
@@ -223,7 +232,7 @@ export const AdhkarPage: React.FC<AdhkarPageProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<string>('all');
 
-  // Direct parameter & deep-link synchronization (/adhkar/morning, /adhkar/evening, /adhkar/[type])
+  // Direct parameter & deep-link synchronization (/library/adhkar/morning, /adhkar/morning, /adhkar/[type])
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -231,7 +240,10 @@ export const AdhkarPage: React.FC<AdhkarPageProps> = ({
     const params = new URLSearchParams(window.location.search);
     let matchedType: string | null = null;
 
-    if (pathname.startsWith('/adhkar/')) {
+    if (pathname.startsWith('/library/adhkar/')) {
+      const sub = pathname.replace('/library/adhkar/', '').split('/')[0].split('?')[0].trim();
+      if (sub) matchedType = sub;
+    } else if (pathname.startsWith('/adhkar/')) {
       const sub = pathname.replace('/adhkar/', '').split('/')[0].split('?')[0].trim();
       if (sub) matchedType = sub;
     }
@@ -306,7 +318,10 @@ export const AdhkarPage: React.FC<AdhkarPageProps> = ({
           </button>
           <button
             type="button"
-            onClick={handleBackToHome}
+            onClick={() => {
+              setSelectedAdhkarCategoryId(null);
+              handleBackToHome();
+            }}
             className="px-4 py-2.5 rounded-xl bg-white dark:bg-obsidian-900 border border-gray-100 dark:border-slate-800 text-gray-600 dark:text-gray-200 font-bold text-xs sm:text-sm hover:bg-gray-50 dark:hover:bg-slate-800 transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer"
           >
             <RotateCcw className="w-4 h-4 text-emerald-600" />
@@ -466,7 +481,7 @@ export const AdhkarPage: React.FC<AdhkarPageProps> = ({
 
           {/* Cards List for active Dhikr */}
           <div className="grid gap-4">
-            {activeCategory.items.map((dhikr) => {
+            {(activeCategory.items || []).map((dhikr) => {
               const currentRemaining = adhkarProgress[dhikr.id] ?? dhikr.count;
               const isCompleted = currentRemaining === 0;
 

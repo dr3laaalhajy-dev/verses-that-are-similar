@@ -10,6 +10,7 @@ import DailyAyah from '../DailyAyah';
 import { PullToRefresh } from '../PullToRefresh';
 import QuranZoomViewer from '../QuranZoomViewer';
 import { NotificationBell } from '../NotificationBell';
+import { Link } from '../common/Link';
 
 export interface MainLayoutProps {
   children: React.ReactNode;
@@ -439,15 +440,16 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
         </main>
       </PullToRefresh>
 
-      {/* Fixed Bottom Navigation Bar */}
-      {!app.isMushafFullscreen && (
-        <nav className="fixed bottom-0 left-0 right-0 z-40 bg-[#064e3b]/90 dark:bg-obsidian-950/95 border-t border-white/15 dark:border-regalGold-500/20 shadow-2xl backdrop-blur-2xl py-2 px-2 sm:px-6 transition-colors duration-500">
+      {/* Fixed Bottom Navigation Bar - High Priority z-[100] Layer */}
+      {(!app.isMushafFullscreen || app.view !== 'mushaf') && (
+        <nav className="fixed bottom-0 left-0 right-0 z-[100] bg-[#064e3b]/95 dark:bg-obsidian-950/95 border-t border-white/15 dark:border-regalGold-500/20 shadow-2xl backdrop-blur-2xl py-2 px-2 sm:px-6 transition-colors duration-500 select-none">
           <div className="max-w-lg mx-auto flex items-center justify-around">
             {/* 1. الرئيسية */}
-            <button
+            <Link
+              href="/"
               onClick={() => {
-                app.setView('home');
                 app.setShowScores(false);
+                app.setView('home');
               }}
               className={`flex flex-col items-center gap-1 py-1 px-2 sm:px-3 rounded-2xl transition-all duration-300 cursor-pointer ${
                 app.view === 'home' && !app.showScores
@@ -458,13 +460,14 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
             >
               <Home className="w-5 h-5 sm:w-6 sm:h-6" />
               <span className="text-[10px] sm:text-xs font-bold whitespace-nowrap">الرئيسية</span>
-            </button>
+            </Link>
 
             {/* 2. التحديات */}
-            <button
+            <Link
+              href="/challenges"
               onClick={() => {
-                app.setView('challenges');
                 app.setShowScores(false);
+                app.setView('challenges');
               }}
               className={`flex flex-col items-center gap-1 py-1 px-2 sm:px-3 rounded-2xl transition-all duration-300 cursor-pointer ${
                 app.view === 'challenges' && !app.showScores
@@ -475,10 +478,11 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
             >
               <Zap className="w-5 h-5 sm:w-6 sm:h-6" />
               <span className="text-[10px] sm:text-xs font-bold whitespace-nowrap">التحديات</span>
-            </button>
+            </Link>
 
             {/* 3. المتصدرين (نقلت من الشريط العلوي لتحفيز التنافس) */}
-            <button
+            <Link
+              href="/scores"
               onClick={() => {
                 app.setShowScores(true);
                 app.setView('home');
@@ -492,13 +496,14 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
             >
               <Trophy className="w-5 h-5 sm:w-6 sm:h-6 text-brand-gold dark:text-regalGold-400" />
               <span className="text-[10px] sm:text-xs font-bold whitespace-nowrap">المتصدرين</span>
-            </button>
+            </Link>
 
             {/* 4. المكتبة */}
-            <button
+            <Link
+              href="/library"
               onClick={() => {
-                app.setView('library');
                 app.setShowScores(false);
+                app.setView('library');
               }}
               className={`flex flex-col items-center gap-1 py-1 px-2 sm:px-3 rounded-2xl transition-all duration-300 cursor-pointer ${
                 !app.showScores && (app.view === 'library' || app.view === 'mushaf' || app.view === 'adhkar' || app.view === 'hadith' || app.view === 'book' || app.view === 'encyclopedia' || app.view === 'islamic_videos')
@@ -509,13 +514,14 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
             >
               <BookOpen className="w-5 h-5 sm:w-6 sm:h-6" />
               <span className="text-[10px] sm:text-xs font-bold whitespace-nowrap">المكتبة</span>
-            </button>
+            </Link>
 
             {/* 5. الإعدادات */}
-            <button
+            <Link
+              href="/settings"
               onClick={() => {
-                app.setView('settings');
                 app.setShowScores(false);
+                app.setView('settings');
               }}
               className={`flex flex-col items-center gap-1 py-1 px-2 sm:px-3 rounded-2xl transition-all duration-300 cursor-pointer ${
                 app.view === 'settings' && !app.showScores
@@ -526,14 +532,14 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
             >
               <Settings className="w-5 h-5 sm:w-6 sm:h-6" />
               <span className="text-[10px] sm:text-xs font-bold whitespace-nowrap">الإعدادات</span>
-            </button>
+            </Link>
           </div>
         </nav>
       )}
 
       {/* Fullscreen Mushaf Mode Overlay */}
       <AnimatePresence>
-        {app.isMushafFullscreen && (
+        {app.view === 'mushaf' && app.isMushafFullscreen && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}

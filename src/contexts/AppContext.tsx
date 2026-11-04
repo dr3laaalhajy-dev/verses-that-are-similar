@@ -1887,12 +1887,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return;
       }
 
-      // Requirement 1 & 3: Direct routing for Adhkar (/adhkar/morning, /adhkar/evening, /adhkar/[type])
-      const isExplicitAdhkar = path === '/adhkar' || path.startsWith('/adhkar/') || params.get('view') === 'adhkar';
+      // Requirement 1 & 3: Direct routing for Adhkar (/library/adhkar/morning, /adhkar/morning, /adhkar/[type])
+      const isExplicitAdhkar =
+        path === '/adhkar' ||
+        path.startsWith('/adhkar/') ||
+        path === '/library/adhkar' ||
+        path.startsWith('/library/adhkar/') ||
+        params.get('view') === 'adhkar';
 
       if (isExplicitAdhkar) {
         let typeOrCategory: string | null = null;
-        if (path.startsWith('/adhkar/')) {
+        if (path.startsWith('/library/adhkar/')) {
+          const sub = path.replace('/library/adhkar/', '').split('/')[0].split('?')[0].trim();
+          if (sub) typeOrCategory = sub;
+        } else if (path.startsWith('/adhkar/')) {
           const sub = path.replace('/adhkar/', '').split('/')[0].split('?')[0].trim();
           if (sub) typeOrCategory = sub;
         }
@@ -1904,6 +1912,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const resolvedCategory = resolveAdhkarCategoryId(typeOrCategory);
           setSelectedAdhkarCategoryId(resolvedCategory);
         }
+        setIsMushafFullscreen(false);
+        setShowScores(false);
         setView('adhkar', false);
         return;
       }
@@ -1911,6 +1921,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // If user is at root '/', stay on home or saved view; do not force mushaf
       if (path === '/' || path === '') {
         const savedView = sessionStorage.getItem('current_app_view');
+        setIsMushafFullscreen(false);
+        setShowScores(false);
         if (savedView && VALID_VIEWS.includes(savedView as View) && savedView !== 'home') {
           setView(savedView as View, false);
         } else {
@@ -1928,16 +1940,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const rootSegment = cleanPath.split('/')[0];
 
       if (rootSegment === 'leaderboard' || rootSegment === 'scores') {
+        setIsMushafFullscreen(false);
         setShowScores(true);
         return;
       }
 
+      if (rootSegment === 'challenges') {
+        setIsMushafFullscreen(false);
+        setShowScores(false);
+        setView('challenges', false);
+        return;
+      }
+
+      if (rootSegment === 'library') {
+        setIsMushafFullscreen(false);
+        setShowScores(false);
+        setView('library', false);
+        return;
+      }
+
       if (rootSegment === 'settings') {
+        setIsMushafFullscreen(false);
+        setShowScores(false);
         setView('settings', false);
         return;
       }
 
       if (VALID_VIEWS.includes(rootSegment as View)) {
+        setIsMushafFullscreen(false);
+        setShowScores(false);
         setView(rootSegment as View, false);
       }
     };

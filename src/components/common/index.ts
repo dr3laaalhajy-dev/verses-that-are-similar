@@ -7,3 +7,5 @@ export type {
   ModalType,
 } from './GlobalModalWrapper';
 export { GlobalOverlays } from './GlobalOverlays';
+export { Link } from './Link';
+export type { LinkProps } from './Link';

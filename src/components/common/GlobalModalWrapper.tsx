@@ -286,3 +286,4 @@ export const GlobalModalWrapper: React.FC<GlobalModalWrapperProps> = ({
 };
 
 export default GlobalModalWrapper;
+

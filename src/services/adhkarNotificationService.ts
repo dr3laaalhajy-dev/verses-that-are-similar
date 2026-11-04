@@ -11,7 +11,7 @@ export interface AdhkarNotificationOptions {
 
 export async function scheduleAdhkarNotification(options: AdhkarNotificationOptions): Promise<boolean> {
   const isMorning = options.type === 'morning';
-  const route = isMorning ? '/adhkar/morning' : '/adhkar/evening';
+  const route = isMorning ? '/library/adhkar/morning' : '/library/adhkar/evening';
   const title = isMorning ? '☀️ أذكار الصباح | ابدأ يومك بحفظ الله' : '🌙 أذكار المساء | حصنك ليلتك';
   const body = isMorning
     ? '«أَصْبَحْنَا وَأَصْبَحَ الْمُلْكُ لِلَّهِ» • أذكار الصباح حصنك الحصين وسبب لانشراح صدرك وتيسير يومك.'
@@ -59,4 +59,3 @@ export async function scheduleAdhkarNotification(options: AdhkarNotificationOpti
 
   return false;
 }
-

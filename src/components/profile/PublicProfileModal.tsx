@@ -186,8 +186,8 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
           exit={{ opacity: 0, scale: 0.95, y: 15 }}
           className="relative w-full max-w-md bg-white dark:bg-[#151518] rounded-3xl shadow-2xl border border-gray-100 dark:border-slate-800 overflow-hidden flex flex-col max-h-[90vh]"
         >
-          {/* 1. Header Banner (Separated colored header) */}
-          <div className="relative h-28 bg-gradient-to-r from-emerald-800 via-emerald-700 to-teal-800 p-4 sm:p-5 flex items-start justify-between shrink-0">
+          {/* 1. Header Banner (Separated colored header without overflow-hidden) */}
+          <div className="relative h-28 bg-gradient-to-r from-emerald-800 via-emerald-700 to-teal-800 p-4 sm:p-5 flex items-start justify-between shrink-0 overflow-visible">
             <div className="flex items-center gap-2 text-white/95 font-bold text-xs sm:text-sm">
               <Sparkles className="w-4 h-4 text-amber-300" />
               <span>الملف الشخصي للاعب</span>
@@ -200,49 +200,58 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
             </button>
           </div>
 
-          {/* Main Body */}
-          <div className="p-4 sm:p-5 pt-0 overflow-y-auto space-y-4">
-            {/* 1 & 2. Avatar & Identity Area */}
-            <div className="relative -mt-14 z-10 flex flex-col items-center text-center">
-              {/* Perfectly centered circular avatar with broad white border & soft shadow */}
-              <div className="relative w-24 h-24 sm:w-28 sm:h-28 flex items-center justify-center mb-2">
-                <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-br from-emerald-600 via-teal-700 to-emerald-900 text-white font-black text-3xl sm:text-4xl flex items-center justify-center border-4 border-white dark:border-slate-800 shadow-md">
-                  {(player?.name || 'ل').charAt(0).toUpperCase()}
-                </div>
-
-                {/* Achievement Frame Overlay (Scaled to fit without clipping) */}
-                {activeFrame === 'seerah' ? (
-                  <div className="absolute inset-0 rounded-full pointer-events-none bg-[url('/golden_seerah_achievement_frame.png')] bg-center bg-no-repeat bg-contain scale-110 drop-shadow-md" />
-                ) : activeFrame === 'general' ? (
-                  <div className="absolute inset-0 rounded-full pointer-events-none bg-[url('/golden_general_achievement_frame.png')] bg-center bg-no-repeat bg-contain scale-110 drop-shadow-md" />
-                ) : null}
+          {/* 2. Avatar & Identity Area (Positioned directly after the green header, with relative & z-10 and negative margin to overlap halfway) */}
+          <div className="relative z-10 -mt-14 sm:-mt-16 flex flex-col items-center text-center px-4 shrink-0">
+            {/* Perfectly centered circular avatar with thick white border & soft shadow */}
+            <div className="relative w-24 h-24 sm:w-28 sm:h-28 flex items-center justify-center mb-2">
+              <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-br from-emerald-600 via-teal-700 to-emerald-900 text-white font-black text-3xl sm:text-4xl flex items-center justify-center border-4 border-white dark:border-slate-800 shadow-md relative overflow-hidden">
+                {player?.avatarUrl || player?.image ? (
+                  <img
+                    src={player.avatarUrl || player.image}
+                    alt={player?.name || 'صورة اللاعب'}
+                    className="w-full h-full object-cover rounded-full"
+                  />
+                ) : (
+                  <span>{(player?.name || 'ل').charAt(0).toUpperCase()}</span>
+                )}
               </div>
 
-              {/* Player Name: Bold and Dark */}
-              <h3
-                className="text-2xl font-bold text-gray-800 dark:text-slate-100 flex items-center gap-1.5"
-                style={player?.equippedNameColor ? { color: player.equippedNameColor } : undefined}
-              >
-                {player?.name || 'لاعب'}
-              </h3>
-
-              {/* Unique ID Badge: Pale gold pill badge below the name, cleanly formatted */}
-              {player?.uniquePlayerId && (
-                <button
-                  type="button"
-                  onClick={handleCopyId}
-                  title="انقر لنسخ المعرّف"
-                  className="inline-flex items-center gap-1.5 px-3 py-1 mt-1.5 rounded-full bg-amber-50/90 dark:bg-amber-950/40 border border-amber-200/70 dark:border-amber-700/50 text-amber-900 dark:text-amber-200 font-mono font-bold text-xs hover:bg-amber-100 dark:hover:bg-amber-900/60 transition-all cursor-pointer shadow-2xs group"
-                >
-                  <span className="tracking-wide">ID: {player.uniquePlayerId}</span>
-                  {copiedId ? (
-                    <Check className="w-3.5 h-3.5 text-emerald-600" />
-                  ) : (
-                    <Copy className="w-3.5 h-3.5 text-amber-600 group-hover:scale-110 transition-transform" />
-                  )}
-                </button>
-              )}
+              {/* Achievement Frame Overlay (Scaled to fit without clipping) */}
+              {activeFrame === 'seerah' ? (
+                <div className="absolute inset-0 rounded-full pointer-events-none bg-[url('/golden_seerah_achievement_frame.png')] bg-center bg-no-repeat bg-contain scale-110 drop-shadow-md" />
+              ) : activeFrame === 'general' ? (
+                <div className="absolute inset-0 rounded-full pointer-events-none bg-[url('/golden_general_achievement_frame.png')] bg-center bg-no-repeat bg-contain scale-110 drop-shadow-md" />
+              ) : null}
             </div>
+
+            {/* Player Name: Bold and Dark */}
+            <h3
+              className="text-2xl font-bold text-gray-800 dark:text-slate-100 flex items-center gap-1.5"
+              style={player?.equippedNameColor ? { color: player.equippedNameColor } : undefined}
+            >
+              {player?.name || 'لاعب'}
+            </h3>
+
+            {/* Unique ID Badge: Pale gold pill badge below the name, cleanly formatted */}
+            {player?.uniquePlayerId && (
+              <button
+                type="button"
+                onClick={handleCopyId}
+                title="انقر لنسخ المعرّف"
+                className="inline-flex items-center gap-1.5 px-3 py-1 mt-1.5 rounded-full bg-amber-50/90 dark:bg-amber-950/40 border border-amber-200/70 dark:border-amber-700/50 text-amber-900 dark:text-amber-200 font-mono font-bold text-xs hover:bg-amber-100 dark:hover:bg-amber-900/60 transition-all cursor-pointer shadow-2xs group"
+              >
+                <span className="tracking-wide">ID: {player.uniquePlayerId}</span>
+                {copiedId ? (
+                  <Check className="w-3.5 h-3.5 text-emerald-600" />
+                ) : (
+                  <Copy className="w-3.5 h-3.5 text-amber-600 group-hover:scale-110 transition-transform" />
+                )}
+              </button>
+            )}
+          </div>
+
+          {/* 3. Main Scrollable Body Content */}
+          <div className="p-4 sm:p-5 pt-3 overflow-y-auto space-y-4 flex-1">
 
             {loading ? (
               <div className="py-10 text-center">
