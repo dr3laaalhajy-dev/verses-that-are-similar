@@ -15,6 +15,7 @@ import { INITIAL_ISLAMIC_VIDEOS, VIDEO_CATEGORIES, IslamicVideo } from '../../da
 import ConfirmModal from '../ConfirmModal';
 import WhoAmIAdmin from './WhoAmIAdmin';
 import NotificationAdmin from './NotificationAdmin';
+import { supabase } from '../../services/supabase';
 
 interface Verse {
   id: string;
@@ -1704,6 +1705,15 @@ export default function AdminDashboard({
         cups: parsedCups
       } : u));
       setEditingUser(null);
+      try {
+        supabase.channel('realtime_leaderboard_updates').send({
+          type: 'broadcast',
+          event: 'leaderboard_updated',
+          payload: { updatedUserId: editingUser.id }
+        });
+      } catch (e) {
+        console.warn('Realtime broadcast failed:', e);
+      }
       showAlert('نجاح', data.message || 'تم تحديث بيانات المستخدم بنجاح', () => fetchUsers(usersSearch));
     } catch (err: any) {
       showAlert('خطأ', err.message);

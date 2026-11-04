@@ -426,6 +426,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, currentAdmin
         ? Math.max(0, parseInt(String(cups), 10))
         : undefined;
 
+      // Absolute Direct Override: Update target player directly without cumulative increments
       const updated = await prisma.player.update({
         where: { id: player.id },
         data: {
@@ -435,6 +436,25 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, currentAdmin
           ...(parsedCups !== undefined ? { cups: parsedCups } : {})
         }
       });
+
+      // Synchronize any duplicate records matching this username or name to prevent stale cache resurrection
+      if (cleanN || cleanU) {
+        await prisma.player.updateMany({
+          where: {
+            OR: [
+              ...(cleanN ? [{ name: { equals: cleanN, mode: 'insensitive' as const } }] : []),
+              ...(cleanU ? [{ username: cleanU }, { username: '@' + cleanU }] : [])
+            ],
+            NOT: { id: player.id }
+          },
+          data: {
+            ...(parsedPoints !== undefined ? { points: parsedPoints } : {}),
+            ...(parsedCups !== undefined ? { cups: parsedCups } : {})
+          }
+        }).catch(() => {});
+      }
+
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
       return res.status(200).json({ success: true, message: 'تم تحديث بيانات المستخدم بنجاح', player: updated });
     }
 

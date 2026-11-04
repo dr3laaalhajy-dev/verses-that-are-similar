@@ -145,8 +145,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (addedPoints > 0) {
       updateData.points = { increment: addedPoints };
     } else if (explicitTotalPoints !== null && !isNaN(explicitTotalPoints)) {
-      updateData.points = Math.max(player.points || 0, explicitTotalPoints);
-    } else if (clientScore !== null && !isNaN(clientScore) && clientScore > (player.points || 0)) {
+      updateData.points = explicitTotalPoints;
+    } else if (clientScore !== null && !isNaN(clientScore)) {
       updateData.points = clientScore;
     }
 
@@ -168,13 +168,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     } else if (isNewChallenge) {
       updateData.cups = { increment: 1 };
     } else if (explicitTotalCups !== null && !isNaN(explicitTotalCups)) {
-      updateData.cups = Math.max(player.cups || 0, explicitTotalCups);
+      updateData.cups = explicitTotalCups;
     }
 
     // 3. Streak handling:
     const explicitStreak = req.body.streakCount !== undefined ? Number(req.body.streakCount) : (req.body.streak !== undefined ? Number(req.body.streak) : null);
     if (explicitStreak !== null && !isNaN(explicitStreak)) {
-      updateData.streak = Math.max((player as any).streak || 0, explicitStreak);
+      updateData.streak = explicitStreak;
     }
 
     if (seerahCompleted !== undefined) updateData.seerahCompleted = Boolean(seerahCompleted);

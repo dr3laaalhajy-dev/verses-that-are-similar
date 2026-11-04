@@ -4214,12 +4214,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             body: JSON.stringify({
               name: playerName,
               username: playerUsername,
-              score: totalPoints,
-              totalPoints: totalPoints,
-              totalCups: cups,
-              trophiesCount: cups,
-              streak: streak,
-              streakCount: streak,
               seerahCompleted: hasSeerah,
               generalCompleted: hasGeneral,
               activeFrame: effectiveFrame
@@ -4228,27 +4222,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (scoreRes.ok) {
             const pData = await scoreRes.json();
             if (pData) {
-              if (typeof pData.cups === 'number' && pData.cups > 0) {
-                setCups(prev => {
-                  const best = Math.max(prev, pData.cups);
-                  localStorage.setItem('quran_total_cups', best.toString());
-                  localStorage.setItem('quran_cups', best.toString());
-                  return best;
-                });
+              if (typeof pData.cups === 'number') {
+                setCups(pData.cups);
+                localStorage.setItem('quran_total_cups', pData.cups.toString());
+                localStorage.setItem('quran_cups', pData.cups.toString());
               }
-              if (typeof pData.points === 'number' && pData.points > 0) {
-                setTotalPoints(prev => {
-                  const best = Math.max(prev, pData.points);
-                  localStorage.setItem('quran_total_points', best.toString());
-                  return best;
-                });
+              if (typeof pData.points === 'number') {
+                setTotalPoints(pData.points);
+                localStorage.setItem('quran_total_points', pData.points.toString());
               }
-              if (typeof pData.streak === 'number' && pData.streak > 0) {
-                setStreak(prev => {
-                  const best = Math.max(prev, pData.streak);
-                  localStorage.setItem('quran_streak', best.toString());
-                  return best;
-                });
+              if (typeof pData.streak === 'number') {
+                setStreak(pData.streak);
+                localStorage.setItem('quran_streak', pData.streak.toString());
               }
             }
           }
@@ -4325,29 +4310,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         if (myEntry) {
           const myCups = myEntry.trophiesCount ?? myEntry.cups;
-          if (typeof myCups === 'number' && myCups > 0) {
-            setCups(prev => {
-              const best = Math.max(prev, myCups);
-              localStorage.setItem('quran_total_cups', best.toString());
-              localStorage.setItem('quran_cups', best.toString());
-              return best;
-            });
+          if (typeof myCups === 'number') {
+            setCups(myCups);
+            localStorage.setItem('quran_total_cups', myCups.toString());
+            localStorage.setItem('quran_cups', myCups.toString());
           }
           const myPts = myEntry.totalPoints ?? myEntry.points;
-          if (typeof myPts === 'number' && myPts > 0) {
-            setTotalPoints(prev => {
-              const best = Math.max(prev, myPts);
-              localStorage.setItem('quran_total_points', best.toString());
-              return best;
-            });
+          if (typeof myPts === 'number') {
+            setTotalPoints(myPts);
+            localStorage.setItem('quran_total_points', myPts.toString());
           }
           const myStreak = myEntry.streakCount ?? myEntry.streak;
-          if (typeof myStreak === 'number' && myStreak > 0) {
-            setStreak(prev => {
-              const best = Math.max(prev, myStreak);
-              localStorage.setItem('quran_streak', best.toString());
-              return best;
-            });
+          if (typeof myStreak === 'number') {
+            setStreak(myStreak);
+            localStorage.setItem('quran_streak', myStreak.toString());
           }
         }
       }
@@ -4479,6 +4455,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
     }
   }, [showScores, syncLeaderboard]);
+
+  // Realtime Leaderboard updates: listen for admin score adjustments and update leaderboard instantly without full page refresh
+  useEffect(() => {
+    try {
+      const channel = supabase.channel('realtime_leaderboard_updates')
+        .on('broadcast', { event: 'leaderboard_updated' }, () => {
+          syncLeaderboard();
+        })
+        .subscribe();
+
+      return () => {
+        try {
+          supabase.removeChannel(channel);
+        } catch { }
+      };
+    } catch (e) {
+      console.warn('Realtime leaderboard subscription warning:', e);
+    }
+  }, [syncLeaderboard]);
 
 
 

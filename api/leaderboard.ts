@@ -13,6 +13,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.setHeader('Expires', '0');
 
     const players: any[] = await prisma.player.findMany({
+      orderBy: { updatedAt: 'desc' },
       select: {
         id: true,
         name: true,
@@ -29,7 +30,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       } as any
     })
 
-    // Deduplicate and merge by normalized player name so no achievements, cups, or streaks are lost
+    // Deduplicate and merge by normalized player name
+    // Players are ordered by newest update first, so authoritative values from Admin overrides are preserved
     const playerMap = new Map<string, LeaderboardUser>()
 
     for (const player of players) {
@@ -66,16 +68,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (!existing.id && player.id) {
           existing.id = player.id;
         }
-        existing.totalPoints = Math.max(existing.totalPoints || 0, pPoints)
-        existing.points = existing.totalPoints
-        existing.trophiesCount = Math.max(existing.trophiesCount || 0, pCups)
-        existing.cups = existing.trophiesCount
-        existing.streakCount = Math.max(existing.streakCount || 0, pStreak)
-        existing.streak = existing.streakCount
+        // Do NOT use Math.max - keep authoritative values from the most recent player record!
         existing.seerahCompleted = existing.seerahCompleted || player.seerahCompleted
         existing.generalCompleted = existing.generalCompleted || player.generalCompleted
-        existing.activeFrame = (player.activeFrame === 'seerah' || player.activeFrame === 'general') ? player.activeFrame : null;
-        if (player.equippedNameColor) {
+        if (!existing.activeFrame && (player.activeFrame === 'seerah' || player.activeFrame === 'general')) {
+          existing.activeFrame = player.activeFrame;
+        }
+        if (!existing.equippedNameColor && player.equippedNameColor) {
           existing.equippedNameColor = player.equippedNameColor
         }
         if (!existing.username && player.username) {
