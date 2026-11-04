@@ -9,6 +9,9 @@ export interface RoomInvitePayload {
   hostUsername?: string;
   hostAvatarFrame?: string | null;
   isPrivate?: boolean;
+  password?: string;
+  isInvite?: boolean;
+  invitedUserId?: string | number;
   gameMode?: string;
   timestamp: number;
 }

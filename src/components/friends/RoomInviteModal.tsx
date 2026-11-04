@@ -1,20 +1,83 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Swords, X, Play, ShieldAlert, Sparkles } from 'lucide-react';
+import { Swords, X, Play, ShieldAlert, Sparkles, Loader2, AlertCircle } from 'lucide-react';
 import type { RoomInvitePayload } from '../../services/friendsRealtimeService';
 
 export interface RoomInviteModalProps {
   invite: RoomInvitePayload | null;
-  onAccept: (invite: RoomInvitePayload) => void;
+  onAccept: (roomOrInvite: any) => void;
   onDecline: () => void;
+  currentPlayer?: {
+    id?: number;
+    name?: string | null;
+    username?: string | null;
+    uniquePlayerId?: string | null;
+  } | null;
 }
 
 export const RoomInviteModal: React.FC<RoomInviteModalProps> = ({
   invite,
   onAccept,
-  onDecline
+  onDecline,
+  currentPlayer
 }) => {
+  const [isJoining, setIsJoining] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
   if (!invite) return null;
+
+  const handleAcceptInviteClick = async () => {
+    setIsJoining(true);
+    setErrorMessage(null);
+
+    try {
+      const token = localStorage.getItem('quran_admin_token') || localStorage.getItem('quran_auth_token') || '';
+      const pId = currentPlayer?.uniquePlayerId || currentPlayer?.username || currentPlayer?.name || localStorage.getItem('quran_unique_player_id') || localStorage.getItem('quran_player_username') || localStorage.getItem('quran_player_name') || '';
+      const pName = currentPlayer?.name || localStorage.getItem('quran_player_name') || 'متسابق جديد';
+
+      const res = await fetch('/api/1v1', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          action: 'join',
+          roomId: invite.roomId,
+          id: invite.roomId,
+          player2Id: pId,
+          playerName: pName,
+          password: invite.password,
+          isInvite: true,
+          invitedUserId: pId
+        })
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        if (res.status === 403) {
+          throw new Error('غير مصرح لك بالدخول أو الدعوة غير صالحة');
+        } else if (res.status === 404) {
+          throw new Error('الغرفة غير موجودة');
+        } else {
+          throw new Error(data.message || data.error || 'تعذر الانضمام للغرفة');
+        }
+      }
+
+      onAccept(data.room || data);
+    } catch (err: any) {
+      console.error('Error joining invited room:', err);
+      if (err?.message === 'Failed to fetch') {
+        setErrorMessage('تعذر الاتصال بالخادم، يرجى التحقق من اتصال الإنترنت');
+      } else {
+        setErrorMessage(err?.message || 'غير مصرح لك بالدخول أو الدعوة غير صالحة');
+      }
+    } finally {
+      setIsJoining(false);
+    }
+  };
 
   return (
     <AnimatePresence>
@@ -64,18 +127,32 @@ export const RoomInviteModal: React.FC<RoomInviteModalProps> = ({
             )}
           </div>
 
+          {/* Error message banner if join fails */}
+          {errorMessage && (
+            <div className="p-2.5 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/60 rounded-xl text-red-600 dark:text-red-400 text-xs font-bold flex items-center justify-center gap-1.5">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span>{errorMessage}</span>
+            </div>
+          )}
+
           {/* Action Buttons */}
           <div className="flex items-center gap-2 pt-2">
             <button
-              onClick={() => onAccept(invite)}
-              className="flex-1 py-3 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-2xl text-xs sm:text-sm font-black shadow-lg transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+              onClick={handleAcceptInviteClick}
+              disabled={isJoining}
+              className="flex-1 py-3 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-2xl text-xs sm:text-sm font-black shadow-lg transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
             >
-              <Play className="w-4 h-4" />
-              <span>قبول التحدي</span>
+              {isJoining ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Play className="w-4 h-4" />
+              )}
+              <span>{isJoining ? 'جاري الانضمام...' : 'قبول التحدي'}</span>
             </button>
 
             <button
               onClick={onDecline}
+              disabled={isJoining}
               className="py-3 px-4 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-2xl text-xs font-bold transition-all cursor-pointer"
             >
               <span>تجاهل</span>
@@ -88,4 +165,3 @@ export const RoomInviteModal: React.FC<RoomInviteModalProps> = ({
 };
 
 export default RoomInviteModal;
-

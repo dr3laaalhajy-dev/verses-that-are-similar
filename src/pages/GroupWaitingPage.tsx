@@ -93,6 +93,9 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
         hostName: playerName || 'صديقك',
         hostUsername: playerUsername || undefined,
         isPrivate: room.isPrivate,
+        password: room.password,
+        isInvite: true,
+        invitedUserId: friend.id,
         gameMode: room.gameMode,
         timestamp: Date.now()
       });

@@ -41,6 +41,7 @@ async function findPlayer(idOrUsernameOrName: any, nameFallback?: string) {
   return await prisma.player.findFirst({
     where: {
       OR: [
+        ...(str ? [{ uniquePlayerId: str.toUpperCase() }] : []),
         ...(cleanU ? [{ username: cleanU }, { username: '@' + cleanU }] : []),
         ...(str ? [{ name: { equals: str, mode: 'insensitive' as const } }] : []),
         ...(nameFallback ? [{ name: { equals: nameFallback.trim(), mode: 'insensitive' as const } }] : []),
@@ -258,11 +259,14 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
 }
 
 async function handleJoin(req: VercelRequest, res: VercelResponse) {
-  const { code, roomId, id, player2Id, playerName, password } = req.body
+  const { code, roomId, id, player2Id, playerName, password, isInvite, invitedUserId } = req.body || {}
   const targetId = String(roomId || id || '').trim()
   const cleanCode = String(code || '').trim()
   if (!targetId && !cleanCode) return res.status(400).json({ message: 'يرجى تحديد الغرفة' })
-  if (!player2Id && !playerName) return res.status(400).json({ message: 'Missing player2Id' })
+
+  const effectivePlayerId = player2Id || req.body?.player2Name || req.headers['x-player-id'] || req.headers['x-player-username']
+  const effectivePlayerName = playerName || req.body?.player2Name || req.headers['x-player-name']
+  if (!effectivePlayerId && !effectivePlayerName) return res.status(400).json({ message: 'Missing player2Id' })
 
   try {
     const room = await prisma.room.findFirst({ 
@@ -272,7 +276,7 @@ async function handleJoin(req: VercelRequest, res: VercelResponse) {
       include: { player1: true } 
     })
     
-    if (!room) return res.status(404).json({ message: 'الغرفة غير موجودة أو تم إغلاقها' })
+    if (!room) return res.status(404).json({ message: 'الغرفة غير موجودة' })
     
     // Status can be WAITING or PLAYING (allow late join if within maxPlayers)
     if (room.status === 'FINISHED') return res.status(400).json({ message: 'هذا التحدي انتهى بالفعل' })
@@ -291,31 +295,42 @@ async function handleJoin(req: VercelRequest, res: VercelResponse) {
       return res.status(410).json({ message: 'انتهت صلاحية هذه الغرفة' })
     }
 
-    let player = await findPlayer(player2Id, playerName)
+    let player = await findPlayer(effectivePlayerId, effectivePlayerName)
     
     // Auto-register player if not in database yet
     if (!player) {
-      const defaultName = (playerName && String(playerName).trim()) || 'متسابق جديد'
+      const defaultName = (effectivePlayerName && String(effectivePlayerName).trim()) || 'متسابق جديد'
       player = await prisma.player.create({
         data: {
           name: defaultName
         }
       })
-    } else if (playerName && String(playerName).trim() && player.name !== String(playerName).trim()) {
+    } else if (effectivePlayerName && String(effectivePlayerName).trim() && player.name !== String(effectivePlayerName).trim()) {
       player = await prisma.player.update({
         where: { id: player.id },
-        data: { name: String(playerName).trim() }
+        data: { name: String(effectivePlayerName).trim() }
       })
     }
 
     const isHost = player.id === room.player1Id
 
-    // Private Room Password Verification (Host bypasses password verification)
-    if (room.isPrivate && !isHost) {
+    // Check if the player is invited to this room:
+    const isInvited = Boolean(
+      isInvite ||
+      (invitedUserId && (
+        String(invitedUserId) === String(player.id) ||
+        String(invitedUserId).toLowerCase() === String(player.username || '').toLowerCase().replace(/^@+/, '') ||
+        String(invitedUserId).toUpperCase() === String(player.uniquePlayerId || '').toUpperCase() ||
+        String(invitedUserId).toLowerCase() === String(player.name || '').toLowerCase()
+      ))
+    )
+
+    // Private Room Password Verification (Host and Invited players bypass password verification)
+    if (room.isPrivate && !isHost && !isInvited) {
       const enteredPass = password ? String(password).trim() : ''
       const actualPass = room.password ? String(room.password).trim() : ''
       if (!enteredPass || enteredPass !== actualPass) {
-        return res.status(403).json({ message: 'كلمة المرور غير صحيحة، يرجى كتابة كلمة المرور الصحيحة للغرفة' })
+        return res.status(403).json({ message: 'غير مصرح لك بالدخول أو الدعوة غير صالحة' })
       }
     }
 

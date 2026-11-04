@@ -3026,37 +3026,77 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, [playerName, playerUsername, uniquePlayerId, userAchievement]);
 
-  const handleAcceptRoomInvite = useCallback(async (invite: any) => {
+  const handleAcceptRoomInvite = useCallback(async (roomOrInvite: any) => {
     setIncomingRoomInvite(null);
-    if (!invite?.roomId) return;
+    if (!roomOrInvite) return;
+
+    // If RoomInviteModal already completed the join and passed the room object:
+    if (roomOrInvite.status && (roomOrInvite.id || roomOrInvite.room)) {
+      setRoom(roomOrInvite.room || roomOrInvite);
+      setView('group_waiting');
+      return;
+    }
+
+    const roomId = roomOrInvite.roomId || roomOrInvite.id;
+    if (!roomId) return;
 
     try {
+      const token = localStorage.getItem('quran_admin_token') || localStorage.getItem('quran_auth_token') || '';
+      const pId = uniquePlayerId || playerUsername || playerName || '';
+      const pName = playerName || 'متسابق جديد';
+
       const res = await fetch('/api/1v1', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
         body: JSON.stringify({
           action: 'join',
-          roomId: invite.roomId,
-          player2Id: playerUsername || playerName,
-          player2Name: playerName,
-          password: invite.isPrivate ? invite.password : undefined
+          roomId: roomId,
+          id: roomId,
+          player2Id: pId,
+          playerName: pName,
+          password: roomOrInvite.password,
+          isInvite: true,
+          invitedUserId: pId
         })
       });
+
       const data = await res.json();
-      if (res.ok && data.room) {
-        setRoom(data.room);
+      if (res.ok && (data.room || data.id)) {
+        setRoom(data.room || data);
         setView('group_waiting');
       } else {
+        let errorMsg = 'تعذر الانضمام للغرفة';
+        if (res.status === 403) {
+          errorMsg = 'غير مصرح لك بالدخول أو الدعوة غير صالحة';
+        } else if (res.status === 404) {
+          errorMsg = 'الغرفة غير موجودة';
+        } else if (data.message || data.error) {
+          errorMsg = data.message || data.error;
+        }
+
         setToastMessage({
           id: String(Date.now()),
           type: 'error',
-          message: data.error || 'تعذر الانضمام للغرفة، ربما بدأت المباراة أو أُلغيت الغرفة'
+          message: errorMsg
         });
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('Error accepting room invite:', e);
+      setToastMessage({
+        id: String(Date.now()),
+        type: 'error',
+        message: e?.status === 403
+          ? 'غير مصرح لك بالدخول أو الدعوة غير صالحة'
+          : e?.status === 404
+          ? 'الغرفة غير موجودة'
+          : (e?.message || 'غير مصرح لك بالدخول أو الدعوة غير صالحة')
+      });
     }
-  }, [playerUsername, playerName]);
+  }, [playerUsername, playerName, uniquePlayerId]);
 
   const handleDeclineRoomInvite = useCallback(() => {
     setIncomingRoomInvite(null);

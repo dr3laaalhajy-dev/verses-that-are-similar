@@ -725,6 +725,12 @@ export const GlobalOverlays: React.FC = () => {
         invite={app.incomingRoomInvite}
         onAccept={app.handleAcceptRoomInvite}
         onDecline={app.handleDeclineRoomInvite}
+        currentPlayer={{
+          id: app.playerId,
+          name: app.playerName,
+          username: app.playerUsername,
+          uniquePlayerId: app.uniquePlayerId
+        }}
       />
     </>
   );
