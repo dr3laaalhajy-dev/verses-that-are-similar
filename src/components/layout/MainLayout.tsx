@@ -11,6 +11,7 @@ import { PullToRefresh } from '../PullToRefresh';
 import QuranZoomViewer from '../QuranZoomViewer';
 import { NotificationBell } from '../NotificationBell';
 import { Link } from '../common/Link';
+import { router } from '../../services/router';
 
 export interface MainLayoutProps {
   children: React.ReactNode;
@@ -449,6 +450,8 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
               href="/"
               prefetch={false}
               onClick={() => {
+                router.refresh();
+                router.push('/');
                 app.setShowScores(false);
                 app.setView('home');
               }}
@@ -468,6 +471,8 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
               href="/challenges"
               prefetch={false}
               onClick={() => {
+                router.refresh();
+                router.push('/challenges');
                 app.setShowScores(false);
                 app.setView('challenges');
               }}
@@ -487,6 +492,8 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
               href="/scores"
               prefetch={false}
               onClick={() => {
+                router.refresh();
+                router.push('/scores');
                 app.setShowScores(true);
                 app.setView('home');
               }}
@@ -506,6 +513,8 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
               href="/library"
               prefetch={false}
               onClick={() => {
+                router.refresh();
+                router.push('/library');
                 app.setShowScores(false);
                 app.setView('library');
               }}
@@ -525,6 +534,8 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
               href="/settings"
               prefetch={false}
               onClick={() => {
+                router.refresh();
+                router.push('/settings');
                 app.setShowScores(false);
                 app.setView('settings');
               }}

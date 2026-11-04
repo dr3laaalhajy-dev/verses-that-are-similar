@@ -67,10 +67,9 @@ export const LibraryHubPage: React.FC<LibraryHubPageProps> = ({
         {/* Clean & Beautiful Library Grid using standard Link with absolute paths */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
 
-          {/* 1. Mushaf Card */}
-          <Link
-            href="/mushaf"
-            prefetch={false}
+          {/* 1. Mushaf Card (Fallback HTML <a> Test to bypass Next.js client interception) */}
+          <a
+            href="/library/quran"
             onClick={() => {
               setView('mushaf');
               setSelectedSurahId(null);
@@ -98,7 +97,7 @@ export const LibraryHubPage: React.FC<LibraryHubPageProps> = ({
                 تصفح القرآن الكريم كاملاً بالرسم العثماني المقروء
               </p>
             </div>
-          </Link>
+          </a>
 
           {/* 2. Adhkar Card */}
           <Link

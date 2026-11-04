@@ -29,6 +29,7 @@ export const router = {
     try {
       window.postMessage({
         type: 'DEEP_LINK_NAVIGATE',
+        source: 'internal_router',
         url: cleanRoute,
         route: cleanRoute,
         data: { route: cleanRoute }
@@ -71,6 +72,28 @@ export const router = {
     try {
       window.dispatchEvent(new CustomEvent('app_navigate', { detail: { route: cleanRoute } }));
     } catch (e) {}
+  },
+
+  /**
+   * Router Refresh: Invalidate client router cache and refresh active route state
+   * Used to clear Next.js / SPA router cache before view switching
+   */
+  refresh: () => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.dispatchEvent(new CustomEvent('app_router_refresh', { detail: { timestamp: Date.now() } }));
+    } catch (e) {
+      console.warn('[Router] Failed to refresh router cache:', e);
+    }
+  },
+
+  /**
+   * Global Prefetch Disable:
+   * No-op function to prevent background prefetch failures on dynamic routes in Capacitor / SSG
+   */
+  prefetch: (_route: string) => {
+    // Disabled intentionally to prevent silent freezes in Capacitor / offline mode
+    return;
   }
 };
 

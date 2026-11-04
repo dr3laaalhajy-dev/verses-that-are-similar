@@ -17,6 +17,8 @@ function AppContent() {
     // 1. Web / Service Worker notification click listener via postMessage
     const handleServiceWorkerMessage = (event: MessageEvent) => {
       if (event.data?.type === 'DEEP_LINK_NAVIGATE') {
+        // Prevent loop if the message was posted by internal router.push
+        if (event.data?.source === 'internal_router') return;
         const route = event.data?.data?.route || event.data?.route || event.data?.url;
         if (route) {
           router.push(route);
