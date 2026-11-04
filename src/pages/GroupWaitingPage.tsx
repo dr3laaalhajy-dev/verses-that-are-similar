@@ -13,6 +13,7 @@ import { useApp } from '../contexts/AppContext';
 export interface FriendInviteStateItem {
   status: 'idle' | 'sent' | 'declined' | 'accepted';
   cooldownRemaining?: number;
+  dnd?: boolean;
 }
 
 export interface GroupWaitingPageProps {
@@ -80,11 +81,17 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
             [fId]: { status: 'idle' as const }
           }));
         }
-        // Requirement 2: In case of explicit decline, disable button, show 'تم الرفض' with 30s cooldown timer
+        // Requirement 2: In case of explicit decline, check doNotDisturb.
+        // If true: disable button for 300s (5m) and show 'لا يمكن الإزعاج حالياً'. If false: 30s.
         else if (response.event === 'invite_declined') {
+          const isDnd = Boolean(response.doNotDisturb);
           setInviteStatuses(prev => ({
             ...prev,
-            [fId]: { status: 'declined' as const, cooldownRemaining: 30 }
+            [fId]: {
+              status: 'declined' as const,
+              cooldownRemaining: isDnd ? 300 : 30,
+              dnd: isDnd
+            }
           }));
         }
         // Requirement 3: In case of acceptance, immediately change button to 'تم القبول'
@@ -259,6 +266,38 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
     setSendingInviteId(friend.id);
     try {
       const senderTarget = app?.uniquePlayerId || playerUsername || playerName || String(app?.playerId || '');
+      const senderId = app?.playerId || playerUsername || playerName || '';
+      const receiverId = friend.id || friend.uniquePlayerId || friend.username;
+
+      // Backend enforcement: Check if receiver enabled Do Not Disturb (429 status)
+      try {
+        const checkRes = await fetch('/api/1v1', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'send-invite',
+            senderId: String(senderId),
+            receiverId: String(receiverId)
+          })
+        });
+
+        if (checkRes.status === 429) {
+          const errData = await checkRes.json();
+          const rem = errData.cooldownRemaining || 300;
+          setInviteStatuses(prev => ({
+            ...prev,
+            [friend.id]: {
+              status: 'declined',
+              cooldownRemaining: rem,
+              dnd: true
+            }
+          }));
+          return;
+        }
+      } catch (checkErr) {
+        console.warn('Could not verify DND status with backend:', checkErr);
+      }
+
       await friendsRealtimeService.sendRoomInvite(friendTarget, {
         roomId: room.id,
         roomCode: room.code,
@@ -444,7 +483,11 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
                               ) : isDeclined ? (
                                 <>
                                   <X className="w-3 h-3 text-red-500" />
-                                  <span>تم الرفض ({fStatus.cooldownRemaining || 30}ث)</span>
+                                  <span>
+                                    {fStatus.dnd
+                                      ? `لا يمكن الإزعاج حالياً (${fStatus.cooldownRemaining || 300}ث)`
+                                      : `تم الرفض (${fStatus.cooldownRemaining || 30}ث)`}
+                                  </span>
                                 </>
                               ) : isSent ? (
                                 <>

@@ -24,6 +24,7 @@ export const RoomInviteModal: React.FC<RoomInviteModalProps> = ({
   const [isJoining, setIsJoining] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [timeLeft, setTimeLeft] = useState(10);
+  const [doNotDisturb, setDoNotDisturb] = useState(false);
   const hasRespondedRef = useRef(false);
 
   // Requirement 1: 10-second timeout timer.
@@ -78,13 +79,34 @@ export const RoomInviteModal: React.FC<RoomInviteModalProps> = ({
 
     // Requirement 2: Declined event sent when user clicks 'إلغاء'
     const senderTarget = getSenderTarget();
+    const senderId = (invite as any).senderId || (invite as any).hostId || senderTarget;
+    const receiverId = getMyFriendId();
+
     if (senderTarget) {
       friendsRealtimeService.sendInviteResponse(senderTarget, 'invite_declined', {
         roomId: invite.roomId,
-        friendId: getMyFriendId(),
-        friendName: currentPlayer?.name || undefined
+        friendId: receiverId,
+        friendName: currentPlayer?.name || undefined,
+        senderId: senderId,
+        doNotDisturb: doNotDisturb,
+        action: 'declined'
       }).catch(err => console.warn('Failed to send invite_declined event:', err));
     }
+
+    // Backend enforcement: persist DND cooldown if selected
+    if (doNotDisturb) {
+      fetch('/api/1v1', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'dnd-cooldown',
+          senderId: String(senderId),
+          receiverId: String(receiverId),
+          durationSeconds: 300
+        })
+      }).catch(() => {});
+    }
+
     onDecline();
   };
 
@@ -232,8 +254,19 @@ export const RoomInviteModal: React.FC<RoomInviteModalProps> = ({
             </div>
           )}
 
+          {/* Do Not Disturb Checkbox */}
+          <label className="flex items-center justify-center gap-2 pt-1 cursor-pointer select-none text-[11px] font-bold text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors">
+            <input
+              type="checkbox"
+              checked={doNotDisturb}
+              onChange={(e) => setDoNotDisturb(e.target.checked)}
+              className="w-3.5 h-3.5 rounded text-amber-600 focus:ring-amber-500 border-slate-300 dark:border-slate-700 cursor-pointer"
+            />
+            <span>عدم استقبال دعوات من هذا اللاعب لمدة 5 دقائق</span>
+          </label>
+
           {/* Action Buttons */}
-          <div className="flex items-center gap-2 pt-2">
+          <div className="flex items-center gap-2 pt-1">
             <button
               onClick={handleAcceptInviteClick}
               disabled={isJoining}

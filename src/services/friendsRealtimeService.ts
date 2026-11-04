@@ -23,6 +23,9 @@ export interface RoomInviteResponsePayload {
   roomId: string;
   friendId: number | string;
   friendName?: string;
+  senderId?: number | string;
+  doNotDisturb?: boolean;
+  action?: string;
   timestamp: number;
 }
 
@@ -235,14 +238,14 @@ class FriendsRealtimeService {
             setTimeout(() => {
               try {
                 supabase.removeChannel(channel);
-              } catch (e) {}
+              } catch (e) { }
               resolve(true);
             }, 300);
           }).catch(err => {
             console.error('Failed to send broadcast room invite:', err);
             try {
               supabase.removeChannel(channel);
-            } catch (e) {}
+            } catch (e) { }
             resolve(false);
           });
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
@@ -263,6 +266,9 @@ class FriendsRealtimeService {
       roomId: string;
       friendId: number | string;
       friendName?: string;
+      senderId?: number | string;
+      doNotDisturb?: boolean;
+      action?: string;
       timestamp?: number;
     }
   ): Promise<boolean> {
@@ -296,14 +302,14 @@ class FriendsRealtimeService {
             setTimeout(() => {
               try {
                 supabase.removeChannel(channel);
-              } catch (e) {}
+              } catch (e) { }
               resolve(true);
             }, 300);
           }).catch(err => {
             console.error('Failed to send invite response broadcast:', err);
             try {
               supabase.removeChannel(channel);
-            } catch (e) {}
+            } catch (e) { }
             resolve(false);
           });
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
@@ -359,7 +365,7 @@ class FriendsRealtimeService {
       activeSubs.forEach(ch => {
         try {
           supabase.removeChannel(ch);
-        } catch (e) {}
+        } catch (e) { }
       });
     };
   }

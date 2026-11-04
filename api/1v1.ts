@@ -24,6 +24,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     case 'leave':
       return handleResign(req, res)
     case 'reaction': return handleReaction(req, res)
+    case 'dnd-cooldown': return handleDndCooldown(req, res)
+    case 'invite':
+    case 'send-invite':
+    case 'check-invite':
+      return handleSendInviteAPI(req, res)
     default:
       return res.status(400).json({ message: 'Invalid action' })
   }
@@ -1488,4 +1493,108 @@ async function handleReaction(req: VercelRequest, res: VercelResponse) {
     console.error('Reaction error:', err)
     return res.status(500).json({ error: err.message })
   }
+}
+
+// In-memory cache for Do Not Disturb cooldowns: `${senderId}_${receiverId}` => expiry timestamp
+const dndCooldowns: Map<string, number> = new Map()
+
+export function setDndCooldown(senderId: string | number, receiverId: string | number, durationSeconds: number = 300) {
+  const cleanSender = String(senderId || '').trim().toLowerCase()
+  const cleanReceiver = String(receiverId || '').trim().toLowerCase()
+  if (!cleanSender || !cleanReceiver) return
+  const key = `${cleanSender}_${cleanReceiver}`
+  dndCooldowns.set(key, Date.now() + durationSeconds * 1000)
+}
+
+export function isDndActive(senderId: string | number, receiverId: string | number): { active: boolean; remainingSeconds: number } {
+  const cleanSender = String(senderId || '').trim().toLowerCase()
+  const cleanReceiver = String(receiverId || '').trim().toLowerCase()
+  const key = `${cleanSender}_${cleanReceiver}`
+  const expiry = dndCooldowns.get(key)
+  if (!expiry) return { active: false, remainingSeconds: 0 }
+  const diff = expiry - Date.now()
+  if (diff <= 0) {
+    dndCooldowns.delete(key)
+    return { active: false, remainingSeconds: 0 }
+  }
+  return { active: true, remainingSeconds: Math.ceil(diff / 1000) }
+}
+
+async function handleDndCooldown(req: VercelRequest, res: VercelResponse) {
+  const { senderId, receiverId, durationSeconds = 300 } = req.body || req.query || {}
+  if (!senderId || !receiverId) {
+    return res.status(400).json({ message: 'Missing senderId or receiverId' })
+  }
+
+  const senderPlayer = await findPlayer(senderId).catch(() => null)
+  const receiverPlayer = await findPlayer(receiverId).catch(() => null)
+
+  const senderKeys = [
+    String(senderId),
+    senderPlayer?.id ? String(senderPlayer.id) : null,
+    senderPlayer?.username ? senderPlayer.username.toLowerCase().replace(/^@+/, '') : null,
+    senderPlayer?.uniquePlayerId ? senderPlayer.uniquePlayerId.toUpperCase() : null
+  ].filter(Boolean) as string[]
+
+  const receiverKeys = [
+    String(receiverId),
+    receiverPlayer?.id ? String(receiverPlayer.id) : null,
+    receiverPlayer?.username ? receiverPlayer.username.toLowerCase().replace(/^@+/, '') : null,
+    receiverPlayer?.uniquePlayerId ? receiverPlayer.uniquePlayerId.toUpperCase() : null
+  ].filter(Boolean) as string[]
+
+  const expiry = Date.now() + Number(durationSeconds) * 1000
+  for (const s of senderKeys) {
+    for (const r of receiverKeys) {
+      dndCooldowns.set(`${s.toLowerCase()}_${r.toLowerCase()}`, expiry)
+    }
+  }
+
+  return res.status(200).json({ success: true, message: 'DND cooldown recorded' })
+}
+
+async function handleSendInviteAPI(req: VercelRequest, res: VercelResponse) {
+  const { senderId, receiverId, friendId, targetId } = req.body || req.query || {}
+  const targetReceiver = receiverId || friendId || targetId
+  if (!senderId || !targetReceiver) {
+    return res.status(400).json({ message: 'Missing senderId or receiverId' })
+  }
+
+  const senderPlayer = await findPlayer(senderId).catch(() => null)
+  const receiverPlayer = await findPlayer(targetReceiver).catch(() => null)
+
+  const senderKeys = [
+    String(senderId),
+    senderPlayer?.id ? String(senderPlayer.id) : null,
+    senderPlayer?.username ? senderPlayer.username.toLowerCase().replace(/^@+/, '') : null,
+    senderPlayer?.uniquePlayerId ? senderPlayer.uniquePlayerId.toUpperCase() : null
+  ].filter(Boolean) as string[]
+
+  const receiverKeys = [
+    String(targetReceiver),
+    receiverPlayer?.id ? String(receiverPlayer.id) : null,
+    receiverPlayer?.username ? receiverPlayer.username.toLowerCase().replace(/^@+/, '') : null,
+    receiverPlayer?.uniquePlayerId ? receiverPlayer.uniquePlayerId.toUpperCase() : null
+  ].filter(Boolean) as string[]
+
+  for (const s of senderKeys) {
+    for (const r of receiverKeys) {
+      const key = `${s.toLowerCase()}_${r.toLowerCase()}`
+      const expiry = dndCooldowns.get(key)
+      if (expiry) {
+        const remaining = Math.ceil((expiry - Date.now()) / 1000)
+        if (remaining > 0) {
+          return res.status(429).json({
+            message: 'اللاعب مفعّل لوضع عدم الإزعاج حالياً، لا يمكن إرسال دعوة له.',
+            cooldownRemaining: remaining,
+            doNotDisturb: true
+          })
+        } else {
+          dndCooldowns.delete(key)
+        }
+      }
+    }
+  }
+
+  return res.status(200).json({ success: true, message: 'Invite allowed' })
 }
