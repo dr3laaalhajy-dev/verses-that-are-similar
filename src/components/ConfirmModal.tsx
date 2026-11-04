@@ -1,6 +1,5 @@
 import React from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { AlertCircle, CheckCircle2, X } from 'lucide-react';
+import { GlobalModalWrapper } from './common/GlobalModalWrapper';
 
 interface ConfirmModalProps {
   isOpen: boolean;
@@ -28,94 +27,40 @@ const ConfirmModal: React.FC<ConfirmModalProps> = ({
   isLoading = false
 }) => {
   const isSuccess = title.includes('نجاح');
+  const modalType = isDanger ? 'danger' : isSuccess ? 'success' : isAlert ? 'alert' : 'default';
 
   return (
-    <AnimatePresence>
-      {isOpen && (
-        <div 
-          className="fixed inset-0 z-[1100] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-xl cursor-pointer"
-          onClick={onClose}
-        >
-          {/* Modal Card */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.9, y: 20 }}
-            onClick={(e) => e.stopPropagation()}
-            className="relative w-full max-w-md bg-white rounded-[3.5rem] shadow-3xl overflow-hidden border border-white/20 p-10 text-center cursor-default"
-          >
-            {/* Close Button */}
-            <button
-              type="button"
-              onClick={onClose}
-              className="absolute top-8 left-8 p-2 text-slate-300 hover:text-slate-500 transition-colors cursor-pointer"
-            >
-              <X className="w-6 h-6" />
-            </button>
-
-            {/* Icon */}
-            <div className={`w-20 h-20 ${
-              isDanger 
-                ? 'bg-red-500/10 text-red-500 shadow-red-500/5' 
-                : isSuccess 
-                  ? 'bg-emerald-500/10 text-emerald-600 shadow-emerald-500/5' 
-                  : 'bg-brand-gold/10 text-brand-gold shadow-brand-gold/5'
-            } rounded-3xl flex items-center justify-center mx-auto mb-8 shadow-xl`}>
-              {isSuccess ? (
-                <CheckCircle2 className="w-10 h-10 text-emerald-600" />
-              ) : (
-                <AlertCircle className={`w-10 h-10 ${isDanger ? 'text-red-500' : 'text-brand-gold'}`} />
-              )}
-            </div>
-
-            {/* Content */}
-            <h2 className="text-3xl font-black text-brand-emerald mb-4 font-quran tracking-tight">
-              {title}
-            </h2>
-            <p className="text-slate-500 font-bold mb-10 leading-relaxed text-lg px-2">
-              {message}
-            </p>
-
-            {/* Actions */}
-            <div className={`flex ${isAlert ? 'justify-center' : 'flex-row-reverse gap-4'}`}>
-              <button
-                type="button"
-                disabled={isLoading}
-                onClick={() => {
-                  try {
-                    if (onConfirm) onConfirm();
-                  } catch (err) {
-                    console.error('ConfirmModal action error:', err);
-                  } finally {
-                    onClose();
-                  }
-                }}
-                className={`${isAlert ? 'px-16' : 'flex-1'} py-4 ${isDanger ? 'bg-red-500 hover:bg-red-600 shadow-red-500/20' : 'bg-brand-emerald hover:bg-brand-emerald/90 shadow-brand-emerald/20'} text-white rounded-2xl font-black text-lg shadow-xl transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 cursor-pointer`}
-              >
-                {isLoading ? (
-                  <>
-                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    <span>جاري التنفيذ...</span>
-                  </>
-                ) : (
-                  <span>{confirmText}</span>
-                )}
-              </button>
-              {!isAlert && (
-                <button
-                  type="button"
-                  disabled={isLoading}
-                  onClick={onClose}
-                  className="flex-1 py-4 bg-slate-50 text-slate-500 rounded-2xl font-black text-lg border border-slate-100 hover:bg-slate-100 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-                >
-                  {cancelText}
-                </button>
-              )}
-            </div>
-          </motion.div>
-        </div>
-      )}
-    </AnimatePresence>
+    <GlobalModalWrapper
+      isOpen={isOpen}
+      onClose={onClose}
+      type={modalType}
+      title={title}
+      subtitle={message}
+      primaryAction={{
+        label: confirmText,
+        onClick: () => {
+          try {
+            if (onConfirm) onConfirm();
+          } catch (err) {
+            console.error('ConfirmModal action error:', err);
+          } finally {
+            onClose();
+          }
+        },
+        variant: isDanger ? 'danger' : isSuccess ? 'gold' : 'primary',
+        loading: isLoading,
+      }}
+      secondaryAction={
+        !isAlert
+          ? {
+              label: cancelText,
+              onClick: onClose,
+              variant: 'secondary',
+              disabled: isLoading,
+            }
+          : undefined
+      }
+    />
   );
 };
 
