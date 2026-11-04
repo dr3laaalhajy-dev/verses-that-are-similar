@@ -154,6 +154,7 @@ export const AppRouter: React.FC = () => {
           fetchAvailableRooms={app.fetchAvailableRooms}
           isLoadingRooms={app.isLoadingRooms}
           availableRooms={app.availableRooms}
+          setRooms={app.setRooms || app.setAvailableRooms}
           playerUsername={app.playerUsername}
           playerName={app.playerName}
           handleJoinV1={app.handleJoinV1}

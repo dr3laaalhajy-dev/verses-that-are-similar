@@ -1978,6 +1978,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, []);
 
+  // Requirement 1: Prevent room duplication in room list when socket/realtime updates arrive
+  const updateRoomInList = useCallback((newRoom: any) => {
+    if (!newRoom || !newRoom.id) return;
+    setAvailableRooms(prev => prev.some(r => r.id === newRoom.id) ? prev.map(r => r.id === newRoom.id ? newRoom : r) : [...prev, newRoom]);
+  }, []);
+
   useEffect(() => {
     if (view === 'group_join') {
       fetchAvailableRooms(true);
@@ -3338,7 +3344,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         console.warn('[API resign fetch warn]:', apiErr);
       }
 
-      // 3. Reset local storage & state
+      // 3. Reset local storage & state (Cleanup on Withdraw)
       try {
         localStorage.removeItem('activeRoomId');
         localStorage.removeItem('currentRoomId');
@@ -3348,6 +3354,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setSessionCorrect(0);
       setRoom(null);
       setIsResignModalOpen(false);
+
+      // Requirement 2: Reset all invite states and modals upon withdrawal
+      setIncomingRoomInvite(null);
+      setPrivateRoomModal({
+        isOpen: false,
+        room: null,
+        password: '',
+        error: undefined
+      });
+      setIsFriendsModalOpen(false);
+
       setView('group_join');
       toast.success('تم الانسحاب من الغرفة بنجاح');
     } catch (err: any) {
@@ -5269,6 +5286,8 @@ ${versesList}
     isRoomLeader,
     isRoomActionLoading,
     availableRooms, setAvailableRooms,
+    rooms: availableRooms, setRooms: setAvailableRooms,
+    updateRoomInList,
     isLoadingRooms, setIsLoadingRooms,
     fetchAvailableRooms,
     handleJoinV1,
@@ -5279,6 +5298,16 @@ ${versesList}
     syncGroupProgress,
     handleLeaveRoom: () => {
       setRoom(null);
+      setActiveRunningRoom(null);
+      setIncomingRoomInvite(null);
+      setIsResignModalOpen(false);
+      setPrivateRoomModal({
+        isOpen: false,
+        room: null,
+        password: '',
+        error: undefined
+      });
+      setIsFriendsModalOpen(false);
       setView('home');
     },
     handleWithdraw,

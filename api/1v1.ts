@@ -340,12 +340,33 @@ async function handleJoin(req: VercelRequest, res: VercelResponse) {
 
     let playersProgress = (room.playersProgress as any) || {}
 
-    // Add player if not already in
-    if (!playersProgress[player.id]) {
+    // Requirement 3: Backend Re-join Logic
+    // If the player was previously in the room or marked as abandoned/resigned, update their status to joined in the same record
+    const existingParticipant = playersProgress[player.id]
+    if (!existingParticipant) {
       playersProgress[player.id] = { 
         progress: 0, 
         joinedAt: Date.now(),
-        name: player.name
+        name: player.name,
+        status: 'joined',
+        isAbandoned: false,
+        isResigned: false,
+        isDisqualified: false,
+        hasLeft: false,
+        isOnline: true
+      }
+    } else {
+      // Re-activate existing record without creating duplicate entries
+      playersProgress[player.id] = {
+        ...existingParticipant,
+        name: player.name || existingParticipant.name,
+        status: 'joined',
+        isAbandoned: false,
+        isResigned: false,
+        isDisqualified: false,
+        hasLeft: false,
+        isOnline: true,
+        rejoinedAt: Date.now()
       }
     }
 

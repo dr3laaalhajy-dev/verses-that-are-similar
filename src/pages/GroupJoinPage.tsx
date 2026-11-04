@@ -10,6 +10,7 @@ export interface GroupJoinPageProps {
   fetchAvailableRooms: (force?: boolean) => void;
   isLoadingRooms: boolean;
   availableRooms: any[];
+  setRooms?: React.Dispatch<React.SetStateAction<any[]>>;
   playerUsername: string | null;
   playerName: string | null;
   handleJoinV1: (id: string) => void;
@@ -22,12 +23,19 @@ export const GroupJoinPage: React.FC<GroupJoinPageProps> = ({
   fetchAvailableRooms,
   isLoadingRooms,
   availableRooms,
+  setRooms,
   playerUsername,
   playerName,
   handleJoinV1,
   setPrivateRoomModal,
   isJoiningRoom
 }) => {
+  // Requirement 1: Prevent room duplication when receiving room updates
+  // setRooms(prev => prev.some(r => r.id === newRoom.id) ? prev.map(r => r.id === newRoom.id ? newRoom : r) : [...prev, newRoom]);
+  const updateRoomInList = React.useCallback((newRoom: any) => {
+    if (!newRoom || !newRoom.id || !setRooms) return;
+    setRooms(prev => prev.some(r => r.id === newRoom.id) ? prev.map(r => r.id === newRoom.id ? newRoom : r) : [...prev, newRoom]);
+  }, [setRooms]);
   return (
     <motion.div
       key="group_join"
