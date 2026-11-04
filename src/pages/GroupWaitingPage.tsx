@@ -7,6 +7,7 @@ import {
 import { View } from '../types/challenges';
 import { LiveReactionsOverlay } from '../components/LiveReactionsOverlay';
 import { friendsRealtimeService } from '../services/friendsRealtimeService';
+import { supabase } from '../services/supabase';
 import { useApp } from '../contexts/AppContext';
 
 export interface FriendInviteStateItem {
@@ -93,6 +94,14 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
             [fId]: { status: 'accepted' as const }
           }));
         }
+        // Requirement 1 & 2: When player leaves or withdraws from the room, reset invite button back to 'إرسال دعوة' (idle)
+        else if (response.event === 'player_left') {
+          setInviteStatuses(prev => {
+            const next = { ...prev };
+            delete next[fId];
+            return next;
+          });
+        }
       }
     );
 
@@ -129,6 +138,82 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
 
     return () => clearInterval(timer);
   }, []);
+
+  // Requirement 1 & 2: Listen to leave event from room reactions / socket channel directly to reset invite button
+  useEffect(() => {
+    if (!room?.id) return;
+
+    // A) If room.lastReaction or room.playersProgress.__lastReaction is 'player_left'
+    const lastReaction = (room as any)?.lastReaction || (room as any)?.playersProgress?.__lastReaction;
+    if (lastReaction && (lastReaction.action === 'player_left' || lastReaction.type === 'LEAVE' || lastReaction.action === 'player_abandoned')) {
+      const leftPlayerId = lastReaction.playerId;
+      const leftPlayerName = lastReaction.playerName;
+
+      // Find matching friend from friendsList
+      const matchingFriend = friendsList.find(f =>
+        (leftPlayerId && String(f.id) === String(leftPlayerId)) ||
+        (leftPlayerName && f.name && f.name.trim().toLowerCase() === String(leftPlayerName).trim().toLowerCase()) ||
+        (f.uniquePlayerId && leftPlayerId && String(f.uniquePlayerId).toUpperCase() === String(leftPlayerId).toUpperCase()) ||
+        (f.username && leftPlayerId && f.username.toLowerCase().replace(/^@+/, '') === String(leftPlayerId).toLowerCase().replace(/^@+/, ''))
+      );
+
+      const targetKey = matchingFriend ? matchingFriend.id : leftPlayerId;
+      if (targetKey) {
+        setInviteStatuses(prev => {
+          if (!prev[targetKey]) return prev;
+          const next = { ...prev };
+          delete next[targetKey];
+          return next;
+        });
+      }
+    }
+
+    // B) Direct Supabase channel listener for `room_${room.id}` & `room_sync_${room.id}`
+    const channelName = `room_sync_${room.id}`;
+    const channel = supabase.channel(channelName);
+    channel
+      .on('broadcast', { event: 'player_left' }, ({ payload }) => {
+        if (!payload) return;
+        const leftId = payload.playerId || payload.friendId || payload.userId;
+        const leftName = payload.playerName || payload.friendName || payload.name;
+        const match = friendsList.find(f =>
+          (leftId && String(f.id) === String(leftId)) ||
+          (leftName && f.name && f.name.trim().toLowerCase() === String(leftName).trim().toLowerCase())
+        );
+        const target = match ? match.id : leftId;
+        if (target) {
+          setInviteStatuses(prev => {
+            const next = { ...prev };
+            delete next[target];
+            return next;
+          });
+        }
+      })
+      .on('broadcast', { event: 'participant_removed' }, ({ payload }) => {
+        if (!payload) return;
+        const leftId = payload.playerId || payload.friendId || payload.userId;
+        const leftName = payload.playerName || payload.friendName || payload.name;
+        const match = friendsList.find(f =>
+          (leftId && String(f.id) === String(leftId)) ||
+          (leftName && f.name && f.name.trim().toLowerCase() === String(leftName).trim().toLowerCase())
+        );
+        const target = match ? match.id : leftId;
+        if (target) {
+          setInviteStatuses(prev => {
+            const next = { ...prev };
+            delete next[target];
+            return next;
+          });
+        }
+      })
+      .subscribe();
+
+    return () => {
+      try {
+        supabase.removeChannel(channel);
+      } catch (e) { }
+    };
+  }, [room?.id, (room as any)?.lastReaction, (room as any)?.playersProgress?.__lastReaction, friendsList]);
 
   const fetchFriends = useCallback(async (isInitial = false) => {
     if (isInitial || friendsList.length === 0) {

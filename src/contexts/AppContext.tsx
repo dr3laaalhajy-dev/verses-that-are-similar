@@ -3322,9 +3322,50 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const currentUserId = playerUsername || playerName;
 
     try {
-      // 1. Delete player from Supabase room_participants and submissions
+      // 1. Delete player from Supabase room_participants and submissions & broadcast leave event
       try {
         if (currentUserId) {
+          const leavePayload = {
+            type: 'LEAVE',
+            action: 'player_left',
+            roomId: roomId,
+            playerId: playerId || currentUserId,
+            userId: playerId || currentUserId,
+            playerName: playerName || currentUserId,
+            timestamp: Date.now()
+          };
+
+          // Broadcast to room channel so host and participants immediately remove player and reset invite status
+          try {
+            const ch = supabase.channel(`room_sync_${roomId}`);
+            ch.subscribe((status) => {
+              if (status === 'SUBSCRIBED') {
+                ch.send({
+                  type: 'broadcast',
+                  event: 'player_left',
+                  payload: leavePayload
+                }).catch(() => {});
+                ch.send({
+                  type: 'broadcast',
+                  event: 'participant_removed',
+                  payload: leavePayload
+                }).catch(() => {});
+              }
+            });
+          } catch (bErr) {
+            console.warn('[Broadcast leave event warn]:', bErr);
+          }
+
+          // If this player joined via an invite with senderTarget, notify the sender directly
+          const senderTarget = (room as any)?.senderTarget || (room as any)?.hostUsername || (room as any)?.hostName;
+          if (senderTarget) {
+            friendsRealtimeService.sendInviteResponse(senderTarget, 'player_left', {
+              roomId: roomId,
+              friendId: playerId || uniquePlayerId || currentUserId,
+              friendName: playerName || undefined
+            }).catch(() => {});
+          }
+
           await Promise.allSettled([
             supabase.from('room_participants').delete().match({ room_id: roomId, user_id: currentUserId }),
             supabase.from('room_participants').delete().match({ room_id: roomId, name: currentUserId }),

@@ -141,7 +141,11 @@ export const RoomInviteModal: React.FC<RoomInviteModalProps> = ({
         }
       }
 
-      onAccept(data.room || data);
+      const acceptedRoom = data.room || data;
+      if (acceptedRoom && senderTarget) {
+        (acceptedRoom as any).senderTarget = senderTarget;
+      }
+      onAccept(acceptedRoom);
     } catch (err: any) {
       console.error('Error joining invited room:', err);
       hasRespondedRef.current = false;

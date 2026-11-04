@@ -19,7 +19,7 @@ export interface RoomInvitePayload {
 }
 
 export interface RoomInviteResponsePayload {
-  event: 'invite_ignored' | 'invite_declined' | 'invite_accepted';
+  event: 'invite_ignored' | 'invite_declined' | 'invite_accepted' | 'player_left';
   roomId: string;
   friendId: number | string;
   friendName?: string;
@@ -254,11 +254,11 @@ class FriendsRealtimeService {
 
   /**
    * Send response to an invite back to the host/sender:
-   * event: 'invite_ignored' | 'invite_declined' | 'invite_accepted'
+   * event: 'invite_ignored' | 'invite_declined' | 'invite_accepted' | 'player_left'
    */
   public async sendInviteResponse(
     senderTarget: string,
-    event: 'invite_ignored' | 'invite_declined' | 'invite_accepted',
+    event: 'invite_ignored' | 'invite_declined' | 'invite_accepted' | 'player_left',
     payload: {
       roomId: string;
       friendId: number | string;
@@ -338,6 +338,12 @@ class FriendsRealtimeService {
         })
         .on('broadcast', { event: 'invite_accepted' }, ({ payload }) => {
           if (payload) onResponseReceived({ ...(payload as RoomInviteResponsePayload), event: 'invite_accepted' });
+        })
+        .on('broadcast', { event: 'player_left' }, ({ payload }) => {
+          if (payload) onResponseReceived({ ...(payload as RoomInviteResponsePayload), event: 'player_left' });
+        })
+        .on('broadcast', { event: 'participant_removed' }, ({ payload }) => {
+          if (payload) onResponseReceived({ ...(payload as RoomInviteResponsePayload), event: 'player_left' });
         })
         .on('broadcast', { event: 'room-invite-response' }, ({ payload }) => {
           if (payload && (payload as any).event) {
