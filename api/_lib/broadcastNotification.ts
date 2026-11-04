@@ -177,7 +177,11 @@ export async function broadcastNotification({
             full_url: resolvedFullUrl || '/',
             relative_url: cleanTargetUrl || '/',
             click_action: resolvedFullUrl || '/',
-            ...(metadata || {})
+            route: String(metadata?.route || cleanTargetUrl || '/'),
+            target_url: cleanTargetUrl || '/',
+            ...Object.fromEntries(
+              Object.entries(metadata || {}).map(([k, v]) => [k, typeof v === 'object' ? JSON.stringify(v) : String(v)])
+            )
           },
           webpush: {
             fcmOptions: {

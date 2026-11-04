@@ -791,7 +791,10 @@ export const HomePage: React.FC<HomePageProps> = ({
             type="button"
             onClick={() => {
               if (app.setSelectedAdhkarCategoryId) {
-                app.setSelectedAdhkarCategoryId('hisn_1');
+                app.setSelectedAdhkarCategoryId('morning');
+              }
+              if (typeof window !== 'undefined' && window.history) {
+                window.history.pushState({ view: 'adhkar', category: 'morning' }, '', '/adhkar/morning');
               }
               setView('adhkar');
             }}
@@ -805,7 +808,7 @@ export const HomePage: React.FC<HomePageProps> = ({
                 أَذْكَارُ الصَّبَاح
               </span>
               <span className="text-[10px] text-slate-400 dark:text-regalGold-300/60 font-medium">
-                ٢٤ ذكراً مأثوراً
+                ٢٣ ذكراً مأثوراً
               </span>
             </div>
           </button>
@@ -814,7 +817,10 @@ export const HomePage: React.FC<HomePageProps> = ({
             type="button"
             onClick={() => {
               if (app.setSelectedAdhkarCategoryId) {
-                app.setSelectedAdhkarCategoryId('hisn_1');
+                app.setSelectedAdhkarCategoryId('evening');
+              }
+              if (typeof window !== 'undefined' && window.history) {
+                window.history.pushState({ view: 'adhkar', category: 'evening' }, '', '/adhkar/evening');
               }
               setView('adhkar');
             }}

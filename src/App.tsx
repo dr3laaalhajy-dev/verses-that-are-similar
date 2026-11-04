@@ -1,13 +1,88 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { AppProvider, useApp } from './contexts/AppContext';
 import { AppRouter } from './routes/AppRouter';
 import { MainLayout } from './components/layout/MainLayout';
 import { GlobalOverlays } from './components/common/GlobalOverlays';
 import AdminDashboard from './components/Admin/AdminDashboard';
 import AdminLogin from './components/Admin/AdminLogin';
+import { router } from './services/router';
 
 function AppContent() {
   const app = useApp();
+
+  // Requirement 2 & 3: Notification Action Listeners (Push & Local) with router.push direct navigation
+  useEffect(() => {
+    // 1. Web / Service Worker notification click listener via postMessage
+    const handleServiceWorkerMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'DEEP_LINK_NAVIGATE') {
+        const route = event.data?.data?.route || event.data?.route || event.data?.url;
+        if (route) {
+          router.push(route);
+        }
+      }
+    };
+    window.addEventListener('message', handleServiceWorkerMessage);
+
+    // 2. Capacitor Push Notifications Action Listener (pushNotificationActionPerformed)
+    let pushListenerCleanup: (() => void) | null = null;
+    try {
+      const cap = typeof window !== 'undefined' ? (window as any).Capacitor : null;
+      const pushPlugin = cap?.Plugins?.PushNotifications;
+      if (pushPlugin && typeof pushPlugin.addListener === 'function') {
+        const handle = pushPlugin.addListener('pushNotificationActionPerformed', (notification: any) => {
+          console.log('[NotificationListener] Push notification action performed:', notification);
+          const route = notification?.notification?.data?.route ||
+                        notification?.notification?.data?.url ||
+                        notification?.data?.route ||
+                        notification?.data?.url ||
+                        notification?.notification?.data?.relative_url;
+          if (route) {
+            router.push(route);
+          }
+        });
+        if (handle && typeof handle.then === 'function') {
+          handle.then((sub: any) => {
+            pushListenerCleanup = () => sub?.remove?.();
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('[NotificationListener] PushNotifications listener attachment error:', e);
+    }
+
+    // 3. Capacitor Local Notifications Action Listener (localNotificationActionPerformed)
+    let localListenerCleanup: (() => void) | null = null;
+    try {
+      const cap = typeof window !== 'undefined' ? (window as any).Capacitor : null;
+      const localPlugin = cap?.Plugins?.LocalNotifications;
+      if (localPlugin && typeof localPlugin.addListener === 'function') {
+        const handle = localPlugin.addListener('localNotificationActionPerformed', (notification: any) => {
+          console.log('[NotificationListener] Local notification action performed:', notification);
+          const route = notification?.notification?.extra?.route ||
+                        notification?.notification?.data?.route ||
+                        notification?.notification?.extra?.url ||
+                        notification?.data?.route ||
+                        notification?.extra?.route;
+          if (route) {
+            router.push(route);
+          }
+        });
+        if (handle && typeof handle.then === 'function') {
+          handle.then((sub: any) => {
+            localListenerCleanup = () => sub?.remove?.();
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('[NotificationListener] LocalNotifications listener attachment error:', e);
+    }
+
+    return () => {
+      window.removeEventListener('message', handleServiceWorkerMessage);
+      if (pushListenerCleanup) pushListenerCleanup();
+      if (localListenerCleanup) localListenerCleanup();
+    };
+  }, []);
 
   if (app.view === 'admin') {
     return (

@@ -80,20 +80,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   console.log(`[Cron-Adhkar] Triggering scheduled notification for ${timePeriodLabel} (Makkah Hour: ${makkahHour}:00, UTC: ${utcHours}:00)...`);
 
   try {
+    const adhkarRoute = isMorning ? '/adhkar/morning' : '/adhkar/evening';
+
     // 4. Broadcast notification:
     // - Persists in Supabase 'notifications' table (triggers in-app bell)
     // - Fetches all fcm_token from Supabase 'device_tokens' (and Prisma)
     // - Sends FCM multicast push notifications via Firebase Admin
-    // - Directs target_url to '/adhkar'
+    // - Directs target_url & route to specific adhkar category
     const result = await broadcastNotification({
       title: template.title,
       body: template.body,
-      targetUrl: '/adhkar',
+      targetUrl: adhkarRoute,
       senderRole: 'SYSTEM_CRON',
       senderName: timePeriodLabel,
       metadata: {
         type: isMorning ? 'MORNING_ADHKAR' : 'EVENING_ADHKAR',
         timePeriod: isMorning ? 'morning' : 'evening',
+        route: adhkarRoute,
+        extra: { route: adhkarRoute },
         scheduled: true,
         makkahHour,
         sentAt: now.toISOString()

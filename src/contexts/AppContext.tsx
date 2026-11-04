@@ -11,7 +11,8 @@ import { quranData } from '../services/QuranRepository';
 import { HADITHS, Hadith } from '../services/HadithRepository';
 import { juzBoundaries, JUZ_NAMES_AR, ALL_QURAN_SURAHS, getJuzsForSurah } from '../services/JuzRepository';
 import { getPageNumber, juzStartPages, surahStartPages } from '../services/PageRepository';
-import { adhkarData, Dhikr } from '../services/AdhkarRepository';
+import { adhkarData, Dhikr, resolveAdhkarCategoryId } from '../services/AdhkarRepository';
+import { router } from '../services/router';
 import { normalizeArabicText, getSimilarity, convertArabicNumbersToEnglish } from '../utils/arabic';
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -1886,6 +1887,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return;
       }
 
+      // Requirement 1 & 3: Direct routing for Adhkar (/adhkar/morning, /adhkar/evening, /adhkar/[type])
+      const isExplicitAdhkar = path === '/adhkar' || path.startsWith('/adhkar/') || params.get('view') === 'adhkar';
+
+      if (isExplicitAdhkar) {
+        let typeOrCategory: string | null = null;
+        if (path.startsWith('/adhkar/')) {
+          const sub = path.replace('/adhkar/', '').split('/')[0].split('?')[0].trim();
+          if (sub) typeOrCategory = sub;
+        }
+        if (!typeOrCategory) {
+          typeOrCategory = params.get('type') || params.get('category') || params.get('id');
+        }
+
+        if (typeOrCategory) {
+          const resolvedCategory = resolveAdhkarCategoryId(typeOrCategory);
+          setSelectedAdhkarCategoryId(resolvedCategory);
+        }
+        setView('adhkar', false);
+        return;
+      }
+
       // If user is at root '/', stay on home or saved view; do not force mushaf
       if (path === '/' || path === '') {
         const savedView = sessionStorage.getItem('current_app_view');
@@ -1926,12 +1948,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // 2. Listen for deep link events from Service Worker, Window & popstate (when notification is clicked or history changes)
     const deepLinkListener = (event: MessageEvent) => {
       if (event.data?.type === 'DEEP_LINK_NAVIGATE') {
-        handleAppDeepLink(event.data.url);
+        const targetRoute = event.data.data?.route || event.data.route || event.data.url;
+        handleAppDeepLink(targetRoute);
       }
     };
 
     const popstateListener = () => {
       handleAppDeepLink();
+    };
+
+    const customNavigateListener = (e: any) => {
+      if (e.detail?.route) {
+        handleAppDeepLink(e.detail.route);
+      }
     };
 
     if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
@@ -1940,6 +1969,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (typeof window !== 'undefined') {
       window.addEventListener('message', deepLinkListener);
       window.addEventListener('popstate', popstateListener);
+      window.addEventListener('app_navigate', customNavigateListener);
     }
 
     return () => {
@@ -1949,6 +1979,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (typeof window !== 'undefined') {
         window.removeEventListener('message', deepLinkListener);
         window.removeEventListener('popstate', popstateListener);
+        window.removeEventListener('app_navigate', customNavigateListener);
       }
     };
   }, [setView]);
@@ -5459,6 +5490,8 @@ ${versesList}
     librarySettings, setLibrarySettings,
     isLibrarySettingsOpen: isSettingsOpen, setIsLibrarySettingsOpen: setIsSettingsOpen,
     isSettingsOpen, setIsSettingsOpen,
+    router,
+    navigateToRoute: router.push,
 
     // Modals & Overlays
     showAboutModal, setShowAboutModal,

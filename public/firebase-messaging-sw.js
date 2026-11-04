@@ -93,14 +93,17 @@ self.addEventListener('notificationclick', (event) => {
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+      const explicitRoute = data.route || relativePath;
+
       // إذا كان التطبيق مفتوحاً في الخلفية، استخدم client.postMessage لإرسال المسار النسبي دون تحديث الصفحة
       for (const client of windowClients) {
         if (client.url.includes(self.location.origin) && 'focus' in client) {
           client.postMessage({
             type: 'DEEP_LINK_NAVIGATE',
             url: relativePath,
+            route: explicitRoute,
             fullUrl: fullUrl,
-            data: data
+            data: { ...data, route: explicitRoute }
           });
 
           return client.focus();

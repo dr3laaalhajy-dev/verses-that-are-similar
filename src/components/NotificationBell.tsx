@@ -4,6 +4,7 @@ import { Bell, Check, X, Sparkles, Smartphone, CheckCheck, Clock, User, ChevronL
 import { supabase } from '../services/supabase';
 import { usePushNotifications } from '../hooks/usePushNotifications';
 import { useApp } from '../contexts/AppContext';
+import { router } from '../services/router';
 
 export interface NotificationItem {
   id: string;
@@ -201,6 +202,11 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
           } catch {}
           if (app.setIsPageModeActive) app.setIsPageModeActive(true);
           if (app.setView) app.setView('mushaf');
+          return;
+        }
+
+        if (target.includes('/adhkar') || target.includes('adhkar')) {
+          router.push(target);
           return;
         }
 

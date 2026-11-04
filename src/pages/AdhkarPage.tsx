@@ -1,10 +1,10 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   Sparkles, Settings, RotateCcw, Hash, XCircle, Sun, Moon,
   Compass, Home, Plane, BookOpen, CheckCircle, ArrowRight
 } from 'lucide-react';
-import { adhkarData } from '../services/AdhkarRepository';
+import { adhkarData, resolveAdhkarCategoryId } from '../services/AdhkarRepository';
 
 export interface AdhkarPageProps {
   adhkarSearchQuery: string;
@@ -27,6 +27,33 @@ export const AdhkarPage: React.FC<AdhkarPageProps> = ({
   setIsSettingsOpen,
   handleBackToHome
 }) => {
+  // Requirement 3: Read type/category directly from URL parameters (e.g. /adhkar/morning, /adhkar/evening, /adhkar/[type] or ?type=...)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const pathname = window.location.pathname;
+    const params = new URLSearchParams(window.location.search);
+    let matchedType: string | null = null;
+
+    if (pathname.startsWith('/adhkar/')) {
+      const sub = pathname.replace('/adhkar/', '').split('/')[0].split('?')[0].trim();
+      if (sub) matchedType = sub;
+    }
+    if (!matchedType) {
+      matchedType = params.get('type') || params.get('category') || params.get('id');
+    }
+
+    if (matchedType) {
+      const resolvedId = resolveAdhkarCategoryId(matchedType);
+      if (resolvedId && selectedAdhkarCategoryId !== resolvedId) {
+        setSelectedAdhkarCategoryId(resolvedId);
+      }
+    }
+  }, [selectedAdhkarCategoryId, setSelectedAdhkarCategoryId]);
+
+  const activeCategory = selectedAdhkarCategoryId 
+    ? (adhkarData[selectedAdhkarCategoryId] || adhkarData[resolveAdhkarCategoryId(selectedAdhkarCategoryId)] || adhkarData['hisn_1'])
+    : null;
   return (
     <motion.div
       key="adhkar"
@@ -88,10 +115,11 @@ export const AdhkarPage: React.FC<AdhkarPageProps> = ({
       )}
 
       <div className="w-full">
-        {!selectedAdhkarCategoryId ? (
+        {!activeCategory ? (
           /* القائمة الرئيسية المفلترة */
           <div className="grid grid-cols-3 md:grid-cols-5 gap-2 md:gap-4">
             {Object.values(adhkarData)
+              .filter(cat => !cat.id.includes('_morning') && !cat.id.includes('_evening'))
               .filter(cat => cat.title.toLowerCase().includes(adhkarSearchQuery.toLowerCase()))
               .map((cat) => (
                 <button
@@ -99,6 +127,9 @@ export const AdhkarPage: React.FC<AdhkarPageProps> = ({
                   onClick={() => {
                     setSelectedAdhkarCategoryId(cat.id);
                     setAdhkarSearchQuery(''); // Clear search on selection
+                    if (typeof window !== 'undefined' && window.history) {
+                      window.history.pushState({ view: 'adhkar', category: cat.id }, '', `/adhkar/${cat.id}`);
+                    }
                   }}
                   className={`flex flex-col items-center gap-2 md:gap-3 px-1.5 py-4 md:p-6 rounded-xl md:rounded-[2rem] border transition-all duration-300 ${selectedAdhkarCategoryId === cat.id
                     ? 'bg-brand-emerald text-white border-brand-emerald shadow-lg -translate-y-1'
@@ -122,12 +153,12 @@ export const AdhkarPage: React.FC<AdhkarPageProps> = ({
             {/* رأس الواجهة (العنوان) */}
             <div className="text-center mb-4">
               <h2 className="text-3xl font-black text-brand-emerald">
-                {adhkarData[selectedAdhkarCategoryId].title}
+                {activeCategory.title}
               </h2>
             </div>
 
             <div className="grid gap-4">
-              {adhkarData[selectedAdhkarCategoryId].items.map((dhikr) => (
+              {activeCategory.items.map((dhikr) => (
                 <motion.div
                   key={dhikr.id}
                   layout
@@ -196,6 +227,9 @@ export const AdhkarPage: React.FC<AdhkarPageProps> = ({
             <button
               onClick={() => {
                 setSelectedAdhkarCategoryId(null);
+                if (typeof window !== 'undefined' && window.history) {
+                  window.history.pushState({ view: 'adhkar' }, '', '/adhkar');
+                }
                 // Scroll to top of the card
                 document.querySelector('.adhkar-container')?.scrollIntoView({ behavior: 'smooth' });
               }}
