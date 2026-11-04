@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   X, UserPlus, UserCheck, Award, BookOpen, Flame, Trophy,
-  Star, Copy, Check, Shield, Sparkles, UserMinus, Loader2, CheckCircle2
+  Star, Copy, Check, Shield, Sparkles, UserMinus, Loader2, CheckCircle2, Lock
 } from 'lucide-react';
 
 export interface PublicProfileModalProps {
@@ -184,17 +184,17 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
           initial={{ opacity: 0, scale: 0.95, y: 15 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 15 }}
-          className="relative w-full max-w-md bg-white dark:bg-[#151518] rounded-3xl shadow-2xl border border-amber-200/40 dark:border-amber-500/20 overflow-hidden flex flex-col max-h-[90vh]"
+          className="relative w-full max-w-md bg-white dark:bg-[#151518] rounded-3xl shadow-2xl border border-gray-100 dark:border-slate-800 overflow-hidden flex flex-col max-h-[90vh]"
         >
-          {/* Header Banner */}
-          <div className="relative h-24 bg-gradient-to-r from-emerald-800 via-emerald-600 to-amber-700 p-4 flex items-start justify-between">
-            <div className="flex items-center gap-2 text-white/90 font-bold text-xs">
+          {/* 1. Header Banner (Separated colored header) */}
+          <div className="relative h-28 bg-gradient-to-r from-emerald-800 via-emerald-700 to-teal-800 p-4 sm:p-5 flex items-start justify-between shrink-0">
+            <div className="flex items-center gap-2 text-white/95 font-bold text-xs sm:text-sm">
               <Sparkles className="w-4 h-4 text-amber-300" />
               <span>الملف الشخصي للاعب</span>
             </div>
             <button
               onClick={onClose}
-              className="w-8 h-8 rounded-full bg-black/30 hover:bg-black/50 text-white flex items-center justify-center transition-all cursor-pointer"
+              className="w-8 h-8 rounded-full bg-black/20 hover:bg-black/40 text-white flex items-center justify-center transition-all cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
@@ -202,15 +202,15 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
 
           {/* Main Body */}
           <div className="p-4 sm:p-5 pt-0 overflow-y-auto space-y-4">
-            {/* Avatar & Identifiers Card */}
-            <div className="relative -mt-12 flex flex-col items-center text-center">
-              {/* Avatar with Frame */}
-              <div className="relative w-20 h-20 sm:w-22 sm:h-22 flex items-center justify-center mb-2">
-                <div className="w-16 h-16 sm:w-18 sm:h-18 rounded-full bg-gradient-to-br from-emerald-600 to-teal-800 text-white font-black text-2xl flex items-center justify-center shadow-lg border-2 border-white dark:border-slate-800">
+            {/* 1 & 2. Avatar & Identity Area */}
+            <div className="relative -mt-14 z-10 flex flex-col items-center text-center">
+              {/* Perfectly centered circular avatar with broad white border & soft shadow */}
+              <div className="relative w-24 h-24 sm:w-28 sm:h-28 flex items-center justify-center mb-2">
+                <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-br from-emerald-600 via-teal-700 to-emerald-900 text-white font-black text-3xl sm:text-4xl flex items-center justify-center border-4 border-white dark:border-slate-800 shadow-md">
                   {(player?.name || 'ل').charAt(0).toUpperCase()}
                 </div>
 
-                {/* Achievement Frame Overlay */}
+                {/* Achievement Frame Overlay (Scaled to fit without clipping) */}
                 {activeFrame === 'seerah' ? (
                   <div className="absolute inset-0 rounded-full pointer-events-none bg-[url('/golden_seerah_achievement_frame.png')] bg-center bg-no-repeat bg-contain scale-110 drop-shadow-md" />
                 ) : activeFrame === 'general' ? (
@@ -218,33 +218,30 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
                 ) : null}
               </div>
 
-              {/* Player Name */}
+              {/* Player Name: Bold and Dark */}
               <h3
-                className="text-lg sm:text-xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-1.5"
+                className="text-2xl font-bold text-gray-800 dark:text-slate-100 flex items-center gap-1.5"
                 style={player?.equippedNameColor ? { color: player.equippedNameColor } : undefined}
               >
                 {player?.name || 'لاعب'}
               </h3>
 
-              {/* Username & Unique Player ID */}
-              <div className="flex items-center gap-2 mt-1 flex-wrap justify-center text-xs">
-                {player?.username && (
-                  <span className="text-slate-400 dark:text-slate-400 font-bold">
-                    @{player.username.replace(/^@+/, '')}
-                  </span>
-                )}
-
-                {player?.uniquePlayerId && (
-                  <button
-                    onClick={handleCopyId}
-                    title="انقر لنسخ المعرّف"
-                    className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-700/60 text-amber-800 dark:text-amber-200 font-mono font-black text-xs hover:bg-amber-100 dark:hover:bg-amber-900/60 transition-all cursor-pointer"
-                  >
-                    <span>{player.uniquePlayerId}</span>
-                    {copiedId ? <Check className="w-3 h-3 text-emerald-600" /> : <Copy className="w-3 h-3 text-amber-600" />}
-                  </button>
-                )}
-              </div>
+              {/* Unique ID Badge: Pale gold pill badge below the name, cleanly formatted */}
+              {player?.uniquePlayerId && (
+                <button
+                  type="button"
+                  onClick={handleCopyId}
+                  title="انقر لنسخ المعرّف"
+                  className="inline-flex items-center gap-1.5 px-3 py-1 mt-1.5 rounded-full bg-amber-50/90 dark:bg-amber-950/40 border border-amber-200/70 dark:border-amber-700/50 text-amber-900 dark:text-amber-200 font-mono font-bold text-xs hover:bg-amber-100 dark:hover:bg-amber-900/60 transition-all cursor-pointer shadow-2xs group"
+                >
+                  <span className="tracking-wide">ID: {player.uniquePlayerId}</span>
+                  {copiedId ? (
+                    <Check className="w-3.5 h-3.5 text-emerald-600" />
+                  ) : (
+                    <Copy className="w-3.5 h-3.5 text-amber-600 group-hover:scale-110 transition-transform" />
+                  )}
+                </button>
+              )}
             </div>
 
             {loading ? (
@@ -258,134 +255,143 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
               </div>
             ) : (
               <>
-                {/* 3 Core Stats Cards */}
-                <div className="grid grid-cols-3 gap-2 text-center">
-                  <div className="p-2.5 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200/60 dark:border-amber-800/40">
-                    <div className="flex items-center justify-center gap-1 text-amber-600 text-xs font-black mb-1">
-                      <Star className="w-3.5 h-3.5" />
-                      <span>النقاط</span>
-                    </div>
-                    <span className="text-base sm:text-lg font-black text-amber-800 dark:text-amber-200">
+                {/* 3. Stats Grid: 3 columns, soft backgrounds, prominent large numbers, word & icon underneath */}
+                <div className="grid grid-cols-3 gap-2 sm:gap-2.5 text-center">
+                  {/* Points Card */}
+                  <div className="p-3 sm:p-3.5 rounded-2xl bg-orange-50/90 dark:bg-orange-950/30 flex flex-col items-center justify-center transition-all hover:scale-[1.02]">
+                    <span className="text-2xl sm:text-3xl font-extrabold text-orange-950 dark:text-orange-200 font-mono leading-none">
                       {player?.points || 0}
                     </span>
+                    <div className="flex items-center justify-center gap-1 text-xs font-bold text-orange-700/90 dark:text-orange-300/90 mt-1.5">
+                      <Star className="w-3.5 h-3.5 text-orange-500 fill-orange-500/20" />
+                      <span>النقاط</span>
+                    </div>
                   </div>
 
-                  <div className="p-2.5 rounded-2xl bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-200/60 dark:border-yellow-800/40">
-                    <div className="flex items-center justify-center gap-1 text-yellow-600 text-xs font-black mb-1">
-                      <Trophy className="w-3.5 h-3.5" />
-                      <span>الكؤوس</span>
-                    </div>
-                    <span className="text-base sm:text-lg font-black text-yellow-800 dark:text-yellow-200">
+                  {/* Cups Card */}
+                  <div className="p-3 sm:p-3.5 rounded-2xl bg-yellow-50/90 dark:bg-yellow-950/30 flex flex-col items-center justify-center transition-all hover:scale-[1.02]">
+                    <span className="text-2xl sm:text-3xl font-extrabold text-yellow-950 dark:text-yellow-200 font-mono leading-none">
                       {player?.cups || 0}
                     </span>
+                    <div className="flex items-center justify-center gap-1 text-xs font-bold text-yellow-700/90 dark:text-yellow-300/90 mt-1.5">
+                      <Trophy className="w-3.5 h-3.5 text-yellow-600 fill-yellow-600/20" />
+                      <span>الكؤوس</span>
+                    </div>
                   </div>
 
-                  <div className="p-2.5 rounded-2xl bg-orange-50 dark:bg-orange-950/30 border border-orange-200/60 dark:border-orange-800/40">
-                    <div className="flex items-center justify-center gap-1 text-orange-600 text-xs font-black mb-1">
-                      <Flame className="w-3.5 h-3.5" />
+                  {/* Streak / Flame Card */}
+                  <div className="p-3 sm:p-3.5 rounded-2xl bg-rose-50/90 dark:bg-rose-950/30 flex flex-col items-center justify-center transition-all hover:scale-[1.02]">
+                    <span className="text-2xl sm:text-3xl font-extrabold text-rose-950 dark:text-rose-200 font-mono leading-none">
+                      {player?.streak || 0}
+                    </span>
+                    <div className="flex items-center justify-center gap-1 text-xs font-bold text-rose-700/90 dark:text-rose-300/90 mt-1.5">
+                      <Flame className="w-3.5 h-3.5 text-rose-500 fill-rose-500/20" />
                       <span>الشعلة</span>
                     </div>
-                    <span className="text-base sm:text-lg font-black text-orange-800 dark:text-orange-200">
-                      {player?.streak || 0} يوم
-                    </span>
                   </div>
                 </div>
 
-                {/* Islamic Achievements Section */}
-                <div className="bg-slate-50 dark:bg-slate-900/60 p-3 sm:p-3.5 rounded-2xl border border-slate-200/60 dark:border-slate-800 space-y-2">
-                  <div className="flex items-center gap-1.5 text-xs font-black text-slate-700 dark:text-slate-200">
-                    <Award className="w-4 h-4 text-brand-gold" />
+                {/* 4. Bottom Sections: Badges & Quran Wird as distinct white cards */}
+                {/* Islamic Badges & Certificates */}
+                <div className="bg-white dark:bg-slate-900/80 rounded-xl shadow-sm border border-gray-100 dark:border-slate-800 p-4 space-y-3">
+                  <div className="flex items-center gap-2 text-xs font-bold text-gray-800 dark:text-slate-200">
+                    <Award className="w-4 h-4 text-amber-500" />
                     <span>الأوسمة والشهادات المكتسبة</span>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     {/* Seerah Certificate */}
-                    <div className={`p-2 rounded-xl border flex items-center gap-2 ${
+                    <div className={`p-2.5 rounded-xl border flex items-center gap-2.5 transition-all ${
                       hasSeerah
-                        ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-700 text-emerald-800 dark:text-emerald-200'
-                        : 'bg-slate-100/70 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700/60 text-slate-400 opacity-60'
+                        ? 'bg-emerald-50/80 dark:bg-emerald-950/40 border-emerald-200/80 dark:border-emerald-700 text-emerald-800 dark:text-emerald-200 shadow-2xs'
+                        : 'bg-gray-50/80 dark:bg-slate-800/40 border-gray-200/60 dark:border-slate-700/60 text-gray-400 opacity-60'
                     }`}>
-                      <span className="text-base">{hasSeerah ? '📜' : '🔒'}</span>
+                      <span className="text-lg shrink-0">
+                        {hasSeerah ? '📜' : <Lock className="w-4 h-4 text-gray-400 inline-block" />}
+                      </span>
                       <div className="text-right">
-                        <div className="font-black text-[11px] leading-tight">شهادة السيرة</div>
-                        <div className="text-[9px] font-bold">{hasSeerah ? 'مكتملة ومُجازة' : 'لم تُنجز بعد'}</div>
+                        <div className="font-bold text-[11px] leading-tight text-gray-800 dark:text-slate-200">شهادة السيرة</div>
+                        <div className="text-[9px] font-semibold text-gray-500 dark:text-gray-400">{hasSeerah ? 'مكتملة ومُجازة' : 'لم تُنجز بعد'}</div>
                       </div>
                     </div>
 
                     {/* General Certificate */}
-                    <div className={`p-2 rounded-xl border flex items-center gap-2 ${
+                    <div className={`p-2.5 rounded-xl border flex items-center gap-2.5 transition-all ${
                       hasGeneral
-                        ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-200'
-                        : 'bg-slate-100/70 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700/60 text-slate-400 opacity-60'
+                        ? 'bg-amber-50/80 dark:bg-amber-950/40 border-amber-200/80 dark:border-amber-700 text-amber-800 dark:text-amber-200 shadow-2xs'
+                        : 'bg-gray-50/80 dark:bg-slate-800/40 border-gray-200/60 dark:border-slate-700/60 text-gray-400 opacity-60'
                     }`}>
-                      <span className="text-base">{hasGeneral ? '🏆' : '🔒'}</span>
+                      <span className="text-lg shrink-0">
+                        {hasGeneral ? '🏆' : <Lock className="w-4 h-4 text-gray-400 inline-block" />}
+                      </span>
                       <div className="text-right">
-                        <div className="font-black text-[11px] leading-tight">الثقافة العامة</div>
-                        <div className="text-[9px] font-bold">{hasGeneral ? 'مكتملة ومُجازة' : 'لم تُنجز بعد'}</div>
+                        <div className="font-bold text-[11px] leading-tight text-gray-800 dark:text-slate-200">الثقافة العامة</div>
+                        <div className="text-[9px] font-semibold text-gray-500 dark:text-gray-400">{hasGeneral ? 'مكتملة ومُجازة' : 'لم تُنجز بعد'}</div>
                       </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Quran Wird Progress Section */}
-                <div className="bg-slate-50 dark:bg-slate-900/60 p-3 sm:p-3.5 rounded-2xl border border-slate-200/60 dark:border-slate-800 space-y-2.5">
+                {/* Quran Wird Progress Card */}
+                <div className="bg-white dark:bg-slate-900/80 rounded-xl shadow-sm border border-gray-100 dark:border-slate-800 p-4 space-y-3">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5 text-xs font-black text-slate-700 dark:text-slate-200">
+                    <div className="flex items-center gap-2 text-xs font-bold text-gray-800 dark:text-slate-200">
                       <BookOpen className="w-4 h-4 text-emerald-600" />
                       <span>الورد القرآني وختمة التلاوة</span>
                     </div>
                     {wird?.isActive && (
-                      <span className="text-[9px] font-black px-1.5 py-0.5 rounded-md bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-300">
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200/60">
                         ورد نشط
                       </span>
                     )}
                   </div>
 
                   {wird?.hasWird ? (
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between text-xs font-bold text-slate-600 dark:text-slate-300">
+                    <div className="space-y-2.5">
+                      <div className="flex items-center justify-between text-xs font-bold text-gray-700 dark:text-slate-300">
                         <span>السورة الحالية: <strong className="font-black text-emerald-700 dark:text-emerald-400">{wird.currentSurah}</strong></span>
-                        <span className="text-[11px] text-slate-400">الصفحة {wird.currentPage} من 604</span>
+                        <span className="text-[11px] text-gray-400">الصفحة {wird.currentPage} من 604</span>
                       </div>
 
                       {/* Progress Bar */}
-                      <div className="w-full bg-slate-200 dark:bg-slate-700 h-2.5 rounded-full overflow-hidden">
+                      <div className="w-full bg-gray-100 dark:bg-slate-700 h-2.5 rounded-full overflow-hidden">
                         <div
                           className="bg-gradient-to-r from-emerald-500 to-teal-400 h-full rounded-full transition-all duration-500"
                           style={{ width: `${wird.completionPercentage}%` }}
                         />
                       </div>
 
-                      <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                      <div className="flex items-center justify-between text-[11px] font-bold text-gray-500 dark:text-gray-400">
                         <span>نسبة الإنجاز في الختمة</span>
-                        <span className="font-black text-slate-800 dark:text-slate-200 font-mono">{wird.completionPercentage}%</span>
+                        <span className="font-extrabold text-gray-800 dark:text-slate-200 font-mono">{wird.completionPercentage}%</span>
                       </div>
                     </div>
                   ) : (
-                    <p className="text-xs text-slate-400 font-bold py-1">
+                    <p className="text-xs text-gray-400 font-bold py-1">
                       اللاعب لم يقم بتفعيل الورد القرآني بعد
                     </p>
                   )}
                 </div>
 
-                {/* Friendship Interactive Actions */}
+                {/* Friendship Action Buttons: Proportional, responsive & balanced */}
                 <div className="pt-1">
                   {isSelf ? (
-                    <div className="w-full py-2.5 px-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-xl text-center text-xs font-bold text-emerald-800 dark:text-emerald-200 flex items-center justify-center gap-1.5">
+                    <div className="w-full py-2.5 px-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200/70 dark:border-emerald-800/60 rounded-xl text-center text-xs font-bold text-emerald-800 dark:text-emerald-200 flex items-center justify-center gap-1.5">
                       <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                       <span>هذا حسابك الشخصي</span>
                     </div>
                   ) : friendshipStatus === 'ACCEPTED' ? (
                     <div className="flex items-center gap-2">
-                      <div className="flex-1 py-2.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 rounded-xl text-center text-xs font-bold text-emerald-700 dark:text-emerald-300 flex items-center justify-center gap-1.5">
+                      <div className="flex-1 py-2.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200/60 dark:border-emerald-800/60 rounded-xl text-center text-xs font-bold text-emerald-700 dark:text-emerald-300 flex items-center justify-center gap-1.5">
                         <UserCheck className="w-4 h-4 text-emerald-600" />
                         <span>أنتم أصدقاء</span>
                       </div>
                       <button
+                        type="button"
                         onClick={handleRemoveFriend}
                         disabled={actionLoading}
                         title="إلغاء الصداقة"
-                        className="p-2.5 rounded-xl border border-red-200 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 transition-all cursor-pointer"
+                        className="p-2.5 rounded-xl border border-red-200 text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 transition-all cursor-pointer shrink-0"
                       >
                         <UserMinus className="w-4 h-4" />
                       </button>
@@ -397,26 +403,29 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
                   ) : friendshipStatus === 'PENDING_RECEIVED' ? (
                     <div className="flex items-center gap-2">
                       <button
+                        type="button"
                         onClick={() => handleRespondRequest('ACCEPT')}
                         disabled={actionLoading}
-                        className="flex-1 py-2.5 bg-brand-emerald hover:bg-brand-emerald/90 text-white rounded-xl text-xs font-black shadow-md transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer"
+                        className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-md transition-all active:scale-[0.98] flex items-center justify-center gap-1.5 cursor-pointer"
                       >
                         <UserCheck className="w-4 h-4" />
-                        <span>قبول طلب الصداقة</span>
+                        <span>قبول الصداقة</span>
                       </button>
                       <button
+                        type="button"
                         onClick={() => handleRespondRequest('DECLINE')}
                         disabled={actionLoading}
-                        className="py-2.5 px-4 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                        className="py-2.5 px-4 bg-gray-100 hover:bg-gray-200 dark:bg-slate-800 text-gray-700 dark:text-slate-300 rounded-xl text-xs font-bold transition-all cursor-pointer"
                       >
                         رفض
                       </button>
                     </div>
                   ) : (
                     <button
+                      type="button"
                       onClick={handleSendFriendRequest}
                       disabled={actionLoading}
-                      className="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-2xl text-xs sm:text-sm font-black shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
+                      className="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-xl text-xs sm:text-sm font-bold shadow-md transition-all active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer"
                     >
                       {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
                       <span>إضافة كصديق</span>
