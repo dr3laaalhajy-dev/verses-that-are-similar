@@ -199,7 +199,8 @@ export const AdhkarPage: React.FC<AdhkarPageProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<string>('all');
 
-  // Direct parameter & deep-link synchronization (/library/adhkar/morning, /adhkar/morning, /adhkar/[type])
+  // Direct parameter & deep-link synchronization on mount only
+  // Empty dependency array prevents infinite re-render loops and UI flickering
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
@@ -220,11 +221,11 @@ export const AdhkarPage: React.FC<AdhkarPageProps> = ({
 
     if (matchedType) {
       const resolvedId = resolveAdhkarCategoryId(matchedType);
-      if (resolvedId && selectedAdhkarCategoryId !== resolvedId) {
+      if (resolvedId) {
         setSelectedAdhkarCategoryId(resolvedId);
       }
     }
-  }, [selectedAdhkarCategoryId, setSelectedAdhkarCategoryId]);
+  }, []); // Run strictly on mount to avoid infinite loop when state updates
 
   const activeCategory = selectedAdhkarCategoryId 
     ? (adhkarData[selectedAdhkarCategoryId] || adhkarData[resolveAdhkarCategoryId(selectedAdhkarCategoryId)] || adhkarData['morning'])

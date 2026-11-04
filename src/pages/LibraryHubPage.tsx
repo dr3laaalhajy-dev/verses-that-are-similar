@@ -101,7 +101,7 @@ export const LibraryHubPage: React.FC<LibraryHubPageProps> = ({
 
           {/* 2. Adhkar Card */}
           <Link
-            href="/adhkar"
+            href="/library/adhkar"
             prefetch={false}
             onClick={() => {
               setView('adhkar');
@@ -131,7 +131,7 @@ export const LibraryHubPage: React.FC<LibraryHubPageProps> = ({
 
           {/* 3. Hadith Card */}
           <Link
-            href="/hadith"
+            href="/library/hadith"
             prefetch={false}
             onClick={() => {
               setView('hadith');
@@ -161,7 +161,7 @@ export const LibraryHubPage: React.FC<LibraryHubPageProps> = ({
 
           {/* 4. Book Card */}
           <Link
-            href="/book"
+            href="/library/book"
             prefetch={false}
             onClick={() => setView('book')}
             className="group relative p-5 md:p-6 rounded-2xl text-right overflow-hidden transition-all duration-200 flex flex-col justify-between border border-slate-150 hover:border-amber-400 bg-white shadow-xs hover:shadow-md min-h-[160px] active:scale-[0.99] cursor-pointer"
@@ -188,7 +188,7 @@ export const LibraryHubPage: React.FC<LibraryHubPageProps> = ({
 
           {/* 5. Encyclopedia Card */}
           <Link
-            href="/encyclopedia"
+            href="/library/encyclopedia"
             prefetch={false}
             onClick={() => setView('encyclopedia')}
             className="group relative p-5 md:p-6 rounded-2xl text-right overflow-hidden transition-all duration-200 flex flex-col justify-between border border-slate-150 hover:border-purple-400 bg-white shadow-xs hover:shadow-md min-h-[160px] active:scale-[0.99] cursor-pointer"
@@ -216,7 +216,7 @@ export const LibraryHubPage: React.FC<LibraryHubPageProps> = ({
           {/* 6. Islamic Videos Card (المكتبة المرئية) */}
           {!systemSettings?.hideIslamicVideos && (
             <Link
-              href="/islamic_videos"
+              href="/library/islamic_videos"
               prefetch={false}
               onClick={() => setView('islamic_videos')}
               className="group relative p-5 md:p-6 rounded-2xl text-right overflow-hidden transition-all duration-200 flex flex-col justify-between border border-slate-150 hover:border-[#0D6E52] bg-white shadow-xs hover:shadow-md min-h-[160px] active:scale-[0.99] cursor-pointer"

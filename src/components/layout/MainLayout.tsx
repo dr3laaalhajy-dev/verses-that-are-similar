@@ -448,10 +448,11 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
             {/* 1. الرئيسية */}
             <Link
               href="/"
+              replace={true}
               prefetch={false}
               onClick={() => {
                 router.refresh();
-                router.push('/');
+                router.replace('/');
                 app.setShowScores(false);
                 app.setView('home');
               }}
@@ -469,10 +470,11 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
             {/* 2. التحديات */}
             <Link
               href="/challenges"
+              replace={true}
               prefetch={false}
               onClick={() => {
                 router.refresh();
-                router.push('/challenges');
+                router.replace('/challenges');
                 app.setShowScores(false);
                 app.setView('challenges');
               }}
@@ -490,10 +492,11 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
             {/* 3. المتصدرين (نقلت من الشريط العلوي لتحفيز التنافس) */}
             <Link
               href="/scores"
+              replace={true}
               prefetch={false}
               onClick={() => {
                 router.refresh();
-                router.push('/scores');
+                router.replace('/scores');
                 app.setShowScores(true);
                 app.setView('home');
               }}
@@ -511,10 +514,11 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
             {/* 4. المكتبة */}
             <Link
               href="/library"
+              replace={true}
               prefetch={false}
               onClick={() => {
                 router.refresh();
-                router.push('/library');
+                router.replace('/library');
                 app.setShowScores(false);
                 app.setView('library');
               }}
@@ -532,10 +536,11 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
             {/* 5. الإعدادات */}
             <Link
               href="/settings"
+              replace={true}
               prefetch={false}
               onClick={() => {
                 router.refresh();
-                router.push('/settings');
+                router.replace('/settings');
                 app.setShowScores(false);
                 app.setView('settings');
               }}
