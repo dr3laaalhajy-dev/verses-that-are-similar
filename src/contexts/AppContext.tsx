@@ -4334,6 +4334,114 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [playerName, playerUsername, cups, totalPoints, streak, completedChallengeIds, activeFrame, userCertificates]);
 
+  // Requirement 1 & 2: Refresh User Profile / Session from server (/api/users/me)
+  const refreshUserProfile = useCallback(async () => {
+    const pUnique = uniquePlayerId || localStorage.getItem('quran_unique_player_id');
+    const pUser = playerUsername || localStorage.getItem('quran_player_username');
+    const pName = playerName || localStorage.getItem('quran_player_name');
+    const pId = localStorage.getItem('quran_player_id');
+
+    if (!pUnique && !pUser && !pName && !pId) return null;
+
+    try {
+      const params = new URLSearchParams({ t: Date.now().toString() });
+      if (pId) params.append('id', pId);
+      if (pUnique) params.append('uniquePlayerId', pUnique);
+      if (pUser) params.append('username', pUser);
+      if (pName) params.append('name', pName);
+
+      const res = await fetch(`/api/users/me?${params.toString()}`, {
+        cache: 'no-store',
+        headers: {
+          'Pragma': 'no-cache',
+          'Cache-Control': 'no-cache'
+        }
+      });
+
+      if (!res.ok) return null;
+      const data = await res.json();
+      const user = data.user || data.player;
+
+      if (user) {
+        if (user.name) {
+          setPlayerName(user.name);
+          localStorage.setItem('quran_player_name', user.name);
+        }
+        if (user.username) {
+          setPlayerUsername(user.username);
+          localStorage.setItem('quran_player_username', user.username);
+        }
+        if (user.uniquePlayerId) {
+          setUniquePlayerId(user.uniquePlayerId);
+          localStorage.setItem('quran_unique_player_id', user.uniquePlayerId);
+        }
+        if (user.id) {
+          localStorage.setItem('quran_player_id', String(user.id));
+        }
+        if (typeof user.points === 'number') {
+          setTotalPoints(user.points);
+          localStorage.setItem('quran_total_points', String(user.points));
+        }
+        if (typeof user.cups === 'number') {
+          setCups(user.cups);
+          localStorage.setItem('quran_total_cups', String(user.cups));
+          localStorage.setItem('quran_cups', String(user.cups));
+        }
+        if (typeof user.streak === 'number') {
+          setStreak(user.streak);
+          localStorage.setItem('quran_streak', String(user.streak));
+        }
+        if (user.activeFrame !== undefined) {
+          const frame = (user.activeFrame === 'seerah' || user.activeFrame === 'general') ? user.activeFrame : null;
+          setActiveFrame(frame);
+          if (frame) {
+            localStorage.setItem('quran_active_frame', frame);
+          } else {
+            localStorage.removeItem('quran_active_frame');
+          }
+        }
+        return user;
+      }
+    } catch (e) {
+      console.warn('Failed to refresh user profile from server:', e);
+    }
+    return null;
+  }, [uniquePlayerId, playerUsername, playerName]);
+
+  // Live session refresh on mount and window focus
+  useEffect(() => {
+    refreshUserProfile();
+    const onFocus = () => refreshUserProfile();
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') refreshUserProfile();
+    };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [refreshUserProfile]);
+
+  // Realtime user updates listener (Supabase Realtime Broadcast)
+  useEffect(() => {
+    try {
+      const channel = supabase.channel('realtime_user_updates')
+        .on('broadcast', { event: 'user_profile_updated' }, () => {
+          refreshUserProfile();
+        })
+        .subscribe();
+
+      return () => {
+        try {
+          supabase.removeChannel(channel);
+        } catch { }
+      };
+    } catch (e) {
+      console.warn('Realtime user profile subscription warning:', e);
+    }
+  }, [refreshUserProfile]);
+
   const handlePlayerLogout = useCallback(() => {
     try {
       setPlayerName(null);
@@ -5355,6 +5463,7 @@ ${versesList}
     handleDeclineRoomInvite,
     handleOpenPlayerProfile,
     handleClosePlayerProfile,
+    refreshUserProfile,
   };
 
   return (

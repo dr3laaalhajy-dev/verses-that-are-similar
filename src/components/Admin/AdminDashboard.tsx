@@ -50,6 +50,7 @@ interface PlayerUser {
   id: number;
   name: string;
   username: string;
+  uniquePlayerId?: string | null;
   points: number;
   cups: number;
   isBlocked: boolean;
@@ -1710,6 +1711,18 @@ export default function AdminDashboard({
           type: 'broadcast',
           event: 'leaderboard_updated',
           payload: { updatedUserId: editingUser.id }
+        });
+        supabase.channel('realtime_user_updates').send({
+          type: 'broadcast',
+          event: 'user_profile_updated',
+          payload: {
+            userId: editingUser.id,
+            uniquePlayerId: editingUser.uniquePlayerId,
+            username: editUserUsername.replace(/^@+/, '').trim(),
+            name: editUserName.trim(),
+            points: parsedPoints,
+            cups: parsedCups
+          }
         });
       } catch (e) {
         console.warn('Realtime broadcast failed:', e);

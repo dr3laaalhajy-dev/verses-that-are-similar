@@ -95,6 +95,12 @@ export const HomePage: React.FC<HomePageProps> = ({
 }) => {
   const app = useApp();
 
+  // Requirement 2: Live Fetch for Welcome Component
+  // Fetch latest user data from /api/users/me on mount so the welcome name is always synchronized with the database
+  useEffect(() => {
+    app?.refreshUserProfile?.();
+  }, [app?.refreshUserProfile]);
+
   // Audio Playback for Ayah of the Day
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isAyahPlaying, setIsAyahPlaying] = useState(false);

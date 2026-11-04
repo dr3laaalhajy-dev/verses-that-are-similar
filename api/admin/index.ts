@@ -454,6 +454,16 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, currentAdmin
         }).catch(() => {});
       }
 
+      // Next.js ISR path revalidation fallback if run in a Next.js environment
+      try {
+        if (typeof (globalThis as any).revalidatePath === 'function') {
+          (globalThis as any).revalidatePath('/');
+          (globalThis as any).revalidatePath('/leaderboard');
+        }
+      } catch (err) {
+        // Safe to ignore if not in Next.js environment
+      }
+
       res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
       return res.status(200).json({ success: true, message: 'تم تحديث بيانات المستخدم بنجاح', player: updated });
     }

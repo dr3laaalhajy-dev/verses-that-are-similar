@@ -60,6 +60,7 @@ function apiServerPlugin(): Plugin {
 
           let relativePath = '';
           if (pathname === '/api/1v1') relativePath = 'api/1v1.ts';
+          else if (pathname === '/api/users/me') relativePath = 'api/users/me.ts';
           else if (pathname === '/api/leaderboard') relativePath = 'api/leaderboard.ts';
           else if (pathname === '/api/player-register') relativePath = 'api/player-register.ts';
           else if (pathname === '/api/player-score') relativePath = 'api/player-score.ts';
