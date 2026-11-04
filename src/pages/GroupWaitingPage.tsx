@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Users, Lock, Globe, Loader2, Trash2, ArrowRight, LogOut,
@@ -130,8 +130,10 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
     return () => clearInterval(timer);
   }, []);
 
-  const fetchFriends = async () => {
-    setIsLoadingFriends(true);
+  const fetchFriends = useCallback(async (isInitial = false) => {
+    if (isInitial || friendsList.length === 0) {
+      setIsLoadingFriends(true);
+    }
     try {
       const viewerParam = playerUsername || playerName || '';
       const res = await fetch(`/api/friends?action=list&viewerId=${encodeURIComponent(viewerParam)}`);
@@ -144,10 +146,10 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
     } finally {
       setIsLoadingFriends(false);
     }
-  };
+  }, [playerUsername, playerName, friendsList.length]);
 
   useEffect(() => {
-    fetchFriends();
+    fetchFriends(true);
   }, [playerUsername, playerName]);
 
   // Online friends who are not currently active in this room (Allow re-inviting abandoned/left players)

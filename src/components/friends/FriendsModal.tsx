@@ -39,10 +39,17 @@ export const FriendsModal: React.FC<FriendsModalProps> = ({
   const [copiedMyId, setCopiedMyId] = useState(false);
   const [onlineKeys, setOnlineKeys] = useState<Set<string>>(new Set());
 
-  // Listen to realtime presence
+  // Listen to realtime presence & update local friend state without triggering full API refetch
   useEffect(() => {
     const unsubscribe = friendsRealtimeService.onPresenceChange((keys) => {
       setOnlineKeys(new Set(keys));
+      // Requirement 3: Update local friend state without calling API
+      setFriendsList(prev =>
+        prev.map(f => {
+          const isOnline = friendsRealtimeService.isPlayerOnline(f);
+          return f.isOnline !== isOnline ? { ...f, isOnline } : f;
+        })
+      );
     });
     return () => {
       unsubscribe();
@@ -50,19 +57,33 @@ export const FriendsModal: React.FC<FriendsModalProps> = ({
   }, []);
 
   const isPlayerOnline = (player: any) => {
+    if (player && typeof player.isOnline === 'boolean') {
+      return player.isOnline;
+    }
     return friendsRealtimeService.isPlayerOnline(player);
   };
 
-  // Fetch friends & requests
-  const fetchFriendsData = useCallback(async () => {
-    if (!currentPlayer) return;
-    setIsLoadingData(true);
+  const currentViewerParam = currentPlayer
+    ? String(currentPlayer.uniquePlayerId || currentPlayer.username || currentPlayer.name || currentPlayer.id || '')
+    : '';
+
+  // Requirement 1 & 2: Fetch friends & requests with useCallback and primitive dependency
+  // setIsLoadingData(true) is strictly called when opening or when friendsList is empty.
+  // Subsequent background updates (polling/realtime) update silently without flickering the loading spinner.
+  const fetchFriendsData = useCallback(async (isInitial = false) => {
+    if (!currentViewerParam) return;
+    if (isInitial || friendsList.length === 0) {
+      setIsLoadingData(true);
+    }
     try {
-      const viewerParam = currentPlayer.uniquePlayerId || currentPlayer.username || currentPlayer.name || currentPlayer.id;
-      const res = await fetch(`/api/friends?action=list&viewerId=${encodeURIComponent(String(viewerParam))}`);
+      const res = await fetch(`/api/friends?action=list&viewerId=${encodeURIComponent(currentViewerParam)}`);
       if (res.ok) {
         const data = await res.json();
-        setFriendsList(data.friends || []);
+        const incomingFriends = (data.friends || []).map((f: any) => ({
+          ...f,
+          isOnline: friendsRealtimeService.isPlayerOnline(f)
+        }));
+        setFriendsList(incomingFriends);
         setIncomingRequests(data.incomingRequests || []);
       }
     } catch (e) {
@@ -70,11 +91,11 @@ export const FriendsModal: React.FC<FriendsModalProps> = ({
     } finally {
       setIsLoadingData(false);
     }
-  }, [currentPlayer]);
+  }, [currentViewerParam]);
 
   useEffect(() => {
     if (isOpen) {
-      fetchFriendsData();
+      fetchFriendsData(true);
     }
   }, [isOpen, fetchFriendsData]);
 
