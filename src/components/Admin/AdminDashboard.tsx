@@ -1086,13 +1086,18 @@ export default function AdminDashboard({
     onConfirm: () => {}
   });
 
-  const showAlert = (title: string, message: string) => {
+  const showAlert = (title: string, message: string, onConfirmCallback?: () => void) => {
     setModalConfig({
       isOpen: true,
       title,
       message,
       isAlert: true,
-      onConfirm: () => {}
+      onConfirm: () => {
+        setModalConfig(prev => ({ ...prev, isOpen: false }));
+        if (onConfirmCallback) {
+          onConfirmCallback();
+        }
+      }
     });
   };
 
@@ -1632,7 +1637,7 @@ export default function AdminDashboard({
           const data = await res.json();
           if (!res.ok) throw new Error(data.message || 'فشلت العملية');
           setUsersList(prev => prev.map(u => u.id === user.id ? { ...u, isBlocked: nextStatus } : u));
-          showAlert('نجاح', data.message);
+          showAlert('نجاح', data.message, () => fetchUsers(usersSearch));
         } catch (err: any) {
           showAlert('خطأ', err.message);
         } finally {
@@ -1656,7 +1661,7 @@ export default function AdminDashboard({
           const data = await res.json();
           if (!res.ok) throw new Error(data.message || 'فشل حذف المستخدم');
           setUsersList(prev => prev.filter(u => u.id !== user.id));
-          showAlert('نجاح', data.message);
+          showAlert('نجاح', data.message, () => fetchUsers(usersSearch));
         } catch (err: any) {
           showAlert('خطأ', err.message);
         } finally {
@@ -1696,7 +1701,7 @@ export default function AdminDashboard({
         cups: Number(editUserCups)
       } : u));
       setEditingUser(null);
-      showAlert('نجاح', data.message);
+      showAlert('نجاح', data.message || 'تم تحديث بيانات المستخدم بنجاح', () => fetchUsers(usersSearch));
     } catch (err: any) {
       showAlert('خطأ', err.message);
     } finally {
@@ -1725,7 +1730,7 @@ export default function AdminDashboard({
       if (!res.ok) throw new Error(data.message || 'فشل إعادة تعيين كلمة المرور');
       setResetPasswordUser(null);
       setNewUserPassword('');
-      showAlert('نجاح', data.message);
+      showAlert('نجاح', data.message || 'تم إعادة تعيين كلمة المرور بنجاح', () => fetchUsers(usersSearch));
     } catch (err: any) {
       showAlert('خطأ', err.message);
     } finally {
@@ -5195,12 +5200,16 @@ export default function AdminDashboard({
       {/* Edit User Modal */}
       <AnimatePresence>
         {editingUser && (
-          <div className="fixed inset-0 z-[1000] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div 
+            className="fixed inset-0 z-[1000] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 cursor-pointer"
+            onClick={() => setEditingUser(null)}
+          >
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white rounded-[2.5rem] p-6 md:p-8 max-w-lg w-full shadow-2xl border border-slate-100"
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-[2.5rem] p-6 md:p-8 max-w-lg w-full shadow-2xl border border-slate-100 cursor-default"
             >
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
@@ -5304,12 +5313,16 @@ export default function AdminDashboard({
       {/* Reset Password Modal */}
       <AnimatePresence>
         {resetPasswordUser && (
-          <div className="fixed inset-0 z-[1000] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div 
+            className="fixed inset-0 z-[1000] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 cursor-pointer"
+            onClick={() => setResetPasswordUser(null)}
+          >
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white rounded-[2.5rem] p-6 md:p-8 max-w-md w-full shadow-2xl border border-slate-100"
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-[2.5rem] p-6 md:p-8 max-w-md w-full shadow-2xl border border-slate-100 cursor-default"
             >
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
