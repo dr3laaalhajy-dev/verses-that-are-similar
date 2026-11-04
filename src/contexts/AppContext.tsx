@@ -1874,7 +1874,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         params = new URLSearchParams(window.location.search);
       }
 
-      const isExplicitMushaf = path === '/mushaf' || path.startsWith('/mushaf/') || params.get('view') === 'mushaf';
+      // 1. Mushaf route (/mushaf, /library/mushaf, /library/quran)
+      const isExplicitMushaf =
+        path === '/mushaf' ||
+        path.startsWith('/mushaf/') ||
+        path === '/library/mushaf' ||
+        path.startsWith('/library/mushaf/') ||
+        path === '/library/quran' ||
+        path.startsWith('/library/quran/') ||
+        params.get('view') === 'mushaf';
 
       if (isExplicitMushaf) {
         const pageParam = params.get('page');
@@ -1882,12 +1890,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (!isNaN(pageNum) && pageNum >= 1 && pageNum <= 604) {
           setCurrentPage(pageNum);
         }
-        setIsPageModeActive(true);
+        setIsMushafFullscreen(false);
+        setShowScores(false);
+        setIsPageModeActive(false);
         setView('mushaf', false);
         return;
       }
 
-      // Requirement 1 & 3: Direct routing for Adhkar (/library/adhkar/morning, /adhkar/morning, /adhkar/[type])
+      // 2. Adhkar route (/library/adhkar/morning, /adhkar/morning, /adhkar/[type])
       const isExplicitAdhkar =
         path === '/adhkar' ||
         path.startsWith('/adhkar/') ||
@@ -1917,6 +1927,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setIsMushafFullscreen(false);
         setShowScores(false);
         setView('adhkar', false);
+        return;
+      }
+
+      // 3. Hadith route (/hadith, /library/hadith)
+      if (path === '/hadith' || path.startsWith('/hadith/') || path === '/library/hadith' || path.startsWith('/library/hadith/')) {
+        setIsMushafFullscreen(false);
+        setShowScores(false);
+        setSelectedHadith(null);
+        setView('hadith', false);
+        return;
+      }
+
+      // 4. Book route (/book, /library/book)
+      if (path === '/book' || path.startsWith('/book/') || path === '/library/book' || path.startsWith('/library/book/')) {
+        setIsMushafFullscreen(false);
+        setShowScores(false);
+        setView('book', false);
+        return;
+      }
+
+      // 5. Encyclopedia route (/encyclopedia, /library/encyclopedia)
+      if (path === '/encyclopedia' || path.startsWith('/encyclopedia/') || path === '/library/encyclopedia' || path.startsWith('/library/encyclopedia/')) {
+        setIsMushafFullscreen(false);
+        setShowScores(false);
+        setView('encyclopedia', false);
+        return;
+      }
+
+      // 6. Islamic Videos route (/islamic_videos, /library/islamic_videos, /library/videos)
+      if (path === '/islamic_videos' || path.startsWith('/islamic_videos/') || path === '/library/islamic_videos' || path.startsWith('/library/islamic_videos/') || path === '/library/videos') {
+        setIsMushafFullscreen(false);
+        setShowScores(false);
+        setView('islamic_videos', false);
         return;
       }
 

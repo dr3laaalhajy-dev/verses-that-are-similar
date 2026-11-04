@@ -9,3 +9,4 @@ export type {
 export { GlobalOverlays } from './GlobalOverlays';
 export { Link } from './Link';
 export type { LinkProps } from './Link';
+export { ErrorBoundary } from './ErrorBoundary';
