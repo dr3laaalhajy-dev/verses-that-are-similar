@@ -447,6 +447,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
             {/* 1. الرئيسية */}
             <Link
               href="/"
+              prefetch={false}
               onClick={() => {
                 app.setShowScores(false);
                 app.setView('home');
@@ -465,6 +466,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
             {/* 2. التحديات */}
             <Link
               href="/challenges"
+              prefetch={false}
               onClick={() => {
                 app.setShowScores(false);
                 app.setView('challenges');
@@ -483,6 +485,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
             {/* 3. المتصدرين (نقلت من الشريط العلوي لتحفيز التنافس) */}
             <Link
               href="/scores"
+              prefetch={false}
               onClick={() => {
                 app.setShowScores(true);
                 app.setView('home');
@@ -501,6 +504,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
             {/* 4. المكتبة */}
             <Link
               href="/library"
+              prefetch={false}
               onClick={() => {
                 app.setShowScores(false);
                 app.setView('library');
@@ -519,6 +523,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
             {/* 5. الإعدادات */}
             <Link
               href="/settings"
+              prefetch={false}
               onClick={() => {
                 app.setShowScores(false);
                 app.setView('settings');

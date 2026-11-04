@@ -6,6 +6,7 @@ import { GlobalOverlays } from './components/common/GlobalOverlays';
 import AdminDashboard from './components/Admin/AdminDashboard';
 import AdminLogin from './components/Admin/AdminLogin';
 import { useRouter } from './services/router';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
 
 function AppContent() {
   const app = useApp();
@@ -144,8 +145,10 @@ function AppContent() {
 
 export default function App() {
   return (
-    <AppProvider>
-      <AppContent />
-    </AppProvider>
+    <ErrorBoundary>
+      <AppProvider>
+        <AppContent />
+      </AppProvider>
+    </ErrorBoundary>
   );
 }

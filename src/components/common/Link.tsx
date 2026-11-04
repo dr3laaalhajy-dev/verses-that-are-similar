@@ -1,3 +1,5 @@
+'use client';
+
 import React from 'react';
 import { router } from '../../services/router';
 
@@ -5,18 +7,20 @@ export interface LinkProps extends React.AnchorHTMLAttributes<HTMLAnchorElement>
   href: string;
   children: React.ReactNode;
   replace?: boolean;
+  prefetch?: boolean;
 }
 
 /**
  * Universal Link Component
  * Provides Next.js / SPA compatible navigation using client-side router.push
- * Prevents full page refresh, supports onClick callbacks and keeps SPA state intact
+ * Prevents full page refresh, supports prefetch={false}, and keeps SPA state intact
  */
 export const Link: React.FC<LinkProps> = ({
   href,
   children,
   onClick,
   replace = false,
+  prefetch = false,
   className = '',
   ...props
 }) => {
@@ -52,4 +56,3 @@ export const Link: React.FC<LinkProps> = ({
 };
 
 export default Link;
-
