@@ -104,16 +104,52 @@ export default function AdminLogin({ onLogin, onBack }: AdminLoginProps) {
         animate={{ opacity: 1, y: 0 }}
         className="bg-white p-8 md:p-10 rounded-[2.5rem] shadow-2xl border border-slate-100 max-w-md w-full"
       >
-        <div className="text-center mb-8">
-          <div className="w-16 h-16 md:w-20 md:h-20 bg-brand-emerald/10 rounded-3xl flex items-center justify-center mx-auto mb-5 text-brand-emerald shadow-sm">
-            {isRegistering ? <ShieldCheck className="w-8 h-8 md:w-10 md:h-10" /> : <Lock className="w-8 h-8 md:w-10 md:h-10" />}
+        <div className="text-center mb-6">
+          <div className="w-16 h-16 md:w-20 md:h-20 bg-brand-emerald/10 rounded-3xl flex items-center justify-center mx-auto mb-4 text-brand-emerald shadow-sm">
+            {isRegistering ? <ShieldCheck className="w-8 h-8 md:w-10 md:h-10 text-amber-600" /> : <Lock className="w-8 h-8 md:w-10 md:h-10" />}
           </div>
           <h2 className="text-2xl md:text-3xl font-black text-slate-800">
-            {isRegistering ? 'تسجيل مشرف جديد' : 'لوحة التحكم'}
+            {isRegistering ? 'إنشاء حساب أدمن جديد' : 'تسجيل دخول كأدمن'}
           </h2>
           <p className="text-slate-500 font-medium text-xs md:text-sm mt-1">
-            {isRegistering ? 'أدخل بياناتك وكود الدعوة لإتمام إنشاء الحساب' : 'تسجيل الدخول للمسؤولين فقط'}
+            {isRegistering ? 'يتطلب إدخال كود المؤسس السري لتفعيل الحساب الإداري' : 'تسجيل الدخول المستقل لمسؤولي ومشرفي النظام'}
           </p>
+        </div>
+
+        {/* خيارا مصادقة الإدارة: تسجيل دخول كأدمن / إنشاء حساب أدمن */}
+        <div className="flex bg-slate-100 p-1.5 rounded-2xl mb-6 border border-slate-200/60">
+          <button
+            type="button"
+            onClick={() => {
+              setIsRegistering(false);
+              setError('');
+              setSuccess('');
+            }}
+            className={`flex-1 py-2.5 px-3 rounded-xl font-black text-xs sm:text-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+              !isRegistering
+                ? 'bg-white text-brand-emerald shadow-sm'
+                : 'text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <Lock className="w-4 h-4" />
+            <span>تسجيل دخول كأدمن</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setIsRegistering(true);
+              setError('');
+              setSuccess('');
+            }}
+            className={`flex-1 py-2.5 px-3 rounded-xl font-black text-xs sm:text-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+              isRegistering
+                ? 'bg-white text-brand-emerald shadow-sm'
+                : 'text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <ShieldCheck className="w-4 h-4 text-amber-600" />
+            <span>إنشاء حساب أدمن</span>
+          </button>
         </div>
 
         {error && (
@@ -224,7 +260,7 @@ export default function AdminLogin({ onLogin, onBack }: AdminLoginProps) {
               >
                 <label className="text-xs font-black uppercase tracking-wider text-slate-500 mr-1 flex items-center gap-1.5">
                   <Key className="w-3.5 h-3.5 text-amber-500" />
-                  <span>كود الدعوة</span>
+                  <span>كود المؤسس السري (كود الدعوة)</span>
                 </label>
                 <div className="relative">
                   <input
@@ -243,12 +279,12 @@ export default function AdminLogin({ onLogin, onBack }: AdminLoginProps) {
           <button
             type="submit"
             disabled={loading}
-            className="w-full mt-2 py-4 bg-brand-emerald text-white rounded-2xl font-black text-base shadow-xl shadow-brand-emerald/20 hover:bg-brand-emerald/90 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
+            className="w-full mt-2 py-4 bg-brand-emerald text-white rounded-2xl font-black text-base shadow-xl shadow-brand-emerald/20 hover:bg-brand-emerald/90 transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
           >
-            {loading ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : (isRegistering ? 'تسجيل الآن' : 'دخول')}
+            {loading ? <Loader2 className="w-5 h-5 animate-spin mx-auto" /> : (isRegistering ? 'إنشاء حساب أدمن' : 'تسجيل دخول كأدمن')}
           </button>
 
-          {/* زر التبديل بين تسجيل الدخول وليس لدي حساب */}
+          {/* زر التبديل بين تسجيل الدخول وإنشاء حساب أدمن */}
           <div className="pt-3 text-center">
             <button
               type="button"
@@ -259,7 +295,7 @@ export default function AdminLogin({ onLogin, onBack }: AdminLoginProps) {
               }}
               className="text-xs md:text-sm font-black text-slate-500 hover:text-brand-emerald transition-colors"
             >
-              {isRegistering ? 'لديك حساب بالفعل؟ سجل دخول' : 'ليس لديك حساب؟ تسجيل جديد بكود دعوة'}
+              {isRegistering ? 'لديك حساب إداري بالفعل؟ تسجيل دخول كأدمن' : 'مشرف جديد؟ إنشاء حساب أدمن بكود المؤسس'}
             </button>
           </div>
         </form>

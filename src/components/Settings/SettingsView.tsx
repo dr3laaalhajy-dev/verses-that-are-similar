@@ -32,6 +32,7 @@ import {
   BellRing
 } from 'lucide-react';
 import { usePushNotifications } from '../../hooks/usePushNotifications';
+import { router } from '../../services/router';
 
 interface SettingsViewProps {
   playerName: string | null;
@@ -98,6 +99,29 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       console.error('Error during logout:', err);
       if (typeof onBackToHome === 'function') onBackToHome();
       else window.location.href = '/';
+    }
+  };
+
+  const handleAdminAccessClick = () => {
+    // 1. Check if current session possesses an active admin token and role
+    const token = app.adminToken || localStorage.getItem('quran_admin_token');
+    const role = app.adminRole || localStorage.getItem('quran_admin_role');
+    const isSuper = app.isSuperAdmin || localStorage.getItem('quran_admin_super') === 'true';
+
+    const hasAdminSession = Boolean(token && (role || isSuper));
+
+    if (hasAdminSession) {
+      // Current user is an authenticated admin -> Route directly to admin dashboard
+      router.push('/admin');
+      app.setView('admin');
+    } else {
+      // Current user is a regular player -> Route to Admin Login screen for independent admin login
+      if (!role && !isSuper) {
+        app.setAdminToken(null);
+        localStorage.removeItem('quran_admin_token');
+      }
+      router.push('/admin');
+      app.setView('admin');
     }
   };
 
@@ -1286,50 +1310,47 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 </div>
 
         {/* ================================================= */}
-        {/* ADMIN ACCESS SECTION (Founders only)              */}
+        {/* QUICK ACCESS ADMIN SECTION (Visible to everyone)  */}
         {/* ================================================= */}
-        {canAccessAdmin && (
-          <div className="bg-slate-50 border border-slate-200/80 rounded-2xl sm:rounded-3xl p-4 sm:p-5 space-y-3">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-200/60">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-700 flex items-center justify-center font-black">
-                  <Lock className="w-4 h-4 text-emerald-600" />
-                </div>
-                <h4 className="font-black text-sm text-slate-800">إدارة النظام</h4>
+        <div className="bg-slate-50 border border-slate-200/80 rounded-2xl sm:rounded-3xl p-4 sm:p-5 space-y-3">
+          <div className="flex items-center justify-between pb-2 border-b border-slate-200/60">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-700 flex items-center justify-center font-black">
+                <ShieldCheck className="w-4 h-4 text-emerald-600" />
               </div>
-              <span className="text-[10px] font-bold text-slate-400">إصدار التطبيق v2.5</span>
+              <h4 className="font-black text-sm text-slate-800">إدارة النظام</h4>
             </div>
-
-            <div className="pt-1">
-              {/* خيار لوحة الإدارة (محصور بالمؤسس والمساعد) */}
-              <button
-                type="button"
-                onClick={onOpenAdminPanel}
-                className="w-full p-3.5 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-emerald-600/10 border border-emerald-300/80 hover:border-emerald-400 hover:bg-emerald-50/50 transition-all flex items-center justify-between group cursor-pointer shadow-xs active:scale-98 text-right"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-emerald to-teal-800 text-white flex items-center justify-center shrink-0 shadow-sm group-hover:scale-105 transition-transform">
-                    <Lock className="w-4 h-4 text-brand-gold" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-1.5">
-                      <h5 className="font-black text-xs sm:text-sm text-emerald-900 group-hover:text-emerald-700 transition-colors">
-                        لوحة الإدارة
-                      </h5>
-                      <span className="text-[9px] font-black px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-800 border border-amber-300">
-                        للمؤسسين
-                      </span>
-                    </div>
-                    <p className="text-[11px] font-bold text-emerald-700/80 mt-0.5">
-                      إدارة الأسئلة، التحديثات، وبث الإشعارات
-                    </p>
-                  </div>
-                </div>
-                <ChevronLeft className="w-4 h-4 text-emerald-600 group-hover:-translate-x-1 transition-all" />
-              </button>
-            </div>
+            <span className="text-[10px] font-bold text-slate-400">إصدار التطبيق v2.5</span>
           </div>
-        )}
+
+          <div className="pt-1">
+            <button
+              type="button"
+              onClick={handleAdminAccessClick}
+              className="w-full p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-emerald-600 via-teal-700 to-emerald-800 hover:from-emerald-700 hover:to-teal-900 text-white transition-all flex items-center justify-between group cursor-pointer shadow-md hover:shadow-lg active:scale-98 text-right"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-white/10 text-brand-gold flex items-center justify-center shrink-0 shadow-sm group-hover:scale-105 transition-transform">
+                  <Lock className="w-5 h-5 text-amber-300" />
+                </div>
+                <div>
+                  <h5 className="font-black text-sm sm:text-base text-white">
+                    الدخول لواجهة الأدمن
+                  </h5>
+                  <p className="text-[11px] font-medium text-emerald-100/90 mt-0.5">
+                    {Boolean(app.adminToken && (app.adminRole || app.isSuperAdmin))
+                      ? 'لديك صلاحية إدارية نشطة - الانتقال المباشر للوحة التحكم'
+                      : 'تسجيل الدخول المستقل لمسؤولي ومشرفي النظام'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5 text-xs font-black text-amber-300 group-hover:-translate-x-1 transition-transform">
+                <span>دخول</span>
+                <ChevronLeft className="w-4 h-4" />
+              </div>
+            </button>
+          </div>
+        </div>
 
         {/* ================================================= */}
         {/* PUSH NOTIFICATIONS SETTINGS (iOS & Web Push)      */}

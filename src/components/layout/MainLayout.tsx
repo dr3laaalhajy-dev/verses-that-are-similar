@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Trophy, Sun, Moon, Info, Lock, ArrowRight, BookOpen, LogOut, Trash2,
   UserPlus, Key, User, AtSign, ArrowLeft, LogIn, Home, Zap, Settings,
-  ChevronRight, ChevronLeft, X, Users
+  ChevronRight, ChevronLeft, X, Users, ShieldCheck
 } from 'lucide-react';
 import { useApp } from '../../contexts/AppContext';
 import DailyAyah from '../DailyAyah';
@@ -495,7 +495,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                       app.setPlayerAuthMode('login');
                       app.setRegistrationError(null);
                     }}
-                    className="text-xs md:text-sm font-black text-brand-emerald hover:text-brand-emerald/80 hover:underline transition-colors py-1"
+                    className="text-xs md:text-sm font-black text-brand-emerald hover:text-brand-emerald/80 hover:underline transition-colors py-1 cursor-pointer"
                   >
                     لدي حساب بالفعل؟ تسجيل الدخول
                   </button>
@@ -506,11 +506,27 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                       app.setPlayerAuthMode('register');
                       app.setRegistrationError(null);
                     }}
-                    className="text-xs md:text-sm font-black text-brand-emerald hover:text-brand-emerald/80 hover:underline transition-colors py-1"
+                    className="text-xs md:text-sm font-black text-brand-emerald hover:text-brand-emerald/80 hover:underline transition-colors py-1 cursor-pointer"
                   >
                     ليس لدي حساب، إنشاء حساب جديد
                   </button>
                 )}
+              </div>
+
+              {/* رابط الدخول كأدمن (Admin Auth) */}
+              <div className="mt-3 pt-3 border-t border-slate-100/80 flex items-center justify-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    app.setIsAuthModalOpen(false);
+                    router.push('/admin');
+                    app.setView('admin');
+                  }}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black text-slate-500 hover:text-brand-emerald hover:bg-slate-50 transition-all cursor-pointer group"
+                >
+                  <ShieldCheck className="w-4 h-4 text-slate-400 group-hover:text-brand-emerald transition-colors" />
+                  <span>الدخول كأدمن (Admin Auth)</span>
+                </button>
               </div>
             </motion.div>
           </motion.div>

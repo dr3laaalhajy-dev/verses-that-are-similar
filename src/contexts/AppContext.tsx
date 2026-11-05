@@ -2031,6 +2031,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return;
       }
 
+      if (rootSegment === 'admin') {
+        setIsMushafFullscreen(false);
+        setShowScores(false);
+        setView('admin', false);
+        return;
+      }
+
       if (VALID_VIEWS.includes(rootSegment as View)) {
         setIsMushafFullscreen(false);
         setShowScores(false);
