@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { usePushNotifications } from '../../hooks/usePushNotifications';
 import { router } from '../../services/router';
+import { supabase } from '../../services/supabase';
 
 interface SettingsViewProps {
   playerName: string | null;
@@ -80,25 +81,34 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const app = useApp();
   const { permission: pushPermission, requestPermissionAndRegister: requestPushPermission, isLoading: isPushLoading } = usePushNotifications(playerUsername || playerName);
 
-  const handleLogoutClick = () => {
+  const handleLogoutClick = async () => {
     try {
       if (typeof onLogout === 'function') {
-        onLogout();
+        await onLogout();
       } else if (app?.signOut) {
-        app.signOut();
+        await app.signOut();
       } else if (app?.handlePlayerLogout) {
-        app.handlePlayerLogout();
+        await app.handlePlayerLogout();
       } else {
+        try {
+          await supabase.auth.signOut();
+        } catch {}
         localStorage.removeItem('quran_player_name');
         localStorage.removeItem('quran_player_username');
         localStorage.removeItem('quran_device_id');
+        try {
+          router.refresh();
+        } catch {}
         if (typeof onBackToHome === 'function') onBackToHome();
-        else window.location.href = '/';
+        else router.replace('/');
       }
     } catch (err) {
       console.error('Error during logout:', err);
+      try {
+        router.refresh();
+      } catch {}
       if (typeof onBackToHome === 'function') onBackToHome();
-      else window.location.href = '/';
+      else router.replace('/');
     }
   };
 

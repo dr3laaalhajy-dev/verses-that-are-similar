@@ -4712,6 +4712,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const handlePlayerLogout = useCallback(async () => {
     try {
+      // 4. تنظيف حالة الواجهة (State Reset) فوراً
       setPlayerName(null);
       setPlayerUsername(null);
       setUniquePlayerId(null);
@@ -4722,12 +4723,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setPendingFriendRequestsCount(0);
       friendsRealtimeService.stopPresence();
 
+      // 1. التنفيذ المتزامن الآمن (Await & Try/Catch) لمسح الجلسة والتوكنات
       try {
         await supabase.auth.signOut();
       } catch (authErr) {
         console.error('Supabase auth signOut error:', authErr);
       }
 
+      // مسح كافة بيانات المستخدم وجلسة المصادقة من التخزين المحلي
       localStorage.removeItem('quran_player_name');
       localStorage.removeItem('quran_player_username');
       localStorage.removeItem('quran_unique_player_id');
@@ -4737,12 +4740,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.removeItem('quran_name_decorated');
       localStorage.removeItem('quran_show_decoration');
       localStorage.removeItem('quran_user_certificates');
+      localStorage.removeItem('fcm_device_token');
 
+      // 2. تفريغ كاش الراوتر (Client / Router Cache Invalidation)
+      try {
+        router.refresh();
+      } catch (e) {
+        console.warn('Router refresh warning:', e);
+      }
+
+      // 3. ترتيب التوجيه (Routing Sequence) كخطوة نهائية
       setView('home');
+      router.replace('/');
       syncLeaderboard();
     } catch (err) {
       console.error('Error during player logout:', err);
+      try {
+        router.refresh();
+      } catch {}
       setView('home');
+      router.replace('/');
     }
   }, [syncLeaderboard]);
 
