@@ -69,14 +69,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         // Upsert in Supabase
         try {
-          await supabase
+          const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cleanUser);
+          const safeUserId = isUuid ? cleanUser : null;
+
+          let { error: sbErr } = await supabase
             .from('device_tokens')
             .upsert({
-              user_id: cleanUser,
-              fcm_token: cleanToken,
-              platform: cleanPlatform,
-              updated_at: new Date().toISOString()
-            }, { onConflict: 'fcm_token' });
+              user_id: safeUserId,
+              token: cleanToken
+            }, { onConflict: 'token' });
+
+          if (sbErr && (sbErr.code === '42703' || sbErr.code === 'PGRST204' || sbErr.message?.includes('token'))) {
+            await supabase
+              .from('device_tokens')
+              .upsert({
+                user_id: safeUserId,
+                fcm_token: cleanToken
+              }, { onConflict: 'fcm_token' });
+          }
         } catch (sbErr: any) {
           console.warn('[Notifications] Supabase token upsert warning:', sbErr?.message);
         }

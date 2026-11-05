@@ -1,10 +1,6 @@
 import { prisma } from './prisma.js';
 import { getFirebaseMessaging } from './firebaseAdmin.js';
-import { createClient } from '@supabase/supabase-js';
-
-const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://hexxbopfvbuliakufejj.supabase.co';
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhleHhib3BmdmJ1bGlha3VmZWpqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMyMzA1MjYsImV4cCI6MjEwODgwNjUyNn0.-JG3tJo4PJrxtaHI9MC9fXQKR1AZ60GY5b-OJOFNSZo';
-const supabase = createClient(supabaseUrl, supabaseKey);
+import { supabaseAdmin } from './supabaseAdmin.js';
 
 /**
  * Resolves a full absolute URL for push notifications payload (FCM).
@@ -83,76 +79,98 @@ export async function broadcastNotification({
 
   let savedNotification: any = null;
 
-  // 1. Prisma / Neon database persistence
+  // 1. Mandatory Supabase persistence (Single Source of Truth)
   try {
-    savedNotification = await (prisma as any).notification.create({
-      data: {
-        title: cleanTitle,
-        body: cleanBody,
-        target_url: cleanTargetUrl,
-        sender_role: senderRole,
-        sender_name: senderName,
-        metadata: metadata || {}
-      }
-    });
-  } catch (prismaErr) {
-    console.warn('[Broadcast] Prisma save warning:', prismaErr);
-  }
+    const payloadToInsert: any = {
+      title: cleanTitle,
+      body: cleanBody,
+      target_url: cleanTargetUrl,
+      sender_role: senderRole,
+      sender_name: senderName
+    };
 
-  // 2. Supabase persistence (triggers Supabase Realtime in-app bell instantly)
-  try {
-    const { data: sbData, error: sbErr } = await supabase
+    let { data: sbData, error: sbErr } = await supabaseAdmin
       .from('notifications')
-      .insert({
-        title: cleanTitle,
-        body: cleanBody,
-        target_url: cleanTargetUrl,
-        sender_role: senderRole,
-        sender_name: senderName,
-        metadata: metadata || {}
-      })
-      .select()
+      .insert(payloadToInsert)
+      .select('*')
       .single();
 
-    if (sbErr) {
-      console.warn('[Broadcast] Supabase Realtime insert warning:', sbErr.message);
-    } else if (!savedNotification && sbData) {
-      savedNotification = sbData;
+    // In case target_url, sender_role, or sender_name columns are not yet in Supabase schema cache
+    if (sbErr && (sbErr.code === 'PGRST204' || sbErr.message?.includes('column') || sbErr.code === '42703')) {
+      console.warn('[Broadcast] Schema column mismatch on notifications table, retrying with core columns:', sbErr.message);
+      const corePayload: any = {
+        title: cleanTitle,
+        body: cleanBody
+      };
+      const retry = await supabaseAdmin
+        .from('notifications')
+        .insert(corePayload)
+        .select('*')
+        .single();
+      sbData = retry.data;
+      sbErr = retry.error;
     }
-  } catch (sbEx) {
-    console.warn('[Broadcast] Supabase insert exception:', sbEx);
+
+    if (sbErr) {
+      console.error('[Broadcast] Failed to insert notification in Supabase:', sbErr.message);
+    } else if (sbData) {
+      savedNotification = sbData;
+      // Realtime Broadcast
+      try {
+        await supabaseAdmin.channel('realtime_public_notifications').send({
+          type: 'broadcast',
+          event: 'NOTIFICATION_UPDATED',
+          payload: sbData
+        });
+      } catch (bcErr) {
+        console.warn('[Broadcast] Realtime channel broadcast warning:', bcErr);
+      }
+    }
+  } catch (sbEx: any) {
+    console.error('[Broadcast] Exception saving notification in Supabase:', sbEx?.message || sbEx);
   }
 
-  // 3. Gather all FCM Device Tokens (from both Prisma and Supabase)
-  const allTokens: any[] = [];
+  // 2. Gather and Strictly Deduplicate Device Tokens
+  const rawTokens: string[] = [];
+
+  try {
+    const { data: sbTokens, error: tokenErr } = await supabaseAdmin
+      .from('device_tokens')
+      .select('*');
+
+    if (sbTokens && Array.isArray(sbTokens)) {
+      for (const t of sbTokens) {
+        const val = (t.token || t.fcm_token || t.device_token || '').trim();
+        if (val && val.length > 20) {
+          rawTokens.push(val);
+        }
+      }
+    }
+    if (tokenErr) {
+      console.warn('[Broadcast] Supabase device_tokens query warning:', tokenErr.message);
+    }
+  } catch (err: any) {
+    console.warn('[Broadcast] Could not query Supabase device tokens:', err?.message || err);
+  }
 
   try {
     const dbTokens = await (prisma as any).deviceToken.findMany({
       select: { fcm_token: true }
     });
     if (dbTokens && Array.isArray(dbTokens)) {
-      allTokens.push(...dbTokens);
+      for (const t of dbTokens) {
+        const val = (t.fcm_token || '').trim();
+        if (val && val.length > 20) {
+          rawTokens.push(val);
+        }
+      }
     }
-  } catch (e) {
-    console.warn('[Broadcast] Could not query Prisma device tokens:', e);
-  }
+  } catch (_) {}
 
-  try {
-    const { data: sbTokens } = await supabase
-      .from('device_tokens')
-      .select('fcm_token');
-    if (sbTokens && Array.isArray(sbTokens)) {
-      allTokens.push(...sbTokens);
-    }
-  } catch (e) {
-    console.warn('[Broadcast] Could not query Supabase device tokens:', e);
-  }
+  // Strict Deduplication using Set (prevents duplicate push notifications on lock screen)
+  const uniqueTokens = Array.from(new Set(rawTokens.map(t => t.trim()))).filter(t => Boolean(t) && t.length > 20);
 
-  // Deduplicate tokens using Set to strictly prevent duplicate push deliveries
-  const uniqueTokens = [...new Set(allTokens.map(t => (t.fcm_token || t.token || t || '').trim()))]
-    .filter(t => Boolean(t) && t.length > 20);
-
-  console.log(`[Broadcast] Total raw tokens: ${allTokens.length}, Unique device tokens: ${uniqueTokens.length}`);
+  console.log(`[Broadcast] Total raw tokens: ${rawTokens.length}, Unique device tokens: ${uniqueTokens.length}`);
 
   // 4. Send FCM Push Notifications via Firebase Admin SDK
   const messaging = getFirebaseMessaging();
@@ -232,7 +250,14 @@ export async function broadcastNotification({
       } catch (_) {}
 
       try {
-        await supabase
+        await supabaseAdmin
+          .from('device_tokens')
+          .delete()
+          .in('token', staleTokens);
+      } catch (_) {}
+
+      try {
+        await supabaseAdmin
           .from('device_tokens')
           .delete()
           .in('fcm_token', staleTokens);

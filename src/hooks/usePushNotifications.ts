@@ -39,38 +39,39 @@ export function usePushNotifications(userId?: string | null, onNotificationRecei
     if (!cleanToken) return;
 
     const platform = typeof navigator !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ? 'mobile' : 'web';
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(uId || '');
+    const safeUserId = isUuid ? uId : null;
 
     // 1. Save in Supabase with explicit upsert deduplication on token
     try {
-      const { error: sbError } = await supabase
+      let { error: sbError } = await supabase
         .from('device_tokens')
         .upsert(
           {
-            user_id: uId,
-            fcm_token: cleanToken,
-            platform,
-            updated_at: new Date().toISOString()
+            user_id: safeUserId,
+            token: cleanToken
           },
-          { onConflict: 'fcm_token' }
+          { onConflict: 'token' }
         );
 
+      if (sbError && (sbError.code === '42703' || sbError.code === 'PGRST204' || sbError.message?.includes('token'))) {
+        // Fallback: in case column is named 'fcm_token' in some migrations
+        const retryRes = await supabase
+          .from('device_tokens')
+          .upsert(
+            {
+              user_id: safeUserId,
+              fcm_token: cleanToken,
+              platform,
+              updated_at: new Date().toISOString()
+            },
+            { onConflict: 'fcm_token' }
+          );
+        sbError = retryRes.error;
+      }
+
       if (sbError) {
-        // Fallback: in case column is named 'token' in some migrations
-        if (sbError.message?.includes('fcm_token') || sbError.code === '42703') {
-          await supabase
-            .from('device_tokens')
-            .upsert(
-              {
-                user_id: uId,
-                token: cleanToken,
-                platform,
-                updated_at: new Date().toISOString()
-              },
-              { onConflict: 'token' }
-            );
-        } else {
-          console.warn('[PushNotifications] Supabase save warn:', sbError.message);
-        }
+        console.warn('[PushNotifications] Supabase save warn:', sbError.message);
       } else {
         console.log('[PushNotifications] Token saved to Supabase successfully via upsert.');
       }

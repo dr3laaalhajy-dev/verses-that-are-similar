@@ -538,6 +538,7 @@ export const NotificationAdmin: React.FC<NotificationAdminProps> = ({
 
   const handleSendNotification = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSending) return;
 
     if (!title.trim() || !body.trim()) {
       setResultMessage({
@@ -615,13 +616,21 @@ export const NotificationAdmin: React.FC<NotificationAdminProps> = ({
       } else {
         // Fallback: If API had an issue, directly try inserting in Supabase for in-app realtime
         try {
-          const { error: sbErr } = await supabase.from('notifications').insert({
+          let { error: sbErr } = await supabase.from('notifications').insert({
             title: title.trim(),
             body: body.trim(),
             target_url: targetUrl.trim() || null,
             sender_role: isFounder ? 'FOUNDER' : 'CO_FOUNDER',
             sender_name: isFounder ? 'المؤسس' : 'مساعد المؤسس'
           });
+
+          if (sbErr && (sbErr.code === 'PGRST204' || sbErr.message?.includes('column') || sbErr.code === '42703')) {
+            const retryRes = await supabase.from('notifications').insert({
+              title: title.trim(),
+              body: body.trim()
+            });
+            sbErr = retryRes.error;
+          }
 
           if (!sbErr) {
             setResultMessage({
