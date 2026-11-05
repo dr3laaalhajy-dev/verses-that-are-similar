@@ -11,11 +11,116 @@ export interface NotificationItem {
   title: string;
   body: string;
   target_url?: string | null;
+  action_url?: string | null;
+  route?: string | null;
+  type?: string | null;
   sender_role?: string;
   sender_name?: string;
+  metadata?: any;
   created_at: string;
   updated_at?: string;
 }
+
+/**
+ * Helper to dynamically extract or infer the destination route from notification fields or content.
+ * Handles specific Adhkar destinations (Morning / Evening / etc.) even if the notification only had generic '/adhkar' or no route.
+ */
+export const getNotificationTargetRoute = (item: NotificationItem): string | null => {
+  // 1. Direct explicit fields from database or metadata
+  const explicitRoute =
+    item.route ||
+    item.action_url ||
+    item.target_url ||
+    item.metadata?.route ||
+    item.metadata?.action_url ||
+    item.metadata?.target_url ||
+    null;
+
+  const titleText = (item.title || '').trim();
+  const bodyText = (item.body || '').trim();
+  const typeText = (item.type || item.metadata?.type || '').trim();
+  const fullContent = `${titleText} ${bodyText} ${typeText}`.toLowerCase();
+
+  // If an explicit route exists
+  if (explicitRoute && typeof explicitRoute === 'string' && explicitRoute.trim()) {
+    const trimmed = explicitRoute.trim();
+
+    // Check external URL
+    if (/^https?:\/\//i.test(trimmed)) {
+      return trimmed;
+    }
+
+    // If explicit route already targets a specific sub-adhkar category:
+    if (
+      trimmed.includes('/morning') ||
+      trimmed.includes('/evening') ||
+      trimmed.includes('category=') ||
+      trimmed.includes('type=')
+    ) {
+      return trimmed;
+    }
+
+    // If explicit route is a generic adhkar route (/adhkar, /library/adhkar, etc.)
+    // Inspect title/body to determine whether it's Morning or Evening Adhkar
+    if (
+      trimmed === '/adhkar' ||
+      trimmed === '/library/adhkar' ||
+      trimmed === 'adhkar' ||
+      trimmed === '/adhkar/' ||
+      trimmed === '/library/adhkar/'
+    ) {
+      if (fullContent.includes('صباح') || fullContent.includes('morning')) {
+        return '/library/adhkar/morning';
+      }
+      if (fullContent.includes('مساء') || fullContent.includes('evening')) {
+        return '/library/adhkar/evening';
+      }
+      if (fullContent.includes('نوم') || fullContent.includes('sleep')) {
+        return '/library/adhkar/hisn_2';
+      }
+      if (fullContent.includes('استيقاظ') || fullContent.includes('waking')) {
+        return '/library/adhkar/hisn_3';
+      }
+      if (fullContent.includes('بعد الصلاة') || fullContent.includes('الصلاة')) {
+        return '/library/adhkar/hisn_27';
+      }
+      return '/library/adhkar';
+    }
+
+    return trimmed;
+  }
+
+  // 2. If no explicit route field in database, infer from title and content
+  if (fullContent.includes('أذكار الصباح') || fullContent.includes('اذكار الصباح') || (fullContent.includes('صباح') && fullContent.includes('أذكار'))) {
+    return '/library/adhkar/morning';
+  }
+  if (fullContent.includes('أذكار المساء') || fullContent.includes('اذكار المساء') || (fullContent.includes('مساء') && fullContent.includes('أذكار'))) {
+    return '/library/adhkar/evening';
+  }
+  if (fullContent.includes('أذكار النوم') || fullContent.includes('اذكار النوم')) {
+    return '/library/adhkar/hisn_2';
+  }
+  if (fullContent.includes('أذكار الاستيقاظ') || fullContent.includes('اذكار الاستيقاظ')) {
+    return '/library/adhkar/hisn_3';
+  }
+  if (fullContent.includes('أذكار بعد الصلاة') || fullContent.includes('أذكار الصلاة')) {
+    return '/library/adhkar/hisn_27';
+  }
+  if (fullContent.includes('أذكار') || fullContent.includes('اذكار') || fullContent.includes('حصن المسلم')) {
+    return '/library/adhkar';
+  }
+  if (fullContent.includes('مصحف') || fullContent.includes('القرآن الكريم') || fullContent.includes('سورة')) {
+    return '/mushaf';
+  }
+  if (fullContent.includes('حديث') || fullContent.includes('أحاديث') || fullContent.includes('النووية')) {
+    return '/hadith';
+  }
+  if (fullContent.includes('متصدرين') || fullContent.includes('لوحة الشرف') || fullContent.includes('الترتيب')) {
+    return '/leaderboard';
+  }
+
+  return null;
+};
 
 export interface NotificationBellProps {
   darkMode?: boolean;
@@ -155,8 +260,12 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
   };
 
   // 2. Individual Read & Deep Link: Click a notification to mark as read and navigate
+  const closeModal = () => {
+    setIsOpen(false);
+  };
+
   const handleItemClick = (item: NotificationItem) => {
-    // 1. Mark as read
+    // 1. Mark as read immediately
     if (isItemUnread(item)) {
       const nowIso = new Date().toISOString();
       setReadMap(prev => {
@@ -171,64 +280,92 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
       setUnreadCount(prev => Math.max(0, prev - 1));
     }
 
-    // 2. Action URL Navigation
-    if (item.target_url && item.target_url.trim()) {
-      setIsOpen(false);
-      const target = item.target_url.trim();
+    // 2. Extract or infer dynamic destination route
+    const target = getNotificationTargetRoute(item);
 
-      // Check external URL
-      if (/^https?:\/\//i.test(target)) {
-        window.open(target, '_blank', 'noopener,noreferrer');
+    // 3. Immediately close modal prior to navigation to prevent modal lingering over Adhkar/target view
+    closeModal();
+
+    if (!target) return;
+
+    // Check external URL
+    if (/^https?:\/\//i.test(target)) {
+      window.open(target, '_blank', 'noopener,noreferrer');
+      return;
+    }
+
+    // Broadcast deep link event (e.g. for Mushaf listener or custom components)
+    try {
+      window.postMessage({ type: 'DEEP_LINK_NAVIGATE', url: target }, '*');
+    } catch {}
+
+    // Internal app navigation
+    try {
+      // Adhkar route with direct category targeting (Morning / Evening / etc.)
+      if (target.includes('/adhkar') || target.includes('adhkar')) {
+        let categoryId: string | null = null;
+        if (target.includes('morning') || target.includes('sabah')) {
+          categoryId = 'morning';
+        } else if (target.includes('evening') || target.includes('masaa')) {
+          categoryId = 'evening';
+        } else if (target.includes('hisn_2') || target.includes('sleep')) {
+          categoryId = 'hisn_2';
+        } else if (target.includes('hisn_3') || target.includes('waking')) {
+          categoryId = 'hisn_3';
+        } else if (target.includes('hisn_27') || target.includes('prayer')) {
+          categoryId = 'hisn_27';
+        }
+
+        if (categoryId && app.setSelectedAdhkarCategoryId) {
+          app.setSelectedAdhkarCategoryId(categoryId);
+        }
+        if (app.setView) {
+          app.setView('adhkar');
+        }
+        router.push(target);
         return;
       }
 
-      // Broadcast deep link event (e.g. for Mushaf listener or custom components)
-      try {
-        window.postMessage({ type: 'DEEP_LINK_NAVIGATE', url: target }, '*');
-      } catch {}
-
-      // Internal app navigation
-      try {
-        if (target.includes('/mushaf') || target.includes('page=')) {
-          try {
-            const urlObj = new URL(target, window.location.origin);
-            const pageParam = urlObj.searchParams.get('page');
-            if (pageParam && app.setCurrentPage) {
-              const pageNum = parseInt(pageParam, 10);
-              if (!isNaN(pageNum) && pageNum >= 1 && pageNum <= 604) {
-                app.setCurrentPage(pageNum);
-              }
+      // Mushaf route
+      if (target.includes('/mushaf') || target.includes('page=')) {
+        try {
+          const urlObj = new URL(target, window.location.origin);
+          const pageParam = urlObj.searchParams.get('page');
+          if (pageParam && app.setCurrentPage) {
+            const pageNum = parseInt(pageParam, 10);
+            if (!isNaN(pageNum) && pageNum >= 1 && pageNum <= 604) {
+              app.setCurrentPage(pageNum);
             }
-          } catch {}
-          if (app.setIsPageModeActive) app.setIsPageModeActive(true);
-          if (app.setView) app.setView('mushaf');
-          return;
-        }
-
-        if (target.includes('/adhkar') || target.includes('adhkar')) {
-          router.push(target);
-          return;
-        }
-
-        const cleanPath = target.replace(/^\//, '').split('?')[0].split('#')[0];
-
-        if (cleanPath === 'leaderboard' || cleanPath === 'scores') {
-          if (app.setShowScores) app.setShowScores(true);
-          return;
-        }
-
-        if (cleanPath === 'settings') {
-          if (app.setView) app.setView('settings');
-          else if (app.setShowSettings) app.setShowSettings(true);
-          return;
-        }
-
-        if (app.setView) {
-          app.setView(cleanPath as any);
-        }
-      } catch (err) {
-        console.warn('[NotificationBell] Navigation error:', err);
+          }
+        } catch {}
+        if (app.setIsPageModeActive) app.setIsPageModeActive(true);
+        if (app.setView) app.setView('mushaf');
+        router.push(target);
+        return;
       }
+
+      // Other internal views
+      const cleanPath = target.replace(/^\//, '').split('?')[0].split('#')[0];
+
+      if (cleanPath === 'leaderboard' || cleanPath === 'scores') {
+        if (app.setShowScores) app.setShowScores(true);
+        router.push(target);
+        return;
+      }
+
+      if (cleanPath === 'settings') {
+        if (app.setView) app.setView('settings');
+        else if (app.setShowSettings) app.setShowSettings(true);
+        router.push(target);
+        return;
+      }
+
+      if (app.setView) {
+        app.setView(cleanPath as any);
+      }
+      router.push(target);
+    } catch (err) {
+      console.warn('[NotificationBell] Navigation error:', err);
     }
   };
 
@@ -490,6 +627,8 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
               ) : (
                 notifications.map((item) => {
                   const unread = isItemUnread(item);
+                  const targetRoute = getNotificationTargetRoute(item);
+
                   return (
                     <div
                       key={item.id}
@@ -559,14 +698,19 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
                             )}
                           </div>
 
-                          {item.target_url && (
-                            <span
-                              className="flex items-center gap-0.5 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 group-hover:-translate-x-1 transition-transform"
-                              title="انقر للانتقال إلى الرابط"
+                          {targetRoute && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleItemClick(item);
+                              }}
+                              className="flex items-center gap-0.5 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 group-hover:-translate-x-1 transition-transform cursor-pointer"
+                              title={`فتح: ${targetRoute}`}
                             >
                               <span>فتح</span>
                               <ChevronLeft className="w-3.5 h-3.5" />
-                            </span>
+                            </button>
                           )}
                         </div>
                       </div>
