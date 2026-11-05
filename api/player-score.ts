@@ -1,9 +1,12 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { prisma } from './_lib/prisma.js'
+import { handleCors } from './_lib/cors.js'
 import { getOrGenerateUniquePlayerId } from './_lib/uniquePlayerId.js'
 import { compareLeaderboardUsers, LeaderboardUser } from './_lib/ranking.js'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (handleCors(req, res)) return;
+
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
 
   // Handle GET request to retrieve player stats or full leaderboard

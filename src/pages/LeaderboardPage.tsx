@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { motion } from "framer-motion";
 import { Trophy, RotateCcw, Users, Sparkles } from "lucide-react";
 
@@ -32,6 +32,12 @@ export const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
   equippedTitle,
   onOpenPlayerProfile
 }) => {
+  // Requirement 2: Unconditionally fetch leaderboard immediately on mount for all visitors
+  // Operates independently of user session or login state
+  useEffect(() => {
+    syncLeaderboard();
+  }, [syncLeaderboard]);
+
   return (
                   <motion.div
                     key="scores"
@@ -128,9 +134,12 @@ export const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
                     ) : (
                       <div className="space-y-2">
                         {leaderboard.slice(0, 10).map((player: any, index) => {
-                          const isCurrentPlayer = (playerName && player.name)
-                            ? player.name.trim().toLowerCase() === playerName.trim().toLowerCase()
-                            : false;
+                          // Safe Current User Highlight: strictly false if playerName is null/empty
+                          const isCurrentPlayer = Boolean(
+                            playerName &&
+                            player?.name &&
+                            player.name.trim().toLowerCase() === playerName.trim().toLowerCase()
+                          );
 
                           const playerTotalPoints = player.totalPoints ?? player.points ?? 0;
                           const playerTrophies = player.trophiesCount ?? player.cups ?? 0;
@@ -138,11 +147,11 @@ export const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
 
                           // INDIVIDUAL PLAYER ACHIEVEMENT LOGIC (Global visibility)
                           const getPlayerAchievement = (p: any) => {
-                            if (p.activeFrame === 'seerah' || p.activeFrame === 'general') return p.activeFrame;
-                            if (p.activeFrame === 'none' || p.activeFrame === null || p.activeFrame === '') return 'none';
+                            if (p?.activeFrame === 'seerah' || p?.activeFrame === 'general') return p.activeFrame;
+                            if (p?.activeFrame === 'none' || p?.activeFrame === null || p?.activeFrame === '') return 'none';
                             // Only fallback to completed flags if activeFrame is strictly undefined
-                            if (p.activeFrame === undefined && p.seerahCompleted) return 'seerah';
-                            if (p.activeFrame === undefined && p.generalCompleted) return 'general';
+                            if (p?.activeFrame === undefined && p?.seerahCompleted) return 'seerah';
+                            if (p?.activeFrame === undefined && p?.generalCompleted) return 'general';
                             return 'none';
                           };
 
@@ -150,7 +159,7 @@ export const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
                           const achievement = isCurrentPlayer
                             ? (userAchievement && userAchievement !== 'none' ? userAchievement : 'none')
                             : getPlayerAchievement(player);
-                          const style = achievementStyles[achievement];
+                          const style = (achievementStyles && achievementStyles[achievement]) || { className: '' };
 
                           // Decoration visibility (solely determined by selected frame: none or active frame)
                           const isPlayerElite = achievement !== 'none';
@@ -215,14 +224,14 @@ export const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
                                     ) : achievement === 'general' ? (
                                       <div className="absolute -inset-1 rounded-full pointer-events-none z-20 bg-[url('/golden_general_achievement_frame.png')] bg-center bg-no-repeat bg-contain scale-110" />
                                     ) : (
-                                      <div className={`absolute -inset-0.5 rounded-full pointer-events-none z-0 ${style.className}`} />
+                                      <div className={`absolute -inset-0.5 rounded-full pointer-events-none z-0 ${style?.className || ''}`} />
                                     )
                                   )}
 
                                   {/* Badge Icon */}
-                                  {isPlayerElite && (
+                                  {isPlayerElite && style?.icon && (
                                     <div className="absolute -bottom-1 -left-1 z-30 flex h-3.5 w-3.5 sm:h-4 sm:w-4 items-center justify-center bg-transparent drop-shadow">
-                                      {style.icon.startsWith('/') ? (
+                                      {typeof style.icon === 'string' && style.icon.startsWith('/') ? (
                                         <img src={style.icon} className="w-full h-full object-contain" alt="Badge" />
                                       ) : (
                                         <div className="flex items-center justify-center text-[8px] w-full h-full">

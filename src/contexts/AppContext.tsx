@@ -4434,13 +4434,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (playerName) params.append('name', playerName);
       if (playerUsername) params.append('username', playerUsername);
 
-      const response = await fetch(`/api/leaderboard?${params.toString()}`, {
-        cache: 'no-store',
-        headers: {
-          'Pragma': 'no-cache',
-          'Cache-Control': 'no-cache'
+      // Fetch public leaderboard: Accessible to all visitors without requiring active session or login
+      let response: Response;
+      try {
+        response = await fetch(`/api/player-score?action=leaderboard&${params.toString()}`, {
+          cache: 'no-store',
+          headers: {
+            'Pragma': 'no-cache',
+            'Cache-Control': 'no-cache'
+          }
+        });
+        if (!response.ok) {
+          response = await fetch(`/api/leaderboard?${params.toString()}`, {
+            cache: 'no-store',
+            headers: {
+              'Pragma': 'no-cache',
+              'Cache-Control': 'no-cache'
+            }
+          });
         }
-      });
+      } catch {
+        response = await fetch(`/api/leaderboard?${params.toString()}`, {
+          cache: 'no-store',
+          headers: {
+            'Pragma': 'no-cache',
+            'Cache-Control': 'no-cache'
+          }
+        });
+      }
+
       if (!response.ok) {
         const text = await response.text();
         throw new Error(`Leaderboard sync failed: ${text.substring(0, 100)}`);
