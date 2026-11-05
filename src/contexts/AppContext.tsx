@@ -4698,7 +4698,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [refreshUserProfile]);
 
-  const handlePlayerLogout = useCallback(() => {
+  const handlePlayerLogout = useCallback(async () => {
     try {
       setPlayerName(null);
       setPlayerUsername(null);
@@ -4707,7 +4707,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setIsNameDecorated(false);
       setShowProfileDecoration(false);
       setUserCertificates([]);
+      setPendingFriendRequestsCount(0);
       friendsRealtimeService.stopPresence();
+
+      try {
+        await supabase.auth.signOut();
+      } catch (authErr) {
+        console.error('Supabase auth signOut error:', authErr);
+      }
 
       localStorage.removeItem('quran_player_name');
       localStorage.removeItem('quran_player_username');

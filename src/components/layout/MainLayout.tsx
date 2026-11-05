@@ -33,14 +33,20 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
 
   // Fetch pending friend requests from Supabase & backend API
   const fetchPendingFriendRequests = useCallback(async () => {
-    const viewerId = app.playerId || app.uniquePlayerId || app.playerUsername || app.playerName;
-    if (!viewerId) {
+    // 2. حماية الاستعلام بشرط الجلسة والمستخدم (Session Check)
+    const user = app.playerName || app.playerUsername || app.playerId;
+    const session = user;
+    if (!user || !session) {
       setPendingFriendRequestsCount(0);
       if (app.setPendingFriendRequestsCount) app.setPendingFriendRequestsCount(0);
       return;
     }
 
-    // 1. Supabase Query: Query friendships where current user is the receiver/addressee and status is pending
+    const viewerId = app.playerId || app.uniquePlayerId || app.playerUsername || app.playerName;
+    if (!viewerId) return;
+
+    // 3. عزل الأخطاء (Safe Try-Catch)
+    // 1. استعلام Supabase: التحقق من طلبات الصداقة المعلقة
     try {
       const { count, data, error } = await supabase
         .from('friendships')
@@ -48,14 +54,17 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
         .or(`addresseeId.eq.${viewerId},receiver_id.eq.${viewerId},addressee_id.eq.${viewerId}`)
         .in('status', ['pending', 'PENDING']);
 
-      if (!error && (typeof count === 'number' || Array.isArray(data))) {
+      if (error) {
+        // تسجيل الخطأ بهدوء في الكونسول دون رمي استثناء قد يعطل تسجيل الخروج أو باقي دوال التطبيق
+        console.error('[Friendships] Supabase query error:', error.message || error);
+      } else if (typeof count === 'number' || Array.isArray(data)) {
         const total = typeof count === 'number' ? count : (Array.isArray(data) ? (data as any[]).length : 0);
         setPendingFriendRequestsCount(total);
         if (app.setPendingFriendRequestsCount) app.setPendingFriendRequestsCount(total);
         return;
       }
-    } catch {
-      // Fallback silently to API
+    } catch (err) {
+      console.error('[Friendships] Safe catch error:', err);
     }
 
     // 2. Primary / Fallback API: Fetch from backend API (/api/friends?action=list)
@@ -68,36 +77,50 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
         if (app.setPendingFriendRequestsCount) app.setPendingFriendRequestsCount(incoming);
       }
     } catch (e) {
-      console.warn('[MainLayout] Error fetching pending friend requests:', e);
+      console.error('[Friendships] Safe catch - API fetch error:', e);
     }
   }, [app.playerId, app.uniquePlayerId, app.playerUsername, app.playerName, app.setPendingFriendRequestsCount]);
 
   useEffect(() => {
-    if (!app.playerName) return;
+    if (!app.playerName) {
+      setPendingFriendRequestsCount(0);
+      return;
+    }
 
     fetchPendingFriendRequests();
 
     // Subscribe to Supabase Realtime updates on 'friendships'
-    const channel = supabase
-      .channel('realtime_friendships_badge')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'friendships' },
-        () => {
-          fetchPendingFriendRequests();
-        }
-      )
-      .on(
-        'broadcast',
-        { event: 'FRIEND_REQUEST_UPDATED' },
-        () => {
-          fetchPendingFriendRequests();
-        }
-      )
-      .subscribe();
+    let channel: any = null;
+    try {
+      channel = supabase
+        .channel('realtime_friendships_badge')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'friendships' },
+          () => {
+            fetchPendingFriendRequests();
+          }
+        )
+        .on(
+          'broadcast',
+          { event: 'FRIEND_REQUEST_UPDATED' },
+          () => {
+            fetchPendingFriendRequests();
+          }
+        )
+        .subscribe();
+    } catch (err) {
+      console.error('[Friendships] Realtime subscription error:', err);
+    }
 
     return () => {
-      supabase.removeChannel(channel);
+      if (channel) {
+        try {
+          supabase.removeChannel(channel);
+        } catch (e) {
+          console.error('[Friendships] Remove channel error:', e);
+        }
+      }
     };
   }, [app.playerName, fetchPendingFriendRequests]);
 
