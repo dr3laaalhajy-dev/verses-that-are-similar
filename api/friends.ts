@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { prisma } from './_lib/prisma.js';
 import { handleCors } from './_lib/cors.js';
 import { getOrGenerateUniquePlayerId } from './_lib/uniquePlayerId.js';
+import { supabaseAdmin } from './_lib/supabaseAdmin.js';
 
 // Surah metadata lookup helper for Quran page (1-604)
 const SURAH_PAGES: Array<{ number: number; name: string; startPage: number; endPage: number }> = [
@@ -130,31 +130,40 @@ function getSurahFromPage(page: number): string {
 async function resolvePlayer(identifier?: string | number): Promise<any | null> {
   if (!identifier) return null;
   const str = String(identifier).trim();
+  if (!str || str === 'undefined' || str === 'null') return null;
+
   const cleanU = str.replace(/^@+/, '');
   const numId = Number(str);
 
-  const player = await prisma.player.findFirst({
-    where: {
-      OR: [
-        { uniquePlayerId: str.toUpperCase() },
-        { username: cleanU },
-        { username: '@' + cleanU },
-        { name: { equals: str, mode: 'insensitive' as const } },
-        ...(Number.isInteger(numId) && numId > 0 ? [{ id: numId }] : [])
-      ]
-    }
-  });
-
-  if (player && !player.uniquePlayerId) {
-    try {
-      const uid = await getOrGenerateUniquePlayerId(player.id);
-      player.uniquePlayerId = uid;
-    } catch (e) {
-      console.error('Error backfilling uniquePlayerId:', e);
-    }
+  // 1. By Numeric ID
+  if (Number.isInteger(numId) && numId > 0) {
+    const { data } = await supabaseAdmin.from('players').select('*').eq('id', numId).maybeSingle();
+    if (data) return data;
   }
 
-  return player;
+  // 2. By Unique Player ID (MT-XXXX)
+  if (/^MT-[A-Z0-9]{4}$/i.test(str)) {
+    const { data } = await supabaseAdmin.from('players').select('*').ilike('uniquePlayerId', str).maybeSingle();
+    if (data) return data;
+  }
+
+  // 3. By Username
+  const { data: byUser } = await supabaseAdmin
+    .from('players')
+    .select('*')
+    .or(`username.eq.${cleanU},username.eq.@${cleanU}`)
+    .maybeSingle();
+  if (byUser) return byUser;
+
+  // 4. By Name
+  const { data: byName } = await supabaseAdmin
+    .from('players')
+    .select('*')
+    .ilike('name', str)
+    .maybeSingle();
+  if (byName) return byName;
+
+  return null;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -162,12 +171,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
 
-  const method = req.method;
   const action = (req.query.action || req.body?.action || 'list') as string;
 
   try {
     // ========================================================
-    // 1. SEARCH PLAYERS (by uniquePlayerId or partial username/name)
+    // 1. SEARCH PLAYERS
     // ========================================================
     if (action === 'search') {
       const q = String(req.query.q || req.body?.q || '').trim();
@@ -179,67 +187,55 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       const cleanQ = q.replace(/^@+/, '');
-      const isExactUniqueCode = /^MT-[A-Z0-9]{4}$/i.test(q);
+      let query = supabaseAdmin
+        .from('players')
+        .select('id, name, username, uniquePlayerId, points, cups, streak, activeFrame, equippedNameColor, seerahCompleted, generalCompleted, quranCompleted')
+        .eq('isBlocked', false);
 
-      const players = await prisma.player.findMany({
-        where: {
-          AND: [
-            viewer ? { id: { not: viewer.id } } : {},
-            { isBlocked: false },
-            {
-              OR: [
-                { uniquePlayerId: { equals: q.toUpperCase(), mode: 'insensitive' } },
-                { username: { contains: cleanQ, mode: 'insensitive' } },
-                { name: { contains: q, mode: 'insensitive' } }
-              ]
-            }
-          ]
-        },
-        take: 15,
-        select: {
-          id: true,
-          name: true,
-          username: true,
-          uniquePlayerId: true,
-          points: true,
-          cups: true,
-          streak: true,
-          activeFrame: true,
-          equippedNameColor: true,
-          seerahCompleted: true,
-          generalCompleted: true,
-          quranCompleted: true
-        }
-      });
+      if (viewer) {
+        query = query.neq('id', viewer.id);
+      }
 
-      // Get friendship status for each result with the viewer
-      let friendshipMap = new Map<number, string>();
-      if (viewer && players.length > 0) {
+      if (/^MT-[A-Z0-9]{4}$/i.test(q)) {
+        query = query.ilike('uniquePlayerId', q);
+      } else {
+        query = query.or(`username.ilike.%${cleanQ}%,name.ilike.%${q}%`);
+      }
+
+      const { data: players, error } = await query.limit(15);
+      if (error) {
+        console.warn('[Friends Search] Error:', error.message);
+        return res.status(200).json({ results: [] });
+      }
+
+      // Check friendship status for each result with the viewer
+      const friendshipMap = new Map<number, string>();
+      if (viewer && players && players.length > 0) {
         const playerIds = players.map(p => p.id);
-        const friendships = await prisma.friendship.findMany({
-          where: {
-            OR: [
-              { requesterId: viewer.id, addresseeId: { in: playerIds } },
-              { requesterId: { in: playerIds }, addresseeId: viewer.id }
-            ]
-          }
-        });
+        const { data: friendships } = await supabaseAdmin
+          .from('friendships')
+          .select('*')
+          .or(`requesterId.eq.${viewer.id},addresseeId.eq.${viewer.id}`);
 
-        for (const f of friendships) {
-          if (f.status === 'ACCEPTED') {
-            const otherId = f.requesterId === viewer.id ? f.addresseeId : f.requesterId;
-            friendshipMap.set(otherId, 'ACCEPTED');
-          } else if (f.status === 'PENDING') {
-            if (f.requesterId === viewer.id) {
-              friendshipMap.set(f.addresseeId, 'PENDING_SENT');
-            } else {
-              friendshipMap.set(f.requesterId, 'PENDING_RECEIVED');
+        if (friendships) {
+          for (const f of friendships) {
+            const reqId = Number(f.requesterId || f.user_id);
+            const addId = Number(f.addresseeId || f.friend_id);
+            if (f.status === 'ACCEPTED') {
+              const otherId = reqId === viewer.id ? addId : reqId;
+              if (playerIds.includes(otherId)) friendshipMap.set(otherId, 'ACCEPTED');
+            } else if (f.status === 'PENDING') {
+              if (reqId === viewer.id && playerIds.includes(addId)) {
+                friendshipMap.set(addId, 'PENDING_SENT');
+              } else if (addId === viewer.id && playerIds.includes(reqId)) {
+                friendshipMap.set(reqId, 'PENDING_RECEIVED');
+              }
             }
           }
         }
       }
 
-      const results = players.map(p => ({
+      const results = (players || []).map(p => ({
         ...p,
         status: friendshipMap.get(p.id) || 'NONE'
       }));
@@ -264,49 +260,67 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       // Check existing relationship
-      const existing = await prisma.friendship.findFirst({
-        where: {
-          OR: [
-            { requesterId: requester.id, addresseeId: target.id },
-            { requesterId: target.id, addresseeId: requester.id }
-          ]
-        }
-      });
+      const { data: existingList } = await supabaseAdmin
+        .from('friendships')
+        .select('*')
+        .or(`and(requesterId.eq.${requester.id},addresseeId.eq.${target.id}),and(requesterId.eq.${target.id},addresseeId.eq.${requester.id})`);
+
+      const existing = existingList && existingList.length > 0 ? existingList[0] : null;
 
       if (existing) {
         if (existing.status === 'ACCEPTED') {
           return res.status(200).json({ success: true, message: 'أنتم أصدقاء بالفعل', status: 'ACCEPTED' });
         }
         if (existing.status === 'PENDING') {
+          const reqId = Number(existing.requesterId || existing.user_id);
+          const addId = Number(existing.addresseeId || existing.friend_id);
           // If the target had already sent request to me, auto-accept!
-          if (existing.requesterId === target.id && existing.addresseeId === requester.id) {
-            const accepted = await prisma.friendship.update({
-              where: { id: existing.id },
-              data: { status: 'ACCEPTED' }
-            });
+          if (reqId === target.id && addId === requester.id) {
+            const { data: accepted } = await supabaseAdmin
+              .from('friendships')
+              .update({ status: 'ACCEPTED', updated_at: new Date().toISOString() })
+              .eq('id', existing.id)
+              .select()
+              .single();
             return res.status(200).json({ success: true, message: 'تم قبول طلب الصداقة المتبادل', status: 'ACCEPTED', friendship: accepted });
           }
           return res.status(200).json({ success: true, message: 'تم إرسال الطلب مسبقاً', status: 'PENDING_SENT' });
         }
+
         // If DECLINED, reactivate
-        const updated = await prisma.friendship.update({
-          where: { id: existing.id },
-          data: {
+        const { data: updated } = await supabaseAdmin
+          .from('friendships')
+          .update({
             requesterId: requester.id,
             addresseeId: target.id,
-            status: 'PENDING'
-          }
-        });
+            user_id: String(requester.id),
+            friend_id: String(target.id),
+            status: 'PENDING',
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', existing.id)
+          .select()
+          .single();
+
         return res.status(200).json({ success: true, message: 'تم إرسال طلب الصداقة بنجاح', status: 'PENDING_SENT', friendship: updated });
       }
 
-      const created = await prisma.friendship.create({
-        data: {
+      const { data: created, error } = await supabaseAdmin
+        .from('friendships')
+        .insert({
           requesterId: requester.id,
           addresseeId: target.id,
+          user_id: String(requester.id),
+          friend_id: String(target.id),
           status: 'PENDING'
-        }
-      });
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('[Friends] Send request error:', error.message);
+        return res.status(500).json({ error: 'فشل إرسال طلب الصداقة' });
+      }
 
       return res.status(200).json({
         success: true,
@@ -329,36 +343,39 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       let friendshipRecord = null;
       if (friendshipId) {
-        friendshipRecord = await prisma.friendship.findUnique({
-          where: { id: Number(friendshipId) }
-        });
+        const { data } = await supabaseAdmin.from('friendships').select('*').eq('id', friendshipId).maybeSingle();
+        friendshipRecord = data;
       } else if (requesterId) {
         const otherPlayer = await resolvePlayer(requesterId);
         if (otherPlayer) {
-          friendshipRecord = await prisma.friendship.findFirst({
-            where: {
-              requesterId: otherPlayer.id,
-              addresseeId: viewer.id,
-              status: 'PENDING'
-            }
-          });
+          const { data } = await supabaseAdmin
+            .from('friendships')
+            .select('*')
+            .or(`and(requesterId.eq.${otherPlayer.id},addresseeId.eq.${viewer.id}),and(user_id.eq.${otherPlayer.id},friend_id.eq.${viewer.id})`)
+            .eq('status', 'PENDING')
+            .maybeSingle();
+          friendshipRecord = data;
         }
       }
 
-      if (!friendshipRecord || friendshipRecord.addresseeId !== viewer.id) {
+      const recAddressee = Number(friendshipRecord?.addresseeId || friendshipRecord?.friend_id);
+      if (!friendshipRecord || recAddressee !== viewer.id) {
         return res.status(404).json({ error: 'طلب الصداقة غير موجود أو تم معالجته بالفعل' });
       }
 
       if (response === 'ACCEPT') {
-        const updated = await prisma.friendship.update({
-          where: { id: friendshipRecord.id },
-          data: { status: 'ACCEPTED' }
-        });
+        const { data: updated } = await supabaseAdmin
+          .from('friendships')
+          .update({ status: 'ACCEPTED', updated_at: new Date().toISOString() })
+          .eq('id', friendshipRecord.id)
+          .select()
+          .single();
         return res.status(200).json({ success: true, message: 'تم قبول طلب الصداقة', status: 'ACCEPTED', friendship: updated });
       } else {
-        await prisma.friendship.delete({
-          where: { id: friendshipRecord.id }
-        });
+        await supabaseAdmin
+          .from('friendships')
+          .delete()
+          .eq('id', friendshipRecord.id);
         return res.status(200).json({ success: true, message: 'تم رفض طلب الصداقة', status: 'DECLINED' });
       }
     }
@@ -375,20 +392,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(404).json({ error: 'اللاعب غير موجود' });
       }
 
-      await prisma.friendship.deleteMany({
-        where: {
-          OR: [
-            { requesterId: viewer.id, addresseeId: friend.id },
-            { requesterId: friend.id, addresseeId: viewer.id }
-          ]
-        }
-      });
+      await supabaseAdmin
+        .from('friendships')
+        .delete()
+        .or(`and(requesterId.eq.${viewer.id},addresseeId.eq.${friend.id}),and(requesterId.eq.${friend.id},addresseeId.eq.${viewer.id}),and(user_id.eq.${viewer.id},friend_id.eq.${friend.id}),and(user_id.eq.${friend.id},friend_id.eq.${viewer.id})`);
 
       return res.status(200).json({ success: true, message: 'تمت إزالة الصداقة بنجاح' });
     }
 
     // ========================================================
-    // 5. LIST FRIENDS & PENDING REQUESTS
+    // 5. LIST FRIENDS & PENDING REQUESTS (Fully Hydrated)
     // ========================================================
     if (action === 'list') {
       const viewerId = req.query.viewerId || req.body?.viewerId;
@@ -398,74 +411,70 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(200).json({ friends: [], incomingRequests: [], outgoingRequests: [] });
       }
 
-      const friendships = await prisma.friendship.findMany({
-        where: {
-          OR: [
-            { requesterId: viewer.id },
-            { addresseeId: viewer.id }
-          ]
-        },
-        include: {
-          requester: {
-            select: {
-              id: true,
-              name: true,
-              username: true,
-              uniquePlayerId: true,
-              points: true,
-              cups: true,
-              streak: true,
-              activeFrame: true,
-              equippedNameColor: true,
-              seerahCompleted: true,
-              generalCompleted: true,
-              quranCompleted: true
-            }
-          },
-          addressee: {
-            select: {
-              id: true,
-              name: true,
-              username: true,
-              uniquePlayerId: true,
-              points: true,
-              cups: true,
-              streak: true,
-              activeFrame: true,
-              equippedNameColor: true,
-              seerahCompleted: true,
-              generalCompleted: true,
-              quranCompleted: true
-            }
-          }
-        },
-        orderBy: { createdAt: 'desc' }
-      });
+      // Query friendships where user is either side
+      const { data: friendships, error: fErr } = await supabaseAdmin
+        .from('friendships')
+        .select('*')
+        .or(`requesterId.eq.${viewer.id},addresseeId.eq.${viewer.id},user_id.eq.${viewer.id},friend_id.eq.${viewer.id}`)
+        .order('created_at', { ascending: false });
+
+      if (fErr) {
+        console.warn('[Friends List] Supabase error:', fErr.message);
+        return res.status(200).json({ friends: [], incomingRequests: [], outgoingRequests: [] });
+      }
+
+      // Collect all other player IDs to hydrate their profiles in a single query
+      const otherPlayerIds = new Set<number>();
+      for (const f of (friendships || [])) {
+        const reqId = Number(f.requesterId || f.user_id);
+        const addId = Number(f.addresseeId || f.friend_id);
+        if (reqId) otherPlayerIds.add(reqId);
+        if (addId) otherPlayerIds.add(addId);
+      }
+
+      const playerMap = new Map<number, any>();
+      if (otherPlayerIds.size > 0) {
+        const { data: players } = await supabaseAdmin
+          .from('players')
+          .select('id, name, username, uniquePlayerId, points, cups, streak, activeFrame, equippedNameColor, seerahCompleted, generalCompleted, quranCompleted, createdAt')
+          .in('id', Array.from(otherPlayerIds));
+
+        (players || []).forEach(p => playerMap.set(p.id, p));
+      }
 
       const friends: any[] = [];
       const incomingRequests: any[] = [];
       const outgoingRequests: any[] = [];
+      const seenFriendIds = new Set<number>();
 
-      for (const f of friendships) {
+      for (const f of (friendships || [])) {
+        const reqId = Number(f.requesterId || f.user_id);
+        const addId = Number(f.addresseeId || f.friend_id);
+        const requesterData = playerMap.get(reqId) || { id: reqId, name: 'لاعب' };
+        const addresseeData = playerMap.get(addId) || { id: addId, name: 'لاعب' };
+
         if (f.status === 'ACCEPTED') {
-          const friendData = f.requesterId === viewer.id ? f.addressee : f.requester;
-          friends.push({
-            ...friendData,
-            friendshipId: f.id,
-            since: f.createdAt
-          });
-        } else if (f.status === 'PENDING') {
-          if (f.addresseeId === viewer.id) {
-            incomingRequests.push({
-              ...f.requester,
+          const friendData = reqId === viewer.id ? addresseeData : requesterData;
+          if (friendData.id && !seenFriendIds.has(friendData.id) && friendData.id !== viewer.id) {
+            seenFriendIds.add(friendData.id);
+            friends.push({
+              ...friendData,
               friendshipId: f.id,
-              requestedAt: f.createdAt
+              since: f.createdAt || f.created_at
             });
-          } else {
-            outgoingRequests.push({
-              ...f.addressee,
+          }
+        } else if (f.status === 'PENDING') {
+          if (addId === viewer.id) {
+            incomingRequests.push({
+              ...requesterData,
               friendshipId: f.id,
-              requestedAt: f.createdAt
+              requestedAt: f.createdAt || f.created_at
+            });
+          } else if (reqId === viewer.id) {
+            outgoingRequests.push({
+              ...addresseeData,
+              friendshipId: f.id,
+              requestedAt: f.createdAt || f.created_at
             });
           }
         }
@@ -495,28 +504,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // Check friendship status
       let friendshipStatus = 'NONE';
-      let friendshipId: number | null = null;
+      let friendshipId: string | number | null = null;
       if (viewer && viewer.id !== target.id) {
-        const friendship = await prisma.friendship.findFirst({
-          where: {
-            OR: [
-              { requesterId: viewer.id, addresseeId: target.id },
-              { requesterId: target.id, addresseeId: viewer.id }
-            ]
-          }
-        });
+        const { data: existingFriendships } = await supabaseAdmin
+          .from('friendships')
+          .select('*')
+          .or(`and(requesterId.eq.${viewer.id},addresseeId.eq.${target.id}),and(requesterId.eq.${target.id},addresseeId.eq.${viewer.id}),and(user_id.eq.${viewer.id},friend_id.eq.${target.id}),and(user_id.eq.${target.id},friend_id.eq.${viewer.id})`)
+          .limit(1);
 
+        const friendship = existingFriendships && existingFriendships.length > 0 ? existingFriendships[0] : null;
         if (friendship) {
           friendshipId = friendship.id;
           if (friendship.status === 'ACCEPTED') {
             friendshipStatus = 'ACCEPTED';
           } else if (friendship.status === 'PENDING') {
-            friendshipStatus = friendship.requesterId === viewer.id ? 'PENDING_SENT' : 'PENDING_RECEIVED';
+            const reqId = Number(friendship.requesterId || friendship.user_id);
+            friendshipStatus = reqId === viewer.id ? 'PENDING_SENT' : 'PENDING_RECEIVED';
           }
         }
       }
 
-      // Quran Wird stats
+      // Quran Wird stats from user_wird table in Supabase
       let wirdStats = {
         hasWird: false,
         currentPage: 1,
@@ -527,36 +535,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       };
 
       try {
-        const wird = await prisma.userWird.findFirst({
-          where: {
-            OR: [
-              { user_id: String(target.id) },
-              ...(target.username ? [{ user_id: target.username }, { user_id: target.username.replace(/^@+/, '') }] : []),
-              { user_id: target.name }
-            ]
-          }
-        });
+        const uIdVariants = [
+          String(target.id),
+          target.uniquePlayerId,
+          target.username,
+          target.username ? target.username.replace(/^@+/, '') : null,
+          target.name
+        ].filter(Boolean);
 
+        const { data: wirdList } = await supabaseAdmin
+          .from('user_wird')
+          .select('*')
+          .in('user_id', uIdVariants)
+          .limit(1);
+
+        const wird = wirdList && wirdList.length > 0 ? wirdList[0] : null;
         if (wird) {
           const curPage = wird.current_page || 1;
           const percentage = Math.min(100, Math.round((curPage / 604) * 100));
           wirdStats = {
             hasWird: true,
             currentPage: curPage,
-            pagesPerDay: wird.pages_per_day,
+            pagesPerDay: wird.pages_per_day || 4,
             currentSurah: getSurahFromPage(curPage),
             completionPercentage: percentage,
-            isActive: wird.is_active
+            isActive: Boolean(wird.is_active)
           };
         }
       } catch (e) {
-        console.error('Error fetching wird stats for profile:', e);
+        console.error('[Friends Profile] Error fetching wird stats:', e);
       }
 
       return res.status(200).json({
         player: {
           id: target.id,
-          name: target.name,
+          name: target.name || 'لاعب',
           username: target.username,
           uniquePlayerId: target.uniquePlayerId,
           points: target.points || 0,
@@ -564,10 +577,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           streak: target.streak || 0,
           activeFrame: target.activeFrame,
           equippedNameColor: target.equippedNameColor,
-          seerahCompleted: target.seerahCompleted,
-          generalCompleted: target.generalCompleted,
-          quranCompleted: target.quranCompleted,
-          createdAt: target.createdAt
+          seerahCompleted: target.seerahCompleted || false,
+          generalCompleted: target.generalCompleted || false,
+          quranCompleted: target.quranCompleted || false,
+          createdAt: target.createdAt || target.created_at
         },
         wird: wirdStats,
         friendshipStatus,
@@ -582,4 +595,3 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ error: 'حدث خطأ في معالجة طلب الأصدقاء', details: error.message });
   }
 }
-

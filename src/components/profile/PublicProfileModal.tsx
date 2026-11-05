@@ -41,18 +41,63 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
     setLoading(true);
     setError(null);
     try {
-      const targetParam = targetPlayer.uniquePlayerId || targetPlayer.username || targetPlayer.name || targetPlayer.id;
-      const viewerParam = currentViewer?.uniquePlayerId || currentViewer?.username || currentViewer?.name || currentViewer?.id || '';
+      const targetParam = targetPlayer.id || targetPlayer.uniquePlayerId || targetPlayer.username || targetPlayer.name;
+      const viewerParam = currentViewer?.id || currentViewer?.uniquePlayerId || currentViewer?.username || currentViewer?.name || '';
+
+      if (!targetParam) {
+        throw new Error('بيانات اللاعب غير متوفرة');
+      }
 
       const res = await fetch(`/api/friends?action=profile&targetId=${encodeURIComponent(String(targetParam))}&viewerId=${encodeURIComponent(String(viewerParam))}`);
-      if (!res.ok) {
-        throw new Error('فشل جلب بيانات الملف الشخصي');
+      if (res.ok) {
+        const data = await res.json();
+        setProfileData(data);
+      } else {
+        console.warn('[PublicProfileModal] Profile API returned non-OK status, falling back to local data.');
+        setProfileData({
+          player: {
+            id: targetPlayer.id,
+            name: targetPlayer.name || 'لاعب',
+            username: targetPlayer.username || null,
+            uniquePlayerId: targetPlayer.uniquePlayerId || null,
+            points: (targetPlayer as any).points || 0,
+            cups: (targetPlayer as any).cups || 0,
+            streak: (targetPlayer as any).streak || 0,
+            activeFrame: (targetPlayer as any).activeFrame || null,
+            equippedNameColor: (targetPlayer as any).equippedNameColor || null,
+            seerahCompleted: (targetPlayer as any).seerahCompleted || false,
+            generalCompleted: (targetPlayer as any).generalCompleted || false,
+            quranCompleted: (targetPlayer as any).quranCompleted || false,
+            createdAt: (targetPlayer as any).createdAt || (targetPlayer as any).since || new Date().toISOString()
+          },
+          wird: null,
+          friendshipStatus: (targetPlayer as any).status || 'ACCEPTED',
+          isSelf: false
+        });
       }
-      const data = await res.json();
-      setProfileData(data);
     } catch (err: any) {
-      console.error('Error fetching public profile:', err);
-      setError(err.message || 'حدث خطأ في تحميل الملف الشخصي');
+      console.warn('Error fetching public profile, utilizing targetPlayer fallback:', err);
+      // Fallback gracefully to targetPlayer data so modal never breaks
+      setProfileData({
+        player: {
+          id: targetPlayer.id,
+          name: targetPlayer.name || 'لاعب',
+          username: targetPlayer.username || null,
+          uniquePlayerId: targetPlayer.uniquePlayerId || null,
+          points: (targetPlayer as any).points || 0,
+          cups: (targetPlayer as any).cups || 0,
+          streak: (targetPlayer as any).streak || 0,
+          activeFrame: (targetPlayer as any).activeFrame || null,
+          equippedNameColor: (targetPlayer as any).equippedNameColor || null,
+          seerahCompleted: (targetPlayer as any).seerahCompleted || false,
+          generalCompleted: (targetPlayer as any).generalCompleted || false,
+          quranCompleted: (targetPlayer as any).quranCompleted || false,
+          createdAt: (targetPlayer as any).createdAt || (targetPlayer as any).since || new Date().toISOString()
+        },
+        wird: null,
+        friendshipStatus: (targetPlayer as any).status || 'ACCEPTED',
+        isSelf: false
+      });
     } finally {
       setLoading(false);
     }
@@ -258,7 +303,7 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
                 <Loader2 className="w-8 h-8 border-brand-emerald animate-spin mx-auto text-emerald-600 mb-2" />
                 <p className="text-xs text-slate-400 font-bold">جاري تحميل إحصائيات اللاعب...</p>
               </div>
-            ) : error ? (
+            ) : error && !player ? (
               <div className="p-3 bg-red-50 dark:bg-red-950/30 text-red-600 text-xs rounded-xl text-center font-bold">
                 {error}
               </div>
