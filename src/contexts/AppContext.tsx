@@ -432,6 +432,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Friends & Profile State
   const [isFriendsModalOpen, setIsFriendsModalOpen] = useState(false);
+  const [pendingFriendRequestsCount, setPendingFriendRequestsCount] = useState<number>(0);
   const [selectedProfilePlayer, setSelectedProfilePlayer] = useState<any | null>(null);
   const [incomingRoomInvite, setIncomingRoomInvite] = useState<any | null>(null);
 
@@ -5683,6 +5684,7 @@ ${versesList}
     // Friends, Profile & Live Invites
     uniquePlayerId, setUniquePlayerId,
     isFriendsModalOpen, setIsFriendsModalOpen,
+    pendingFriendRequestsCount, setPendingFriendRequestsCount,
     selectedProfilePlayer, setSelectedProfilePlayer,
     incomingRoomInvite, setIncomingRoomInvite,
     inviteData: incomingRoomInvite, setInviteData: setIncomingRoomInvite,

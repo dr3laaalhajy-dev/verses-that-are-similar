@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Trophy, Sun, Moon, Info, Lock, ArrowRight, BookOpen, LogOut, Trash2,
@@ -12,6 +12,7 @@ import QuranZoomViewer from '../QuranZoomViewer';
 import { NotificationBell } from '../NotificationBell';
 import { Link } from '../common/Link';
 import { router } from '../../services/router';
+import { supabase } from '../../services/supabase';
 
 export interface MainLayoutProps {
   children: React.ReactNode;
@@ -19,6 +20,86 @@ export interface MainLayoutProps {
 
 export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   const app = useApp();
+
+  // State to hold the count of pending incoming friend requests
+  const [pendingFriendRequestsCount, setPendingFriendRequestsCount] = useState<number>(() => app.pendingFriendRequestsCount || 0);
+
+  // Sync state when updated via AppContext (e.g. from FriendsModal accept/reject actions)
+  useEffect(() => {
+    if (typeof app.pendingFriendRequestsCount === 'number') {
+      setPendingFriendRequestsCount(app.pendingFriendRequestsCount);
+    }
+  }, [app.pendingFriendRequestsCount]);
+
+  // Fetch pending friend requests from Supabase & backend API
+  const fetchPendingFriendRequests = useCallback(async () => {
+    const viewerId = app.playerId || app.uniquePlayerId || app.playerUsername || app.playerName;
+    if (!viewerId) {
+      setPendingFriendRequestsCount(0);
+      if (app.setPendingFriendRequestsCount) app.setPendingFriendRequestsCount(0);
+      return;
+    }
+
+    // 1. Supabase Query: Query friendships where current user is the receiver/addressee and status is pending
+    try {
+      const { count, data, error } = await supabase
+        .from('friendships')
+        .select('*', { count: 'exact' })
+        .or(`addresseeId.eq.${viewerId},receiver_id.eq.${viewerId},addressee_id.eq.${viewerId}`)
+        .in('status', ['pending', 'PENDING']);
+
+      if (!error && (typeof count === 'number' || Array.isArray(data))) {
+        const total = typeof count === 'number' ? count : (Array.isArray(data) ? (data as any[]).length : 0);
+        setPendingFriendRequestsCount(total);
+        if (app.setPendingFriendRequestsCount) app.setPendingFriendRequestsCount(total);
+        return;
+      }
+    } catch {
+      // Fallback silently to API
+    }
+
+    // 2. Primary / Fallback API: Fetch from backend API (/api/friends?action=list)
+    try {
+      const res = await fetch(`/api/friends?action=list&viewerId=${encodeURIComponent(String(viewerId))}`);
+      if (res.ok) {
+        const data = await res.json();
+        const incoming = (data.incomingRequests || []).length;
+        setPendingFriendRequestsCount(incoming);
+        if (app.setPendingFriendRequestsCount) app.setPendingFriendRequestsCount(incoming);
+      }
+    } catch (e) {
+      console.warn('[MainLayout] Error fetching pending friend requests:', e);
+    }
+  }, [app.playerId, app.uniquePlayerId, app.playerUsername, app.playerName, app.setPendingFriendRequestsCount]);
+
+  useEffect(() => {
+    if (!app.playerName) return;
+
+    fetchPendingFriendRequests();
+
+    // Subscribe to Supabase Realtime updates on 'friendships'
+    const channel = supabase
+      .channel('realtime_friendships_badge')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'friendships' },
+        () => {
+          fetchPendingFriendRequests();
+        }
+      )
+      .on(
+        'broadcast',
+        { event: 'FRIEND_REQUEST_UPDATED' },
+        () => {
+          fetchPendingFriendRequests();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [app.playerName, fetchPendingFriendRequests]);
 
   return (
     <>
@@ -105,6 +186,13 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                 >
                   <Users className="w-4 h-4 text-brand-gold dark:text-regalGold-400" />
                   <span className="hidden sm:inline">الأصدقاء</span>
+
+                  {/* Red Dot / Pending Requests Badge (Cloned from NotificationBell) */}
+                  {pendingFriendRequestsCount > 0 && (
+                    <span className="absolute -top-1 -left-1 flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-black text-white bg-red-600 rounded-full border-2 border-emerald-900 shadow-md animate-pulse">
+                      {pendingFriendRequestsCount > 9 ? '+9' : pendingFriendRequestsCount}
+                    </span>
+                  )}
                 </button>
               )}
 

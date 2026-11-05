@@ -4,6 +4,7 @@ import {
   Users, Search, UserPlus, UserCheck, X, Check, Copy, Flame,
   Trophy, Star, Clock, AlertCircle, Loader2, CheckCircle2, UserX
 } from 'lucide-react';
+import { useApp } from '../../contexts/AppContext';
 import { friendsRealtimeService } from '../../services/friendsRealtimeService';
 
 export interface FriendsModalProps {
@@ -28,6 +29,7 @@ export const FriendsModal: React.FC<FriendsModalProps> = ({
   onInviteFriendToRoom,
   isInRoomLobby = false
 }) => {
+  const app = useApp();
   const [activeTab, setActiveTab] = useState<'friends' | 'requests' | 'search'>('friends');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
@@ -84,7 +86,11 @@ export const FriendsModal: React.FC<FriendsModalProps> = ({
           isOnline: friendsRealtimeService.isPlayerOnline(f)
         }));
         setFriendsList(incomingFriends);
-        setIncomingRequests(data.incomingRequests || []);
+        const inc = data.incomingRequests || [];
+        setIncomingRequests(inc);
+        if (app.setPendingFriendRequestsCount) {
+          app.setPendingFriendRequestsCount(inc.length);
+        }
       }
     } catch (e) {
       console.error('Error fetching friends list:', e);
@@ -173,7 +179,13 @@ export const FriendsModal: React.FC<FriendsModalProps> = ({
         })
       });
       if (res.ok) {
-        setIncomingRequests(prev => prev.filter(r => (r.friendshipId || r.id) !== (request.friendshipId || request.id)));
+        setIncomingRequests(prev => {
+          const next = prev.filter(r => (r.friendshipId || r.id) !== (request.friendshipId || request.id));
+          if (app.setPendingFriendRequestsCount) {
+            app.setPendingFriendRequestsCount(next.length);
+          }
+          return next;
+        });
         if (response === 'ACCEPT') {
           fetchFriendsData();
         }
