@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowRight, Sparkles, BookOpen, Search, XCircle, ChevronDown, Check,
   ChevronLeft, ChevronRight, Settings, ZoomIn, ZoomOut, Maximize2, Minimize2, Hash, Moon, RotateCcw, X, ListFilter,
-  Clock
+  Clock, Info
 } from "lucide-react";
 import { View } from "../types/challenges";
 import { quranData } from "../services/QuranRepository";
@@ -13,6 +13,7 @@ import QuranZoomViewer from "../components/QuranZoomViewer";
 import AyahActionSheet from "../components/AyahActionSheet";
 import UserWirdModal from "../components/UserWirdModal";
 import { useApp } from "../contexts/AppContext";
+import { router } from "../services/router";
 
 // أسماء الأجزاء الثلاثين باللغة العربية
 const JUZ_NAMES_ARABIC = [
@@ -100,6 +101,16 @@ export const MushafPage: React.FC<MushafPageProps> = ({
   const [areFsControlsVisible, setAreFsControlsVisible] = useState(false);
   const fsControlsTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [isWirdModalOpen, setIsWirdModalOpen] = useState(false);
+
+  // حالة نافذة مميزات وخصائص المصحف الشريف
+  const [internalFeaturesModalOpen, setInternalFeaturesModalOpen] = useState(false);
+  const isFeaturesOpen = typeof isMushafFeaturesModalOpen === 'boolean' ? isMushafFeaturesModalOpen : internalFeaturesModalOpen;
+  const setFeaturesOpen = (val: boolean) => {
+    setInternalFeaturesModalOpen(val);
+    if (typeof setIsMushafFeaturesModalOpen === 'function') {
+      setIsMushafFeaturesModalOpen(val);
+    }
+  };
 
   // Smart Verification for Daily Mystery Gift: Active Reading Time Tracker
   useEffect(() => {
@@ -211,6 +222,7 @@ export const MushafPage: React.FC<MushafPageProps> = ({
     } else if (app?.setView) {
       app.setView('library');
     }
+    router.replace('/library');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [setIsPageModeActive, setSelectedSurahId, setSelectedJuz, setIsSearchSubmitted, setSelectedAyah, setView, app, setMushafZoomScale]);
 
@@ -405,7 +417,7 @@ export const MushafPage: React.FC<MushafPageProps> = ({
             }`}
           >
             <div className="flex items-center justify-between gap-3 w-full">
-              {/* اليمين: عرض "اسم السورة - الجزء" الحالي بوضوح */}
+              {/* اليمين: عرض "اسم السورة - الجزء" الحالي بوضوح مع أيقونة مميزات المصحف */}
               <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
                 <button
                   type="button"
@@ -433,6 +445,17 @@ export const MushafPage: React.FC<MushafPageProps> = ({
                 >
                   <span>الجزء {pageInfo.juzName}</span>
                   <ChevronDown className="w-3 h-3 opacity-60 shrink-0" />
+                </button>
+
+                {/* أيقونة مميزات وخصائص المصحف الشريف */}
+                <button
+                  type="button"
+                  onClick={() => setFeaturesOpen(true)}
+                  className="p-1 sm:p-1.5 rounded-xl text-amber-500 dark:text-amber-400 hover:text-amber-600 dark:hover:text-amber-300 hover:bg-amber-500/10 active:scale-90 transition-all cursor-pointer shrink-0 flex items-center justify-center border border-amber-500/20"
+                  title="مميزات وخصائص المصحف الشريف"
+                  aria-label="مميزات وخصائص المصحف الشريف"
+                >
+                  <Info className="w-4 h-4" />
                 </button>
               </div>
 
@@ -1017,43 +1040,42 @@ export const MushafPage: React.FC<MushafPageProps> = ({
 
                     {/* نافذة مميزات وخصائص المصحف الشريف العالمية */}
                     <AnimatePresence>
+                      {isFeaturesOpen && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+                          <motion.div
+                            initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                            className={`relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl p-6 md:p-8 shadow-2xl border ${
+                              librarySettings.darkMode
+                                ? 'bg-slate-900 border-slate-800 text-slate-100'
+                                : 'bg-white border-slate-200 text-slate-900'
+                            }`}
+                          >
+                            {/* رأس النافذة */}
+                            <div className="flex items-center justify-between pb-4 border-b border-slate-200 dark:border-slate-800 mb-6">
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl bg-brand-emerald text-brand-gold flex items-center justify-center shadow-md">
+                                  <BookOpen className="w-5 h-5" />
+                                </div>
+                                <div>
+                                  <h3 className="text-lg md:text-xl font-black text-brand-emerald">
+                                    مميزات وخصائص المصحف الشريف
+                                  </h3>
+                                  <p className="text-xs font-bold text-slate-400">
+                                    مصحف المدينة النبوية الشريف بالرسم العثماني • أوفلاين 100%
+                                  </p>
+                                </div>
+                              </div>
 
-                              {isMushafFeaturesModalOpen && (
-                                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-                                  <motion.div
-                                    initial={{ opacity: 0, scale: 0.95, y: 10 }}
-                                    animate={{ opacity: 1, scale: 1, y: 0 }}
-                                    exit={{ opacity: 0, scale: 0.95, y: 10 }}
-                                    className={`relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl p-6 md:p-8 shadow-2xl border ${
-                                      librarySettings.darkMode
-                                        ? 'bg-slate-900 border-slate-800 text-slate-100'
-                                        : 'bg-white border-slate-200 text-slate-900'
-                                    }`}
-                                  >
-                                    {/* رأس النافذة */}
-                                    <div className="flex items-center justify-between pb-4 border-b border-slate-200 dark:border-slate-800 mb-6">
-                                      <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 rounded-xl bg-brand-emerald text-brand-gold flex items-center justify-center shadow-md">
-                                          <BookOpen className="w-5 h-5" />
-                                        </div>
-                                        <div>
-                                          <h3 className="text-lg md:text-xl font-black text-brand-emerald">
-                                            مميزات وخصائص المصحف الشريف
-                                          </h3>
-                                          <p className="text-xs font-bold text-slate-400">
-                                            مصحف المدينة النبوية الشريف بالرسم العثماني • أوفلاين 100%
-                                          </p>
-                                        </div>
-                                      </div>
-
-                                      <button
-                                        onClick={() => setIsMushafFeaturesModalOpen(false)}
-                                        className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-                                        title="إغلاق"
-                                      >
-                                        <X className="w-5 h-5" />
-                                      </button>
-                                    </div>
+                              <button
+                                onClick={() => setFeaturesOpen(false)}
+                                className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                                title="إغلاق"
+                              >
+                                <X className="w-5 h-5" />
+                              </button>
+                            </div>
 
                                     {/* شبكة المميزات */}
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 mb-6">
@@ -1118,26 +1140,22 @@ export const MushafPage: React.FC<MushafPageProps> = ({
                                       </div>
                                     </div>
 
-                                    {/* أزرار أسفل النافذة */}
-                                    <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-800">
-                                      <button
-                                        onClick={() => setIsMushafFeaturesModalOpen(false)}
-                                        className="px-5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 font-bold text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-                                      >
-                                        إغلاق
-                                      </button>
-                                      <button
-                                        onClick={() => {
-                                          setIsMushafFeaturesModalOpen(false);
-                                          setIsPageModeActive(true);
-                                          window.scrollTo({ top: 0, behavior: 'smooth' });
-                                        }}
-                                        className="px-6 py-2.5 rounded-xl bg-brand-emerald text-white font-black text-xs hover:bg-brand-emerald/90 transition-all shadow-md active:scale-95 flex items-center gap-2 cursor-pointer"
-                                      >
-                                        <BookOpen className="w-4 h-4 text-brand-gold" />
-                                        <span>فتح المصحف الآن</span>
-                                      </button>
-                                    </div>
+                            {/* أزرار أسفل النافذة */}
+                            <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-800">
+                              <button
+                                onClick={() => setFeaturesOpen(false)}
+                                className="px-5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 font-bold text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                              >
+                                إغلاق
+                              </button>
+                              <button
+                                onClick={() => setFeaturesOpen(false)}
+                                className="px-6 py-2.5 rounded-xl bg-brand-emerald text-white font-black text-xs hover:bg-brand-emerald/90 transition-all shadow-md active:scale-95 flex items-center gap-2 cursor-pointer"
+                              >
+                                <BookOpen className="w-4 h-4 text-brand-gold" />
+                                <span>متابعة القراءة</span>
+                              </button>
+                            </div>
                                   </motion.div>
                                 </div>
                               )}

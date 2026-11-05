@@ -4,6 +4,8 @@ import { ArrowLeft } from 'lucide-react';
 import { View } from '../types/challenges';
 import { Link } from '../components/common/Link';
 import { ErrorBoundary } from '../components/common/ErrorBoundary';
+import { useApp } from '../contexts/AppContext';
+import { router } from '../services/router';
 import {
   MushafLibraryIcon,
   AdhkarLibraryIcon,
@@ -37,6 +39,24 @@ export const LibraryHubPage: React.FC<LibraryHubPageProps> = ({
   setSelectedHadith,
   systemSettings
 }) => {
+  const app = useApp();
+
+  // الانتقال المباشر لصفحات المصحف الشريف في وضع SPA كامل بدون Hard Reload
+  const handleOpenMushaf = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    setIsPageModeActive(true);
+    setSelectedSurahId(null);
+    setSelectedJuz(null);
+    setIsSearchSubmitted(false);
+    setView('mushaf');
+    if (app?.setIsPageModeActive) app.setIsPageModeActive(true);
+    if (app?.setView) app.setView('mushaf');
+    router.push('/mushaf');
+  };
+
   return (
     <ErrorBoundary
       fallbackTitle="تعذر عرض قسم المكتبة"
@@ -67,17 +87,11 @@ export const LibraryHubPage: React.FC<LibraryHubPageProps> = ({
         {/* Clean & Beautiful Library Grid using standard Link with absolute paths */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
 
-          {/* 1. Mushaf Card (Fallback HTML <a> Test to bypass Next.js client interception) */}
-          <a
-            href="/library/quran"
-            onClick={() => {
-              setView('mushaf');
-              setSelectedSurahId(null);
-              setSelectedJuz(null);
-              setIsSearchSubmitted(false);
-              setIsPageModeActive(true);
-            }}
-            className="group relative p-5 md:p-6 rounded-2xl text-right overflow-hidden transition-all duration-200 flex flex-col justify-between border border-slate-150 hover:border-blue-400 bg-white shadow-xs hover:shadow-md min-h-[160px] active:scale-[0.99] cursor-pointer"
+          {/* 1. Mushaf Card - Pure SPA Direct Reading Navigation */}
+          <button
+            type="button"
+            onClick={handleOpenMushaf}
+            className="group relative p-5 md:p-6 rounded-2xl text-right overflow-hidden transition-all duration-200 flex flex-col justify-between border border-slate-150 hover:border-blue-400 bg-white shadow-xs hover:shadow-md min-h-[160px] active:scale-[0.99] cursor-pointer w-full"
           >
             <div className="flex items-start justify-between">
               <MushafLibraryIcon className="w-12 h-12 shrink-0 transition-transform duration-200 group-hover:scale-105" />
@@ -97,7 +111,7 @@ export const LibraryHubPage: React.FC<LibraryHubPageProps> = ({
                 تصفح القرآن الكريم كاملاً بالرسم العثماني المقروء
               </p>
             </div>
-          </a>
+          </button>
 
           {/* 2. Adhkar Card */}
           <Link
