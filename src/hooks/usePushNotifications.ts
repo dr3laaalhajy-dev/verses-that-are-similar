@@ -35,16 +35,19 @@ export function usePushNotifications(userId?: string | null, onNotificationRecei
    * Save or update FCM token in database
    */
   const saveTokenToDatabase = useCallback(async (token: string, uId: string) => {
+    const cleanToken = (token || '').trim();
+    if (!cleanToken) return;
+
     const platform = typeof navigator !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ? 'mobile' : 'web';
 
-    // 1. Save in Supabase
+    // 1. Save in Supabase with explicit upsert deduplication on token
     try {
       const { error: sbError } = await supabase
         .from('device_tokens')
         .upsert(
           {
             user_id: uId,
-            fcm_token: token,
+            fcm_token: cleanToken,
             platform,
             updated_at: new Date().toISOString()
           },
@@ -52,9 +55,24 @@ export function usePushNotifications(userId?: string | null, onNotificationRecei
         );
 
       if (sbError) {
-        console.warn('[PushNotifications] Supabase save warn:', sbError.message);
+        // Fallback: in case column is named 'token' in some migrations
+        if (sbError.message?.includes('fcm_token') || sbError.code === '42703') {
+          await supabase
+            .from('device_tokens')
+            .upsert(
+              {
+                user_id: uId,
+                token: cleanToken,
+                platform,
+                updated_at: new Date().toISOString()
+              },
+              { onConflict: 'token' }
+            );
+        } else {
+          console.warn('[PushNotifications] Supabase save warn:', sbError.message);
+        }
       } else {
-        console.log('[PushNotifications] Token saved to Supabase successfully.');
+        console.log('[PushNotifications] Token saved to Supabase successfully via upsert.');
       }
     } catch (err) {
       console.warn('[PushNotifications] Supabase exception:', err);
@@ -67,7 +85,7 @@ export function usePushNotifications(userId?: string | null, onNotificationRecei
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userId: uId,
-          fcmToken: token,
+          fcmToken: cleanToken,
           platform
         })
       }).catch(() => {});

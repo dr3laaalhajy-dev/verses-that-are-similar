@@ -220,40 +220,22 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
     setUnreadCount(count);
   };
 
-  // Fetch initial notifications
+  // Fetch notifications exclusively from Supabase (Single Source of Truth)
   const fetchNotifications = async () => {
     const stored = getStoredReadMap();
-
-    // 1. Primary: Fetch from backend API (connected to Neon / Prisma notifications table)
-    try {
-      const res = await fetch('/api/notifications?limit=20');
-      if (res.ok) {
-        const data = await res.json().catch(() => null);
-        if (data?.notifications && data.notifications.length > 0) {
-          setNotifications(data.notifications);
-          calculateUnread(data.notifications, stored);
-          setIsLoading(false);
-          return;
-        }
-      }
-    } catch (err) {
-      console.warn('[NotificationBell] API fetch warn:', err);
-    }
-
-    // 2. Fallback: Try Supabase in case notifications table is present
     try {
       const { data, error } = await supabase
         .from('notifications')
         .select('*')
         .order('created_at', { ascending: false })
-        .limit(20);
+        .limit(30);
 
-      if (!error && data && data.length > 0) {
+      if (!error && data) {
         setNotifications(data);
         calculateUnread(data, stored);
       }
     } catch (e) {
-      // Fallback silently
+      console.warn('[NotificationBell] Supabase fetch error:', e);
     } finally {
       setIsLoading(false);
     }

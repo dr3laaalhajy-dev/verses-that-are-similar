@@ -502,37 +502,22 @@ export const NotificationAdmin: React.FC<NotificationAdminProps> = ({
     }
   };
 
-  // Fetch sent notifications and device tokens count
+  // Fetch sent notifications and device tokens count exclusively from Supabase (Single Source of Truth)
   const fetchHistoryAndStats = async () => {
     setIsLoadingHistory(true);
     try {
-      // 1. Fetch recent notifications from API (Neon/Prisma notifications)
-      let fetchedFromApi = false;
-      try {
-        const res = await fetch('/api/notifications?limit=15');
-        if (res.ok) {
-          const json = await res.json().catch(() => null);
-          if (json?.notifications) {
-            setHistory(json.notifications);
-            fetchedFromApi = true;
-          }
-        }
-      } catch (e) {}
+      // 1. Fetch recent notifications exclusively from Supabase
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(30);
 
-      // Fallback to Supabase if API returned empty
-      if (!fetchedFromApi) {
-        const { data, error } = await supabase
-          .from('notifications')
-          .select('*')
-          .order('created_at', { ascending: false })
-          .limit(15);
-
-        if (!error && data) {
-          setHistory(data);
-        }
+      if (!error && data) {
+        setHistory(data);
       }
 
-      // 2. Query device tokens count
+      // 2. Query device tokens count from Supabase
       const { count } = await supabase
         .from('device_tokens')
         .select('*', { count: 'exact', head: true });

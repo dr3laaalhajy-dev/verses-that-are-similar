@@ -124,15 +124,15 @@ export async function broadcastNotification({
   }
 
   // 3. Gather all FCM Device Tokens (from both Prisma and Supabase)
-  const tokenSet = new Set<string>();
+  const allTokens: any[] = [];
 
   try {
     const dbTokens = await (prisma as any).deviceToken.findMany({
       select: { fcm_token: true }
     });
-    dbTokens.forEach((t: any) => {
-      if (t.fcm_token) tokenSet.add(t.fcm_token);
-    });
+    if (dbTokens && Array.isArray(dbTokens)) {
+      allTokens.push(...dbTokens);
+    }
   } catch (e) {
     console.warn('[Broadcast] Could not query Prisma device tokens:', e);
   }
@@ -142,16 +142,17 @@ export async function broadcastNotification({
       .from('device_tokens')
       .select('fcm_token');
     if (sbTokens && Array.isArray(sbTokens)) {
-      sbTokens.forEach((t: any) => {
-        if (t.fcm_token) tokenSet.add(t.fcm_token);
-      });
+      allTokens.push(...sbTokens);
     }
   } catch (e) {
     console.warn('[Broadcast] Could not query Supabase device tokens:', e);
   }
 
-  const allTokens = Array.from(tokenSet);
-  console.log(`[Broadcast] Total active device tokens retrieved: ${allTokens.length}`);
+  // Deduplicate tokens using Set to strictly prevent duplicate push deliveries
+  const uniqueTokens = [...new Set(allTokens.map(t => (t.fcm_token || t.token || t || '').trim()))]
+    .filter(t => Boolean(t) && t.length > 20);
+
+  console.log(`[Broadcast] Total raw tokens: ${allTokens.length}, Unique device tokens: ${uniqueTokens.length}`);
 
   // 4. Send FCM Push Notifications via Firebase Admin SDK
   const messaging = getFirebaseMessaging();
@@ -159,10 +160,10 @@ export async function broadcastNotification({
   let failureCount = 0;
   const staleTokens: string[] = [];
 
-  if (messaging && allTokens.length > 0) {
+  if (messaging && uniqueTokens.length > 0) {
     const chunkSize = 500;
-    for (let i = 0; i < allTokens.length; i += chunkSize) {
-      const chunk = allTokens.slice(i, i + chunkSize);
+    for (let i = 0; i < uniqueTokens.length; i += chunkSize) {
+      const chunk = uniqueTokens.slice(i, i + chunkSize);
       try {
         const response = await messaging.sendEachForMulticast({
           tokens: chunk,
@@ -252,7 +253,7 @@ export async function broadcastNotification({
       created_at: new Date().toISOString()
     },
     stats: {
-      totalTokens: allTokens.length,
+      totalTokens: uniqueTokens.length,
       pushSuccessCount: successCount,
       pushFailureCount: failureCount,
       fcmConfigured: !!messaging
