@@ -394,8 +394,10 @@ export const AdhkarPage: React.FC<AdhkarPageProps> = ({
                       </h3>
                     </div>
 
-                    {/* Left Side: Clean Arrow (no container box, no square shadow) */}
-                    <ChevronLeft className="w-4 h-4 text-gray-300 dark:text-gray-600 group-hover:text-emerald-600 group-hover:-translate-x-0.5 transition-all shrink-0 z-10" />
+                    {/* Left Side: Clean Arrow Container (Transparent, Centered, No Shadow/Square Box) */}
+                    <div className="flex items-center justify-center bg-transparent text-gray-400 dark:text-gray-500 shrink-0 z-10 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                      <ChevronLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
+                    </div>
                   </motion.button>
                 );
               })}
