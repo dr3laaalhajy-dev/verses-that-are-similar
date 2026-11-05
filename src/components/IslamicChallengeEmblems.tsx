@@ -101,7 +101,7 @@ export const AdhkarLibraryIcon: React.FC<{ className?: string }> = ({ className 
       strokeWidth="0.8"
     />
     <circle cx="24" cy="33" r="2.2" fill="#F59E0B" />
-    {/* Flowing Silk Tassel (الشرابة) */}
+    {/* Flowing Silk Tassel (الشرابة)  */}
     <path
       d="M24 37V41M22 41C22 41 23 43 24 43C25 43 26 41 26 41"
       stroke="#4338CA"
