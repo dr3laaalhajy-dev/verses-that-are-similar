@@ -57,7 +57,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({
       success: false,
       message: 'حدث خطأ أثناء تنفيذ التنبيه المجدول ليوم الجمعة',
-      error: error.message
+      error: error.message,
+      details: error.message
     });
   }
 }

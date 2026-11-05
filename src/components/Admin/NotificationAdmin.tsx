@@ -400,14 +400,22 @@ export const NotificationAdmin: React.FC<NotificationAdminProps> = ({
 
       // 2. Fallback to API route if needed
       if (sbErr) {
-        await fetch('/api/notifications', {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify(updatedData)
-        });
+        try {
+          const res = await fetch('/api/notifications', {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(updatedData)
+          });
+          if (!res.ok) {
+            const errData = await res.json().catch(() => null);
+            console.warn('[NotificationAdmin] Edit API returned error:', errData);
+          }
+        } catch (apiErr) {
+          console.warn('[NotificationAdmin] Edit API fetch error:', apiErr);
+        }
       }
 
       // 3. Broadcast Realtime event across Supabase channel
@@ -447,12 +455,20 @@ export const NotificationAdmin: React.FC<NotificationAdminProps> = ({
 
       // 2. Fallback to API route if needed
       if (sbErr) {
-        await fetch(`/api/notifications?action=delete&id=${item.id}`, {
-          method: 'DELETE',
-          headers: {
-            'Authorization': `Bearer ${token}`
+        try {
+          const res = await fetch(`/api/notifications?action=delete&id=${item.id}`, {
+            method: 'DELETE',
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
+          if (!res.ok) {
+            const errData = await res.json().catch(() => null);
+            console.warn('[NotificationAdmin] Delete API returned error:', errData);
           }
-        });
+        } catch (apiErr) {
+          console.warn('[NotificationAdmin] Delete API fetch error:', apiErr);
+        }
       }
 
       // 3. Broadcast Realtime event to delete notification instantly across all clients
@@ -495,8 +511,8 @@ export const NotificationAdmin: React.FC<NotificationAdminProps> = ({
       try {
         const res = await fetch('/api/notifications?limit=15');
         if (res.ok) {
-          const json = await res.json();
-          if (json.notifications) {
+          const json = await res.json().catch(() => null);
+          if (json?.notifications) {
             setHistory(json.notifications);
             fetchedFromApi = true;
           }
@@ -575,9 +591,32 @@ export const NotificationAdmin: React.FC<NotificationAdminProps> = ({
         })
       });
 
-      const data = await res.json();
+      let data: any = null;
 
-      if (res.ok && data.success) {
+      // Safe JSON parse: handle cases where response is not OK or not JSON
+      if (res.ok) {
+        try {
+          data = await res.json();
+        } catch (jsonErr) {
+          console.warn('[NotificationAdmin] Could not parse successful JSON response:', jsonErr);
+        }
+      } else {
+        // Attempt to parse JSON error payload, or fallback gracefully
+        try {
+          const contentType = res.headers.get('content-type') || '';
+          if (contentType.includes('application/json')) {
+            data = await res.json();
+          } else {
+            const rawText = await res.text();
+            console.warn('[NotificationAdmin] Non-JSON error response from server:', rawText);
+            data = { error: 'استجابة غير متوقعة من الخادم', details: rawText };
+          }
+        } catch (err) {
+          data = { error: 'تعذر قراءة استجابة الخادم' };
+        }
+      }
+
+      if (res.ok && data?.success) {
         setResultMessage({
           type: 'success',
           text: data.message || 'تم إرسال التنبيه بنجاح لجميع المستخدمين والهواتف المسجلة.',
@@ -611,11 +650,19 @@ export const NotificationAdmin: React.FC<NotificationAdminProps> = ({
             fetchHistoryAndStats();
             return;
           }
-        } catch {}
+        } catch (sbInsertErr) {
+          console.warn('[NotificationAdmin] Supabase fallback insert warning:', sbInsertErr);
+        }
+
+        const failureReason =
+          data?.error ||
+          data?.message ||
+          data?.details ||
+          (!res.ok ? `فشل إرسال التنبيه (رمز الخطأ: ${res.status})` : 'فشل إرسال التنبيه، يرجى المحاولة مرة أخرى.');
 
         setResultMessage({
           type: 'error',
-          text: data.message || 'فشل إرسال التنبيه، يرجى المحاولة مرة أخرى.'
+          text: failureReason
         });
       }
     } catch (err: any) {

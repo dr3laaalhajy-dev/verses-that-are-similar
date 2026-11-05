@@ -228,8 +228,8 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
     try {
       const res = await fetch('/api/notifications?limit=20');
       if (res.ok) {
-        const data = await res.json();
-        if (data.notifications && data.notifications.length > 0) {
+        const data = await res.json().catch(() => null);
+        if (data?.notifications && data.notifications.length > 0) {
           setNotifications(data.notifications);
           calculateUnread(data.notifications, stored);
           setIsLoading(false);

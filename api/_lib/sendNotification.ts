@@ -7,60 +7,72 @@ import jwt from 'jsonwebtoken';
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+
   if (handleCors(req, res)) return;
 
-  if (req.method !== 'POST') {
-    return res.status(405).json({ message: 'Method Not Allowed' });
-  }
-
-  // 1. Authorization: Verify Admin JWT Token
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ message: 'غير مصرح: يجب تسجيل الدخول كمشرف' });
-  }
-
-  const token = authHeader.split(' ')[1];
-  let decoded: any;
   try {
-    decoded = jwt.verify(token, JWT_SECRET);
-  } catch (err) {
-    return res.status(401).json({ message: 'رمز الجلسة غير صالح أو منتهي الصلاحية' });
-  }
+    if (req.method !== 'POST') {
+      return res.status(405).json({ error: 'الطريقة غير مسموحة', details: 'Method Not Allowed' });
+    }
 
-  // 2. Fetch authoritative admin record from database
-  const currentAdmin = await (prisma as any).admin.findUnique({
-    where: { id: decoded.adminId }
-  });
+    // 1. Authorization: Verify Admin JWT Token
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'غير مصرح', details: 'يجب تسجيل الدخول كمشرف' });
+    }
 
-  if (!currentAdmin) {
-    return res.status(401).json({ message: 'حساب المشرف غير موجود' });
-  }
+    const token = authHeader.split(' ')[1];
+    let decoded: any;
+    try {
+      decoded = jwt.verify(token, JWT_SECRET);
+    } catch (err: any) {
+      return res.status(401).json({ error: 'غير مصرح', details: 'رمز الجلسة غير صالح أو منتهي الصلاحية' });
+    }
 
-  // Check if founder or co-founder
-  const isFounder = currentAdmin.role === 'FOUNDER' || currentAdmin.username?.toLowerCase() === 'alaa' || currentAdmin.username === 'علاء';
-  const isCoFounder = currentAdmin.role === 'CO_FOUNDER';
+    // 2. Fetch authoritative admin record from database (with fallback to decoded token)
+    let currentAdmin: any = null;
+    try {
+      currentAdmin = await (prisma as any).admin.findUnique({
+        where: { id: decoded.adminId }
+      });
+    } catch (dbErr: any) {
+      console.warn('[sendNotification] Prisma admin lookup failed, falling back to token claims:', dbErr?.message);
+    }
 
-  if (!isFounder && !isCoFounder) {
-    return res.status(403).json({
-      message: 'غير مصرح: إرسال التنبيهات الشاملة مقتصر على المؤسس ومساعد المؤسس فقط.'
-    });
-  }
+    if (!currentAdmin) {
+      if (decoded.role === 'FOUNDER' || decoded.role === 'CO_FOUNDER' || decoded.username?.toLowerCase() === 'alaa' || decoded.username === 'علاء') {
+        currentAdmin = decoded;
+      } else {
+        return res.status(401).json({ error: 'غير مصرح', details: 'حساب المشرف غير موجود أو لا يملك صلاحيات' });
+      }
+    }
 
-  // 3. Extract and validate notification payload
-  const { title, body, target_url, targetUrl, metadata } = req.body || {};
-  if (!title || !title.trim() || !body || !body.trim()) {
-    return res.status(400).json({ message: 'يرجى إدخال عنوان الإشعار ونصه بالكامل' });
-  }
+    // Check if founder or co-founder
+    const isFounder = currentAdmin.role === 'FOUNDER' || currentAdmin.username?.toLowerCase() === 'alaa' || currentAdmin.username === 'علاء';
+    const isCoFounder = currentAdmin.role === 'CO_FOUNDER';
 
-  const cleanTitle = title.trim();
-  const cleanBody = body.trim();
-  const cleanTargetUrl = (target_url || targetUrl || '').trim() || null;
-  // If target_url starts with '/' (relative path), resolve it to full URL using base URL
-  const fullTargetUrl = resolveFullUrl(cleanTargetUrl);
-  const senderRole = isFounder ? 'FOUNDER' : 'CO_FOUNDER';
-  const senderName = currentAdmin.name || currentAdmin.username;
+    if (!isFounder && !isCoFounder) {
+      return res.status(403).json({
+        error: 'صلاحيات غير كافية',
+        details: 'إرسال التنبيهات الشاملة مقتصر على المؤسس ومساعد المؤسس فقط.'
+      });
+    }
 
-  try {
+    // 3. Extract and validate notification payload
+    const { title, body, target_url, targetUrl, metadata } = req.body || {};
+    if (!title || !title.trim() || !body || !body.trim()) {
+      return res.status(400).json({ error: 'بيانات ناقصة', details: 'يرجى إدخال عنوان الإشعار ونصه بالكامل' });
+    }
+
+    const cleanTitle = title.trim();
+    const cleanBody = body.trim();
+    const cleanTargetUrl = (target_url || targetUrl || '').trim() || null;
+    // If target_url starts with '/' (relative path), resolve it to full URL using base URL
+    const fullTargetUrl = resolveFullUrl(cleanTargetUrl);
+    const senderRole = isFounder ? 'FOUNDER' : 'CO_FOUNDER';
+    const senderName = currentAdmin.name || currentAdmin.username || (isFounder ? 'المؤسس' : 'مساعد المؤسس');
+
     const result = await broadcastNotification({
       title: cleanTitle,
       body: cleanBody,
@@ -71,7 +83,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       metadata: {
         ...(metadata || {}),
         fullUrl: fullTargetUrl,
-        sentByAdminId: currentAdmin.id,
+        sentByAdminId: currentAdmin.id || decoded.adminId,
         sentAt: new Date().toISOString()
       }
     });
@@ -83,10 +95,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       stats: result.stats
     });
   } catch (error: any) {
-    console.error('[Notifications] Error sending notification:', error);
+    console.error('[sendNotification] Error sending notification:', error);
     return res.status(500).json({
-      message: 'حدث خطأ غير متوقع أثناء إرسال التنبيه',
-      error: error.message
+      error: 'حدث خطأ أثناء إرسال التنبيه',
+      details: error?.message || 'خطأ داخلي غير معروف في الخادم'
     });
   }
 }

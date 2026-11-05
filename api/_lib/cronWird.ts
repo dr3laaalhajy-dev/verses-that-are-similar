@@ -240,7 +240,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({
       success: false,
       message: 'حدث خطأ غير متوقع أثناء معالجة الورد القرآني',
-      error: error.message
+      error: error.message,
+      details: error.message
     });
   }
 }
