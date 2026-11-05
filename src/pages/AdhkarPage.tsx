@@ -379,14 +379,11 @@ export const AdhkarPage: React.FC<AdhkarPageProps> = ({
                         window.history.pushState({ view: 'adhkar', category: cat.id }, '', `/adhkar/${cat.id}`);
                       }
                     }}
-                    className="w-full p-3.5 sm:p-4 rounded-2xl border border-gray-150/80 dark:border-slate-800 bg-white dark:bg-obsidian-900 hover:border-emerald-300 dark:hover:border-emerald-600/50 shadow-2xs hover:shadow-xs relative overflow-hidden text-right flex items-center justify-between gap-2.5 transition-all duration-200 cursor-pointer group"
+                    className="w-full p-3.5 sm:p-4 rounded-2xl border border-gray-150/80 dark:border-slate-800 bg-white dark:bg-obsidian-900 hover:border-emerald-300 dark:hover:border-emerald-600/50 shadow-none relative overflow-hidden text-right flex items-center justify-between gap-2.5 transition-all duration-200 cursor-pointer group"
                   >
-                    {/* Subtle Geometric Islamic Corner Watermark (opacity 3%) */}
-                    <div className="absolute -left-2 -bottom-2 w-16 h-16 bg-[url('/islamic_pattern.png')] dark:bg-[url('/islamic_pattern_dark.png')] bg-contain bg-no-repeat opacity-[0.03] pointer-events-none" />
-
                     {/* Right Side: Circular/Rounded Icon Wrapper + Title */}
                     <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 z-10 flex-1">
-                      <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 shadow-2xs transition-transform duration-200 group-hover:scale-105 ${meta.iconBg}`}>
+                      <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-105 ${meta.iconBg}`}>
                         {meta.iconNode}
                       </div>
                       <h3 className="text-xs sm:text-sm font-bold text-gray-800 dark:text-slate-100 truncate leading-snug">
@@ -408,7 +405,7 @@ export const AdhkarPage: React.FC<AdhkarPageProps> = ({
         /* =================== واجهة الأذكار المخصصة والتفاصيل =================== */
         <div className="flex flex-col space-y-6 animate-in fade-in slide-in-from-bottom-3 duration-300">
           {/* Header & Back Action */}
-          <div className="flex items-center justify-between bg-white dark:bg-obsidian-900 p-4 sm:p-5 rounded-2xl border border-gray-100 dark:border-slate-800 shadow-2xs">
+          <div className="flex items-center justify-between bg-white dark:bg-obsidian-900 p-4 sm:p-5 rounded-2xl border border-gray-100 dark:border-slate-800 shadow-none">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 flex items-center justify-center shrink-0">
                 {getCategoryMeta(activeCategory).iconNode}
@@ -448,10 +445,10 @@ export const AdhkarPage: React.FC<AdhkarPageProps> = ({
                 <motion.div
                   key={dhikr.id}
                   layout
-                  className={`p-5 sm:p-6 md:p-8 rounded-2xl md:rounded-3xl border relative overflow-hidden transition-all duration-300 cursor-pointer ${
+                  className={`p-5 sm:p-6 md:p-8 rounded-2xl md:rounded-3xl border relative overflow-hidden transition-all duration-300 cursor-pointer shadow-none hover:shadow-none ${
                     isCompleted
                       ? 'bg-gray-50/70 dark:bg-slate-900/40 border-gray-200/50 opacity-65 grayscale-20'
-                      : 'bg-white dark:bg-obsidian-900 border-gray-100 dark:border-slate-800 hover:shadow-md hover:border-emerald-200 active:scale-[0.99] shadow-2xs'
+                      : 'bg-white dark:bg-obsidian-900 border-gray-100 dark:border-slate-800 hover:border-emerald-200 active:scale-[0.99]'
                   }`}
                   onClick={() => {
                     if (isCompleted) return;
@@ -461,9 +458,6 @@ export const AdhkarPage: React.FC<AdhkarPageProps> = ({
                     }
                   }}
                 >
-                  {/* Subtle Geometric Background Watermark */}
-                  <div className="absolute -left-4 -bottom-4 w-32 h-32 bg-[url('/islamic_pattern.png')] dark:bg-[url('/islamic_pattern_dark.png')] bg-contain bg-no-repeat opacity-[0.04] pointer-events-none" />
-
                   {/* Progress Line */}
                   <div className="absolute bottom-0 right-0 left-0 h-1 bg-gray-100 dark:bg-slate-800">
                     <motion.div
@@ -501,9 +495,9 @@ export const AdhkarPage: React.FC<AdhkarPageProps> = ({
                         key={currentRemaining}
                         initial={{ scale: 0.85, opacity: 0 }}
                         animate={{ scale: 1, opacity: 1 }}
-                        className={`w-16 h-16 sm:w-18 sm:h-18 rounded-2xl flex flex-col items-center justify-center shadow-xs transition-all duration-300 ${
+                        className={`w-16 h-16 sm:w-18 sm:h-18 rounded-2xl flex flex-col items-center justify-center transition-all duration-300 ${
                           isCompleted
-                            ? 'bg-emerald-500 text-white shadow-emerald-300/40 rotate-6 scale-105'
+                            ? 'bg-emerald-500 text-white rotate-6 scale-105'
                             : 'bg-emerald-50 text-emerald-800 dark:bg-slate-800 dark:text-slate-100 border border-emerald-100 dark:border-slate-700'
                         }`}
                       >
@@ -536,7 +530,7 @@ export const AdhkarPage: React.FC<AdhkarPageProps> = ({
               }
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}
-            className="w-full py-4 bg-white dark:bg-obsidian-900 hover:bg-gray-50 text-gray-700 dark:text-gray-200 font-bold rounded-2xl border border-gray-100 dark:border-slate-800 transition-all flex items-center justify-center gap-2 shadow-2xs cursor-pointer"
+            className="w-full py-4 bg-white dark:bg-obsidian-900 hover:bg-gray-50 text-gray-700 dark:text-gray-200 font-bold rounded-2xl border border-gray-100 dark:border-slate-800 transition-all flex items-center justify-center gap-2 shadow-none cursor-pointer"
           >
             <ArrowRight className="w-4 h-4 text-emerald-600" />
             <span>الرجوع إلى قائمة الأذكار</span>
@@ -549,7 +543,7 @@ export const AdhkarPage: React.FC<AdhkarPageProps> = ({
         <button
           type="button"
           onClick={() => setAdhkarProgress({})}
-          className="group inline-flex items-center gap-2 px-6 py-2.5 rounded-full border border-gray-200 dark:border-slate-800 text-xs font-bold text-gray-400 hover:text-emerald-700 hover:border-emerald-300 dark:hover:text-emerald-400 transition-all active:scale-95 cursor-pointer bg-white dark:bg-obsidian-900 shadow-2xs"
+          className="group inline-flex items-center gap-2 px-6 py-2.5 rounded-full border border-gray-200 dark:border-slate-800 text-xs font-bold text-gray-400 hover:text-emerald-700 hover:border-emerald-300 dark:hover:text-emerald-400 transition-all active:scale-95 cursor-pointer bg-white dark:bg-obsidian-900 shadow-none"
         >
           <RotateCcw className="w-3.5 h-3.5 group-hover:-rotate-180 transition-transform duration-500 text-emerald-600" />
           <span>إعادة تصفير جميع عدادات اليوم</span>
