@@ -12,24 +12,21 @@ export interface FirebaseAdminExtended {
   [key: string]: any;
 }
 
-const admin: FirebaseAdminExtended = _admin as any;
-
-// Polyfill admin properties so admin.apps and admin.credential.cert work consistently across SDK versions
-if (!admin.credential) {
-  admin.credential = { cert };
-}
-if (!('apps' in admin)) {
-  Object.defineProperty(admin, 'apps', {
-    get: () => getApps(),
-    configurable: true,
-  });
-}
-if (!admin.initializeApp) {
-  admin.initializeApp = initializeApp;
-}
-if (!admin.messaging) {
-  admin.messaging = (app?: App) => getMessaging(app || getApps()[0]);
-}
+/**
+ * Wrap Firebase Admin in an extensible object to support admin.credential.cert
+ * and admin.apps without attempting to mutate frozen ESM module namespace.
+ */
+export const admin: FirebaseAdminExtended = {
+  ..._admin,
+  get apps(): App[] {
+    return getApps();
+  },
+  credential: {
+    cert,
+  },
+  initializeApp,
+  messaging: (app?: App) => getMessaging(app || getApps()[0]),
+};
 
 /**
  * Explicit Initialization for Firebase Admin on Vercel
@@ -128,6 +125,5 @@ export function getFirebaseMessaging(): Messaging | null {
 }
 
 // Backward compatible helpers and exports
-export { admin };
 export const getFirebaseAdmin = getFirebaseAdminApp;
 export default getFirebaseAdminApp;
