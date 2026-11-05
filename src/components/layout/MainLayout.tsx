@@ -127,7 +127,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   return (
     <>
       {/* Top Header */}
-      {!app.isMushafFullscreen && (
+      {(!app.isMushafFullscreen && app.view !== 'mushaf') && (
         <header className="w-full sticky top-0 z-50 bg-[#064e3b]/90 dark:bg-obsidian-950/90 text-white dark:text-regalGold-100 shadow-xl border-b border-white/10 dark:border-regalGold-500/20 backdrop-blur-xl transition-colors duration-500 pt-[env(safe-area-inset-top,0px)]">
           <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 dark:bg-regalGold-500/5 rounded-full -mr-32 -mt-32 blur-3xl pointer-events-none" />
           <div className="w-full max-w-full box-border px-3.5 sm:px-6 md:px-8 pl-[max(0.875rem,env(safe-area-inset-left))] pr-[max(0.875rem,env(safe-area-inset-right))] py-2 flex items-center justify-between gap-1.5 sm:gap-4 relative z-10">
@@ -529,7 +529,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       </PullToRefresh>
 
       {/* Fixed Bottom Navigation Bar - High Priority z-50 Layer */}
-      {(!app.isMushafFullscreen || app.view !== 'mushaf') && (
+      {app.view !== 'mushaf' && (
         <nav className="fixed bottom-0 left-0 right-0 w-full z-50 bg-[#064e3b]/95 dark:bg-obsidian-950/95 border-t border-white/15 dark:border-regalGold-500/20 shadow-2xl backdrop-blur-2xl py-2 px-2 sm:px-6 transition-colors duration-500 select-none">
           <div className="max-w-lg mx-auto flex items-center justify-around">
             {/* 1. الرئيسية */}
@@ -695,175 +695,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
         </nav>
       )}
 
-      {/* Fullscreen Mushaf Mode Overlay */}
-      <AnimatePresence>
-        {app.view === 'mushaf' && app.isMushafFullscreen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            onClick={app.toggleFullscreenControls}
-            className="fixed inset-0 z-[100] w-screen h-screen flex flex-col justify-between overflow-hidden select-none cursor-pointer"
-            style={{
-              backgroundColor: app.librarySettings.darkMode ? '#0B132B' : '#fcfaf5',
-              color: app.librarySettings.darkMode ? '#e2e8f0' : '#1e293b',
-              backgroundImage: app.librarySettings.darkMode
-                ? 'radial-gradient(circle at center, rgba(16, 185, 129, 0.08) 0%, rgba(11, 19, 43, 0.98) 85%)'
-                : 'radial-gradient(circle at center, rgba(217, 119, 6, 0.05) 0%, #fcfaf5 85%)',
-            }}
-          >
-            {/* Floating Top Controls: Exit 'X' Button on Corner & Page Info */}
-            <AnimatePresence>
-              {app.areFullscreenControlsVisible && (
-                <>
-                  <motion.div
-                    initial={{ opacity: 0, y: -20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -20 }}
-                    transition={{ duration: 0.2 }}
-                    onClick={(e) => e.stopPropagation()}
-                    className="absolute top-3 left-3 sm:top-5 sm:left-5 z-50 pointer-events-auto"
-                  >
-                    <button
-                      onClick={app.exitMushafFullscreen}
-                      className="p-2.5 sm:p-3 rounded-2xl bg-black/60 hover:bg-black/80 text-white backdrop-blur-xl border border-white/20 shadow-2xl transition-all active:scale-95 flex items-center gap-2 group cursor-pointer"
-                      title="خروج من ملء الشاشة (Esc)"
-                      aria-label="خروج من ملء الشاشة"
-                    >
-                      <X className="w-5 h-5 sm:w-6 sm:h-6 text-white group-hover:rotate-90 transition-transform duration-200" />
-                      <span className="text-xs sm:text-sm font-black hidden sm:inline text-white/90">خروج</span>
-                    </button>
-                  </motion.div>
-
-                  <motion.div
-                    initial={{ opacity: 0, y: -20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -20 }}
-                    transition={{ duration: 0.2 }}
-                    onClick={(e) => e.stopPropagation()}
-                    className="absolute top-3 right-3 sm:top-5 sm:right-5 z-50 pointer-events-auto"
-                  >
-                    <div className="px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-2xl bg-black/60 text-white backdrop-blur-xl border border-white/20 shadow-2xl text-xs sm:text-sm font-black flex items-center gap-2">
-                      <BookOpen className="w-4 h-4 text-brand-gold" />
-                      <span>المصحف الشريف</span>
-                      <span className="text-white/40">•</span>
-                      <span className="text-brand-gold">صفحة {app.currentPage}</span>
-                    </div>
-                  </motion.div>
-                </>
-              )}
-            </AnimatePresence>
-
-            {/* Main Fullscreen Quran Page View with Pinch-to-Zoom & Free 2D Pan */}
-            <div className="relative flex-1 w-full h-full flex items-center justify-center overflow-hidden p-0 sm:p-2">
-              <QuranZoomViewer
-                pageNumber={app.currentPage}
-                darkMode={app.librarySettings.darkMode}
-                isFullscreen={true}
-                onPageTurn={(dir) => {
-                  app.setPageTurnDirection(dir);
-                  if (dir === 'next') {
-                    app.setCurrentPage((prev: number) => Math.min(604, prev + 1));
-                  } else {
-                    app.setCurrentPage((prev: number) => Math.max(1, prev - 1));
-                  }
-                  app.resetFullscreenControlsTimer();
-                }}
-                onTap={() => {
-                  if (app.selectedAyah) {
-                    app.setSelectedAyah(null);
-                  } else {
-                    app.toggleFullscreenControls();
-                  }
-                }}
-                onInteraction={app.resetFullscreenControlsTimer}
-                pageTurnDirection={app.pageTurnDirection}
-                selectedAyah={app.selectedAyah}
-                onSelectAyah={(s, a) => {
-                  app.setSelectedAyah({ surah: s, ayah: a });
-                  app.resetFullscreenControlsTimer();
-                }}
-              />
-            </div>
-
-            {/* Bottom Floating Navigation Arrows & Page Jump */}
-            <AnimatePresence>
-              {app.areFullscreenControlsVisible && (
-                <motion.div
-                  initial={{ opacity: 0, y: 25 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 25 }}
-                  transition={{ duration: 0.2 }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    app.resetFullscreenControlsTimer();
-                  }}
-                  className="absolute bottom-4 sm:bottom-6 inset-x-0 flex justify-center items-center pointer-events-none z-50 px-4"
-                >
-                  <div className="pointer-events-auto flex items-center gap-2 sm:gap-3 px-4 sm:px-5 py-2 sm:py-2.5 rounded-full bg-black/65 hover:bg-black/85 backdrop-blur-2xl border border-white/20 shadow-2xl transition-all">
-                    <button
-                      onClick={() => {
-                        if (app.currentPage > 1) {
-                          app.setPageTurnDirection('prev');
-                          app.setCurrentPage((prev: number) => Math.max(1, prev - 1));
-                          app.resetFullscreenControlsTimer();
-                        }
-                      }}
-                      disabled={app.currentPage === 1}
-                      className="p-2 sm:p-2.5 rounded-full text-white hover:text-brand-gold disabled:opacity-30 disabled:hover:text-white transition-all active:scale-90"
-                      title="الصفحة السابقة"
-                      aria-label="الصفحة السابقة"
-                    >
-                      <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6" />
-                    </button>
-
-                    <div className="flex items-center gap-1.5 px-2 text-white font-black text-xs sm:text-sm select-none">
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        value={app.currentPage}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          app.resetFullscreenControlsTimer();
-                        }}
-                        onChange={(e) => {
-                          app.resetFullscreenControlsTimer();
-                          const val = e.target.value.replace(/[^0-9]/g, '');
-                          if (val === '') return;
-                          const num = parseInt(val);
-                          if (num >= 1 && num <= 604) {
-                            app.setCurrentPage(num);
-                          }
-                        }}
-                        className="w-10 sm:w-12 bg-white/10 border border-white/20 rounded-lg text-center text-xs sm:text-sm font-black text-brand-gold focus:outline-none focus:ring-1 focus:ring-brand-gold py-0.5"
-                      />
-                      <span className="text-white/40">/</span>
-                      <span className="text-white/70">604</span>
-                    </div>
-
-                    <button
-                      onClick={() => {
-                        if (app.currentPage < 604) {
-                          app.setPageTurnDirection('next');
-                          app.setCurrentPage((prev: number) => Math.min(604, prev + 1));
-                          app.resetFullscreenControlsTimer();
-                        }
-                      }}
-                      disabled={app.currentPage === 604}
-                      className="p-2 sm:p-2.5 rounded-full text-white hover:text-brand-gold disabled:opacity-30 disabled:hover:text-white transition-all active:scale-90"
-                      title="الصفحة التالية"
-                      aria-label="الصفحة التالية"
-                    >
-                      <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6" />
-                    </button>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* Mushaf Mode is handled natively within MushafPage component */}
     </>
   );
 };
