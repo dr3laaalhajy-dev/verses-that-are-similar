@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Zap, ArrowLeft } from 'lucide-react';
+import { Zap, ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { View } from '../types/challenges';
+import { supabase } from '../services/supabase';
 import {
   GroupChallengeEmblem,
   DailyChallengeEmblem,
@@ -23,6 +24,8 @@ export interface ChallengesHubPageProps {
     hideAudioChallenge?: boolean;
     [key: string]: any;
   };
+  dailyChallenge?: any;
+  userId?: string | number | null;
 }
 
 export const ChallengesHubPage: React.FC<ChallengesHubPageProps> = ({
@@ -34,8 +37,124 @@ export const ChallengesHubPage: React.FC<ChallengesHubPageProps> = ({
   handleStartDaily,
   timeLeft,
   setIsSpeedMode,
-  systemSettings
+  systemSettings,
+  dailyChallenge,
+  userId
 }) => {
+  // 1. حالة التحقق من إتمام التحدي اليومي
+  const [isDailyCompleted, setIsDailyCompleted] = useState<boolean>(() => {
+    if (dailyCompleted) return true;
+    try {
+      const today = new Date().toISOString().split('T')[0];
+      return localStorage.getItem('quran_daily_completed') === today;
+    } catch {
+      return false;
+    }
+  });
+
+  // استعلام التحقق من إتمام التحدي من Supabase والتخزين المحلي
+  const checkDailyCompletion = useCallback(async () => {
+    const today = new Date().toISOString().split('T')[0];
+
+    // أ. فحص سريع من الحالة والتخزين المحلي
+    try {
+      if (dailyCompleted || localStorage.getItem('quran_daily_completed') === today) {
+        setIsDailyCompleted(true);
+        // مسح التحدي اليومي غير المكتمل من التخزين إن وُجد
+        const savedIncomplete = localStorage.getItem('quran_incomplete_challenge');
+        if (savedIncomplete) {
+          const parsed = JSON.parse(savedIncomplete);
+          if (parsed.mode === 'daily') {
+            localStorage.removeItem('quran_incomplete_challenge');
+          }
+        }
+        return;
+      }
+    } catch {}
+
+    // ب. استعلام Supabase للتحقق من جدول إتمامات التحديات (challenge_completions / user_challenges)
+    try {
+      const activeUser = userId || 
+                         localStorage.getItem('quran_player_id') || 
+                         localStorage.getItem('quran_unique_player_id') || 
+                         localStorage.getItem('quran_player_username') || 
+                         localStorage.getItem('quran_player_name');
+
+      if (!activeUser) return;
+
+      const challengeId = dailyChallenge?.id;
+
+      // 1. التحقق من جدول challenge_completions
+      let query = supabase
+        .from('challenge_completions')
+        .select('*')
+        .or(`user_id.eq.${activeUser},player_id.eq.${activeUser},username.eq.${activeUser}`);
+
+      if (challengeId) {
+        query = query.eq('challenge_id', challengeId);
+      } else {
+        query = query.gte('created_at', today);
+      }
+
+      const { data: completions, error: compErr } = await query.limit(1);
+
+      if (!compErr && completions && completions.length > 0) {
+        setIsDailyCompleted(true);
+        localStorage.setItem('quran_daily_completed', today);
+        return;
+      }
+
+      // 2. فحص جدول user_challenges كخيار بديل
+      const { data: userChallenges, error: userChErr } = await supabase
+        .from('user_challenges')
+        .select('*')
+        .or(`user_id.eq.${activeUser},player_id.eq.${activeUser}`)
+        .eq('is_completed', true)
+        .gte('completed_at', today)
+        .limit(1);
+
+      if (!userChErr && userChallenges && userChallenges.length > 0) {
+        setIsDailyCompleted(true);
+        localStorage.setItem('quran_daily_completed', today);
+        return;
+      }
+    } catch (err) {
+      console.error('[ChallengesHubPage] Safe catch verifying daily challenge completion:', err);
+    }
+  }, [dailyCompleted, userId, dailyChallenge]);
+
+  // تحديث الحالة عند تغير الـ Prop
+  useEffect(() => {
+    if (dailyCompleted) {
+      setIsDailyCompleted(true);
+    } else {
+      checkDailyCompletion();
+    }
+  }, [dailyCompleted, checkDailyCompletion]);
+
+  // 3. إعادة جلب البيانات والتحقق عند العودة للشاشة وتركيز النافذة (Revalidation on Focus)
+  useEffect(() => {
+    const handleRevalidate = () => {
+      checkDailyCompletion();
+    };
+
+    window.addEventListener('focus', handleRevalidate);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        handleRevalidate();
+      }
+    });
+
+    handleRevalidate();
+
+    return () => {
+      window.removeEventListener('focus', handleRevalidate);
+    };
+  }, [checkDailyCompletion]);
+
+  // التحقق الشرطي من وجود تحدٍ غير مكتمل قابل للاستئناف
+  const showIncompleteAlert = incompleteChallenge && (!isDailyCompleted || incompleteChallenge.mode !== 'daily');
+
   return (
     <motion.div
       key="challenges"
@@ -59,8 +178,37 @@ export const ChallengesHubPage: React.FC<ChallengesHubPageProps> = ({
         </div>
       </div>
 
-      {/* Incomplete Challenge Alert */}
-      {incompleteChallenge && (
+      {/* 2. لافتة إتمام التحدي اليومي بنجاح (Green Success Banner) */}
+      {isDailyCompleted && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-emerald-50 border border-emerald-200/80 p-4 sm:p-5 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 text-right shadow-xs"
+        >
+          <div className="flex items-center gap-3 w-full sm:w-auto">
+            <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+              <CheckCircle2 className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <span className="font-black text-emerald-950 text-sm sm:text-base block">
+                لقد أتممت التحدي اليومي بنجاح! 🎉
+              </span>
+              <span className="text-xs font-bold text-emerald-700">
+                أحسنت! حافظت على سلسلة إنجازك، نراك غداً في تحدٍ جديد بإذن الله.
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="px-3.5 py-1.5 bg-emerald-100 text-emerald-800 rounded-xl text-xs font-black shrink-0">
+              مكتمل اليوم ✨
+            </span>
+          </div>
+        </motion.div>
+      )}
+
+      {/* 2. لافتة 'لديك تحدي لم يكتمل بعد' (تظهر فقط إذا لم يكتمل التحدي) */}
+      {showIncompleteAlert && (
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -125,12 +273,12 @@ export const ChallengesHubPage: React.FC<ChallengesHubPageProps> = ({
 
         {/* 2. Daily Challenge Card (التحدي اليومي) */}
         <motion.button
-          whileHover={{ y: dailyCompleted ? 0 : -3 }}
-          whileTap={{ scale: dailyCompleted ? 1 : 0.98 }}
+          whileHover={{ y: (dailyCompleted || isDailyCompleted) ? 0 : -3 }}
+          whileTap={{ scale: (dailyCompleted || isDailyCompleted) ? 1 : 0.98 }}
           onClick={handleStartDaily}
-          disabled={dailyCompleted}
+          disabled={dailyCompleted || isDailyCompleted}
           className={`group relative p-5 md:p-6 rounded-2xl text-right overflow-hidden transition-all duration-200 flex flex-col justify-between border min-h-[160px] ${
-            dailyCompleted
+            (dailyCompleted || isDailyCompleted)
               ? 'bg-slate-50 border-slate-150 opacity-70 grayscale'
               : 'bg-white border-slate-150 hover:border-emerald-400 shadow-xs hover:shadow-md'
           }`}
@@ -139,24 +287,24 @@ export const ChallengesHubPage: React.FC<ChallengesHubPageProps> = ({
             <DailyChallengeEmblem className="w-12 h-12 shrink-0 transition-transform duration-200 group-hover:scale-105" />
             <div className="flex items-center gap-2">
               <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200/40">
-                {dailyCompleted ? 'تم إنجازه' : 'كل 24 ساعة'}
+                {(dailyCompleted || isDailyCompleted) ? 'تم إنجازه' : 'كل 24 ساعة'}
               </span>
-              {!dailyCompleted && (
+              {!(dailyCompleted || isDailyCompleted) && (
                 <ArrowLeft className="w-5 h-5 text-slate-300 group-hover:text-brand-emerald group-hover:-translate-x-1 transition-all" />
               )}
             </div>
           </div>
 
           <div className="mt-4">
-            <h3 className={`text-base md:text-lg font-black ${dailyCompleted ? 'text-slate-500' : 'text-slate-800 group-hover:text-brand-emerald'} transition-colors`}>
+            <h3 className={`text-base md:text-lg font-black ${(dailyCompleted || isDailyCompleted) ? 'text-slate-500' : 'text-slate-800 group-hover:text-brand-emerald'} transition-colors`}>
               التحدي اليومي
             </h3>
             <p className="text-slate-400 font-bold text-xs mt-1 leading-relaxed">
-              {dailyCompleted ? 'أحسنت! نراك غداً لمتابعة سلسلة إنجازك' : 'إكمال الآية اليومية لتثبيت حفظ الورد ومضاعفة نقاطك'}
+              {(dailyCompleted || isDailyCompleted) ? 'أحسنت! نراك غداً لمتابعة سلسلة إنجازك' : 'إكمال الآية اليومية لتثبيت حفظ الورد ومضاعفة نقاطك'}
             </p>
           </div>
 
-          {dailyCompleted && (
+          {(dailyCompleted || isDailyCompleted) && (
             <div className="mt-3 pt-2.5 border-t border-slate-200/60 flex items-center justify-between">
               <span className="text-[10px] font-bold text-slate-400">الموعد القادم:</span>
               <span className="text-xs font-black text-brand-emerald tabular-nums">{timeLeft}</span>

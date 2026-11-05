@@ -404,6 +404,8 @@ export const AppRouter: React.FC = () => {
           timeLeft={app.timeLeft}
           setIsSpeedMode={app.setIsSpeedMode}
           systemSettings={app.systemSettings}
+          dailyChallenge={app.currentChallenge || (app.challenges && app.challenges[app.dailyChallengeIndex])}
+          userId={app.playerId || app.uniquePlayerId || app.playerUsername || app.playerName}
         />
       ) : app.view === "library" ? (
         <LibraryHubPage

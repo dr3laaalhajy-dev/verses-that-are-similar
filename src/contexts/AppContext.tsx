@@ -1704,6 +1704,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setStreak(newStreak);
     setLastPlayedDate(today);
     setDailyCompleted(true);
+    setIncompleteChallenge(null);
+    localStorage.removeItem('quran_incomplete_challenge');
     localStorage.setItem('quran_streak', newStreak.toString());
     localStorage.setItem('quran_last_played', today);
     localStorage.setItem('quran_last_played_time', nowTime.toString());
@@ -1839,6 +1841,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const savedDaily = localStorage.getItem('quran_daily_completed');
     if (savedDaily === todayStr) {
       setDailyCompleted(true);
+      const savedIncomplete = localStorage.getItem('quran_incomplete_challenge');
+      if (savedIncomplete) {
+        try {
+          const parsed = JSON.parse(savedIncomplete);
+          if (parsed.mode === 'daily') {
+            setIncompleteChallenge(null);
+            localStorage.removeItem('quran_incomplete_challenge');
+          }
+        } catch {}
+      }
     } else {
       setDailyCompleted(false);
     }
