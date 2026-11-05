@@ -297,3 +297,4 @@ runMigration().catch(err => {
   console.error('❌ خطأ فادح أثناء الترحيل:', err);
   process.exit(1);
 });
+

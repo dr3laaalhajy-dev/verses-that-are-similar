@@ -97,21 +97,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // Send FCM push notification if token exists
       let fcmSent = false;
-      if (messaging && userTokens.length > 0) {
+      const uniqueUserTokens = Array.from(new Set(userTokens)).filter(t => t && t.length > 20);
+
+      if (messaging && uniqueUserTokens.length > 0) {
         try {
           const fcmResponse = await messaging.sendEachForMulticast({
-            tokens: userTokens,
+            tokens: uniqueUserTokens,
             notification: {
               title: notificationTitle,
               body: notificationBody
             },
             data: {
-              title: notificationTitle,
-              body: notificationBody,
               route: targetUrl,
               url: targetUrl,
               page: String(startPage),
-              click_action: targetUrl
+              click_action: targetUrl,
+              tag: `mateen_wird_${user.user_id}`
+            },
+            android: {
+              priority: 'high',
+              notification: {
+                title: notificationTitle,
+                body: notificationBody,
+                icon: 'ic_stat_notification',
+                color: '#10b981',
+                tag: `mateen_wird_${user.user_id}`
+              }
             },
             webpush: {
               headers: {
@@ -126,7 +137,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 icon: '/logo.png',
                 badge: '/logo-mark.png',
                 dir: 'rtl',
-                lang: 'ar'
+                lang: 'ar',
+                tag: `mateen_wird_${user.user_id}`
               }
             }
           });

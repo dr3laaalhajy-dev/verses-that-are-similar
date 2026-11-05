@@ -28,7 +28,15 @@ const messaging = firebase.messaging();
 messaging.onBackgroundMessage((payload) => {
   console.log('[firebase-messaging-sw.js] Received background message:', payload);
 
-  const rawUrl = payload.data?.url || payload.fcmOptions?.link || '/';
+  // إذا كان الإشعار يحتوي على كائن notification، فالمتصفح/نظام التشغيل يقوم بعرضه تلقائياً!
+  // استدعاء showNotification هنا سيؤدي حتماً لظهور إشعار ثانٍ مكرر على شاشة القفل.
+  if (payload.notification) {
+    console.log('[firebase-messaging-sw.js] Notification payload handled automatically by browser/OS. Skipping duplicate showNotification.');
+    return;
+  }
+
+  // يتم العرض اليدوي فقط إذا كانت الرسالة عبارة عن بيانات خالصة (Data-only message)
+  const rawUrl = payload.data?.url || payload.data?.target_url || payload.fcmOptions?.link || '/';
   const fullUrl = (rawUrl.startsWith('http://') || rawUrl.startsWith('https://'))
     ? rawUrl
     : new URL(rawUrl, self.location.origin).href;
@@ -43,13 +51,16 @@ messaging.onBackgroundMessage((payload) => {
     }
   }
 
-  const notificationTitle = payload.notification?.title || payload.data?.title || 'تطبيق متين 🔔';
+  const notificationTitle = payload.data?.title || 'تطبيق متين 🔔';
+  const notificationTag = payload.data?.tag || 'mateen-notification';
   const notificationOptions = {
-    body: payload.notification?.body || payload.data?.body || 'لديك تنبيه جديد من تطبيق متين',
+    body: payload.data?.body || 'لديك تنبيه جديد من تطبيق متين',
     icon: '/logo.png',
     badge: '/logo-mark.png',
     dir: 'rtl',
     lang: 'ar',
+    tag: notificationTag,
+    renotify: false,
     vibrate: [200, 100, 200],
     data: {
       url: fullUrl,

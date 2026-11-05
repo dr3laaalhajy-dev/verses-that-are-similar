@@ -94,58 +94,119 @@ export async function broadcastNotification({
     }
   }
 
-  // 2. Strict Deduplication by User ID (not just Token string)
-  const uniqueTokensMap = new Map<string, string>(); // Key: User ID (or token if no ID), Value: Token
-  const allStaleTokens = new Set<string>();
+  // 2. Strict Deduplication by Token string AND by User ID
+  const uniqueTokensSet = new Set<string>();
+  const seenUserIds = new Set<string>();
+  const staleTokenIds = new Set<string>();
 
   try {
-    const { data: sbTokens } = await supabaseAdmin.from('device_tokens').select('*');
-    if (sbTokens && Array.isArray(sbTokens)) {
+    const { data: sbTokens, error: tokenErr } = await supabaseAdmin
+      .from('device_tokens')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (tokenErr) {
+      console.warn('[Broadcast] Error fetching tokens from Supabase:', tokenErr.message);
+    } else if (sbTokens && Array.isArray(sbTokens)) {
       for (const t of sbTokens) {
-        const val = (t.token || t.fcm_token || t.device_token || '').trim();
-        if (val && val.length > 20) {
-          // If user_id exists, only keep ONE token per user!
-          const key = t.user_id ? `user_${t.user_id}` : val;
-          // If a token already exists for this user, mark the old one as stale (to be deleted later)
-          if (t.user_id && uniqueTokensMap.has(key)) {
-            allStaleTokens.add(uniqueTokensMap.get(key)!);
-          }
-          uniqueTokensMap.set(key, val);
+        const tokenVal = (t.token || t.fcm_token || t.device_token || '').trim();
+        
+        // Skip invalid / corrupted token strings
+        if (!tokenVal || tokenVal.length < 20) {
+          if (t.id) staleTokenIds.add(t.id);
+          continue;
         }
+
+        const uId = t.user_id ? String(t.user_id).trim() : null;
+
+        // If this exact token is already in our set, this row is a duplicate
+        if (uniqueTokensSet.has(tokenVal)) {
+          if (t.id) staleTokenIds.add(t.id);
+          continue;
+        }
+
+        // If this user already has a newer token registered, mark this older one as stale
+        if (uId && seenUserIds.has(uId)) {
+          if (t.id) staleTokenIds.add(t.id);
+          continue;
+        }
+
+        if (uId) {
+          seenUserIds.add(uId);
+        }
+        uniqueTokensSet.add(tokenVal);
+      }
+    }
+
+    // Immediately remove duplicate/stale rows from Supabase
+    if (staleTokenIds.size > 0) {
+      const idsToDelete = Array.from(staleTokenIds);
+      try {
+        await supabaseAdmin.from('device_tokens').delete().in('id', idsToDelete);
+        console.log(`[Broadcast] Cleaned up ${idsToDelete.length} stale/duplicate device token records from Supabase.`);
+      } catch (delErr) {
+        console.warn('[Broadcast] Warning deleting stale tokens:', delErr);
       }
     }
   } catch (err) {
-    console.warn('[Broadcast] Error fetching tokens from Supabase:', err);
+    console.warn('[Broadcast] Exception during token deduplication:', err);
   }
 
-  const finalTokensToPush = Array.from(uniqueTokensMap.values());
-  console.log(`[Broadcast] Sending push to ${finalTokensToPush.length} unique users/devices.`);
+  // Pure strict deduplicated array
+  const finalTokensToPush = Array.from(uniqueTokensSet);
+  console.log(`[Broadcast] Sending push to ${finalTokensToPush.length} strictly unique device tokens.`);
 
-  // 3. Send FCM Push Notifications
+  // 3. Send FCM Push Notifications with unified, non-duplicated payload
   const messaging = getFirebaseMessaging();
   let successCount = 0;
   let failureCount = 0;
-  
+  const invalidTokensToDelete = new Set<string>();
+
   if (messaging && finalTokensToPush.length > 0) {
     const chunkSize = 500;
+    const notificationTag = `mateen_${Date.now()}`;
+
+    // Clean metadata without duplicating title or body
+    const cleanData: Record<string, string> = {
+      url: resolvedFullUrl || '/',
+      full_url: resolvedFullUrl || '/',
+      relative_url: cleanTargetUrl || '/',
+      click_action: resolvedFullUrl || '/',
+      route: String(metadata?.route || cleanTargetUrl || '/'),
+      target_url: cleanTargetUrl || '/',
+      tag: notificationTag
+    };
+
+    if (metadata && typeof metadata === 'object') {
+      for (const [k, v] of Object.entries(metadata)) {
+        if (k !== 'title' && k !== 'body' && v !== undefined && v !== null) {
+          cleanData[k] = typeof v === 'object' ? JSON.stringify(v) : String(v);
+        }
+      }
+    }
+
     for (let i = 0; i < finalTokensToPush.length; i += chunkSize) {
       const chunk = finalTokensToPush.slice(i, i + chunkSize);
       try {
         const response = await messaging.sendEachForMulticast({
           tokens: chunk,
-          notification: { title: cleanTitle, body: cleanBody },
-          data: {
+          // Visible notification handled exclusively by notification payload (to prevent duplicate background renders)
+          notification: {
             title: cleanTitle,
-            body: cleanBody,
-            url: resolvedFullUrl || '/',
-            full_url: resolvedFullUrl || '/',
-            relative_url: cleanTargetUrl || '/',
-            click_action: resolvedFullUrl || '/',
-            route: String(metadata?.route || cleanTargetUrl || '/'),
-            target_url: cleanTargetUrl || '/',
-            ...Object.fromEntries(
-              Object.entries(metadata || {}).map(([k, v]) => [k, typeof v === 'object' ? JSON.stringify(v) : String(v)])
-            )
+            body: cleanBody
+          },
+          // Data payload holds only routing and metadata - NO title/body duplicates
+          data: cleanData,
+          android: {
+            priority: 'high',
+            notification: {
+              title: cleanTitle,
+              body: cleanBody,
+              icon: 'ic_stat_notification',
+              color: '#10b981',
+              channelId: 'mateen_general',
+              tag: notificationTag
+            }
           },
           webpush: {
             headers: {
@@ -160,7 +221,8 @@ export async function broadcastNotification({
               icon: '/logo.png',
               badge: '/logo-mark.png',
               dir: 'rtl',
-              lang: 'ar'
+              lang: 'ar',
+              tag: notificationTag
             }
           }
         });
@@ -173,23 +235,24 @@ export async function broadcastNotification({
             resp.error.code === 'messaging/invalid-registration-token' ||
             resp.error.code === 'messaging/registration-token-not-registered'
           )) {
-            allStaleTokens.add(chunk[idx]);
+            invalidTokensToDelete.add(chunk[idx]);
           }
         });
       } catch (fcmErr) {
+        console.error('[Broadcast] FCM chunk error:', fcmErr);
         failureCount += chunk.length;
       }
     }
 
-    // 4. Aggressive Cleanup of Stale & Duplicate Tokens
-    if (allStaleTokens.size > 0) {
-      const staleArray = Array.from(allStaleTokens);
+    // 4. Cleanup any unregistered/expired tokens reported by FCM
+    if (invalidTokensToDelete.size > 0) {
+      const invalidArray = Array.from(invalidTokensToDelete);
       try {
-        await supabaseAdmin.from('device_tokens').delete().in('token', staleArray);
-        await supabaseAdmin.from('device_tokens').delete().in('fcm_token', staleArray);
-        console.log(`[Broadcast] Cleaned up ${staleArray.length} stale/duplicate FCM tokens.`);
+        await supabaseAdmin.from('device_tokens').delete().in('token', invalidArray);
+        await supabaseAdmin.from('device_tokens').delete().in('fcm_token', invalidArray);
+        console.log(`[Broadcast] Cleaned up ${invalidArray.length} unregistered FCM tokens.`);
       } catch (e) {
-        console.warn('[Broadcast] Cleanup error:', e);
+        console.warn('[Broadcast] Error deleting invalid FCM tokens:', e);
       }
     }
   }

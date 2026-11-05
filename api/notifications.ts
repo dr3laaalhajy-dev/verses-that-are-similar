@@ -44,16 +44,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const cleanPlatform = String(platform || 'web').trim();
 
       try {
-        // Upsert exclusively in Supabase
+        // Upsert exclusively in Supabase with strict deduplication per user
         try {
           const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cleanUser);
           const safeUserId = isUuid ? cleanUser : cleanUser;
+
+          // If a known user is registering a token, remove their older different tokens
+          if (safeUserId && safeUserId !== 'guest_user') {
+            await supabase
+              .from('device_tokens')
+              .delete()
+              .eq('user_id', safeUserId)
+              .neq('token', cleanToken);
+            await supabase
+              .from('device_tokens')
+              .delete()
+              .eq('user_id', safeUserId)
+              .neq('fcm_token', cleanToken);
+          }
 
           let { error: sbErr } = await supabase
             .from('device_tokens')
             .upsert({
               user_id: safeUserId,
               token: cleanToken,
+              fcm_token: cleanToken,
               platform: cleanPlatform
             }, { onConflict: 'token' });
 
