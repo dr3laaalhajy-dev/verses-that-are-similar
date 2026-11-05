@@ -35,7 +35,8 @@
     { "source": "/privacy", "destination": "/privacy.html" },
     { "source": "/terms", "destination": "/privacy.html" },
     { "source": "/delete-account", "destination": "/delete-account.html" },
-    { "source": "/data-deletion", "destination": "/delete-account.html" }
+    { "source": "/data-deletion", "destination": "/delete-account.html" },
+    { "source": "/((?!api/).*)", "destination": "/" }
   ],
   "headers": [
     {
