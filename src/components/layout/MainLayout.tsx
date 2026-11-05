@@ -271,8 +271,8 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
         </header>
       )}
 
-      {/* Floating Back Button Directly Below Top Header Bar (view === 'mushaf') */}
-      {app.view === 'mushaf' && !app.isMushafFullscreen && (
+      {/* Floating Back Button Directly Below Top Header Bar (view === 'mushaf' in index/guide mode) */}
+      {app.view === 'mushaf' && !app.isMushafFullscreen && !app.isPageModeActive && (
         <div className="w-full max-w-6xl mx-auto px-4 sm:px-8 pt-3 pb-1 flex justify-start items-center gap-3 animate-in fade-in slide-in-from-top-2 duration-300">
           <button
             onClick={() => {
