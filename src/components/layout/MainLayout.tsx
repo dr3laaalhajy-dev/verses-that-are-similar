@@ -128,9 +128,9 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
     <>
       {/* Top Header */}
       {!app.isMushafFullscreen && (
-        <header className="w-full sticky top-0 z-50 bg-[#064e3b]/90 dark:bg-obsidian-950/90 text-white dark:text-regalGold-100 shadow-xl border-b border-white/10 dark:border-regalGold-500/20 backdrop-blur-xl transition-colors duration-500">
+        <header className="w-full sticky top-0 z-50 bg-[#064e3b]/90 dark:bg-obsidian-950/90 text-white dark:text-regalGold-100 shadow-xl border-b border-white/10 dark:border-regalGold-500/20 backdrop-blur-xl transition-colors duration-500 pt-[env(safe-area-inset-top,0px)]">
           <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 dark:bg-regalGold-500/5 rounded-full -mr-32 -mt-32 blur-3xl pointer-events-none" />
-          <div className="w-full px-4 sm:px-8 py-2 md:py-2 flex items-center justify-between gap-2 sm:gap-4 relative z-10">
+          <div className="w-full max-w-full box-border px-3.5 sm:px-6 md:px-8 pl-[max(0.875rem,env(safe-area-inset-left))] pr-[max(0.875rem,env(safe-area-inset-right))] py-2 flex items-center justify-between gap-1.5 sm:gap-4 relative z-10">
 
             {/* Logo & Title */}
             <motion.div
@@ -141,7 +141,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                 app.setShowScores(false);
                 app.setShowSettings(false);
               }}
-              className="flex items-center gap-2 sm:gap-3 shrink-0 cursor-pointer group"
+              className="flex items-center gap-1.5 sm:gap-3 shrink-0 cursor-pointer group"
               title="تطبيق متين"
             >
               <div className="bg-white dark:bg-obsidian-900 p-1 sm:p-1.5 rounded-xl md:rounded-2xl shadow-lg border border-white/60 dark:border-regalGold-500/30 flex items-center justify-center shrink-0 transition-transform group-hover:scale-105">
@@ -162,11 +162,11 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
             </motion.div>
 
             {/* Navigation Actions & Profile */}
-            <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0 pl-0.5">
               {/* About App Modal Trigger */}
               <button
                 onClick={() => app.setShowAboutModal(true)}
-                className="h-10 px-3 flex items-center justify-center gap-2 rounded-xl bg-white/10 hover:bg-white/20 dark:bg-obsidian-900/70 dark:hover:bg-obsidian-850 text-white dark:text-regalGold-200 border border-white/10 dark:border-regalGold-500/20 transition-all text-xs sm:text-sm font-bold shadow-md hover:scale-105 active:scale-95 cursor-pointer"
+                className="h-9 w-9 sm:h-10 sm:w-auto px-0 sm:px-3 flex items-center justify-center gap-2 rounded-xl bg-white/10 hover:bg-white/20 dark:bg-obsidian-900/70 dark:hover:bg-obsidian-850 text-white dark:text-regalGold-200 border border-white/10 dark:border-regalGold-500/20 transition-all text-xs sm:text-sm font-bold shadow-md hover:scale-105 active:scale-95 cursor-pointer shrink-0"
                 title="عن التطبيق"
                 aria-label="عن التطبيق"
               >
@@ -177,7 +177,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
               {/* Dark Mode / Light Mode Toggle Button */}
               <button
                 onClick={() => app.setLibrarySettings((prev: any) => ({ ...prev, darkMode: !prev.darkMode }))}
-                className="h-10 px-3 flex items-center justify-center gap-2 rounded-xl bg-white/10 hover:bg-white/20 dark:bg-obsidian-900/70 dark:hover:bg-obsidian-850 text-white dark:text-regalGold-200 border border-white/10 dark:border-regalGold-500/20 transition-all text-xs sm:text-sm font-bold shadow-md hover:scale-105 active:scale-95 cursor-pointer"
+                className="h-9 w-9 sm:h-10 sm:w-auto px-0 sm:px-3 flex items-center justify-center gap-2 rounded-xl bg-white/10 hover:bg-white/20 dark:bg-obsidian-900/70 dark:hover:bg-obsidian-850 text-white dark:text-regalGold-200 border border-white/10 dark:border-regalGold-500/20 transition-all text-xs sm:text-sm font-bold shadow-md hover:scale-105 active:scale-95 cursor-pointer shrink-0"
                 title={app.librarySettings.darkMode ? 'التبديل إلى الوضع الفاتح (Light Mode)' : 'التبديل إلى الوضع الداكن (Dark Mode)'}
                 aria-label="تبديل الوضع الداكن والفاتح"
               >
@@ -195,7 +195,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
               <NotificationBell
                 darkMode={app.librarySettings.darkMode}
                 userId={app.playerUsername || app.playerName}
-                buttonClassName="relative h-10 px-3 flex items-center justify-center gap-2 rounded-xl bg-white/10 hover:bg-white/20 dark:bg-obsidian-900/70 dark:hover:bg-obsidian-850 text-white dark:text-regalGold-200 border border-white/10 dark:border-regalGold-500/20 transition-all text-xs sm:text-sm font-bold shadow-md hover:scale-105 active:scale-95 cursor-pointer"
+                buttonClassName="relative h-9 w-9 sm:h-10 sm:w-auto px-0 sm:px-3 flex items-center justify-center gap-2 rounded-xl bg-white/10 hover:bg-white/20 dark:bg-obsidian-900/70 dark:hover:bg-obsidian-850 text-white dark:text-regalGold-200 border border-white/10 dark:border-regalGold-500/20 transition-all text-xs sm:text-sm font-bold shadow-md hover:scale-105 active:scale-95 cursor-pointer shrink-0"
               />
 
               {/* Friends & Challenge Invites System Button */}
@@ -203,7 +203,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                 <button
                   type="button"
                   onClick={() => app.setIsFriendsModalOpen(true)}
-                  className="relative h-10 px-2.5 sm:px-3 flex items-center justify-center gap-1.5 rounded-xl bg-white/10 hover:bg-white/20 dark:bg-obsidian-900/70 dark:hover:bg-obsidian-850 text-white dark:text-regalGold-200 border border-white/10 dark:border-regalGold-500/20 transition-all text-xs sm:text-sm font-bold shadow-md hover:scale-105 active:scale-95 cursor-pointer"
+                  className="relative h-9 w-9 sm:h-10 sm:w-auto px-0 sm:px-3 flex items-center justify-center gap-1.5 rounded-xl bg-white/10 hover:bg-white/20 dark:bg-obsidian-900/70 dark:hover:bg-obsidian-850 text-white dark:text-regalGold-200 border border-white/10 dark:border-regalGold-500/20 transition-all text-xs sm:text-sm font-bold shadow-md hover:scale-105 active:scale-95 cursor-pointer shrink-0"
                   title="نظام الأصدقاء والتحديات"
                   aria-label="الأصدقاء"
                 >
@@ -225,10 +225,10 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                     app.setView('settings');
                     app.setShowScores(false);
                   }}
-                  className="flex items-center gap-2 sm:gap-2.5 pr-2 sm:pr-2.5 border-r border-white/20 mr-0.5 sm:mr-1 shrink-0 cursor-pointer group"
+                  className="flex items-center gap-1.5 sm:gap-2.5 pr-1.5 sm:pr-2.5 pl-1 sm:pl-1.5 border-r border-white/20 mr-0.5 sm:mr-1 shrink-0 cursor-pointer group"
                   title="ملفي الشخصي"
                 >
-                  <div className="relative shrink-0 flex items-center justify-center">
+                  <div className="relative shrink-0 flex items-center justify-center p-0.5">
                     <div className="relative z-10 w-8 h-8 sm:w-9 sm:h-9 md:w-9 md:h-9 rounded-full flex items-center justify-center text-white font-black text-xs sm:text-sm bg-gradient-to-br from-brand-emerald to-emerald-700 border-2 border-white/30 shadow-md group-hover:scale-105 transition-transform">
                       {(app.playerName || '').trim().charAt(0).toUpperCase()}
                     </div>
