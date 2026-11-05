@@ -2,42 +2,17 @@ import { prisma } from './prisma.js';
 import { getFirebaseMessaging } from './firebaseAdmin.js';
 import { supabaseAdmin } from './supabaseAdmin.js';
 
-/**
- * Resolves a full absolute URL for push notifications payload (FCM).
- * If targetUrl starts with '/' (relative path), it prepends the site base URL.
- */
 export function resolveFullUrl(pathOrUrl?: string | null): string | null {
   if (!pathOrUrl) return null;
   const trimmed = pathOrUrl.trim();
   if (!trimmed) return null;
-
-  // If already an absolute URL (http:// or https://)
-  if (/^https?:\/\//i.test(trimmed)) {
-    return trimmed;
-  }
-
-  // Ensure relative path starts with /
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
   const relativePath = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
-
-  // Extract Base URL from environment variables
-  let baseUrl =
-    process.env.VITE_APP_URL ||
-    process.env.APP_URL ||
-    process.env.NEXT_PUBLIC_APP_URL ||
-    '';
-
-  if (!baseUrl && process.env.VERCEL_URL) {
-    baseUrl = `https://${process.env.VERCEL_URL}`;
-  }
-  if (!baseUrl && process.env.VERCEL_PROJECT_PRODUCTION_URL) {
-    baseUrl = `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
-  }
-  if (!baseUrl) {
-    baseUrl = 'https://mateen-quran.vercel.app';
-  }
-
-  const cleanBase = baseUrl.replace(/\/+$/, '');
-  return `${cleanBase}${relativePath}`;
+  let baseUrl = process.env.VITE_APP_URL || process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || '';
+  if (!baseUrl && process.env.VERCEL_URL) baseUrl = `https://${process.env.VERCEL_URL}`;
+  if (!baseUrl && process.env.VERCEL_PROJECT_PRODUCTION_URL) baseUrl = `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+  if (!baseUrl) baseUrl = 'https://mateen-quran.vercel.app';
+  return `${baseUrl.replace(/\/+$/, '')}${relativePath}`;
 }
 
 export interface BroadcastNotificationParams {
@@ -61,9 +36,6 @@ export interface BroadcastNotificationResult {
   };
 }
 
-/**
- * Reusable function to broadcast in-app realtime notifications and FCM web/mobile push
- */
 export async function broadcastNotification({
   title,
   body,
@@ -78,119 +50,113 @@ export async function broadcastNotification({
   const cleanBody = body.trim();
   const cleanTargetUrl = targetUrl ? targetUrl.trim() : null;
   const resolvedFullUrl = fullUrl ? fullUrl.trim() : resolveFullUrl(cleanTargetUrl);
-
+  
   let savedNotification: any = initialSavedNotification || null;
 
-  // 1. Mandatory Supabase persistence (Single Source of Truth) if not already saved by caller
+  // 1. Mandatory Supabase persistence (Force save)
   if (!savedNotification) {
     try {
-      const payloadToInsert: any = {
-        title: cleanTitle,
-        body: cleanBody,
-        target_url: cleanTargetUrl,
-        sender_role: senderRole,
-        sender_name: senderName
-      };
-
-      let { data: sbData, error: sbErr } = await supabaseAdmin
+      const { data: sbData, error: sbErr } = await supabaseAdmin
         .from('notifications')
-        .insert(payloadToInsert)
+        .insert({
+          title: cleanTitle,
+          body: cleanBody,
+          target_url: cleanTargetUrl,
+          sender_role: senderRole,
+          sender_name: senderName
+        })
         .select();
 
-      // In case target_url, sender_role, or sender_name columns are not yet in Supabase schema cache
-      if (sbErr && (sbErr.code === 'PGRST204' || sbErr.message?.includes('column') || sbErr.code === '42703')) {
-        console.warn('[Broadcast] Schema column mismatch on notifications table, retrying with core columns:', sbErr.message);
-        const corePayload: any = {
-          title: cleanTitle,
-          body: cleanBody
-        };
+      if (sbErr) {
+        console.error('[Broadcast] Critical Supabase Insert Error:', sbErr);
+        // Force simple insert if schema mismatch
         const retry = await supabaseAdmin
           .from('notifications')
-          .insert(corePayload)
+          .insert({ title: cleanTitle, body: cleanBody })
           .select();
-        sbData = retry.data;
-        sbErr = retry.error;
-      }
-
-      if (sbErr) {
-        console.error('Failed to save notification to Supabase:', sbErr);
+        if (retry.data && retry.data.length > 0) savedNotification = retry.data[0];
       } else if (sbData && sbData.length > 0) {
         savedNotification = sbData[0];
-        // Realtime Broadcast
+      }
+
+      if (savedNotification) {
         try {
           await supabaseAdmin.channel('realtime_public_notifications').send({
             type: 'broadcast',
             event: 'NOTIFICATION_UPDATED',
-            payload: sbData[0]
+            payload: savedNotification
           });
-        } catch (bcErr) {
-          console.warn('[Broadcast] Realtime channel broadcast warning:', bcErr);
+        } catch (chanErr) {
+          console.warn('[Broadcast] Realtime broadcast warning:', chanErr);
         }
       }
     } catch (sbEx: any) {
-      console.error('[Broadcast] Exception saving notification in Supabase:', sbEx?.message || sbEx);
+      console.error('[Broadcast] Exception saving notification:', sbEx?.message || sbEx);
     }
   }
 
-  // 2. Gather and Strictly Deduplicate Device Tokens
-  const rawTokens: string[] = [];
+  // 2. Strict Deduplication by User ID (not just Token string)
+  const uniqueTokensMap = new Map<string, string>(); // Key: User ID (or token if no ID), Value: Token
+  const allStaleTokens = new Set<string>();
 
   try {
-    const { data: sbTokens, error: tokenErr } = await supabaseAdmin
-      .from('device_tokens')
-      .select('*');
-
+    const { data: sbTokens } = await supabaseAdmin.from('device_tokens').select('*');
     if (sbTokens && Array.isArray(sbTokens)) {
       for (const t of sbTokens) {
         const val = (t.token || t.fcm_token || t.device_token || '').trim();
         if (val && val.length > 20) {
-          rawTokens.push(val);
+          // If user_id exists, only keep ONE token per user!
+          const key = t.user_id ? `user_${t.user_id}` : val;
+          // If a token already exists for this user, mark the old one as stale (to be deleted later)
+          if (t.user_id && uniqueTokensMap.has(key)) {
+            allStaleTokens.add(uniqueTokensMap.get(key)!);
+          }
+          uniqueTokensMap.set(key, val);
         }
       }
     }
-    if (tokenErr) {
-      console.warn('[Broadcast] Supabase device_tokens query warning:', tokenErr.message);
-    }
-  } catch (err: any) {
-    console.warn('[Broadcast] Could not query Supabase device tokens:', err?.message || err);
+  } catch (err) {
+    console.warn('[Broadcast] Error fetching tokens from Supabase:', err);
   }
 
+  // Also query prisma device tokens if available and deduplicate by user_id
   try {
     const dbTokens = await (prisma as any).deviceToken.findMany({
-      select: { fcm_token: true }
+      select: { fcm_token: true, user_id: true }
     });
     if (dbTokens && Array.isArray(dbTokens)) {
       for (const t of dbTokens) {
         const val = (t.fcm_token || '').trim();
         if (val && val.length > 20) {
-          rawTokens.push(val);
+          const key = t.user_id ? `user_${t.user_id}` : val;
+          if (t.user_id && uniqueTokensMap.has(key)) {
+            const oldToken = uniqueTokensMap.get(key)!;
+            if (oldToken !== val) {
+              allStaleTokens.add(oldToken);
+            }
+          }
+          uniqueTokensMap.set(key, val);
         }
       }
     }
   } catch (_) {}
 
-  // Strict Deduplication using Set (prevents duplicate push notifications on lock screen)
-  const uniqueTokens = Array.from(new Set(rawTokens.map(t => t.trim()))).filter(t => Boolean(t) && t.length > 20);
+  const finalTokensToPush = Array.from(uniqueTokensMap.values());
+  console.log(`[Broadcast] Sending push to ${finalTokensToPush.length} unique users/devices.`);
 
-  console.log(`[Broadcast] Total raw tokens: ${rawTokens.length}, Unique device tokens: ${uniqueTokens.length}`);
-
-  // 4. Send FCM Push Notifications via Firebase Admin SDK
+  // 3. Send FCM Push Notifications
   const messaging = getFirebaseMessaging();
   let successCount = 0;
   let failureCount = 0;
-  const staleTokens: string[] = [];
-
-  if (messaging && uniqueTokens.length > 0) {
+  
+  if (messaging && finalTokensToPush.length > 0) {
     const chunkSize = 500;
-    for (let i = 0; i < uniqueTokens.length; i += chunkSize) {
-      const chunk = uniqueTokens.slice(i, i + chunkSize);
+    for (let i = 0; i < finalTokensToPush.length; i += chunkSize) {
+      const chunk = finalTokensToPush.slice(i, i + chunkSize);
       try {
         const response = await messaging.sendEachForMulticast({
           tokens: chunk,
-          notification: {
-            title: cleanTitle,
-            body: cleanBody
-          },
+          notification: { title: cleanTitle, body: cleanBody },
           data: {
             title: cleanTitle,
             body: cleanBody,
@@ -221,70 +187,46 @@ export async function broadcastNotification({
             }
           }
         });
-
+        
         successCount += response.successCount;
         failureCount += response.failureCount;
-
-        // Collect stale or invalid tokens
+        
         response.responses.forEach((resp, idx) => {
-          if (!resp.success && resp.error) {
-            const code = resp.error.code;
-            if (
-              code === 'messaging/invalid-registration-token' ||
-              code === 'messaging/registration-token-not-registered'
-            ) {
-              staleTokens.push(chunk[idx]);
-            }
+          if (!resp.success && resp.error && (
+            resp.error.code === 'messaging/invalid-registration-token' ||
+            resp.error.code === 'messaging/registration-token-not-registered'
+          )) {
+            allStaleTokens.add(chunk[idx]);
           }
         });
       } catch (fcmErr) {
-        console.error('[Broadcast] FCM batch send error:', fcmErr);
         failureCount += chunk.length;
       }
     }
 
-    // Automatically prune stale tokens from database
-    if (staleTokens.length > 0) {
+    // 4. Aggressive Cleanup of Stale & Duplicate Tokens
+    if (allStaleTokens.size > 0) {
+      const staleArray = Array.from(allStaleTokens);
       try {
+        await supabaseAdmin.from('device_tokens').delete().in('token', staleArray);
+        await supabaseAdmin.from('device_tokens').delete().in('fcm_token', staleArray);
         await (prisma as any).deviceToken.deleteMany({
-          where: { fcm_token: { in: staleTokens } }
+          where: { fcm_token: { in: staleArray } }
         });
-      } catch (_) {}
-
-      try {
-        await supabaseAdmin
-          .from('device_tokens')
-          .delete()
-          .in('token', staleTokens);
-      } catch (_) {}
-
-      try {
-        await supabaseAdmin
-          .from('device_tokens')
-          .delete()
-          .in('fcm_token', staleTokens);
-      } catch (_) {}
-
-      console.log(`[Broadcast] Cleaned up ${staleTokens.length} stale FCM tokens.`);
+        console.log(`[Broadcast] Cleaned up ${staleArray.length} stale/duplicate FCM tokens.`);
+      } catch (e) {
+        console.warn('[Broadcast] Cleanup error:', e);
+      }
     }
-  } else if (!messaging) {
-    console.log('[Broadcast] Firebase Admin messaging not configured. In-app realtime notification recorded.');
   }
 
   return {
-    savedNotification: savedNotification || {
-      title: cleanTitle,
-      body: cleanBody,
-      sender_role: senderRole,
-      sender_name: senderName,
-      created_at: new Date().toISOString()
-    },
+    savedNotification: savedNotification || { title: cleanTitle, body: cleanBody },
     stats: {
-      totalTokens: uniqueTokens.length,
+      totalTokens: finalTokensToPush.length,
       pushSuccessCount: successCount,
       pushFailureCount: failureCount,
       fcmConfigured: !!messaging
     }
   };
 }
-
