@@ -1,67 +1,116 @@
+import * as _admin from 'firebase-admin';
 import { initializeApp, getApps, cert, App } from 'firebase-admin/app';
 import { getMessaging, Messaging } from 'firebase-admin/messaging';
 
-let adminApp: App | null = null;
+export interface FirebaseAdminExtended {
+  apps: App[];
+  initializeApp: typeof initializeApp;
+  credential: {
+    cert: typeof cert;
+  };
+  messaging: (app?: App) => Messaging;
+  [key: string]: any;
+}
+
+const admin: FirebaseAdminExtended = _admin as any;
+
+// Polyfill admin properties so admin.apps and admin.credential.cert work consistently across SDK versions
+if (!admin.credential) {
+  admin.credential = { cert };
+}
+if (!('apps' in admin)) {
+  Object.defineProperty(admin, 'apps', {
+    get: () => getApps(),
+    configurable: true,
+  });
+}
+if (!admin.initializeApp) {
+  admin.initializeApp = initializeApp;
+}
+if (!admin.messaging) {
+  admin.messaging = (app?: App) => getMessaging(app || getApps()[0]);
+}
 
 /**
- * Safely initialize and return the Firebase Admin App instance
- * Uses environment variables securely on the server side
+ * Explicit Initialization for Firebase Admin on Vercel
+ * Prevents "Unable to detect a Project Id" by passing credentials explicitly.
+ * Never calls admin.initializeApp() empty.
  */
-export function getFirebaseAdminApp(): App | null {
-  if (adminApp) return adminApp;
-
-  const existingApps = getApps();
-  if (existingApps.length > 0) {
-    adminApp = existingApps[0];
-    return adminApp;
-  }
-
-  // 1. Check for complete Service Account JSON string in environment variable
-  const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_KEY || process.env.FIREBASE_SERVICE_ACCOUNT;
-  if (serviceAccountJson) {
-    try {
-      const serviceAccount = JSON.parse(serviceAccountJson);
-      adminApp = initializeApp({
-        credential: cert(serviceAccount)
-      });
-      console.log('[FirebaseAdmin] Initialized via FIREBASE_SERVICE_ACCOUNT_KEY');
-      return adminApp;
-    } catch (e: any) {
-      console.error('[FirebaseAdmin] Error parsing service account JSON:', e.message);
-    }
-  }
-
-  // 2. Check for individual environment variables
+if (!admin.apps.length) {
   const projectId = process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID;
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-  const privateKeyRaw = process.env.FIREBASE_PRIVATE_KEY;
+  let privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
+  if (privateKey && privateKey.startsWith('"') && privateKey.endsWith('"')) {
+    privateKey = privateKey.slice(1, -1).replace(/\\n/g, '\n');
+  }
 
-  if (projectId && clientEmail && privateKeyRaw) {
+  if (projectId && clientEmail && privateKey) {
     try {
-      const privateKey = privateKeyRaw.replace(/\\n/g, '\n');
-      adminApp = initializeApp({
-        credential: cert({
-          projectId,
-          clientEmail,
-          privateKey
-        })
+      admin.initializeApp({
+        credential: admin.credential.cert({
+          projectId: projectId.trim(),
+          clientEmail: clientEmail.trim(),
+          // معالجة هامة جداً لرموز السطر الجديد في مفتاح Vercel
+          privateKey,
+        }),
       });
-      console.log('[FirebaseAdmin] Initialized via individual environment variables');
-      return adminApp;
-    } catch (e: any) {
-      console.error('[FirebaseAdmin] Error initializing with individual variables:', e.message);
+      console.log('[FirebaseAdmin] Initialized successfully with explicit service account credentials.');
+    } catch (err: any) {
+      console.error('[FirebaseAdmin] Error during explicit Firebase Admin initialization:', err.message);
+    }
+  } else {
+    // Optional fallback: Complete service account JSON in FIREBASE_SERVICE_ACCOUNT_KEY
+    const serviceAccountJson = process.env.FIREBASE_SERVICE_ACCOUNT_KEY || process.env.FIREBASE_SERVICE_ACCOUNT;
+    if (serviceAccountJson) {
+      try {
+        const serviceAccount = JSON.parse(serviceAccountJson);
+        admin.initializeApp({
+          credential: admin.credential.cert(serviceAccount),
+        });
+        console.log('[FirebaseAdmin] Initialized via FIREBASE_SERVICE_ACCOUNT_KEY JSON.');
+      } catch (e: any) {
+        console.error('[FirebaseAdmin] Error parsing service account JSON:', e.message);
+      }
+    } else {
+      console.warn('[FirebaseAdmin] Firebase service account credentials not found in environment. Explicit initialization skipped to prevent "Unable to detect a Project Id" errors on Vercel.');
+    }
+  }
+}
+
+/**
+ * Safely get the active Firebase Admin App instance (or null if not configured)
+ */
+export function getFirebaseAdminApp(): App | null {
+  const apps = getApps();
+  if (apps.length > 0) {
+    return apps[0];
+  }
+
+  // If not yet initialized (e.g. env vars loaded late in lambda lifecycle), try explicit init once more
+  const projectId = process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID;
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+  let privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
+  if (privateKey && privateKey.startsWith('"') && privateKey.endsWith('"')) {
+    privateKey = privateKey.slice(1, -1).replace(/\\n/g, '\n');
+  }
+
+  if (projectId && clientEmail && privateKey) {
+    try {
+      const app = admin.initializeApp({
+        credential: admin.credential.cert({
+          projectId: projectId.trim(),
+          clientEmail: clientEmail.trim(),
+          privateKey,
+        }),
+      });
+      return app;
+    } catch (err: any) {
+      console.error('[FirebaseAdmin] Error initializing Firebase Admin on demand:', err.message);
+      return null;
     }
   }
 
-  // 3. Fallback attempt for Google Cloud / Vercel default credentials
-  try {
-    adminApp = initializeApp();
-    console.log('[FirebaseAdmin] Initialized via default application credentials');
-    return adminApp;
-  } catch (err: any) {
-    console.warn('[FirebaseAdmin] Firebase Admin credentials not provided in .env yet. FCM Push will be simulated.');
-    return null;
-  }
+  return null;
 }
 
 /**
@@ -78,6 +127,7 @@ export function getFirebaseMessaging(): Messaging | null {
   }
 }
 
-// Backward compatible default helper
+// Backward compatible helpers and exports
+export { admin };
 export const getFirebaseAdmin = getFirebaseAdminApp;
 export default getFirebaseAdminApp;
