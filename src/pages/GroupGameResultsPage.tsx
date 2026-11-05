@@ -29,7 +29,7 @@ export const GroupGameResultsPage: React.FC<GroupGameResultsPageProps> = ({
 
   // Smart Verification for Daily Mystery Gift: Record completed match when game finishes
   useEffect(() => {
-    if (room?.status === 'FINISHED') {
+    if (room?.status === 'FINISHED' || room?.status === 'completed') {
       app?.recordDailyGiftRoomMatch?.();
     }
   }, [room?.status, app]);
@@ -79,7 +79,7 @@ export const GroupGameResultsPage: React.FC<GroupGameResultsPageProps> = ({
       className="flex flex-col gap-6 max-w-3xl mx-auto py-6 md:py-8 px-4 min-h-[60vh]"
     >
       <AnimatePresence>
-        {room?.status === 'FINISHED' ? (
+        {room?.status === 'FINISHED' || room?.status === 'completed' ? (
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}

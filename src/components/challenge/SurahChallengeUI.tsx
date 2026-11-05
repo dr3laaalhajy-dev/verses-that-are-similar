@@ -28,6 +28,11 @@ export interface SurahChallengeUIProps {
   onViewTafsir?: (surahNumber: any, verseNumber: any, text: string) => void;
   currentChallenge?: any;
   surahFeedbackData?: SurahFeedbackData | null;
+  isRoom?: boolean;
+  isHost?: boolean;
+  isLastQuestion?: boolean;
+  onEndRoom?: () => void;
+  isEndingRoom?: boolean;
 }
 
 export const SurahChallengeUI: React.FC<SurahChallengeUIProps> = ({
@@ -47,7 +52,12 @@ export const SurahChallengeUI: React.FC<SurahChallengeUIProps> = ({
   handlePromptNextChallenge,
   onViewTafsir,
   currentChallenge,
-  surahFeedbackData
+  surahFeedbackData,
+  isRoom,
+  isHost,
+  isLastQuestion,
+  onEndRoom,
+  isEndingRoom
 }) => (
   <div className="flex flex-col items-center gap-2 md:gap-4 w-full max-w-xl md:max-w-3xl lg:max-w-4xl mx-auto">
     <div className="glass p-3.5 md:p-8 lg:p-10 rounded-2xl md:rounded-3xl w-full text-center border-white/80 shadow-lg relative overflow-hidden group">
@@ -184,6 +194,23 @@ export const SurahChallengeUI: React.FC<SurahChallengeUIProps> = ({
               >
                 إنهاء التحدي اليومي
               </button>
+            ) : isRoom && isLastQuestion ? (
+              isHost ? (
+                <button
+                  type="button"
+                  onClick={onEndRoom}
+                  disabled={isEndingRoom}
+                  className="px-5 py-2.5 bg-brand-emerald text-white rounded-xl font-black text-xs md:text-sm hover:bg-brand-emerald/90 transition-all shadow-md flex items-center gap-2 cursor-pointer"
+                >
+                  <Trophy className="w-4 h-4 text-amber-300" />
+                  <span>{isEndingRoom ? 'جاري الإنهاء...' : 'إنهاء الغرفة'}</span>
+                </button>
+              ) : (
+                <div className="px-4 py-2 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl font-bold text-xs flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
+                  <span>في انتظار القائد لإنهاء التحدي</span>
+                </div>
+              )
             ) : (
               <button
                 onClick={() => {

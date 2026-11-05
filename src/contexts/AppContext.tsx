@@ -1997,6 +1997,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const cleanPath = path.replace(/^\//, '').split('?')[0].split('#')[0];
       const rootSegment = cleanPath.split('/')[0];
 
+      if (cleanPath === 'challenge/results' || cleanPath.startsWith('challenge/results')) {
+        setIsMushafFullscreen(false);
+        setShowScores(false);
+        setView('group_game', false);
+        return;
+      }
+
       if (rootSegment === 'leaderboard' || rootSegment === 'scores') {
         setIsMushafFullscreen(false);
         setShowScores(true);
@@ -2606,6 +2613,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!room?.id) return;
     if (room.transitionMode === 'ASYNC') {
       // In ASYNC mode: player timed out on their individual question
+      const totalQ = room.questionCount || challenges.length || 5;
+      const isLastQuestion = currentChallengeIndex >= totalQ - 1;
       try {
         fetch('/api/1v1', {
           method: 'POST',
@@ -2619,7 +2628,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             timestamp: Date.now()
           })
         }).catch(err => console.error('Error submitting ASYNC timeout answer:', err));
-        moveToNextQuestion();
+        if (!isLastQuestion) {
+          moveToNextQuestion();
+        } else {
+          setSkillsFeedback(true);
+          setHasAnsweredCurrentQuestion(true);
+        }
       } catch (err) {
         console.error('Error in ASYNC timeout:', err);
       }
@@ -2644,15 +2658,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }).catch(err => console.error('Error submitting timeout answer:', err));
     }
 
-    // Requirement 1: Only Host triggers advance-question on timeout
+    // Requirement 1 & 2: Only Host triggers advance-question on timeout, and NEVER auto-advance on the last question!
+    const totalQ = room.questionCount || challenges.length || 5;
+    const curQ = room.currentQuestionIndex ?? currentChallengeIndex;
+    const isLastQuestion = curQ >= totalQ - 1;
+
+    const currentUserId = playerUsername || playerName;
     const isHost = Boolean(
+      (room?.host_id && String(currentUserId) === String(room.host_id)) ||
+      (room?.player1Id && (String(currentUserId) === String(room.player1Id) || String(currentUserId) === String(room.player1?.id))) ||
       (room?.player1?.name && playerName && room.player1.name === playerName) ||
       (room?.player1?.username && playerUsername && room.player1.username.toLowerCase() === playerUsername.toLowerCase()) ||
       (room?.hostName && playerName && room.hostName === playerName) ||
       (room?.hostUsername && playerUsername && room.hostUsername.toLowerCase() === playerUsername.toLowerCase())
     );
 
-    if (isHost && !isAdvancingRef.current) {
+    if (!isLastQuestion && isHost && !isAdvancingRef.current) {
       isAdvancingRef.current = true;
       try {
         const res = await fetch('/api/1v1', {
@@ -2712,11 +2733,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             return;
           }
 
-          // If room finished, switch to group_game results
-          if (data.status === 'FINISHED') {
+          // If room finished or completed, switch to group_game results
+          if (data.status === 'FINISHED' || data.status === 'completed') {
             recordDailyGiftRoomMatch();
             setRoom(data);
             if (view !== 'group_game') {
+              router.push('/challenge/results');
               setView('group_game');
             }
             return;
@@ -2837,7 +2859,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   activeParticipants.every((p: any) => Boolean(currentAnswers[String(p.id)]))
                 );
 
-                if (allActiveAnswered) {
+                const totalQ = data.questionCount || (challenges && challenges.length) || 5;
+                const isLastQuestion = data.currentQuestionIndex !== undefined && data.currentQuestionIndex >= totalQ - 1;
+
+                if (!isLastQuestion && allActiveAnswered) {
                   isAdvancingRef.current = true;
                   fetch('/api/1v1', {
                     method: 'POST',
@@ -3079,7 +3104,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [view, room, challengeMode, playerUsername, playerName, systemSettings]);
 
-  // 4. معالجة انقطاع الاتصال (Reconnection UI & Supabase Channel Events)
+  // 4. معالجة انقطاع الاتصال والمزامنة اللحظية (Reconnection UI & Supabase Channel Events)
   useEffect(() => {
     if (!room?.id) {
       setIsReconnecting(false);
@@ -3088,6 +3113,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const channel = supabase
       .channel(`room_sync_${room.id}`)
+      .on('broadcast', { event: 'room_completed' }, (_payload: any) => {
+        recordDailyGiftRoomMatch?.();
+        router.push('/challenge/results');
+        setView('group_game');
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${room.id}` }, (payload: any) => {
+        if (payload?.new?.status === 'completed' || payload?.new?.status === 'FINISHED') {
+          recordDailyGiftRoomMatch?.();
+          router.push('/challenge/results');
+          setView('group_game');
+        }
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'Room', filter: `id=eq.${room.id}` }, (payload: any) => {
+        if (payload?.new?.status === 'completed' || payload?.new?.status === 'FINISHED') {
+          recordDailyGiftRoomMatch?.();
+          router.push('/challenge/results');
+          setView('group_game');
+        }
+      })
       .subscribe((status, err) => {
         if (err) console.warn('[Supabase Room Channel Error]:', err);
         if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
@@ -3899,14 +3943,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (currentChallengeIndex >= challengesLength - 1) {
       if (room) {
         syncGroupProgress(true);
+        // Do NOT auto-navigate to group_game here when in a room!
+        // The host must click "إنهاء الغرفة" or wait for leader completion!
+        return;
       }
       if (view === 'challenge') {
-        if (room) {
-          setView('group_game'); // Show leaderboard at end
-        } else {
-          // Requirement 4: Cups are earned strictly in group rooms, not solo sessions
-          setView('skills_results');
-        }
+        // Requirement 4: Cups are earned strictly in group rooms, not solo sessions
+        setView('skills_results');
       }
       return;
     }
@@ -4038,6 +4081,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       if (room?.id) {
+        const totalQ = room.questionCount || (challenges && challenges.length) || 5;
+        const isLastQ = currentChallengeIndex >= totalQ - 1;
+
         if (room.transitionMode === 'ASYNC') {
           fetch('/api/1v1', {
             method: 'POST',
@@ -4053,17 +4099,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }).then(res => res.json()).then(data => {
             if (data && data.status) {
               setRoom(data);
-              if (data.status === 'FINISHED') {
-                recordDailyGiftRoomMatch();
-                setView('group_game');
-              }
             }
           }).catch(err => console.error('Error submitting ASYNC room answer:', err));
 
-          const advanceDelay = isCorrect ? 900 : 1500;
-          setTimeout(() => {
-            moveToNextQuestion();
-          }, advanceDelay);
+          if (!isLastQ) {
+            const advanceDelay = isCorrect ? 900 : 1500;
+            setTimeout(() => {
+              moveToNextQuestion();
+            }, advanceDelay);
+          }
           return;
         }
 
@@ -4082,10 +4126,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }).then(res => res.json()).then(data => {
           if (data && data.status) {
             setRoom(data);
-            if (data.status === 'FINISHED') {
-              recordDailyGiftRoomMatch();
-              setView('group_game');
-            } else if (data.currentQuestionIndex !== undefined && data.currentQuestionIndex > currentChallengeIndex) {
+            if (!isLastQ && data.currentQuestionIndex !== undefined && data.currentQuestionIndex > currentChallengeIndex) {
               resetQuestionUIState(data.currentQuestionIndex, data);
             }
           }
@@ -4195,6 +4236,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // 4. Auto-advance in single-player, or submit in multiplayer
     if (room?.id) {
+      const totalQ = room.questionCount || (challenges && challenges.length) || 5;
+      const isLastQ = currentChallengeIndex >= totalQ - 1;
+
       if (room.transitionMode === 'ASYNC') {
         fetch('/api/1v1', {
           method: 'POST',
@@ -4210,17 +4254,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }).then(res => res.json()).then(data => {
           if (data && data.status) {
             setRoom(data);
-            if (data.status === 'FINISHED') {
-              recordDailyGiftRoomMatch();
-              setView('group_game');
-            }
           }
         }).catch(err => console.error('Error submitting room surah answer:', err));
 
-        const advanceDelay = isFullyCorrect ? 900 : 1800;
-        setTimeout(() => {
-          moveToNextQuestion();
-        }, advanceDelay);
+        if (!isLastQ) {
+          const advanceDelay = isFullyCorrect ? 900 : 1800;
+          setTimeout(() => {
+            moveToNextQuestion();
+          }, advanceDelay);
+        }
         return;
       }
 
@@ -4239,10 +4281,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }).then(res => res.json()).then(data => {
         if (data && data.status) {
           setRoom(data);
-          if (data.status === 'FINISHED') {
-            recordDailyGiftRoomMatch();
-            setView('group_game');
-          } else if (data.currentQuestionIndex !== undefined && data.currentQuestionIndex > currentChallengeIndex) {
+          if (!isLastQ && data.currentQuestionIndex !== undefined && data.currentQuestionIndex > currentChallengeIndex) {
             resetQuestionUIState(data.currentQuestionIndex, data);
           }
         }
@@ -4309,6 +4348,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // 1. Room Multiplayer Handling
     if (room?.id) {
+      const totalQ = room.questionCount || (challenges && challenges.length) || 5;
+      const isLastQ = currentChallengeIndex >= totalQ - 1;
+
       if (room.transitionMode === 'ASYNC') {
         // ASYNC MODE: submit answer as incorrect and advance locally immediately
         fetch('/api/1v1', {
@@ -4325,14 +4367,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }).then(res => res.json()).then(data => {
           if (data && data.status) {
             setRoom(data);
-            if (data.status === 'FINISHED') {
-              recordDailyGiftRoomMatch();
-              setView('group_game');
-            }
           }
         }).catch(err => console.error('Error submitting ASYNC skip:', err));
 
-        moveToNextQuestion();
+        if (!isLastQ) {
+          moveToNextQuestion();
+        }
         return;
       }
 
@@ -4354,10 +4394,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }).then(res => res.json()).then(data => {
         if (data && data.status) {
           setRoom(data);
-          if (data.status === 'FINISHED') {
-            recordDailyGiftRoomMatch();
-            setView('group_game');
-          } else if (data.currentQuestionIndex !== undefined && data.currentQuestionIndex > currentChallengeIndex) {
+          if (!isLastQ && data.currentQuestionIndex !== undefined && data.currentQuestionIndex > currentChallengeIndex) {
             resetQuestionUIState(data.currentQuestionIndex, data);
           }
         }

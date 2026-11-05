@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../services/supabase';
+import { router } from '../services/router';
 import { isAnswerCorrect } from '../utils/normalizeArabic';
 import './WhoAmIGame.css';
 
@@ -48,6 +49,7 @@ export default function WhoAmIGame({
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
+  const [isRoomCompleted, setIsRoomCompleted] = useState(false);
   const revealingRef = useRef<string | null>(null);
   const queueRef = useRef<any[]>([]);
 
@@ -86,6 +88,22 @@ export default function WhoAmIGame({
     const filter = `room_id=eq.${roomId}`;
     const channel = supabase
       .channel(`who-am-i-${roomId}`)
+      .on('broadcast', { event: 'room_completed' }, () => {
+        setIsRoomCompleted(true);
+        router.push('/challenge/results');
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}` }, (payload: any) => {
+        if (payload?.new?.status === 'completed' || payload?.new?.status === 'FINISHED') {
+          setIsRoomCompleted(true);
+          router.push('/challenge/results');
+        }
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'Room', filter: `id=eq.${roomId}` }, (payload: any) => {
+        if (payload?.new?.status === 'completed' || payload?.new?.status === 'FINISHED') {
+          setIsRoomCompleted(true);
+          router.push('/challenge/results');
+        }
+      })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'who_am_i_rounds', filter }, refresh)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'who_am_i_answers', filter }, refresh)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'who_am_i_submissions', filter }, refresh)
@@ -163,7 +181,7 @@ export default function WhoAmIGame({
       .sort((x, y) => (y.score || 0) - (x.score || 0));
   }, [answers, rounds, players]);
 
-  const finished = rounds.length >= totalRounds && revealed;
+  const finished = isRoomCompleted;
 
   // ---------- الكشف التلقائي (القائد) ----------
   useEffect(() => {
@@ -509,11 +527,42 @@ export default function WhoAmIGame({
               </p>
               <Scoreboard scores={scores} meId={currentUser.id} />
               {isLeader ? (
-                <button className="wai-btn" onClick={startNext} style={{ marginTop: 16 }}>
-                  {rounds.length >= totalRounds ? 'عرض النتيجة' : 'السؤال التالي'}
+                <button
+                  className="wai-btn"
+                  onClick={async () => {
+                    if (rounds.length >= totalRounds) {
+                      try {
+                        await Promise.allSettled([
+                          supabase.from('rooms').update({ status: 'completed' }).eq('id', roomId),
+                          supabase.from('Room').update({ status: 'completed' }).eq('id', roomId)
+                        ]);
+                      } catch (_) {}
+                      try {
+                        const ch = supabase.channel(`who-am-i-${roomId}`);
+                        ch.send({
+                          type: 'broadcast',
+                          event: 'room_completed',
+                          payload: { roomId }
+                        }).catch(() => {});
+                      } catch (_) {}
+                      setIsRoomCompleted(true);
+                      router.push('/challenge/results');
+                    } else {
+                      startNext();
+                    }
+                  }}
+                  style={{ marginTop: 16 }}
+                >
+                  {rounds.length >= totalRounds ? 'إنهاء الغرفة' : 'السؤال التالي'}
                 </button>
               ) : (
-                <p className="wai-muted">بانتظار القائد للانتقال...</p>
+                rounds.length >= totalRounds ? (
+                  <p className="wai-muted" style={{ fontWeight: 800, color: '#d97706', marginTop: 12 }}>
+                    في انتظار القائد لإنهاء التحدي
+                  </p>
+                ) : (
+                  <p className="wai-muted">بانتظار القائد للانتقال...</p>
+                )
               )}
             </>
           )}

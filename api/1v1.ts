@@ -13,6 +13,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     case 'start': return handleStart(req, res)
     case 'submit-answer': return handleSubmitAnswer(req, res)
     case 'advance-question': return handleAdvanceQuestion(req, res)
+    case 'end-room':
+    case 'finish-room':
+      return handleEndRoom(req, res)
     case 'submit-progress': return handleSubmitProgress(req, res)
     case 'list-challenges': return handleListChallenges(req, res)
     case 'check-active': return handleCheckActive(req, res)
@@ -801,8 +804,10 @@ async function handlePoll(req: VercelRequest, res: VercelResponse) {
         ((Date.now() - Number(room.questionStartTime)) / 1000 >= (room.timePerQuestion + 1.5))
 
       const allOnlineAnswered = onlinePlayers.length > 0 && validAnswers.length >= onlinePlayers.length
+      const totalQ = room.questionCount || 5
+      const isLastQuestion = curQ >= totalQ - 1
 
-      if (isTimerExpired || allOnlineAnswered) {
+      if (!isLastQuestion && (isTimerExpired || allOnlineAnswered)) {
         await prisma.$transaction(async (tx) => {
           const freshRoom = await tx.room.findUnique({ where: { id: room.id } })
           if (freshRoom && freshRoom.status === 'PLAYING' && freshRoom.currentQuestionIndex === curQ) {
@@ -1020,6 +1025,87 @@ async function handleAdvanceQuestion(req: VercelRequest, res: VercelResponse) {
   }
 }
 
+async function handleEndRoom(req: VercelRequest, res: VercelResponse) {
+  const { roomId, playerId } = req.body
+  if (!roomId) {
+    return res.status(400).json({ message: 'Missing roomId' })
+  }
+
+  try {
+    const room = await prisma.room.findUnique({ where: { id: roomId as string } })
+    if (!room) {
+      return res.status(404).json({ message: 'Room not found' })
+    }
+
+    if (room.status === 'FINISHED' || (room.status as string) === 'completed') {
+      const fullRoom = await getFullRoom(room.id)
+      return res.status(200).json(fullRoom)
+    }
+
+    // Host validation
+    if (playerId) {
+      const player = await findPlayer(playerId)
+      if (player && player.id !== room.player1Id) {
+        console.warn(`Non-host player ${playerId} attempted to end room`)
+        return res.status(403).json({ message: 'Only host can end the room' })
+      }
+    }
+
+    const currentAnswers = (room.currentAnswers as any) || {}
+    const playersProgress = (room.playersProgress as any) || {}
+    const now = Date.now()
+
+    // Ensure all players have an answer entry for the final question
+    const completeAnswers: Record<string, any> = { ...currentAnswers }
+    for (const [pIdStr, pData] of Object.entries(playersProgress)) {
+      if (pIdStr === '__lastReaction') continue
+      if (!completeAnswers[pIdStr]) {
+        completeAnswers[pIdStr] = {
+          playerId: parseInt(pIdStr),
+          name: (pData as any)?.name || 'متسابق',
+          isCorrect: false,
+          timestamp: now,
+          questionIndex: room.currentQuestionIndex || 0,
+          isDefaulted: true
+        }
+      }
+    }
+
+    const firstCorrectId = (room.currentAnswers as any)?._firstCorrectUserId || (completeAnswers as any)?._firstCorrectUserId
+    const updatedProgress = evaluateQuestionScores(playersProgress, completeAnswers, firstCorrectId)
+
+    for (const [pIdStr, ans] of Object.entries(completeAnswers)) {
+      if (pIdStr === '__lastReaction') continue
+      if (updatedProgress[pIdStr]) {
+        updatedProgress[pIdStr].finishTime = Number(ans?.timestamp) || now
+        updatedProgress[pIdStr].progress = 100
+      }
+    }
+
+    const finalized = finalizeRoomScores(room, updatedProgress)
+    const finalProgress = finalized.updatedProgress
+    const winnerId = finalized.winnerId
+
+    await prisma.$transaction(async (tx) => {
+      await applyRoomTrophies(tx, room, finalProgress)
+      await tx.room.update({
+        where: { id: room.id },
+        data: {
+          playersProgress: finalProgress,
+          status: 'completed',
+          winnerId
+        }
+      })
+    })
+
+    const fullRoom = await getFullRoom(room.id)
+    return res.status(200).json(fullRoom)
+  } catch (error: any) {
+    console.error('Error in handleEndRoom:', error)
+    return res.status(500).json({ message: 'Failed to end room', error: error.message })
+  }
+}
+
 async function handleSubmitProgress(req: VercelRequest, res: VercelResponse) {
   const { roomId, playerId, progress, isFinished, score } = req.body
   if (!roomId || !playerId || progress === undefined) return res.status(400).json({ message: 'Missing fields' })
@@ -1207,12 +1293,14 @@ async function handlePresence(req: VercelRequest, res: VercelResponse) {
       })
 
       // Check if all remaining online players have answered current question
+      const totalQ = room.questionCount || 5
+      const isLastQuestion = curQ >= totalQ - 1
       const allRemainingAnswered = remainingOnlinePlayers.length > 0 && remainingOnlinePlayers.every(([id]) => {
         const a = currentAnswers[id]
         return a && (a.questionIndex === undefined || a.questionIndex === curQ)
       })
 
-      if (allRemainingAnswered) {
+      if (!isLastQuestion && allRemainingAnswered) {
         await prisma.$transaction(async (tx) => {
           const freshRoom = await tx.room.findUnique({ where: { id: room.id } })
           if (freshRoom && freshRoom.status === 'PLAYING' && freshRoom.currentQuestionIndex === curQ) {
@@ -1419,6 +1507,8 @@ async function handleResign(req: VercelRequest, res: VercelResponse) {
       // ننتقل فوراً للسؤال التالي دون تركهم معلقين بانتظار المنسحب
       if ((room as any).transitionMode !== 'ASYNC') {
         const curQ = room.currentQuestionIndex || 0
+        const totalQ = room.questionCount || 5
+        const isLastQuestion = curQ >= totalQ - 1
         const curAnswers: Record<string, any> = (room.currentAnswers as any) || {}
 
         const allRemainingAnswered = remainingActivePlayers.length > 0 && remainingActivePlayers.every(([id]) => {
@@ -1426,7 +1516,7 @@ async function handleResign(req: VercelRequest, res: VercelResponse) {
           return a && (a.questionIndex === undefined || a.questionIndex === curQ)
         })
 
-        if (allRemainingAnswered) {
+        if (!isLastQuestion && allRemainingAnswered) {
           await prisma.$transaction(async (tx) => {
             await tx.room.update({
               where: { id: room.id },

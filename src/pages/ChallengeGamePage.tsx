@@ -1,12 +1,15 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Zap, Loader2, Users, AlertCircle } from 'lucide-react';
+import { Zap, Loader2, Users, AlertCircle, Trophy, CheckCircle2, XCircle } from 'lucide-react';
 import { View } from '../types/challenges';
 import { SkillsChallengeHeader } from '../components/challenge/SkillsChallengeHeader';
 import { AudioChallengeUI } from '../components/challenge/AudioChallengeUI';
 import { SurahChallengeUI } from '../components/challenge/SurahChallengeUI';
 import { CompleteChallengeUI } from '../components/challenge/CompleteChallengeUI';
 import { LiveReactionsOverlay } from '../components/LiveReactionsOverlay';
+import { useApp } from '../contexts/AppContext';
+import { router } from '../services/router';
+import { supabase } from '../services/supabase';
 
 export interface ChallengeGamePageProps {
   currentChallenge: any;
@@ -123,6 +126,100 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
   playerName,
   transcript
 }) => {
+  const app = useApp();
+  const [isEndingRoom, setIsEndingRoom] = useState(false);
+
+  const currentUserId = playerUsername || playerName;
+  const isHost = Boolean(
+    (room?.host_id && String(currentUserId) === String(room.host_id)) ||
+    (room?.player1Id && (String(currentUserId) === String(room.player1Id) || String(currentUserId) === String(room.player1?.id))) ||
+    (room?.hostName && playerName && room.hostName === playerName) ||
+    (room?.hostUsername && playerUsername && room.hostUsername.toLowerCase() === playerUsername.toLowerCase()) ||
+    (room?.player1?.name && playerName && room.player1.name === playerName) ||
+    (room?.player1?.username && playerUsername && room.player1.username.toLowerCase() === playerUsername.toLowerCase())
+  );
+
+  const totalQuestions = room?.questionCount || challenges.length || room?.challenges?.length || 5;
+  const currentQuestionIdx = room?.currentQuestionIndex ?? currentChallengeIndex;
+  const isLastQuestion = currentQuestionIdx >= totalQuestions - 1;
+
+  // Supabase Realtime Listener for room completion:
+  // When host ends room or status becomes 'completed'/'FINISHED', instantly route all players
+  useEffect(() => {
+    if (!room?.id) return;
+
+    const handleRoomFinish = () => {
+      app?.recordDailyGiftRoomMatch?.();
+      router.push('/challenge/results');
+      setView('group_game');
+    };
+
+    const channel = supabase
+      .channel(`room_sync_${room.id}`)
+      .on('broadcast', { event: 'room_completed' }, handleRoomFinish)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${room.id}` }, (payload: any) => {
+        if (payload?.new?.status === 'completed' || payload?.new?.status === 'FINISHED') {
+          handleRoomFinish();
+        }
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'Room', filter: `id=eq.${room.id}` }, (payload: any) => {
+        if (payload?.new?.status === 'completed' || payload?.new?.status === 'FINISHED') {
+          handleRoomFinish();
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [room?.id, setView, app]);
+
+  const handleEndRoom = async () => {
+    if (isEndingRoom || !room?.id) return;
+    setIsEndingRoom(true);
+
+    try {
+      const res = await fetch('/api/1v1', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'end-room',
+          roomId: room.id,
+          playerId: playerUsername || playerName
+        })
+      });
+      const data = await res.json();
+      if (data && (data.id || data.status)) {
+        setRoom(data);
+      }
+    } catch (e) {
+      console.error('[ChallengeGamePage] Error calling end-room:', e);
+    }
+
+    try {
+      await Promise.allSettled([
+        supabase.from('rooms').update({ status: 'completed' }).eq('id', room.id),
+        supabase.from('Room').update({ status: 'completed' }).eq('id', room.id)
+      ]);
+    } catch (sbErr) {
+      console.warn('[ChallengeGamePage] Supabase rooms update warning:', sbErr);
+    }
+
+    try {
+      const channel = supabase.channel(`room_sync_${room.id}`);
+      channel.send({
+        type: 'broadcast',
+        event: 'room_completed',
+        payload: { roomId: room.id, status: 'completed' }
+      }).catch(() => {});
+    } catch (bErr) {
+      console.warn('[ChallengeGamePage] Broadcast warning:', bErr);
+    }
+
+    app?.recordDailyGiftRoomMatch?.();
+    router.push('/challenge/results');
+    setView('group_game');
+  };
   if (!currentChallenge) {
     return (
       <div className="flex flex-col items-center justify-center py-40">
@@ -344,6 +441,11 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
           updateStatsAfterWin={updateStatsAfterWin}
           handlePromptNextChallenge={handlePromptNextChallenge}
           onViewTafsir={handleOpenTafsir}
+          isRoom={!!room}
+          isHost={isHost}
+          isLastQuestion={isLastQuestion}
+          onEndRoom={handleEndRoom}
+          isEndingRoom={isEndingRoom}
         />
       ) : skillsType === 'surah' && !systemSettings.hideSurahChallenge && challengeMode !== 'daily' ? (
         <SurahChallengeUI
@@ -368,6 +470,11 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
           onViewTafsir={handleOpenTafsir}
           currentChallenge={currentChallenge}
           surahFeedbackData={surahFeedbackData}
+          isRoom={!!room}
+          isHost={isHost}
+          isLastQuestion={isLastQuestion}
+          onEndRoom={handleEndRoom}
+          isEndingRoom={isEndingRoom}
         />
       ) : ((skillsType === 'complete' && !systemSettings.hideCompletionChallenge) || challengeMode === 'daily') ? (
         <CompleteChallengeUI
@@ -390,6 +497,11 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
           onViewTafsir={handleOpenTafsir}
           currentChallenge={currentChallenge}
           eliminatedIndices={eliminatedOptionIndices}
+          isRoom={!!room}
+          isHost={isHost}
+          isLastQuestion={isLastQuestion}
+          onEndRoom={handleEndRoom}
+          isEndingRoom={isEndingRoom}
           onFinishDaily={() => {
             setChallengeMode('normal');
             setView('home');
@@ -417,6 +529,110 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
             العودة لقائمة الغرف
           </button>
         </div>
+      )}
+
+      {/* Participants Answer Status for the active question in room mode */}
+      {room && (hasAnsweredCurrentQuestion || skillsFeedback || (room.transitionMode !== 'ASYNC' && speedTimeLeft <= 0)) && (
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="p-3.5 sm:p-4 rounded-2xl bg-white/95 dark:bg-slate-900/95 border border-slate-200 dark:border-slate-800 shadow-sm space-y-2.5 my-3"
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs sm:text-sm font-black text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+              <Users className="w-4 h-4 text-brand-emerald" />
+              <span>إجابات اللاعبين {isLastQuestion ? '(السؤال الأخير 🏁)' : ''}</span>
+            </span>
+            <span className="text-[11px] font-bold text-slate-500">
+              {room.answeredCount ?? Object.keys(room.currentAnswers || {}).filter(k => k !== '_firstCorrectUserId' && k !== '__lastReaction').length} من {(room.participants || []).length || 1} أجابوا
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+            {(room.participants || []).map((p: any) => {
+              const pId = String(p.id);
+              const ans = room.currentAnswers?.[pId] || room.currentAnswers?.[p.username] || room.currentAnswers?.[p.name];
+              const isMe = p.name === playerName || p.username === playerUsername || pId === String(currentUserId);
+              const hasAns = Boolean(ans && (ans.questionIndex === undefined || ans.questionIndex === currentQuestionIdx));
+              const isAnsCorrect = hasAns && Boolean(ans.isCorrect);
+
+              return (
+                <div
+                  key={pId}
+                  className={`flex items-center justify-between p-2.5 rounded-xl border text-xs transition-all ${
+                    !hasAns
+                      ? 'bg-slate-50/70 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 text-slate-400'
+                      : isAnsCorrect
+                      ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 font-bold'
+                      : 'bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800 text-rose-800 dark:text-rose-200 font-bold'
+                  }`}
+                >
+                  <span className="flex items-center gap-1.5 truncate">
+                    <span className="truncate">{p.name || p.username || 'لاعب'}</span>
+                    {isMe && <span className="text-[10px] opacity-75">(أنت)</span>}
+                  </span>
+                  <span className="shrink-0 flex items-center gap-1 text-[11px]">
+                    {!hasAns ? (
+                      <span className="text-slate-400 font-normal">بانتظار الإجابة...</span>
+                    ) : isAnsCorrect ? (
+                      <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>أصاب (+1)</span>
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1 text-rose-600 dark:text-rose-400">
+                        <XCircle className="w-3.5 h-3.5" />
+                        <span>أخطأ</span>
+                      </span>
+                    )}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </motion.div>
+      )}
+
+      {/* End Room Action for Host / Waiting state for players on the final question */}
+      {room && isLastQuestion && (hasAnsweredCurrentQuestion || skillsFeedback || (room.transitionMode !== 'ASYNC' && speedTimeLeft <= 0)) && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.98, y: 10 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-amber-500/10 via-brand-emerald/10 to-teal-500/10 border-2 border-brand-emerald/30 shadow-md text-center space-y-3 mt-4"
+        >
+          <div className="flex items-center justify-center gap-2">
+            <Trophy className="w-5 h-5 text-amber-500" />
+            <h4 className="text-sm sm:text-base font-black text-slate-800 dark:text-slate-100">
+              اكتملت جميع أسئلة التحدي! 🏁
+            </h4>
+          </div>
+
+          {isHost ? (
+            <button
+              type="button"
+              onClick={handleEndRoom}
+              disabled={isEndingRoom}
+              className="w-full py-3.5 px-6 rounded-2xl bg-gradient-to-r from-brand-emerald to-teal-600 hover:from-brand-emerald/90 hover:to-teal-700 text-white font-black text-sm sm:text-base shadow-lg shadow-brand-emerald/30 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer"
+            >
+              {isEndingRoom ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <span>جاري إنهاء التحدي والانتقال للنتائج...</span>
+                </>
+              ) : (
+                <>
+                  <Trophy className="w-5 h-5 text-amber-300" />
+                  <span>إنهاء الغرفة وإظهار النتائج</span>
+                </>
+              )}
+            </button>
+          ) : (
+            <div className="flex items-center justify-center gap-2.5 py-2.5 px-4 rounded-xl bg-white/80 dark:bg-slate-800/80 border border-amber-200 dark:border-amber-700/40 text-amber-800 dark:text-amber-200 text-xs sm:text-sm font-black">
+              <Loader2 className="w-4 h-4 animate-spin text-amber-600" />
+              <span>في انتظار القائد لإنهاء التحدي</span>
+            </div>
+          )}
+        </motion.div>
       )}
 
       {/* Live Reactions in Challenge / Room Game */}
