@@ -138,6 +138,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             data: {
               title: notificationTitle,
               body: notificationBody,
+              route: targetUrl,
               url: targetUrl,
               page: String(startPage),
               click_action: targetUrl

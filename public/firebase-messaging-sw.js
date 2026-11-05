@@ -62,64 +62,7 @@ messaging.onBackgroundMessage((payload) => {
     ]
   };
 
-  self.registration.showNotification(notificationTitle, notificationOptions);
-});
-
-// معالجة حدث push القياسي (Standard Web Push API) - ضروري لنظام Apple iOS Safari
-self.addEventListener('push', (event) => {
-  if (!event.data) return;
-
-  let payload = {};
-  try {
-    payload = event.data.json();
-  } catch (e) {
-    payload = {
-      notification: {
-        title: 'تطبيق متين 🔔',
-        body: event.data.text()
-      }
-    };
-  }
-
-  const notificationTitle = payload.notification?.title || payload.data?.title || payload.title || 'تطبيق متين 🔔';
-  const notificationBody = payload.notification?.body || payload.data?.body || payload.body || 'لديك تنبيه جديد من تطبيق متين';
-
-  const rawUrl = payload.data?.url || payload.fcmOptions?.link || payload.notification?.click_action || payload.url || '/';
-  const fullUrl = (rawUrl.startsWith('http://') || rawUrl.startsWith('https://'))
-    ? rawUrl
-    : new URL(rawUrl, self.location.origin).href;
-
-  let relativePath = payload.data?.relative_url || '';
-  if (!relativePath || relativePath.startsWith('http')) {
-    try {
-      const parsed = new URL(fullUrl, self.location.origin);
-      relativePath = parsed.pathname + parsed.search + parsed.hash;
-    } catch (e) {
-      relativePath = rawUrl.startsWith('/') ? rawUrl : '/' + rawUrl;
-    }
-  }
-
-  const notificationOptions = {
-    body: notificationBody,
-    icon: '/logo.png',
-    badge: '/logo-mark.png',
-    dir: 'rtl',
-    lang: 'ar',
-    vibrate: [200, 100, 200],
-    data: {
-      url: fullUrl,
-      fullUrl: fullUrl,
-      relative_url: relativePath,
-      ...payload.data
-    },
-    actions: [
-      { action: 'open_app', title: 'فتح التطبيق' }
-    ]
-  };
-
-  event.waitUntil(
-    self.registration.showNotification(notificationTitle, notificationOptions)
-  );
+  return self.registration.showNotification(notificationTitle, notificationOptions);
 });
 
 // التعامل مع حدث النقر على الإشعار من شريط التنبيهات بالهاتف / المتصفح

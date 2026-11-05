@@ -115,15 +115,6 @@ export function usePushNotifications(userId?: string | null, onNotificationRecei
     }
   }, [isSupported, userId, saveTokenToDatabase]);
 
-  // Auto-sync token if permission is already granted
-  useEffect(() => {
-    if (typeof window === 'undefined' || !isSupported) return;
-
-    if (Notification.permission === 'granted' && !fcmToken) {
-      requestPermissionAndRegister().catch(() => {});
-    }
-  }, [isSupported, fcmToken, requestPermissionAndRegister]);
-
   // Listen for foreground FCM notifications
   useEffect(() => {
     let unsubscribe: (() => void) | null = null;
