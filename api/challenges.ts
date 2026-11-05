@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { prisma } from './_lib/prisma.js'
+import { supabaseAdmin } from './_lib/supabaseAdmin.js'
 import jwt from 'jsonwebtoken'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
@@ -42,19 +42,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === 'PUT') {
       const { keyword, verses, category, level, type, audioUrl, options, correctText } = req.body
       try {
-        const challenge = await prisma.challenge.update({
-          where: { id: Number(id) },
-          data: { 
-            keyword, 
-            verses,
-            category: category !== undefined ? category : undefined,
-            level: level !== undefined ? level : undefined,
-            type: type !== undefined ? type : undefined,
-            audioUrl: audioUrl !== undefined ? audioUrl : undefined,
-            options: options !== undefined ? options : undefined,
-            correctText: correctText !== undefined ? correctText : undefined,
-          }
-        })
+        const updateData: any = {};
+        if (keyword !== undefined) updateData.keyword = keyword;
+        if (verses !== undefined) updateData.verses = verses;
+        if (category !== undefined) updateData.category = category;
+        if (level !== undefined) updateData.level = level;
+        if (type !== undefined) updateData.type = type;
+        if (audioUrl !== undefined) updateData.audioUrl = audioUrl;
+        if (options !== undefined) updateData.options = options;
+        if (correctText !== undefined) updateData.correctText = correctText;
+        updateData.updatedAt = new Date().toISOString();
+
+        const { data: challenge, error } = await supabaseAdmin
+          .from('challenges')
+          .update(updateData)
+          .eq('id', Number(id))
+          .select()
+          .single();
+
+        if (error) throw error;
         return res.status(200).json(challenge)
       } catch (error: any) {
         console.error('Update Challenge API Crash:', {
@@ -72,9 +78,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Protected DELETE
     if (req.method === 'DELETE') {
       try {
-        await prisma.challenge.delete({
-          where: { id: Number(id) }
-        })
+        const { error } = await supabaseAdmin
+          .from('challenges')
+          .delete()
+          .eq('id', Number(id));
+
+        if (error) throw error;
         return res.status(200).json({ message: 'Challenge deleted successfully' })
       } catch (error: any) {
         console.error('Delete Challenge API Crash:', {
@@ -112,7 +121,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Check system settings for hidden challenge types
       let hiddenTypes: string[] = [];
       try {
-        const setting = await prisma.systemSetting.findUnique({ where: { id: 1 } });
+        const { data: setting } = await supabaseAdmin.from('system_settings').select('*').eq('id', 1).maybeSingle();
         if (setting?.hideAudioChallenge) hiddenTypes.push('AUDIO');
         if (setting?.hideCompletionChallenge) hiddenTypes.push('COMPLETION');
         if (setting?.hideSurahChallenge) hiddenTypes.push('SURAH');
@@ -120,31 +129,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // Fallback silently if table not ready
       }
 
-      const where: any = {}
+      let query = supabaseAdmin.from('challenges').select('*');
       
       if (effectiveType) {
-        where.type = effectiveType;
+        query = query.eq('type', effectiveType);
       } else if (hiddenTypes.length > 0) {
-        where.type = { notIn: hiddenTypes };
+        // Exclude hidden types
+        query = query.not('type', 'in', `(${hiddenTypes.map(t => `"${t}"`).join(',')})`);
       }
 
       if (excluded.length > 0) {
-        where.id = { notIn: excluded }
+        query = query.not('id', 'in', `(${excluded.join(',')})`);
       }
 
       if (effectiveCategory) {
-        where.category = effectiveCategory;
+        query = query.eq('category', effectiveCategory);
       }
 
-      const challenges = await prisma.challenge.findMany({
-        where,
-        take,
-        orderBy: {
-          id: 'desc'
-        }
-      })
+      query = query.order('id', { ascending: false });
+
+      if (take) {
+        query = query.limit(take);
+      }
+
+      const { data: challenges, error } = await query;
+      if (error) throw error;
       
-      const mapped = mapChallenges(challenges);
+      const mapped = mapChallenges(challenges || []);
       return res.status(200).json(mapped)
     } catch (error: any) {
       console.error('Fetch Challenges API Crash:', {
@@ -187,8 +198,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     try {
-      const challenge = await prisma.challenge.create({
-        data: {
+      const { data: challenge, error } = await supabaseAdmin
+        .from('challenges')
+        .insert({
           keyword: keyword || '',
           verses: verses || [],
           category: category || '',
@@ -199,8 +211,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           correctText: correctText || null,
           juz,
           surah
-        }
-      })
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
       return res.status(201).json(challenge)
     } catch (error: any) {
       console.error('Create Challenge API Crash:', {

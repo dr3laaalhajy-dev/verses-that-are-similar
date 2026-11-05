@@ -1,5 +1,4 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { prisma } from '../_lib/prisma.js';
 import { handleCors } from '../_lib/cors.js';
 import { broadcastNotification, resolveFullUrl } from '../_lib/broadcastNotification.js';
 import { supabaseAdmin } from '../_lib/supabaseAdmin.js';
@@ -31,14 +30,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(401).json({ error: 'غير مصرح', details: 'رمز الجلسة غير صالح أو منتهي الصلاحية' });
     }
 
-    // 2. Fetch authoritative admin record from database (with fallback to decoded token)
+    // 2. Fetch authoritative admin record from Supabase (with fallback to decoded token)
     let currentAdmin: any = null;
     try {
-      currentAdmin = await (prisma as any).admin.findUnique({
-        where: { id: decoded.adminId }
-      });
+      const { data: adminRecord } = await supabaseAdmin
+        .from('admins')
+        .select('*')
+        .eq('id', decoded.adminId)
+        .maybeSingle();
+      if (adminRecord) {
+        currentAdmin = adminRecord;
+      }
     } catch (dbErr: any) {
-      console.warn('[sendNotification] Prisma admin lookup failed, falling back to token claims:', dbErr?.message);
+      console.warn('[sendNotification] Supabase admin lookup warning, falling back to token claims:', dbErr?.message);
     }
 
     if (!currentAdmin) {

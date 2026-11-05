@@ -1,11 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { prisma } from './prisma.js';
 import { handleCors } from './cors.js';
-import { createClient } from '@supabase/supabase-js';
-
-const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://hexxbopfvbuliakufejj.supabase.co';
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhleHhib3BmdmJ1bGlha3VmZWpqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMyMzA1MjYsImV4cCI6MjEwODgwNjUyNn0.-JG3tJo4PJrxtaHI9MC9fXQKR1AZ60GY5b-OJOFNSZo';
-const supabase = createClient(supabaseUrl, supabaseKey);
+import { supabaseAdmin } from './supabaseAdmin.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (handleCors(req, res)) return;
@@ -20,25 +15,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     try {
-      // Try Prisma first
-      let wird = await (prisma as any).userWird.findUnique({
-        where: { user_id: userId }
-      });
+      const { data, error } = await supabaseAdmin
+        .from('user_wird')
+        .select('*')
+        .eq('user_id', userId)
+        .maybeSingle();
 
-      // Fallback to Supabase if not found in Prisma
-      if (!wird) {
-        const { data, error } = await supabase
-          .from('user_wird')
-          .select('*')
-          .eq('user_id', userId)
-          .maybeSingle();
-
-        if (!error && data) {
-          wird = data;
-        }
+      if (error) {
+        console.warn('[UserWird API] Supabase query error:', error.message);
       }
 
-      if (!wird) {
+      if (!data) {
         // Return default settings for new user
         return res.status(200).json({
           success: true,
@@ -55,7 +42,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       return res.status(200).json({
         success: true,
-        wird
+        wird: data
       });
     } catch (error: any) {
       console.error('[UserWird API] Error fetching wird:', error);
@@ -85,52 +72,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const isActive = is_active !== undefined ? Boolean(is_active) : true;
 
     try {
-      let savedWird: any = null;
+      const { data: savedWird, error: sbErr } = await supabaseAdmin
+        .from('user_wird')
+        .upsert({
+          user_id: activeUserId,
+          pages_per_day: pagesPerDay,
+          current_page: currentPage,
+          notification_time: notificationTime,
+          is_active: isActive,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'user_id' })
+        .select()
+        .maybeSingle();
 
-      // 1. Save in Prisma / Neon
-      try {
-        savedWird = await (prisma as any).userWird.upsert({
-          where: { user_id: activeUserId },
-          create: {
-            user_id: activeUserId,
-            pages_per_day: pagesPerDay,
-            current_page: currentPage,
-            notification_time: notificationTime,
-            is_active: isActive
-          },
-          update: {
-            pages_per_day: pagesPerDay,
-            current_page: currentPage,
-            notification_time: notificationTime,
-            is_active: isActive
-          }
-        });
-      } catch (prismaErr) {
-        console.warn('[UserWird API] Prisma upsert warn:', prismaErr);
-      }
-
-      // 2. Save in Supabase
-      try {
-        const { data: sbData, error: sbErr } = await supabase
-          .from('user_wird')
-          .upsert({
-            user_id: activeUserId,
-            pages_per_day: pagesPerDay,
-            current_page: currentPage,
-            notification_time: notificationTime,
-            is_active: isActive,
-            updated_at: new Date().toISOString()
-          }, { onConflict: 'user_id' })
-          .select()
-          .maybeSingle();
-
-        if (sbErr) {
-          console.warn('[UserWird API] Supabase upsert warn:', sbErr.message);
-        } else if (!savedWird && sbData) {
-          savedWird = sbData;
-        }
-      } catch (sbEx) {
-        console.warn('[UserWird API] Supabase exception:', sbEx);
+      if (sbErr) {
+        console.warn('[UserWird API] Supabase upsert error:', sbErr.message);
       }
 
       return res.status(200).json({

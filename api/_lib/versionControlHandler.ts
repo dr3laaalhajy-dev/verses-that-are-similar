@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import jwt from 'jsonwebtoken'
-import { prisma } from './prisma.js'
+import { supabaseAdmin } from './supabaseAdmin.js'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
 
@@ -31,9 +31,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // 1. GET: Public fetch of version control info
   if (req.method === 'GET') {
     try {
-      const setting = await prisma.systemSetting.findUnique({ where: { id: 1 } })
+      const { data: setting } = await supabaseAdmin
+        .from('system_settings')
+        .select('*')
+        .eq('id', 1)
+        .maybeSingle()
+
       // If version control JSON exists inside setting (or memory)
-      const vc = (setting as any)?.versionControl || memoryVersionControl
+      const vc = setting?.version_control || setting?.versionControl || memoryVersionControl
       return res.status(200).json(vc)
     } catch (err: any) {
       return res.status(200).json(memoryVersionControl)
@@ -55,7 +60,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(401).json({ message: 'انتهت صلاحية الجلسة' })
     }
 
-    const currentAdmin = await prisma.admin.findUnique({ where: { id: decoded.adminId } })
+    const { data: currentAdmin } = await supabaseAdmin
+      .from('admins')
+      .select('*')
+      .eq('id', decoded.adminId)
+      .maybeSingle()
+
     if (!currentAdmin) {
       return res.status(401).json({ message: 'المشرف غير موجود' })
     }
@@ -87,19 +97,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     memoryVersionControl = parsedData
 
     try {
-      // Persist in systemSetting record
-      await (prisma.systemSetting as any).upsert({
-        where: { id: 1 },
-        update: {
-          versionControl: parsedData
-        },
-        create: {
+      // Persist in system_settings record in Supabase
+      await supabaseAdmin
+        .from('system_settings')
+        .upsert({
           id: 1,
-          versionControl: parsedData
-        }
-      }).catch(() => {
-        // Fallback gracefully if column not in schema
-      })
+          version_control: parsedData,
+          versionControl: parsedData,
+          updated_at: new Date().toISOString()
+        })
+        .select()
+        .maybeSingle()
 
       return res.status(200).json({
         message: 'تم نشر التحديث بنجاح وحفظ بيانات الإصدار 🚀',

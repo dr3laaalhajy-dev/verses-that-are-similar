@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { prisma } from './_lib/prisma.js'
 import jwt from 'jsonwebtoken'
+import { supabaseAdmin } from './_lib/supabaseAdmin.js'
 import testersHandler from './_lib/testersHandler.js'
 import versionControlHandler from './_lib/versionControlHandler.js'
 import wirdHandler from './_lib/wirdHandler.js'
@@ -25,16 +25,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Public GET: Anyone (players / visitors) can fetch system settings
   if (req.method === 'GET') {
     try {
-      const setting = await prisma.systemSetting.findUnique({
-        where: { id: 1 }
-      })
+      const { data: setting } = await supabaseAdmin
+        .from('system_settings')
+        .select('*')
+        .eq('id', 1)
+        .maybeSingle()
 
       return res.status(200).json({
-        hideAudioChallenge: setting?.hideAudioChallenge ?? false,
-        hideCompletionChallenge: setting?.hideCompletionChallenge ?? false,
-        hideSurahChallenge: setting?.hideSurahChallenge ?? false,
-        hideIslamicVideos: setting?.hideIslamicVideos ?? false,
-        updatedAt: setting?.updatedAt ?? null
+        hideAudioChallenge: setting?.hideAudioChallenge ?? setting?.hide_audio_challenge ?? false,
+        hideCompletionChallenge: setting?.hideCompletionChallenge ?? setting?.hide_completion_challenge ?? false,
+        hideSurahChallenge: setting?.hideSurahChallenge ?? setting?.hide_surah_challenge ?? false,
+        hideIslamicVideos: setting?.hideIslamicVideos ?? setting?.hide_islamic_videos ?? false,
+        updatedAt: setting?.updatedAt ?? setting?.updated_at ?? null
       })
     } catch (error: any) {
       console.error('Fetch Settings Error:', error)
@@ -62,7 +64,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(401).json({ message: 'جلسة تسجيل الدخول غير صالحة' })
     }
 
-    const currentAdmin = await prisma.admin.findUnique({ where: { id: decoded.adminId } })
+    const { data: currentAdmin } = await supabaseAdmin
+      .from('admins')
+      .select('*')
+      .eq('id', decoded.adminId)
+      .maybeSingle()
+
     if (!currentAdmin) {
       return res.status(401).json({ message: 'المشرف غير موجود' })
     }
@@ -81,22 +88,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     } = req.body || {}
 
     try {
-      const updated = await prisma.systemSetting.upsert({
-        where: { id: 1 },
-        update: {
-          hideAudioChallenge: hideAudioChallenge !== undefined ? Boolean(hideAudioChallenge) : undefined,
-          hideCompletionChallenge: hideCompletionChallenge !== undefined ? Boolean(hideCompletionChallenge) : undefined,
-          hideSurahChallenge: hideSurahChallenge !== undefined ? Boolean(hideSurahChallenge) : undefined,
-          hideIslamicVideos: hideIslamicVideos !== undefined ? Boolean(hideIslamicVideos) : undefined
-        },
-        create: {
-          id: 1,
-          hideAudioChallenge: Boolean(hideAudioChallenge),
-          hideCompletionChallenge: Boolean(hideCompletionChallenge),
-          hideSurahChallenge: Boolean(hideSurahChallenge),
-          hideIslamicVideos: Boolean(hideIslamicVideos)
-        }
-      })
+      const payload: any = {
+        id: 1,
+        updated_at: new Date().toISOString()
+      };
+      if (hideAudioChallenge !== undefined) payload.hideAudioChallenge = Boolean(hideAudioChallenge);
+      if (hideCompletionChallenge !== undefined) payload.hideCompletionChallenge = Boolean(hideCompletionChallenge);
+      if (hideSurahChallenge !== undefined) payload.hideSurahChallenge = Boolean(hideSurahChallenge);
+      if (hideIslamicVideos !== undefined) payload.hideIslamicVideos = Boolean(hideIslamicVideos);
+
+      const { data: updated, error } = await supabaseAdmin
+        .from('system_settings')
+        .upsert(payload, { onConflict: 'id' })
+        .select()
+        .maybeSingle()
+
+      if (error) {
+        throw error;
+      }
 
       return res.status(200).json({
         success: true,

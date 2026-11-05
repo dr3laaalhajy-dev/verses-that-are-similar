@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { prisma } from './prisma.js';
 import { handleCors } from './cors.js';
+import { supabaseAdmin } from './supabaseAdmin.js';
 
 const INTERNAL_TEST_URL = 'https://play.google.com/apps/testing/com.mateen.game';
 
@@ -13,9 +13,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const email = req.query.email as string;
       if (email) {
         const cleanEmail = email.trim().toLowerCase();
-        const tester = await (prisma as any).appTester.findUnique({
-          where: { email: cleanEmail }
-        });
+        const { data: tester, error } = await supabaseAdmin
+          .from('app_testers')
+          .select('*')
+          .eq('email', cleanEmail)
+          .maybeSingle();
+
+        if (error) {
+          console.warn('[Testers] Supabase query warn:', error.message);
+        }
+
         if (!tester) {
           return res.status(200).json({
             success: true,
@@ -29,8 +36,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           registered: true,
           status: isApproved ? 'APPROVED' : (tester.status || 'PENDING'),
           internalTestUrl: isApproved ? INTERNAL_TEST_URL : null,
-          createdAt: tester.createdAt,
-          approvedAt: tester.approvedAt
+          createdAt: tester.created_at || tester.createdAt,
+          approvedAt: tester.approved_at || tester.approvedAt
         });
       }
 
@@ -57,9 +64,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       // Check if already registered
-      const existing = await (prisma as any).appTester.findUnique({
-        where: { email: cleanEmail }
-      });
+      const { data: existing } = await supabaseAdmin
+        .from('app_testers')
+        .select('*')
+        .eq('email', cleanEmail)
+        .maybeSingle();
 
       if (existing) {
         const isApproved = existing.status === 'APPROVED' || existing.status === 'EXPORTED' || existing.status === 'ADDED';
@@ -72,10 +81,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           });
         }
         if (existing.status === 'REJECTED') {
-          await (prisma as any).appTester.update({
-            where: { id: existing.id },
-            data: { status: 'PENDING' }
-          });
+          await supabaseAdmin
+            .from('app_testers')
+            .update({ status: 'PENDING', updated_at: new Date().toISOString() })
+            .eq('id', existing.id);
+
           return res.status(200).json({
             success: true,
             status: 'PENDING',
@@ -90,12 +100,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       // Create new pending tester request
-      await (prisma as any).appTester.create({
-        data: {
+      await supabaseAdmin
+        .from('app_testers')
+        .insert({
           email: cleanEmail,
           status: 'PENDING'
-        }
-      });
+        });
 
       return res.status(200).json({
         success: true,

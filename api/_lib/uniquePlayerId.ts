@@ -1,4 +1,4 @@
-import { prisma } from './prisma.js';
+import { supabaseAdmin } from './supabaseAdmin.js';
 
 export function generateRawPlayerId(): string {
   const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -14,9 +14,12 @@ export async function getOrGenerateUniquePlayerId(playerId?: number): Promise<st
   let attempts = 0;
 
   while (attempts < 10) {
-    const existing = await prisma.player.findUnique({
-      where: { uniquePlayerId }
-    });
+    const { data: existing } = await supabaseAdmin
+      .from('players')
+      .select('id')
+      .eq('uniquePlayerId', uniquePlayerId)
+      .maybeSingle();
+
     if (!existing) {
       break;
     }
@@ -25,10 +28,10 @@ export async function getOrGenerateUniquePlayerId(playerId?: number): Promise<st
   }
 
   if (playerId) {
-    await prisma.player.update({
-      where: { id: playerId },
-      data: { uniquePlayerId }
-    });
+    await supabaseAdmin
+      .from('players')
+      .update({ uniquePlayerId })
+      .eq('id', playerId);
   }
 
   return uniquePlayerId;

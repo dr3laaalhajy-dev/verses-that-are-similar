@@ -1,5 +1,4 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { prisma } from './_lib/prisma.js';
 import { handleCors } from './_lib/cors.js';
 import sendHandler from './_lib/sendNotification.js';
 import cronWirdHandler from './_lib/cronWird.js';
@@ -45,35 +44,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const cleanPlatform = String(platform || 'web').trim();
 
       try {
-        // Upsert in Prisma
-        try {
-          await (prisma as any).deviceToken.upsert({
-            where: { fcm_token: cleanToken },
-            update: {
-              user_id: cleanUser,
-              platform: cleanPlatform,
-              updated_at: new Date()
-            },
-            create: {
-              user_id: cleanUser,
-              fcm_token: cleanToken,
-              platform: cleanPlatform
-            }
-          });
-        } catch (prismaErr: any) {
-          console.warn('[Notifications] Prisma token upsert warning:', prismaErr?.message);
-        }
-
-        // Upsert in Supabase
+        // Upsert exclusively in Supabase
         try {
           const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(cleanUser);
-          const safeUserId = isUuid ? cleanUser : null;
+          const safeUserId = isUuid ? cleanUser : cleanUser;
 
           let { error: sbErr } = await supabase
             .from('device_tokens')
             .upsert({
               user_id: safeUserId,
-              token: cleanToken
+              token: cleanToken,
+              platform: cleanPlatform
             }, { onConflict: 'token' });
 
           if (sbErr && (sbErr.code === '42703' || sbErr.code === 'PGRST204' || sbErr.message?.includes('token'))) {
@@ -81,7 +62,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               .from('device_tokens')
               .upsert({
                 user_id: safeUserId,
-                fcm_token: cleanToken
+                fcm_token: cleanToken,
+                platform: cleanPlatform
               }, { onConflict: 'fcm_token' });
           }
         } catch (sbErr: any) {
@@ -98,36 +80,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    // 4. GET: Fetch list of recent notifications
+    // 4. GET: Fetch list of recent notifications exclusively from Supabase
     if (req.method === 'GET') {
       try {
         const limit = Math.min(50, Math.max(1, parseInt((req.query.limit as string) || '20', 10)));
+        const { data, error } = await supabase
+          .from('notifications')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(limit);
 
-        // Try Supabase first
-        try {
-          const { data, error } = await supabase
-            .from('notifications')
-            .select('*')
-            .order('created_at', { ascending: false })
-            .limit(limit);
-
-          if (!error && data && data.length > 0) {
-            return res.status(200).json({ success: true, notifications: data });
-          }
-        } catch (e) {}
-
-        // Fallback to Prisma
-        let notifications: any[] = [];
-        try {
-          notifications = await (prisma as any).notification.findMany({
-            orderBy: { created_at: 'desc' },
-            take: limit
-          });
-        } catch (prismaErr: any) {
-          console.warn('[Notifications] Prisma notifications query warning:', prismaErr?.message);
+        if (error) {
+          console.warn('[Notifications] Supabase fetch warning:', error.message);
         }
 
-        return res.status(200).json({ success: true, notifications });
+        return res.status(200).json({ success: true, notifications: data || [] });
       } catch (err: any) {
         console.error('[Notifications] Fetch error:', err);
         return res.status(500).json({
@@ -137,7 +104,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    // 5. DELETE: Delete Notification
+    // 5. DELETE: Delete Notification exclusively in Supabase
     if (req.method === 'DELETE' || action === 'delete') {
       const id = (req.query.id as string) || req.body?.id;
       if (!id) {
@@ -145,20 +112,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       try {
-        // 1. Delete in Supabase
-        try {
-          await supabase.from('notifications').delete().eq('id', id);
-        } catch (sbErr: any) {
-          console.warn('[Notifications] Supabase delete warning:', sbErr?.message);
-        }
-
-        // 2. Delete in Prisma
-        try {
-          await (prisma as any).notification.delete({
-            where: { id }
-          });
-        } catch (prismaErr: any) {
-          console.warn('[Notifications] Prisma delete warning:', prismaErr?.message);
+        const { error: sbErr } = await supabase.from('notifications').delete().eq('id', id);
+        if (sbErr) {
+          console.warn('[Notifications] Supabase delete warning:', sbErr.message);
         }
 
         return res.status(200).json({ success: true, message: 'Notification deleted successfully' });
@@ -171,7 +127,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    // 6. UPDATE: Edit Notification
+    // 6. UPDATE: Edit Notification exclusively in Supabase
     if (req.method === 'PUT' || req.method === 'PATCH' || action === 'update') {
       const { id, title, body, target_url, targetUrl } = req.body || {};
       const notificationId = id || (req.query.id as string);
@@ -188,34 +144,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const nowIso = new Date().toISOString();
 
       try {
-        // 1. Update in Supabase
-        try {
-          await supabase
-            .from('notifications')
-            .update({
-              title: cleanTitle,
-              body: cleanBody,
-              target_url: cleanTargetUrl,
-              updated_at: nowIso
-            })
-            .eq('id', notificationId);
-        } catch (sbErr: any) {
-          console.warn('[Notifications] Supabase update warning:', sbErr?.message);
-        }
+        const { error: sbErr } = await supabase
+          .from('notifications')
+          .update({
+            title: cleanTitle,
+            body: cleanBody,
+            target_url: cleanTargetUrl,
+            updated_at: nowIso
+          })
+          .eq('id', notificationId);
 
-        // 2. Update in Prisma
-        try {
-          await (prisma as any).notification.update({
-            where: { id: notificationId },
-            data: {
-              title: cleanTitle,
-              body: cleanBody,
-              target_url: cleanTargetUrl,
-              updated_at: new Date(nowIso)
-            }
-          });
-        } catch (prismaErr: any) {
-          console.warn('[Notifications] Prisma update warning:', prismaErr?.message);
+        if (sbErr) {
+          console.warn('[Notifications] Supabase update warning:', sbErr.message);
         }
 
         return res.status(200).json({

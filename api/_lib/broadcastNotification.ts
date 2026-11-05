@@ -1,4 +1,3 @@
-import { prisma } from './prisma.js';
 import { getFirebaseMessaging } from './firebaseAdmin.js';
 import { supabaseAdmin } from './supabaseAdmin.js';
 
@@ -119,28 +118,6 @@ export async function broadcastNotification({
     console.warn('[Broadcast] Error fetching tokens from Supabase:', err);
   }
 
-  // Also query prisma device tokens if available and deduplicate by user_id
-  try {
-    const dbTokens = await (prisma as any).deviceToken.findMany({
-      select: { fcm_token: true, user_id: true }
-    });
-    if (dbTokens && Array.isArray(dbTokens)) {
-      for (const t of dbTokens) {
-        const val = (t.fcm_token || '').trim();
-        if (val && val.length > 20) {
-          const key = t.user_id ? `user_${t.user_id}` : val;
-          if (t.user_id && uniqueTokensMap.has(key)) {
-            const oldToken = uniqueTokensMap.get(key)!;
-            if (oldToken !== val) {
-              allStaleTokens.add(oldToken);
-            }
-          }
-          uniqueTokensMap.set(key, val);
-        }
-      }
-    }
-  } catch (_) {}
-
   const finalTokensToPush = Array.from(uniqueTokensMap.values());
   console.log(`[Broadcast] Sending push to ${finalTokensToPush.length} unique users/devices.`);
 
@@ -210,9 +187,6 @@ export async function broadcastNotification({
       try {
         await supabaseAdmin.from('device_tokens').delete().in('token', staleArray);
         await supabaseAdmin.from('device_tokens').delete().in('fcm_token', staleArray);
-        await (prisma as any).deviceToken.deleteMany({
-          where: { fcm_token: { in: staleArray } }
-        });
         console.log(`[Broadcast] Cleaned up ${staleArray.length} stale/duplicate FCM tokens.`);
       } catch (e) {
         console.warn('[Broadcast] Cleanup error:', e);

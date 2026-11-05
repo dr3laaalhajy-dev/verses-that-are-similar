@@ -1,5 +1,4 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { prisma } from '../_lib/prisma.js';
 import { getFirebaseMessaging } from '../_lib/firebaseAdmin.js';
 import { supabaseAdmin } from '../_lib/supabaseAdmin.js';
 const supabase = supabaseAdmin;
@@ -31,35 +30,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   console.log(`[Cron-Wird] Running wird check at UTC: ${currentHourUtc}:00, Mecca: ${currentHourMecca}:00 (Force: ${isForce})`);
 
   try {
-    // 3. Fetch active wird subscriptions
+    // 3. Fetch active wird subscriptions exclusively from Supabase
     let activeWirds: any[] = [];
-
-    // From Prisma
     try {
-      const dbWirds = await (prisma as any).userWird.findMany({
-        where: { is_active: true }
-      });
-      if (Array.isArray(dbWirds)) {
-        activeWirds = dbWirds;
+      const { data: sbWirds, error: sbErr } = await supabase
+        .from('user_wird')
+        .select('*')
+        .eq('is_active', true);
+
+      if (!sbErr && Array.isArray(sbWirds)) {
+        activeWirds = sbWirds;
       }
     } catch (e) {
-      console.warn('[Cron-Wird] Could not query Prisma user_wird:', e);
-    }
-
-    // Fallback/Supplement from Supabase
-    if (activeWirds.length === 0) {
-      try {
-        const { data: sbWirds, error: sbErr } = await supabase
-          .from('user_wird')
-          .select('*')
-          .eq('is_active', true);
-
-        if (!sbErr && Array.isArray(sbWirds)) {
-          activeWirds = sbWirds;
-        }
-      } catch (e) {
-        console.warn('[Cron-Wird] Could not query Supabase user_wird:', e);
-      }
+      console.warn('[Cron-Wird] Could not query Supabase user_wird:', e);
     }
 
     if (activeWirds.length === 0) {
@@ -100,27 +83,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const notificationTitle = '📖 حان وقت وردك القرآني اليومي';
       const notificationBody = `وردك اليوم يبدأ من الصفحة ${startPage} (${pagesCount} صفحات). انقر لفتح المصحف مباشرة والبدء في القراءة.`;
 
-      // Find user device tokens
+      // Find user device tokens exclusively from Supabase
       const userTokens: string[] = [];
       try {
-        const dbTokens = await (prisma as any).deviceToken.findMany({
-          where: { user_id: user.user_id },
-          select: { fcm_token: true }
-        });
-        dbTokens.forEach((t: any) => userTokens.push(t.fcm_token));
+        const { data: sbTokens } = await supabase
+          .from('device_tokens')
+          .select('fcm_token')
+          .eq('user_id', user.user_id);
+        if (sbTokens && Array.isArray(sbTokens)) {
+          sbTokens.forEach((t: any) => userTokens.push(t.fcm_token));
+        }
       } catch {}
-
-      if (userTokens.length === 0) {
-        try {
-          const { data: sbTokens } = await supabase
-            .from('device_tokens')
-            .select('fcm_token')
-            .eq('user_id', user.user_id);
-          if (sbTokens && Array.isArray(sbTokens)) {
-            sbTokens.forEach((t: any) => userTokens.push(t.fcm_token));
-          }
-        } catch {}
-      }
 
       // Send FCM push notification if token exists
       let fcmSent = false;
@@ -191,17 +164,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         nextPage = ((nextPage - 1) % 604) + 1;
       }
 
-      // Update user_wird in Prisma & Supabase
-      try {
-        await (prisma as any).userWird.update({
-          where: { user_id: user.user_id },
-          data: {
-            current_page: nextPage,
-            last_notified_date: todayDateStr
-          }
-        });
-      } catch {}
-
+      // Update user_wird in Supabase
       try {
         await supabase
           .from('user_wird')
