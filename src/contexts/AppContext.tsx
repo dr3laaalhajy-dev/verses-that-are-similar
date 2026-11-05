@@ -1887,6 +1887,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         params = new URLSearchParams(window.location.search);
       }
 
+      // 0. Login / Auth route
+      if (path === '/login' || path === '/auth') {
+        setShowScores(false);
+        setIsMushafFullscreen(false);
+        setView('home', false);
+        return;
+      }
+
       // 1. Mushaf route (/mushaf, /library/mushaf, /library/quran)
       const isExplicitMushaf =
         path === '/mushaf' ||
@@ -4711,8 +4719,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [refreshUserProfile]);
 
   const handlePlayerLogout = useCallback(async () => {
+    // 4. تنظيف حالة الواجهة (State Reset) فوراً
     try {
-      // 4. تنظيف حالة الواجهة (State Reset) فوراً
       setPlayerName(null);
       setPlayerUsername(null);
       setUniquePlayerId(null);
@@ -4722,46 +4730,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setUserCertificates([]);
       setPendingFriendRequestsCount(0);
       friendsRealtimeService.stopPresence();
-
-      // 1. التنفيذ المتزامن الآمن (Await & Try/Catch) لمسح الجلسة والتوكنات
-      try {
-        await supabase.auth.signOut();
-      } catch (authErr) {
-        console.error('Supabase auth signOut error:', authErr);
-      }
-
-      // مسح كافة بيانات المستخدم وجلسة المصادقة من التخزين المحلي
-      localStorage.removeItem('quran_player_name');
-      localStorage.removeItem('quran_player_username');
-      localStorage.removeItem('quran_unique_player_id');
-      localStorage.removeItem('quran_device_id');
-      localStorage.removeItem('quran_username_changed_at');
-      localStorage.removeItem('quran_active_frame');
-      localStorage.removeItem('quran_name_decorated');
-      localStorage.removeItem('quran_show_decoration');
-      localStorage.removeItem('quran_user_certificates');
-      localStorage.removeItem('fcm_device_token');
-
-      // 2. تفريغ كاش الراوتر (Client / Router Cache Invalidation)
-      try {
-        router.refresh();
-      } catch (e) {
-        console.warn('Router refresh warning:', e);
-      }
-
-      // 3. ترتيب التوجيه (Routing Sequence) كخطوة نهائية
-      setView('home');
-      router.replace('/');
-      syncLeaderboard();
-    } catch (err) {
-      console.error('Error during player logout:', err);
-      try {
-        router.refresh();
-      } catch {}
-      setView('home');
-      router.replace('/');
+    } catch (stateErr) {
+      console.warn('[Hard Reset] State cleanup warning:', stateErr);
     }
-  }, [syncLeaderboard]);
+
+    // 1. عزل عملية الخروج تماماً داخل try...catch مخصص (Safe Execution)
+    try {
+      await supabase.auth.signOut();
+    } catch (signOutError) {
+      console.error('[Hard Reset] Supabase auth signOut error:', signOutError);
+    }
+
+    // 2. التنظيف اليدوي العنيف (Manual Storage Clearing)
+    try {
+      localStorage.clear();
+      sessionStorage.clear();
+    } catch (storageError) {
+      console.error('[Hard Reset] Storage clearing error:', storageError);
+    }
+
+    // 3. إعادة توجيه قوية لتفريغ الكاش بالكامل (Hard Redirect & Full Page Reload)
+    try {
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login';
+      }
+    } catch (navErr) {
+      console.error('[Hard Reset] Navigation error:', navErr);
+      if (typeof window !== 'undefined') {
+        window.location.replace('/login');
+      }
+    }
+  }, []);
 
   const handleDeletePlayerAccount = useCallback(async (password: string) => {
     const identifier = (playerUsername || playerName || '').trim();

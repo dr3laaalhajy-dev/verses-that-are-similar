@@ -18,6 +18,7 @@
     }
   ],
   "rewrites": [
+    { "source": "/login", "destination": "/" },
     { "source": "/api/users/me", "destination": "/api/player-register" },
     { "source": "/api/leaderboard", "destination": "/api/player-score?action=leaderboard" },
     { "source": "/api/wird", "destination": "/api/settings?target=wird" },

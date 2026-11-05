@@ -82,33 +82,24 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const { permission: pushPermission, requestPermissionAndRegister: requestPushPermission, isLoading: isPushLoading } = usePushNotifications(playerUsername || playerName);
 
   const handleLogoutClick = async () => {
+    // 1. عزل عملية الخروج تماماً (Safe Execution)
     try {
-      if (typeof onLogout === 'function') {
-        await onLogout();
-      } else if (app?.signOut) {
-        await app.signOut();
-      } else if (app?.handlePlayerLogout) {
-        await app.handlePlayerLogout();
-      } else {
-        try {
-          await supabase.auth.signOut();
-        } catch {}
-        localStorage.removeItem('quran_player_name');
-        localStorage.removeItem('quran_player_username');
-        localStorage.removeItem('quran_device_id');
-        try {
-          router.refresh();
-        } catch {}
-        if (typeof onBackToHome === 'function') onBackToHome();
-        else router.replace('/');
-      }
-    } catch (err) {
-      console.error('Error during logout:', err);
-      try {
-        router.refresh();
-      } catch {}
-      if (typeof onBackToHome === 'function') onBackToHome();
-      else router.replace('/');
+      await supabase.auth.signOut();
+    } catch (signOutError) {
+      console.error('[Hard Reset] Supabase auth signOut error:', signOutError);
+    }
+
+    // 2. التنظيف اليدوي العنيف (Manual Storage Clearing)
+    try {
+      localStorage.clear();
+      sessionStorage.clear();
+    } catch (storageError) {
+      console.error('[Hard Reset] Storage clearing error:', storageError);
+    }
+
+    // 3. إعادة توجيه قوية لتفريغ الكاش (Hard Redirect & Full Page Reload)
+    if (typeof window !== 'undefined') {
+      window.location.href = '/login';
     }
   };
 
