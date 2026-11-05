@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { prisma } from '../_lib/prisma.js';
 import { handleCors } from '../_lib/cors.js';
 import { broadcastNotification, resolveFullUrl } from '../_lib/broadcastNotification.js';
+import { supabaseAdmin } from '../_lib/supabaseAdmin.js';
 import jwt from 'jsonwebtoken';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
@@ -73,6 +74,53 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const senderRole = isFounder ? 'FOUNDER' : 'CO_FOUNDER';
     const senderName = currentAdmin.name || currentAdmin.username || (isFounder ? 'المؤسس' : 'مساعد المؤسس');
 
+    // 4. Mandatory Supabase persistence using Service Role client (Single Source of Truth)
+    let savedNotification: any = null;
+    try {
+      const { data, error } = await supabaseAdmin.from('notifications').insert({
+        title: cleanTitle,
+        body: cleanBody,
+        target_url: cleanTargetUrl || null,
+        sender_role: senderRole || 'ADMIN',
+        sender_name: senderName || 'الأدمن'
+      }).select();
+
+      if (error) {
+        console.error('Failed to save notification to Supabase:', error);
+        // Schema fallback in case target_url, sender_role, or sender_name columns are not yet in Supabase schema
+        if (error.code === 'PGRST204' || error.code === '42703' || error.message?.includes('column')) {
+          console.warn('[sendNotification] Schema column mismatch on notifications table, retrying with core columns {title, body}...');
+          const retry = await supabaseAdmin.from('notifications').insert({
+            title: cleanTitle,
+            body: cleanBody
+          }).select();
+          if (retry.error) {
+            console.error('Failed to save notification to Supabase (core retry):', retry.error);
+          } else if (retry.data && retry.data.length > 0) {
+            savedNotification = retry.data[0];
+          }
+        }
+      } else if (data && data.length > 0) {
+        savedNotification = data[0];
+      }
+    } catch (dbEx: any) {
+      console.error('[sendNotification] Exception saving notification in Supabase:', dbEx?.message || dbEx);
+    }
+
+    // Realtime broadcast via Supabase channel if record was created
+    if (savedNotification) {
+      try {
+        await supabaseAdmin.channel('realtime_public_notifications').send({
+          type: 'broadcast',
+          event: 'NOTIFICATION_UPDATED',
+          payload: savedNotification
+        });
+      } catch (bcErr) {
+        console.warn('[sendNotification] Realtime broadcast warning:', bcErr);
+      }
+    }
+
+    // 5. Broadcast FCM Push Notifications
     const result = await broadcastNotification({
       title: cleanTitle,
       body: cleanBody,
@@ -80,6 +128,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       fullUrl: fullTargetUrl,
       senderRole,
       senderName,
+      savedNotification,
       metadata: {
         ...(metadata || {}),
         fullUrl: fullTargetUrl,
@@ -90,8 +139,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     return res.status(200).json({
       success: true,
-      message: 'تم إرسال التنبيه بنجاح لجميع المشتركين',
-      notification: result.savedNotification,
+      message: 'تم إرسال التنبيه وحفظه بنجاح لجميع المشتركين',
+      notification: savedNotification || result.savedNotification,
       stats: result.stats
     });
   } catch (error: any) {

@@ -47,6 +47,7 @@ export interface BroadcastNotificationParams {
   fullUrl?: string | null;
   senderRole?: string;
   senderName?: string;
+  savedNotification?: any;
   metadata?: Record<string, any>;
 }
 
@@ -70,6 +71,7 @@ export async function broadcastNotification({
   fullUrl = null,
   senderRole = 'SYSTEM',
   senderName = 'تطبيق متين',
+  savedNotification: initialSavedNotification = null,
   metadata = {}
 }: BroadcastNotificationParams): Promise<BroadcastNotificationResult> {
   const cleanTitle = title.trim();
@@ -77,57 +79,57 @@ export async function broadcastNotification({
   const cleanTargetUrl = targetUrl ? targetUrl.trim() : null;
   const resolvedFullUrl = fullUrl ? fullUrl.trim() : resolveFullUrl(cleanTargetUrl);
 
-  let savedNotification: any = null;
+  let savedNotification: any = initialSavedNotification || null;
 
-  // 1. Mandatory Supabase persistence (Single Source of Truth)
-  try {
-    const payloadToInsert: any = {
-      title: cleanTitle,
-      body: cleanBody,
-      target_url: cleanTargetUrl,
-      sender_role: senderRole,
-      sender_name: senderName
-    };
-
-    let { data: sbData, error: sbErr } = await supabaseAdmin
-      .from('notifications')
-      .insert(payloadToInsert)
-      .select('*')
-      .single();
-
-    // In case target_url, sender_role, or sender_name columns are not yet in Supabase schema cache
-    if (sbErr && (sbErr.code === 'PGRST204' || sbErr.message?.includes('column') || sbErr.code === '42703')) {
-      console.warn('[Broadcast] Schema column mismatch on notifications table, retrying with core columns:', sbErr.message);
-      const corePayload: any = {
+  // 1. Mandatory Supabase persistence (Single Source of Truth) if not already saved by caller
+  if (!savedNotification) {
+    try {
+      const payloadToInsert: any = {
         title: cleanTitle,
-        body: cleanBody
+        body: cleanBody,
+        target_url: cleanTargetUrl,
+        sender_role: senderRole,
+        sender_name: senderName
       };
-      const retry = await supabaseAdmin
-        .from('notifications')
-        .insert(corePayload)
-        .select('*')
-        .single();
-      sbData = retry.data;
-      sbErr = retry.error;
-    }
 
-    if (sbErr) {
-      console.error('[Broadcast] Failed to insert notification in Supabase:', sbErr.message);
-    } else if (sbData) {
-      savedNotification = sbData;
-      // Realtime Broadcast
-      try {
-        await supabaseAdmin.channel('realtime_public_notifications').send({
-          type: 'broadcast',
-          event: 'NOTIFICATION_UPDATED',
-          payload: sbData
-        });
-      } catch (bcErr) {
-        console.warn('[Broadcast] Realtime channel broadcast warning:', bcErr);
+      let { data: sbData, error: sbErr } = await supabaseAdmin
+        .from('notifications')
+        .insert(payloadToInsert)
+        .select();
+
+      // In case target_url, sender_role, or sender_name columns are not yet in Supabase schema cache
+      if (sbErr && (sbErr.code === 'PGRST204' || sbErr.message?.includes('column') || sbErr.code === '42703')) {
+        console.warn('[Broadcast] Schema column mismatch on notifications table, retrying with core columns:', sbErr.message);
+        const corePayload: any = {
+          title: cleanTitle,
+          body: cleanBody
+        };
+        const retry = await supabaseAdmin
+          .from('notifications')
+          .insert(corePayload)
+          .select();
+        sbData = retry.data;
+        sbErr = retry.error;
       }
+
+      if (sbErr) {
+        console.error('Failed to save notification to Supabase:', sbErr);
+      } else if (sbData && sbData.length > 0) {
+        savedNotification = sbData[0];
+        // Realtime Broadcast
+        try {
+          await supabaseAdmin.channel('realtime_public_notifications').send({
+            type: 'broadcast',
+            event: 'NOTIFICATION_UPDATED',
+            payload: sbData[0]
+          });
+        } catch (bcErr) {
+          console.warn('[Broadcast] Realtime channel broadcast warning:', bcErr);
+        }
+      }
+    } catch (sbEx: any) {
+      console.error('[Broadcast] Exception saving notification in Supabase:', sbEx?.message || sbEx);
     }
-  } catch (sbEx: any) {
-    console.error('[Broadcast] Exception saving notification in Supabase:', sbEx?.message || sbEx);
   }
 
   // 2. Gather and Strictly Deduplicate Device Tokens
