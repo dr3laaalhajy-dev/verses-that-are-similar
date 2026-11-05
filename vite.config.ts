@@ -60,11 +60,14 @@ function apiServerPlugin(): Plugin {
 
           let relativePath = '';
           if (pathname === '/api/1v1') relativePath = 'api/1v1.ts';
-          else if (pathname === '/api/users/me') relativePath = 'api/users/me.ts';
-          else if (pathname === '/api/leaderboard') relativePath = 'api/leaderboard.ts';
+          else if (pathname === '/api/users/me') relativePath = 'api/player-register.ts';
+          else if (pathname === '/api/leaderboard') {
+            req.query.action = 'leaderboard';
+            relativePath = 'api/player-score.ts';
+          }
           else if (pathname === '/api/player-register') relativePath = 'api/player-register.ts';
           else if (pathname === '/api/player-score') relativePath = 'api/player-score.ts';
-          else if (pathname === '/api/admin') relativePath = 'api/admin/index.ts';
+          else if (pathname === '/api/admin') relativePath = 'api/admin.ts';
           else if (pathname === '/api/settings') relativePath = 'api/settings.ts';
           else if (pathname === '/api/challenges') relativePath = 'api/challenges.ts';
           else if (pathname.startsWith('/api/challenges/')) {
@@ -80,6 +83,10 @@ function apiServerPlugin(): Plugin {
             req.query.target = 'version-control';
             relativePath = 'api/settings.ts';
           }
+          else if (pathname === '/api/wird') {
+            req.query.target = 'wird';
+            relativePath = 'api/settings.ts';
+          }
           else if (pathname === '/api/notifications/send') {
             req.query.action = 'send';
             relativePath = 'api/notifications.ts';
@@ -90,15 +97,28 @@ function apiServerPlugin(): Plugin {
           }
           else if (pathname === '/api/notifications/cron-friday') {
             req.query.job = 'friday';
-            relativePath = 'api/cron.ts';
+            relativePath = 'api/notifications.ts';
           }
           else if (pathname === '/api/notifications/cron-wird') {
             req.query.job = 'wird';
-            relativePath = 'api/cron.ts';
+            relativePath = 'api/notifications.ts';
           }
           else if (pathname === '/api/cron/adhkar') {
             req.query.job = 'adhkar';
-            relativePath = 'api/cron.ts';
+            relativePath = 'api/notifications.ts';
+          }
+          else if (pathname.startsWith('/api/cron')) {
+            req.query.job = req.query.job || 'adhkar';
+            relativePath = 'api/notifications.ts';
+          }
+          else if (pathname === '/api/notifications') {
+            relativePath = 'api/notifications.ts';
+          }
+          else if (pathname === '/api/who-am-i') {
+            relativePath = 'api/who-am-i.ts';
+          }
+          else if (pathname === '/api/friends') {
+            relativePath = 'api/friends.ts';
           } else {
             const cleanPath = pathname.replace(/^\/api\//, '');
             if (fs.existsSync(path.resolve(__dirname, `api/${cleanPath}.ts`))) {

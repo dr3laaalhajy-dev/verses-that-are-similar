@@ -319,7 +319,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
 
       {/* Auth Modal for New/Returning Player */}
       <AnimatePresence>
-        {!app.playerName && (
+        {!app.playerName && app.view !== 'admin' && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -518,7 +518,6 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                 <button
                   type="button"
                   onClick={() => {
-                    app.setIsAuthModalOpen(false);
                     router.push('/admin');
                     app.setView('admin');
                   }}
