@@ -271,45 +271,6 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
         </header>
       )}
 
-      {/* Floating Back Button Directly Below Top Header Bar (view === 'mushaf' in index/guide mode) */}
-      {app.view === 'mushaf' && !app.isMushafFullscreen && !app.isPageModeActive && (
-        <div className="w-full max-w-6xl mx-auto px-4 sm:px-8 pt-3 pb-1 flex justify-start items-center gap-3 animate-in fade-in slide-in-from-top-2 duration-300">
-          <button
-            onClick={() => {
-              app.setView('library');
-              app.setIsPageModeActive(false);
-              app.setSelectedSurahId(null);
-              app.setSelectedJuz(null);
-              app.setIsSearchSubmitted(false);
-              app.resetTranscript();
-              app.stopListening();
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
-            className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-white dark:bg-slate-800 backdrop-blur-md border border-emerald-200/60 dark:border-slate-700 shadow-sm hover:bg-emerald-50 dark:hover:bg-slate-700 transition-all text-xs sm:text-sm font-black active:scale-95 group cursor-pointer"
-            title="الرجوع للمكتبة"
-          >
-            <ArrowRight className="w-4 h-4 text-brand-gold group-hover:-translate-x-1 transition-transform" />
-            <span className="text-emerald-800 dark:text-emerald-300 font-black">الرجوع للمكتبة</span>
-          </button>
-
-          {app.isPageModeActive && (
-            <button
-              onClick={() => {
-                app.setIsPageModeActive(false);
-                app.setIsSurahMenuOpen(false);
-                app.setIsJuzMenuOpen(false);
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-              }}
-              className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-white dark:bg-slate-800 backdrop-blur-md border border-amber-300/60 dark:border-slate-700 shadow-sm hover:bg-amber-50 dark:hover:bg-slate-700 transition-all text-xs sm:text-sm font-black active:scale-95 group cursor-pointer"
-              title="العودة لشاشة الدليل والمزايا"
-            >
-              <BookOpen className="w-4 h-4 text-brand-emerald group-hover:scale-110 transition-transform" />
-              <span className="text-slate-700 dark:text-slate-200 font-black">دليل ومزايا المصحف</span>
-            </button>
-          )}
-        </div>
-      )}
-
       {/* Multiplayer Cancel / Resign Button if in a room */}
       {app.room && (app.view === 'challenge' || app.view === 'group_waiting' || app.view === 'group_game') && (
         <div className="w-full max-w-6xl mx-auto px-4 sm:px-8 pt-3 pb-1 flex justify-end items-center">

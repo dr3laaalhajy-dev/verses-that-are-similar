@@ -23,7 +23,7 @@ export const QuranAyahOverlay: React.FC<QuranAyahOverlayProps> = ({
       viewBox={pageBounds.v}
       preserveAspectRatio="none"
       className="absolute inset-0 w-full h-full pointer-events-auto select-none overflow-visible"
-      style={{ zIndex: 15 }}
+      style={{ zIndex: 30 }}
     >
       {pageBounds.b.map((item, idx) => (
         <path
@@ -33,12 +33,16 @@ export const QuranAyahOverlay: React.FC<QuranAyahOverlayProps> = ({
             e.stopPropagation();
             onSelectAyah(item.s, item.a);
           }}
+          onPointerDown={(e) => {
+            e.stopPropagation();
+          }}
           className="cursor-pointer outline-none"
           style={{
             fill: 'rgba(0, 0, 0, 0.001)', // Invisible hit-area
             stroke: 'transparent',
             strokeWidth: 0,
             pointerEvents: 'all',
+            touchAction: 'manipulation',
           }}
         />
       ))}

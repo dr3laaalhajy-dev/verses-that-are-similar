@@ -297,7 +297,7 @@ export const QuranZoomViewer: React.FC<QuranZoomViewerProps> = ({
         }
       }
 
-      if (movedDistanceRef.current < 6) {
+      if (movedDistanceRef.current < 6 && !ayahTapTriggeredRef.current) {
         onTap?.();
       }
     }
@@ -403,8 +403,8 @@ export const QuranZoomViewer: React.FC<QuranZoomViewerProps> = ({
                   ayahTapTriggeredRef.current = true;
                   setTimeout(() => {
                     ayahTapTriggeredRef.current = false;
-                  }, 400);
-                  if (movedDistanceRef.current < 8) {
+                  }, 500);
+                  if (movedDistanceRef.current < 35) {
                     onSelectAyah(surah, ayah);
                   }
                 }}

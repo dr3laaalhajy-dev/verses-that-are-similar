@@ -409,7 +409,7 @@ export const GlobalOverlays: React.FC = () => {
         isCheckingSavedStatus={app.isCheckingSavedStatus}
       />
 
-      {app.selectedAyah && !app.isMushafFullscreen && (
+      {app.selectedAyah && (
         <AyahActionSheet
           selectedAyah={app.selectedAyah}
           onClose={() => app.setSelectedAyah(null)}

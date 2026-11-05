@@ -75,7 +75,7 @@ export const LibraryHubPage: React.FC<LibraryHubPageProps> = ({
               setSelectedSurahId(null);
               setSelectedJuz(null);
               setIsSearchSubmitted(false);
-              setIsPageModeActive(false);
+              setIsPageModeActive(true);
             }}
             className="group relative p-5 md:p-6 rounded-2xl text-right overflow-hidden transition-all duration-200 flex flex-col justify-between border border-slate-150 hover:border-blue-400 bg-white shadow-xs hover:shadow-md min-h-[160px] active:scale-[0.99] cursor-pointer"
           >

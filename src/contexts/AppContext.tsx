@@ -1398,7 +1398,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   }, [skillSurahSearch]);
 
-  const [isPageModeActive, setIsPageModeActive] = useState(false);
+  const [isPageModeActive, setIsPageModeActive] = useState(true);
+  const prevViewForMushafRef = useRef<View>(view);
+  useEffect(() => {
+    if (view === 'mushaf' && prevViewForMushafRef.current !== 'mushaf') {
+      setIsPageModeActive(true);
+    }
+    prevViewForMushafRef.current = view;
+  }, [view]);
   const [isMushafFeaturesModalOpen, setIsMushafFeaturesModalOpen] = useState(false);
   const [isMushafFullscreen, setIsMushafFullscreen] = useState(false);
   const [areFullscreenControlsVisible, setAreFullscreenControlsVisible] = useState(true);
@@ -1913,7 +1920,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
         setIsMushafFullscreen(false);
         setShowScores(false);
-        setIsPageModeActive(false);
+        setIsPageModeActive(true);
         setView('mushaf', false);
         return;
       }
