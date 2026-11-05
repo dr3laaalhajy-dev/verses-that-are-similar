@@ -3,11 +3,16 @@ import { prisma } from './_lib/prisma.js'
 import jwt from 'jsonwebtoken'
 import testersHandler from './_lib/testersHandler.js'
 import versionControlHandler from './_lib/versionControlHandler.js'
+import wirdHandler from './_lib/wirdHandler.js'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const target = req.query.target as string | undefined;
+
+  if (target === 'wird') {
+    return wirdHandler(req, res);
+  }
 
   if (target === 'testers') {
     return testersHandler(req, res);

@@ -1,13 +1,126 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { prisma } from './_lib/prisma.js'
 import { getOrGenerateUniquePlayerId } from './_lib/uniquePlayerId.js'
+import { compareLeaderboardUsers, LeaderboardUser } from './_lib/ranking.js'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
 
-  // Handle GET request to retrieve player stats
+  // Handle GET request to retrieve player stats or full leaderboard
   if (req.method === 'GET') {
-    const { playerId, username, name, uniquePlayerId } = req.query;
+    const { action, leaderboard, playerId, username, name, uniquePlayerId } = req.query;
+
+    // 1. Leaderboard handler consolidated from /api/leaderboard
+    if (action === 'leaderboard' || leaderboard !== undefined) {
+      try {
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+
+        const players: any[] = await prisma.player.findMany({
+          orderBy: { updatedAt: 'desc' },
+          select: {
+            id: true,
+            name: true,
+            username: true,
+            uniquePlayerId: true,
+            points: true,
+            cups: true,
+            streak: true,
+            seerahCompleted: true,
+            generalCompleted: true,
+            quranCompleted: true,
+            activeFrame: true,
+            equippedNameColor: true
+          } as any
+        });
+
+        const playerMap = new Map<string, LeaderboardUser>();
+
+        for (const player of players) {
+          const normalized = (player.name || '').trim().toLowerCase();
+          if (!normalized) continue;
+
+          const pPoints = player.points || 0;
+          const pCups = player.cups || 0;
+          const pStreak = player.streak || 0;
+
+          if (!playerMap.has(normalized)) {
+            playerMap.set(normalized, {
+              id: player.id,
+              name: player.name,
+              username: player.username,
+              uniquePlayerId: player.uniquePlayerId,
+              totalPoints: pPoints,
+              trophiesCount: pCups,
+              streakCount: pStreak,
+              points: pPoints,
+              cups: pCups,
+              streak: pStreak,
+              seerahCompleted: player.seerahCompleted,
+              generalCompleted: player.generalCompleted,
+              quranCompleted: player.quranCompleted,
+              activeFrame: (player.activeFrame === 'seerah' || player.activeFrame === 'general') ? player.activeFrame : null,
+              equippedNameColor: player.equippedNameColor
+            });
+          } else {
+            const existing = playerMap.get(normalized)!;
+            if (!existing.uniquePlayerId && player.uniquePlayerId) {
+              existing.uniquePlayerId = player.uniquePlayerId;
+            }
+            if (!existing.id && player.id) {
+              existing.id = player.id;
+            }
+            existing.seerahCompleted = existing.seerahCompleted || player.seerahCompleted;
+            existing.generalCompleted = existing.generalCompleted || player.generalCompleted;
+            if (!existing.activeFrame && (player.activeFrame === 'seerah' || player.activeFrame === 'general')) {
+              existing.activeFrame = player.activeFrame;
+            }
+            if (!existing.equippedNameColor && player.equippedNameColor) {
+              existing.equippedNameColor = player.equippedNameColor;
+            }
+            if (!existing.username && player.username) {
+              existing.username = player.username;
+            }
+          }
+        }
+
+        const allSorted = Array.from(playerMap.values()).sort(compareLeaderboardUsers);
+        const totalUsers = allSorted.length;
+
+        let userRank: number | null = null;
+        if (name || username) {
+          const qUser = typeof username === 'string' ? username.replace(/^@+/, '').trim().toLowerCase() : '';
+          const qName = typeof name === 'string' ? name.trim().toLowerCase() : '';
+
+          const idx = allSorted.findIndex((p: any) => {
+            if (qUser && p.username && p.username.replace(/^@+/, '').trim().toLowerCase() === qUser) return true;
+            if (qName && p.name && p.name.trim().toLowerCase() === qName) return true;
+            return false;
+          });
+
+          if (idx !== -1) {
+            userRank = idx + 1;
+          }
+        }
+
+        const uniqueLeaderboard = allSorted.slice(0, 10);
+
+        return res.status(200).json({
+          leaderboard: uniqueLeaderboard,
+          totalUsers,
+          userRank
+        });
+      } catch (error: any) {
+        console.error('Leaderboard Error in /api/player-score:', error);
+        return res.status(500).json({ 
+          message: 'Internal server error',
+          error: error.message,
+          code: error.code
+        });
+      }
+    }
+
     const cleanU = String(username || '').trim().replace(/^@+/, '');
     const cleanN = String(name || '').trim();
     const cleanUnique = String(uniquePlayerId || '').trim().toUpperCase();

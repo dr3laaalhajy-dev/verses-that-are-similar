@@ -1,31 +1,36 @@
 {
   "crons": [
     {
-      "path": "/api/notifications/cron-friday",
+      "path": "/api/notifications?job=friday",
       "schedule": "0 6 * * 5"
     },
     {
-      "path": "/api/notifications/cron-wird",
+      "path": "/api/notifications?job=wird",
       "schedule": "0 0 * * *"
     },
     {
-      "path": "/api/cron/adhkar?type=morning",
+      "path": "/api/notifications?job=adhkar&type=morning",
       "schedule": "0 3 * * *"
     },
     {
-      "path": "/api/cron/adhkar?type=evening",
+      "path": "/api/notifications?job=adhkar&type=evening",
       "schedule": "0 14 * * *"
     }
   ],
   "rewrites": [
+    { "source": "/api/users/me", "destination": "/api/player-register" },
+    { "source": "/api/leaderboard", "destination": "/api/player-score?action=leaderboard" },
+    { "source": "/api/wird", "destination": "/api/settings?target=wird" },
     { "source": "/api/testers", "destination": "/api/settings?target=testers" },
     { "source": "/api/version-control", "destination": "/api/settings?target=version-control" },
     { "source": "/api/challenges/:id", "destination": "/api/challenges?id=:id" },
     { "source": "/api/notifications/send", "destination": "/api/notifications?action=send" },
     { "source": "/api/notifications/register-token", "destination": "/api/notifications?action=register-token" },
-    { "source": "/api/notifications/cron-friday", "destination": "/api/cron?job=friday" },
-    { "source": "/api/notifications/cron-wird", "destination": "/api/cron?job=wird" },
-    { "source": "/api/cron/adhkar", "destination": "/api/cron?job=adhkar" },
+    { "source": "/api/notifications/cron-friday", "destination": "/api/notifications?job=friday" },
+    { "source": "/api/notifications/cron-wird", "destination": "/api/notifications?job=wird" },
+    { "source": "/api/cron/adhkar", "destination": "/api/notifications?job=adhkar" },
+    { "source": "/api/cron/:job*", "destination": "/api/notifications?job=:job*" },
+    { "source": "/api/cron", "destination": "/api/notifications?job=adhkar" },
     { "source": "/privacy", "destination": "/privacy.html" },
     { "source": "/terms", "destination": "/privacy.html" },
     { "source": "/delete-account", "destination": "/delete-account.html" },

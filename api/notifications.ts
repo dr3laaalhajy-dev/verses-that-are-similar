@@ -2,6 +2,9 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { prisma } from './_lib/prisma.js';
 import { handleCors } from './_lib/cors.js';
 import sendHandler from './_lib/sendNotification.js';
+import cronWirdHandler from './_lib/cronWird.js';
+import cronFridayHandler from './_lib/cronFriday.js';
+import cronAdhkarHandler from './_lib/cronAdhkar.js';
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://hexxbopfvbuliakufejj.supabase.co';
@@ -12,8 +15,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (handleCors(req, res)) return;
 
   const action = (req.query.action as string) || (req.body && req.body.action);
+  const job = (req.query.job as string) || (action === 'cron' ? (req.query.type as string || req.body?.type) : '');
 
-  // 1. Send Notification Action (Delegates to send handler)
+  // 1. Cron Job Actions consolidated from /api/cron
+  if (job === 'wird' || job === 'cron-wird') {
+    return cronWirdHandler(req, res);
+  }
+  if (job === 'friday' || job === 'cron-friday') {
+    return cronFridayHandler(req, res);
+  }
+  if (job === 'adhkar' || job === 'cron-adhkar') {
+    return cronAdhkarHandler(req, res);
+  }
+
+  // 2. Send Notification Action (Delegates to send handler)
   if (action === 'send' || req.query.send !== undefined) {
     return sendHandler(req, res);
   }
