@@ -60,8 +60,8 @@ export interface MushafPageProps {
   pageTurnDirection?: "next" | "prev" | null;
   setPageTurnDirection?: (dir: any) => void;
   enterMushafFullscreen: () => void;
-  selectedAyah: any;
-  setSelectedAyah: (ayah: any) => void;
+  selectedAyah?: any;
+  setSelectedAyah?: (ayah: any) => void;
   setView: (view: View) => void;
 }
 
@@ -101,6 +101,28 @@ export const MushafPage: React.FC<MushafPageProps> = ({
   const [areFsControlsVisible, setAreFsControlsVisible] = useState(false);
   const fsControlsTimerRef = useRef<NodeJS.Timeout | null>(null);
   const [isWirdModalOpen, setIsWirdModalOpen] = useState(false);
+
+  // 1. استعادة حالة الآية المحددة بأمان (الربط التلقائي مع AppContext والدعم المحلي كـ Fallback)
+  const [internalSelectedAyah, setInternalSelectedAyah] = useState<any>(null);
+  const activeSelectedAyah = selectedAyah !== undefined ? selectedAyah : (app?.selectedAyah !== undefined ? app.selectedAyah : internalSelectedAyah);
+
+  const safeSetSelectedAyah = useCallback((ayah: any) => {
+    setInternalSelectedAyah(ayah);
+    if (typeof setSelectedAyah === 'function') {
+      try {
+        setSelectedAyah(ayah);
+      } catch (e) {
+        console.warn('[MushafPage] Error calling setSelectedAyah prop:', e);
+      }
+    }
+    if (typeof app?.setSelectedAyah === 'function') {
+      try {
+        app.setSelectedAyah(ayah);
+      } catch (e) {
+        console.warn('[MushafPage] Error calling app.setSelectedAyah:', e);
+      }
+    }
+  }, [setSelectedAyah, app?.setSelectedAyah]);
 
   // حالة نافذة مميزات وخصائص المصحف الشريف
   const [internalFeaturesModalOpen, setInternalFeaturesModalOpen] = useState(false);
@@ -216,7 +238,7 @@ export const MushafPage: React.FC<MushafPageProps> = ({
     setSelectedSurahId(null);
     setSelectedJuz(null);
     setIsSearchSubmitted(false);
-    setSelectedAyah(null);
+    safeSetSelectedAyah(null);
     if (setView) {
       setView('library');
     } else if (app?.setView) {
@@ -224,7 +246,7 @@ export const MushafPage: React.FC<MushafPageProps> = ({
     }
     router.replace('/library');
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, [setIsPageModeActive, setSelectedSurahId, setSelectedJuz, setIsSearchSubmitted, setSelectedAyah, setView, app, setMushafZoomScale]);
+  }, [setIsPageModeActive, setSelectedSurahId, setSelectedJuz, setIsSearchSubmitted, safeSetSelectedAyah, setView, app, setMushafZoomScale]);
 
   // التحكم بوضع ملء الشاشة عبر Fullscreen API القياسية على حاوية المصحف الرئيسية
   const handleToggleFullscreen = async () => {
@@ -303,7 +325,7 @@ export const MushafPage: React.FC<MushafPageProps> = ({
         } catch {}
       }
       setCurrentPage((prev) => Math.min(604, prev + 1));
-      setSelectedAyah(null);
+      safeSetSelectedAyah(null);
     }
   };
 
@@ -315,7 +337,7 @@ export const MushafPage: React.FC<MushafPageProps> = ({
         } catch {}
       }
       setCurrentPage((prev) => Math.max(1, prev - 1));
-      setSelectedAyah(null);
+      safeSetSelectedAyah(null);
     }
   };
 
@@ -513,7 +535,7 @@ export const MushafPage: React.FC<MushafPageProps> = ({
                         setSelectedSurahId(null);
                         setSelectedJuz(null);
                         setIsSearchSubmitted(false);
-                        setSelectedAyah(null);
+                        safeSetSelectedAyah(null);
                         try {
                           window.history.replaceState({ page: targetPage, view: 'mushaf' }, '', `/mushaf?page=${targetPage}`);
                         } catch {}
@@ -562,7 +584,7 @@ export const MushafPage: React.FC<MushafPageProps> = ({
                         setSelectedJuz(null);
                         setSelectedSurahId(null);
                         setIsSearchSubmitted(false);
-                        setSelectedAyah(null);
+                        safeSetSelectedAyah(null);
                         try {
                           window.history.replaceState({ page: targetPage, view: 'mushaf' }, '', `/mushaf?page=${targetPage}`);
                         } catch {}
@@ -616,13 +638,13 @@ export const MushafPage: React.FC<MushafPageProps> = ({
                   }
                 }}
                 onTap={() => {
-                  if (selectedAyah) {
-                    setSelectedAyah(null);
+                  if (activeSelectedAyah) {
+                    safeSetSelectedAyah(null);
                   }
                 }}
                 pageTurnDirection={pageTurnDirection || undefined}
-                selectedAyah={selectedAyah}
-                onSelectAyah={(s, a) => setSelectedAyah({ surah: s, ayah: a })}
+                selectedAyah={activeSelectedAyah}
+                onSelectAyah={(s, a) => safeSetSelectedAyah({ surah: s, ayah: a })}
               />
             </div>
           </div>
@@ -679,7 +701,7 @@ export const MushafPage: React.FC<MushafPageProps> = ({
                       const num = parseInt(val, 10);
                       if (!isNaN(num) && num >= 1 && num <= 604) {
                         setCurrentPage(num);
-                        setSelectedAyah(null);
+                        safeSetSelectedAyah(null);
                       }
                     }}
                     className={`w-9 sm:w-11 text-center text-xs sm:text-sm font-black bg-transparent focus:outline-none ${
@@ -806,7 +828,7 @@ export const MushafPage: React.FC<MushafPageProps> = ({
                                     setIsSearchSubmitted(false);
                                     setSelectedSurahId(null);
                                     setSelectedJuz(null);
-                                    setSelectedAyah({ surah: result.surahId, ayah: result.id });
+                                    safeSetSelectedAyah({ surah: result.surahId, ayah: result.id });
                                     try {
                                       window.history.replaceState({ page: targetPage, view: 'mushaf' }, '', `/mushaf?page=${targetPage}`);
                                     } catch {}

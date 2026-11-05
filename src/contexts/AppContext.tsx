@@ -5653,6 +5653,7 @@ ${versesList}
     handleDeletePlayerAccount,
 
     // Library & Mushaf
+    selectedAyah, setSelectedAyah,
     activeListTab, setActiveListTab,
     activeLibraryTab: activeListTab, setActiveLibraryTab: setActiveListTab,
     searchQuery, setSearchQuery,

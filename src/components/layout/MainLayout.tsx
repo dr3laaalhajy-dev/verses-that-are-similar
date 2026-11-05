@@ -55,8 +55,12 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
         .in('status', ['pending', 'PENDING']);
 
       if (error) {
-        // تسجيل الخطأ بهدوء في الكونسول دون رمي استثناء قد يعطل تسجيل الخروج أو باقي دوال التطبيق
-        console.error('[Friendships] Supabase query error:', error.message || error);
+        // إذا كان الجدول غير منشأ بعد في Supabase، نتجاهل الخطأ ونعتمد على الـ API البديل بسلاسة
+        if (error.code === 'PGRST204' || error.code === '42P01' || error.message?.includes('schema cache')) {
+          // هادئ: لا يطبع خطأ أحمر في الكونسول
+        } else {
+          console.warn('[Friendships] Supabase query warning:', error.message || error);
+        }
       } else if (typeof count === 'number' || Array.isArray(data)) {
         const total = typeof count === 'number' ? count : (Array.isArray(data) ? (data as any[]).length : 0);
         setPendingFriendRequestsCount(total);
