@@ -59,6 +59,7 @@ export async function getFCMMessaging(): Promise<Messaging | null> {
 
 /**
  * Register Service Worker and retrieve FCM Device Token
+ * Strictly follows Web Push standard & iOS Safari PWA requirements
  */
 export async function requestFCMToken(customVapidKey?: string): Promise<string | null> {
   if (typeof window === 'undefined' || !('Notification' in window) || !('serviceWorker' in navigator)) {
@@ -67,31 +68,49 @@ export async function requestFCMToken(customVapidKey?: string): Promise<string |
   }
 
   try {
-    const permission = await Notification.requestPermission();
+    // Only prompt for permission if not already granted (critical for iOS User Gesture policy)
+    let permission = Notification.permission;
     if (permission !== 'granted') {
-      console.warn('[FCM] Notification permission denied by user.');
+      permission = await Notification.requestPermission();
+    }
+    if (permission !== 'granted') {
+      console.warn('[FCM] Notification permission not granted by user.');
       return null;
     }
 
     const messaging = await getFCMMessaging();
     if (!messaging) return null;
 
-    // Register firebase-messaging-sw.js service worker
-    const swRegistration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
-      scope: '/'
-    });
+    // Retrieve existing registration or register service worker
+    let swRegistration = await navigator.serviceWorker.getRegistration();
+    if (!swRegistration) {
+      swRegistration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
+        scope: '/'
+      });
+    }
+
+    // Wait until service worker is ready/active
+    await navigator.serviceWorker.ready;
 
     const activeVapidKey = customVapidKey || VAPID_KEY;
-    const token = await getToken(messaging, {
-      serviceWorkerRegistration: swRegistration,
-      vapidKey: activeVapidKey
-    });
+    if (!activeVapidKey) {
+      console.warn('[FCM] VAPID Key is not provided in env (VITE_FIREBASE_VAPID_KEY). iOS Safari requires a valid VAPID Key for Web Push.');
+    }
+
+    const tokenOptions: any = {
+      serviceWorkerRegistration: swRegistration
+    };
+    if (activeVapidKey) {
+      tokenOptions.vapidKey = activeVapidKey;
+    }
+
+    const token = await getToken(messaging, tokenOptions);
 
     if (token) {
       console.log('[FCM] Device Token obtained successfully:', token.substring(0, 15) + '...');
       return token;
     } else {
-      console.warn('[FCM] No registration token available. Request permission to generate one.');
+      console.warn('[FCM] No registration token available.');
       return null;
     }
   } catch (error) {

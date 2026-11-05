@@ -160,9 +160,9 @@ export const UserWirdModal: React.FC<UserWirdModalProps> = ({
         body: JSON.stringify(payload)
       }).catch(() => {});
 
-      // 3. If notifications are enabled but permission not granted, request it
-      if (isActive && permission !== 'granted') {
-        await requestPermissionAndRegister();
+      // 3. Sync device token if permission is already granted
+      if (isActive && permission === 'granted') {
+        requestPermissionAndRegister().catch(() => {});
       }
 
       setSaveSuccess(true);

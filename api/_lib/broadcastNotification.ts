@@ -184,10 +184,15 @@ export async function broadcastNotification({
             )
           },
           webpush: {
+            headers: {
+              Urgency: 'high'
+            },
             fcmOptions: {
               link: resolvedFullUrl || '/'
             },
             notification: {
+              title: cleanTitle,
+              body: cleanBody,
               icon: '/logo.png',
               badge: '/logo-mark.png',
               dir: 'rtl',

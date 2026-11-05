@@ -27,8 +27,11 @@ import {
   Smartphone,
   Download,
   FileText,
-  Trash2
+  Trash2,
+  Bell,
+  BellRing
 } from 'lucide-react';
+import { usePushNotifications } from '../../hooks/usePushNotifications';
 
 interface SettingsViewProps {
   playerName: string | null;
@@ -74,6 +77,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onOpenAdminPanel
 }) => {
   const app = useApp();
+  const { permission: pushPermission, requestPermissionAndRegister: requestPushPermission, isLoading: isPushLoading } = usePushNotifications(playerUsername || playerName);
 
   const handleLogoutClick = () => {
     try {
@@ -1326,6 +1330,57 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             </div>
           </div>
         )}
+
+        {/* ================================================= */}
+        {/* PUSH NOTIFICATIONS SETTINGS (iOS & Web Push)      */}
+        {/* ================================================= */}
+        <div className="bg-slate-50 border border-slate-200/80 rounded-2xl sm:rounded-3xl p-4 sm:p-5 space-y-3">
+          <div className="flex items-center justify-between pb-2 border-b border-slate-200/60">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-700 flex items-center justify-center font-black">
+                <Bell className="w-4 h-4 text-amber-600" />
+              </div>
+              <div>
+                <h4 className="font-black text-sm text-slate-800">إشعارات الهاتف وتنبيهات الويب (Push Notifications)</h4>
+                <p className="text-[11px] font-bold text-slate-500">التذكير بالورد القرآني، أذكار الصباح والمساء، والمسابقات</p>
+              </div>
+            </div>
+            <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${
+              pushPermission === 'granted'
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                : 'bg-amber-50 text-amber-700 border-amber-200'
+            }`}>
+              {pushPermission === 'granted' ? 'مفعلة ✓' : 'غير مفعلة'}
+            </span>
+          </div>
+
+          <div className="pt-1 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="text-right text-xs text-slate-600 font-medium">
+              {pushPermission === 'granted' ? (
+                <div className="flex items-center gap-2 text-emerald-700 font-bold">
+                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+                  <span>الإشعارات المباشرة مفعلة بنجاح على هذا المتصفح/الجهاز.</span>
+                </div>
+              ) : (
+                <p className="leading-relaxed text-[11px] sm:text-xs text-slate-500 font-bold">
+                  اضغط على الزر لمنح الصلاحية وتفعيل التنبيهات. (لمستخدمي الآيفون: تأكد من إضافة التطبيق إلى الشاشة الرئيسية أولاً "Add to Home Screen" لتتمكن من تفعيل واستقبال إشعارات الويب).
+                </p>
+              )}
+            </div>
+
+            {pushPermission !== 'granted' && (
+              <button
+                type="button"
+                onClick={requestPushPermission}
+                disabled={isPushLoading}
+                className="w-full sm:w-auto px-5 py-2.5 bg-brand-emerald hover:bg-brand-emerald/90 text-white rounded-xl font-black text-xs transition-all shadow-md flex items-center justify-center gap-2 shrink-0 cursor-pointer active:scale-95 disabled:opacity-50"
+              >
+                <BellRing className="w-4 h-4 text-amber-300" />
+                <span>{isPushLoading ? 'جاري التفعيل...' : 'تفعيل الإشعارات الآن'}</span>
+              </button>
+            )}
+          </div>
+        </div>
 
         {/* ================================================= */}
         {/* PRIVACY POLICY & TERMS OF USE                     */}

@@ -143,10 +143,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               click_action: targetUrl
             },
             webpush: {
+              headers: {
+                Urgency: 'high'
+              },
               fcmOptions: {
                 link: targetUrl
               },
               notification: {
+                title: notificationTitle,
+                body: notificationBody,
                 icon: '/logo.png',
                 badge: '/logo-mark.png',
                 dir: 'rtl',
