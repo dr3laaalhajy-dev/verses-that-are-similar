@@ -1963,8 +1963,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return;
       }
 
-      // If user is at root '/', stay on home or saved view; do not force mushaf
+      // If user is at root '/', stay on home (or restore view strictly on initial page mount)
       if (path === '/' || path === '') {
+        // If this is an explicit navigation to root '/', always go to home immediately and clear saved view
+        if (typeof urlOrParams === 'string' && (urlOrParams === '/' || urlOrParams === '' || urlOrParams.includes('home'))) {
+          sessionStorage.setItem('current_app_view', 'home');
+          setSelectedAdhkarCategoryId(null);
+          setIsMushafFullscreen(false);
+          setShowScores(false);
+          setView('home', false);
+          return;
+        }
+
         const savedView = sessionStorage.getItem('current_app_view');
         setSelectedAdhkarCategoryId(null);
         setIsMushafFullscreen(false);
@@ -1972,6 +1982,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (savedView && VALID_VIEWS.includes(savedView as View) && savedView !== 'home') {
           setView(savedView as View, false);
         } else {
+          sessionStorage.setItem('current_app_view', 'home');
           setView('home', false);
         }
         if (window.location.search && !params.get('roomId') && !params.get('code')) {

@@ -450,7 +450,17 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
               href="/"
               replace={true}
               prefetch={false}
-              onClick={() => {
+              onPointerDown={() => {
+                if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) {
+                  document.activeElement.blur();
+                }
+                router.refresh();
+                app.setShowScores(false);
+                app.setView('home');
+              }}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
                 router.refresh();
                 router.replace('/');
                 app.setShowScores(false);
@@ -472,7 +482,17 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
               href="/challenges"
               replace={true}
               prefetch={false}
-              onClick={() => {
+              onPointerDown={() => {
+                if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) {
+                  document.activeElement.blur();
+                }
+                router.refresh();
+                app.setShowScores(false);
+                app.setView('challenges');
+              }}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
                 router.refresh();
                 router.replace('/challenges');
                 app.setShowScores(false);
@@ -494,7 +514,17 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
               href="/scores"
               replace={true}
               prefetch={false}
-              onClick={() => {
+              onPointerDown={() => {
+                if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) {
+                  document.activeElement.blur();
+                }
+                router.refresh();
+                app.setShowScores(true);
+                app.setView('home');
+              }}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
                 router.refresh();
                 router.replace('/scores');
                 app.setShowScores(true);
@@ -516,7 +546,17 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
               href="/library"
               replace={true}
               prefetch={false}
-              onClick={() => {
+              onPointerDown={() => {
+                if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) {
+                  document.activeElement.blur();
+                }
+                router.refresh();
+                app.setShowScores(false);
+                app.setView('library');
+              }}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
                 router.refresh();
                 router.replace('/library');
                 app.setShowScores(false);
@@ -538,7 +578,17 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
               href="/settings"
               replace={true}
               prefetch={false}
-              onClick={() => {
+              onPointerDown={() => {
+                if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) {
+                  document.activeElement.blur();
+                }
+                router.refresh();
+                app.setShowScores(false);
+                app.setView('settings');
+              }}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
                 router.refresh();
                 router.replace('/settings');
                 app.setShowScores(false);

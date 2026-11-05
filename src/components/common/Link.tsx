@@ -19,11 +19,24 @@ export const Link: React.FC<LinkProps> = ({
   href,
   children,
   onClick,
+  onPointerDown,
   replace = false,
   prefetch = false,
   className = '',
   ...props
 }) => {
+  const handlePointerDown = (e: React.PointerEvent<HTMLAnchorElement>) => {
+    // Immediate response on mobile: dismiss any virtual keyboard / active input focus
+    // so mobile browsers don't swallow the click event on blur
+    if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+
+    if (onPointerDown) {
+      onPointerDown(e);
+    }
+  };
+
   const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
     // If user held Ctrl / Cmd / Shift or used middle click, allow default browser behavior (open in new tab)
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) {
@@ -31,6 +44,7 @@ export const Link: React.FC<LinkProps> = ({
     }
 
     e.preventDefault();
+    e.stopPropagation();
 
     if (onClick) {
       onClick(e);
@@ -47,6 +61,7 @@ export const Link: React.FC<LinkProps> = ({
     <a
       href={href}
       onClick={handleClick}
+      onPointerDown={handlePointerDown}
       className={className}
       {...props}
     >
