@@ -537,11 +537,12 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
       <AnimatePresence>
         {isOpen && (
           <motion.div
+            dir="rtl"
             initial={{ opacity: 0, y: 12, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 8, scale: 0.95 }}
             transition={{ duration: 0.18 }}
-            className={`absolute left-0 mt-2.5 w-[330px] sm:w-[400px] max-w-[92vw] rounded-2xl sm:rounded-3xl shadow-2xl border z-[999] overflow-hidden ${
+            className={`fixed sm:absolute top-[calc(3.5rem+env(safe-area-inset-top,0px))] sm:top-full left-4 sm:left-0 right-4 sm:right-auto mt-2 sm:mt-2.5 w-[calc(100vw-2rem)] sm:w-[400px] max-w-sm sm:max-w-none mx-auto sm:mx-0 rounded-2xl sm:rounded-3xl shadow-2xl border z-[999] overflow-hidden ${
               darkMode
                 ? 'bg-slate-900/95 border-slate-800 text-slate-100 backdrop-blur-xl'
                 : 'bg-white border-gray-200 text-gray-800 backdrop-blur-xl'
