@@ -4081,6 +4081,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         // توحيد منح النقاط: نقطة واحدة فقط (+1) عبر الدالة المركزية
         addPoint({ challengeId: currentQuestion?.id, roomId: room?.id });
 
+        setSessionMistakes(prev => [...prev, {
+          challenge: currentQuestion,
+          keyword: currentQuestion.keyword || currentQuestion.verseText || currentQuestion.text || "",
+          userAnswer: answer || rawSelected || rawCorrect,
+          correctAnswer: rawCorrect,
+          correctText: rawCorrect,
+          type: currentQuestion.type || 'COMPLETION',
+          isFullyCorrect: true,
+          pointsEarned: 1,
+          totalPossible: 1
+        }]);
+
         if (view === 'group_game') {
           syncGroupProgress(false, sessionCorrect + 1);
         }
@@ -5512,6 +5524,7 @@ ${versesList}
     sessionCorrect, setSessionCorrect,
     sessionWrong, setSessionWrong,
     sessionMistakes, setSessionMistakes,
+    showMistakes, setShowMistakes,
     sessionCurrentIndex, setSessionCurrentIndex,
     skillsOptions, setSkillsOptions,
     selectedOption, setSelectedOption,
