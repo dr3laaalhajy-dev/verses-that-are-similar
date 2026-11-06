@@ -191,8 +191,16 @@ export const LiveReactionsOverlay: React.FC<LiveReactionsOverlayProps> = ({
 
     console.log(`[Supabase Live Reactions] بدء الاستماع على القناة اللحظية room_${roomId}...`);
 
+    const channelName = `room_${roomId}`;
+    const existingChannel = supabase.getChannels().find(ch => ch.topic === `realtime:${channelName}`);
+    if (existingChannel) {
+      try {
+        supabase.removeChannel(existingChannel);
+      } catch (_) {}
+    }
+
     const channel = supabase
-      .channel(`room_${roomId}`)
+      .channel(channelName)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'reactions', filter: `room_id=eq.${roomId}` },
@@ -225,7 +233,9 @@ export const LiveReactionsOverlay: React.FC<LiveReactionsOverlayProps> = ({
 
     return () => {
       console.log(`🔌 إلغاء الاشتراك من القناة room_${roomId}`);
-      channel.unsubscribe();
+      try {
+        supabase.removeChannel(channel);
+      } catch (_) {}
     };
   }, [roomId]);
 

@@ -154,9 +154,16 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
       setView('group_game');
     };
 
-    const channel = supabase
-      .channel(`room_sync_${room.id}`)
-      .on('broadcast', { event: 'room_completed' }, handleRoomFinish)
+    const channelName = `room_sync_${room.id}`;
+    const existingChannel = supabase.getChannels().find(ch => ch.topic === `realtime:${channelName}`);
+    if (existingChannel) {
+      try {
+        supabase.removeChannel(existingChannel);
+      } catch (_) {}
+    }
+
+    const channel = supabase.channel(channelName);
+    channel
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${room.id}` }, (payload: any) => {
         if (payload?.new?.status === 'completed' || payload?.new?.status === 'FINISHED') {
           handleRoomFinish();
@@ -167,10 +174,17 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
           handleRoomFinish();
         }
       })
-      .subscribe();
+      .on('broadcast', { event: 'room_completed' }, handleRoomFinish)
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log(`[ChallengeGamePage] تم الاشتراك في قناة الغرفة بنجاح: ${channelName}`);
+        }
+      });
 
     return () => {
-      supabase.removeChannel(channel);
+      try {
+        supabase.removeChannel(channel);
+      } catch (_) {}
     };
   }, [room?.id, setView, app]);
 
@@ -206,12 +220,29 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
     }
 
     try {
-      const channel = supabase.channel(`room_sync_${room.id}`);
-      channel.send({
-        type: 'broadcast',
-        event: 'room_completed',
-        payload: { roomId: room.id, status: 'completed' }
-      }).catch(() => {});
+      const existingChannel = supabase.getChannels().find(ch => ch.topic === `realtime:room_sync_${room.id}`);
+      if (existingChannel && existingChannel.state === 'joined') {
+        existingChannel.send({
+          type: 'broadcast',
+          event: 'room_completed',
+          payload: { roomId: room.id, status: 'completed' }
+        }).catch(() => {});
+      } else {
+        const sendCh = supabase.channel(`room_sync_${room.id}`);
+        sendCh.subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            sendCh.send({
+              type: 'broadcast',
+              event: 'room_completed',
+              payload: { roomId: room.id, status: 'completed' }
+            }).finally(() => {
+              try {
+                supabase.removeChannel(sendCh);
+              } catch (_) {}
+            });
+          }
+        });
+      }
     } catch (bErr) {
       console.warn('[ChallengeGamePage] Broadcast warning:', bErr);
     }

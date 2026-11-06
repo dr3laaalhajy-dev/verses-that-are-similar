@@ -175,10 +175,23 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
       }
     }
 
-    // B) Direct Supabase channel listener for `room_${room.id}` & `room_sync_${room.id}`
+    // B) Direct Supabase channel listener for `room_sync_${room.id}`
     const channelName = `room_sync_${room.id}`;
-    const channel = supabase.channel(channelName);
-    channel
+    const existingChannel = supabase.getChannels().find(ch => ch.topic === `realtime:${channelName}`);
+    if (existingChannel) {
+      try {
+        supabase.removeChannel(existingChannel);
+      } catch (_) {}
+    }
+
+    const roomChannel = supabase.channel(channelName);
+
+    roomChannel
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms', filter: `id=eq.${room.id}` }, (payload: any) => {
+        if (payload?.new) {
+          setRoom((prev: any) => ({ ...prev, ...payload.new }));
+        }
+      })
       .on('broadcast', { event: 'player_left' }, ({ payload }) => {
         if (!payload) return;
         const leftId = payload.playerId || payload.friendId || payload.userId;
@@ -213,11 +226,15 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
           });
         }
       })
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          console.log(`[GroupWaitingPage] تم الاتصال بالغرفة بنجاح: ${channelName}`);
+        }
+      });
 
     return () => {
       try {
-        supabase.removeChannel(channel);
+        supabase.removeChannel(roomChannel);
       } catch (e) { }
     };
   }, [room?.id, (room as any)?.lastReaction, (room as any)?.playersProgress?.__lastReaction, friendsList]);

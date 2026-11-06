@@ -86,12 +86,16 @@ export default function WhoAmIGame({
     refresh();
 
     const filter = `room_id=eq.${roomId}`;
+    const channelName = `who-am-i-${roomId}`;
+    const existingChannel = supabase.getChannels().find(c => c.topic === `realtime:${channelName}`);
+    if (existingChannel) {
+      try {
+        supabase.removeChannel(existingChannel);
+      } catch (_) {}
+    }
+
     const channel = supabase
-      .channel(`who-am-i-${roomId}`)
-      .on('broadcast', { event: 'room_completed' }, () => {
-        setIsRoomCompleted(true);
-        router.push('/challenge/results');
-      })
+      .channel(channelName)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}` }, (payload: any) => {
         if (payload?.new?.status === 'completed' || payload?.new?.status === 'FINISHED') {
           setIsRoomCompleted(true);
@@ -107,6 +111,10 @@ export default function WhoAmIGame({
       .on('postgres_changes', { event: '*', schema: 'public', table: 'who_am_i_rounds', filter }, refresh)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'who_am_i_answers', filter }, refresh)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'who_am_i_submissions', filter }, refresh)
+      .on('broadcast', { event: 'room_completed' }, () => {
+        setIsRoomCompleted(true);
+        router.push('/challenge/results');
+      })
       .subscribe((status, err) => {
         if (err) console.error('[WhoAmIGame Realtime Error]:', err);
         if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
@@ -538,12 +546,29 @@ export default function WhoAmIGame({
                         ]);
                       } catch (_) {}
                       try {
-                        const ch = supabase.channel(`who-am-i-${roomId}`);
-                        ch.send({
-                          type: 'broadcast',
-                          event: 'room_completed',
-                          payload: { roomId }
-                        }).catch(() => {});
+                        const existingChannel = supabase.getChannels().find(c => c.topic === `realtime:who-am-i-${roomId}`);
+                        if (existingChannel && existingChannel.state === 'joined') {
+                          existingChannel.send({
+                            type: 'broadcast',
+                            event: 'room_completed',
+                            payload: { roomId }
+                          }).catch(() => {});
+                        } else {
+                          const ch = supabase.channel(`who-am-i-${roomId}`);
+                          ch.subscribe((status) => {
+                            if (status === 'SUBSCRIBED') {
+                              ch.send({
+                                type: 'broadcast',
+                                event: 'room_completed',
+                                payload: { roomId }
+                              }).finally(() => {
+                                try {
+                                  supabase.removeChannel(ch);
+                                } catch (_) {}
+                              });
+                            }
+                          });
+                        }
                       } catch (_) {}
                       setIsRoomCompleted(true);
                       router.push('/challenge/results');

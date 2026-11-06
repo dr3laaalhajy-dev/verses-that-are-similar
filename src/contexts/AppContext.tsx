@@ -3145,13 +3145,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
 
+    const channelName = `room_sync_app_${room.id}`;
+    const existingChannel = supabase.getChannels().find(ch => ch.topic === `realtime:${channelName}`);
+    if (existingChannel) {
+      try {
+        supabase.removeChannel(existingChannel);
+      } catch (_) {}
+    }
+
     const channel = supabase
-      .channel(`room_sync_${room.id}`)
-      .on('broadcast', { event: 'room_completed' }, (_payload: any) => {
-        recordDailyGiftRoomMatch?.();
-        router.push('/challenge/results');
-        setView('group_game');
-      })
+      .channel(channelName)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${room.id}` }, (payload: any) => {
         if (payload?.new?.status === 'completed' || payload?.new?.status === 'FINISHED') {
           recordDailyGiftRoomMatch?.();
@@ -3165,6 +3168,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           router.push('/challenge/results');
           setView('group_game');
         }
+      })
+      .on('broadcast', { event: 'room_completed' }, (_payload: any) => {
+        recordDailyGiftRoomMatch?.();
+        router.push('/challenge/results');
+        setView('group_game');
       })
       .subscribe((status, err) => {
         if (err) console.warn('[Supabase Room Channel Error]:', err);
@@ -3535,21 +3543,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
           // Broadcast to room channel so host and participants immediately remove player and reset invite status
           try {
-            const ch = supabase.channel(`room_sync_${roomId}`);
-            ch.subscribe((status) => {
-              if (status === 'SUBSCRIBED') {
-                ch.send({
-                  type: 'broadcast',
-                  event: 'player_left',
-                  payload: leavePayload
-                }).catch(() => {});
-                ch.send({
-                  type: 'broadcast',
-                  event: 'participant_removed',
-                  payload: leavePayload
-                }).catch(() => {});
-              }
-            });
+            const existingChannel = supabase.getChannels().find(c => c.topic === `realtime:room_sync_${roomId}`);
+            if (existingChannel && existingChannel.state === 'joined') {
+              existingChannel.send({
+                type: 'broadcast',
+                event: 'player_left',
+                payload: leavePayload
+              }).catch(() => {});
+              existingChannel.send({
+                type: 'broadcast',
+                event: 'participant_removed',
+                payload: leavePayload
+              }).catch(() => {});
+            } else {
+              const ch = supabase.channel(`room_sync_${roomId}`);
+              ch.subscribe((status) => {
+                if (status === 'SUBSCRIBED') {
+                  ch.send({
+                    type: 'broadcast',
+                    event: 'player_left',
+                    payload: leavePayload
+                  }).catch(() => {});
+                  ch.send({
+                    type: 'broadcast',
+                    event: 'participant_removed',
+                    payload: leavePayload
+                  }).finally(() => {
+                    try {
+                      supabase.removeChannel(ch);
+                    } catch (_) {}
+                  });
+                }
+              });
+            }
           } catch (bErr) {
             console.warn('[Broadcast leave event warn]:', bErr);
           }
