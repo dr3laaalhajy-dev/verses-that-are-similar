@@ -409,6 +409,7 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
       const receiverId = friend.id || friend.uniquePlayerId || friend.username;
 
       // Backend enforcement: Check if receiver enabled Do Not Disturb (429 status)
+      // Also triggers pardon logic if the receiver was previously kicked from this room
       try {
         const checkRes = await fetch('/api/1v1', {
           method: 'POST',
@@ -416,7 +417,8 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
           body: JSON.stringify({
             action: 'send-invite',
             senderId: String(senderId),
-            receiverId: String(receiverId)
+            receiverId: String(receiverId),
+            roomId: room.id  // allows backend to pardon kicked player if host re-invites
           })
         });
 

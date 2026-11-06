@@ -387,11 +387,10 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
         player = updatedP || player
       }
 
-      const isHost = player.id === room.player1Id
+      const isHost = String(player.id) === String(room.player1Id)
 
-      // 1. Check if the player has been kicked from this room:
+      // Build player identifiers once — reused for kick check and invite check
       let playersProgress = (room.playersProgress as any) || {}
-      const kickedList: string[] = Array.isArray(playersProgress.__kicked) ? playersProgress.__kicked : []
       const myIdentifiers = [
         String(player.id),
         String(player.name || '').trim().toLowerCase(),
@@ -399,11 +398,32 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
         player.uniquePlayerId ? String(player.uniquePlayerId).toUpperCase() : null
       ].filter(Boolean) as string[]
 
+      // 1a. Determine if this player carries a valid direct invite from the room host
+      //     An invite is valid when isInvite=true AND invitedUserId matches one of the player's identifiers.
+      //     A host re-invite acts as an explicit pardon — it overrides any previous kick.
+      const hasValidInvite = Boolean(
+        isInvite && invitedUserId && myIdentifiers.some(ident =>
+          String(invitedUserId).toLowerCase() === ident.toLowerCase() ||
+          String(invitedUserId) === String(player.id)
+        )
+      )
+
+      // 1b. Check if the player has been kicked from this room:
+      const kickedList: string[] = Array.isArray(playersProgress.__kicked) ? playersProgress.__kicked : []
       const isKicked = myIdentifiers.some(ident => kickedList.includes(ident))
-      if (isKicked) {
-        return res.status(403).json({ message: 'تم إخراجك من هذه الغرفة من قِبل المنشئ ولا يمكنك الانضمام إليها مجدداً' })
+
+      if (isKicked && !isHost) {
+        if (hasValidInvite) {
+          // Host sent a new direct invite → pardon: remove all identifiers from the kicked list
+          playersProgress.__kicked = kickedList.filter(k => !myIdentifiers.includes(k))
+          // Persist the updated kick list immediately so the join can proceed
+          await supabaseAdmin.from('rooms').update({ playersProgress }).eq('id', room.id)
+        } else {
+          return res.status(403).json({ message: 'تم إخراجك من هذه الغرفة من قِبل المنشئ ولا يمكنك الانضمام إليها مجدداً' })
+        }
       }
 
+      // 2. Check if the player is friend with the host:
       // 2. Check if the player is friend with the host:
       let isFriendWithHost = false
       try {
@@ -416,19 +436,9 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
         if (friendship) isFriendWithHost = true
       } catch (_) {}
 
-      // Check if the player is invited to this room:
-      const isInvited = Boolean(
-        isInvite ||
-        (invitedUserId && (
-          String(invitedUserId) === String(player.id) ||
-          String(invitedUserId).toLowerCase() === String(player.username || '').toLowerCase().replace(/^@+/, '') ||
-          String(invitedUserId).toUpperCase() === String(player.uniquePlayerId || '').toUpperCase() ||
-          String(invitedUserId).toLowerCase() === String(player.name || '').toLowerCase()
-        ))
-      )
-
+      // hasValidInvite was computed above in the kick-check block
       // Private Room Password Verification (Host, Invited players, or Friends bypass password verification)
-      if (room.isPrivate && !isHost && !isInvited && !isFriendWithHost) {
+      if (room.isPrivate && !isHost && !hasValidInvite && !isFriendWithHost) {
         const enteredPass = password ? String(password).trim() : ''
         const actualPass = room.password ? String(room.password).trim() : ''
         if (!enteredPass || enteredPass !== actualPass) {
@@ -1805,7 +1815,7 @@ async function handleDndCooldown(req: VercelRequest, res: VercelResponse) {
 }
 
 async function handleSendInviteAPI(req: VercelRequest, res: VercelResponse) {
-  const { senderId, receiverId, friendId, targetId } = req.body || req.query || {}
+  const { senderId, receiverId, friendId, targetId, roomId } = req.body || req.query || {}
   const targetReceiver = receiverId || friendId || targetId
   if (!senderId || !targetReceiver) {
     return res.status(400).json({ message: 'Missing senderId or receiverId' })
@@ -1844,6 +1854,37 @@ async function handleSendInviteAPI(req: VercelRequest, res: VercelResponse) {
           dndCooldowns.delete(key)
         }
       }
+    }
+  }
+
+  // If a roomId is provided and the sender is the room host, pardon the receiver
+  // from any previous kick ban so the new invite takes effect immediately.
+  if (roomId && senderPlayer?.id && receiverPlayer?.id) {
+    try {
+      const { data: room } = await supabaseAdmin.from('rooms').select('id, player1Id, playersProgress').eq('id', String(roomId)).maybeSingle()
+      if (room && String(room.player1Id) === String(senderPlayer.id)) {
+        const prog: any = (room.playersProgress as any) || {}
+        const kickedList: string[] = Array.isArray(prog.__kicked) ? prog.__kicked : []
+
+        // Build all identifiers for the invited (receiver) player
+        const receiverIdentifiers = [
+          String(receiverPlayer.id),
+          String(receiverPlayer.name || '').trim().toLowerCase(),
+          receiverPlayer.username ? String(receiverPlayer.username).trim().toLowerCase().replace(/^@+/, '') : null,
+          receiverPlayer.uniquePlayerId ? String(receiverPlayer.uniquePlayerId).toUpperCase() : null
+        ].filter(Boolean) as string[]
+
+        const wasKicked = receiverIdentifiers.some(ident => kickedList.includes(ident))
+        if (wasKicked) {
+          // Host is re-inviting a previously kicked player → pardon them
+          prog.__kicked = kickedList.filter(k => !receiverIdentifiers.includes(k))
+          await supabaseAdmin.from('rooms').update({ playersProgress: prog }).eq('id', room.id)
+          console.log(`[Invite] Pardoned kicked player ${receiverPlayer.id} from room ${room.id} via host re-invite`)
+        }
+      }
+    } catch (e) {
+      // Non-fatal: pardon attempt failure should not block the invite
+      console.warn('[Invite] Could not pardon kicked player:', e)
     }
   }
 

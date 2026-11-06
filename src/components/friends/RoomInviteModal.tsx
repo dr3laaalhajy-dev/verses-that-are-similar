@@ -32,6 +32,7 @@ export const RoomInviteModal: React.FC<RoomInviteModalProps> = ({
   useEffect(() => {
     if (!invite) return;
     setTimeLeft(10);
+    setErrorMessage(null);  // Clear any previous error when a new invite arrives
     hasRespondedRef.current = false;
 
     const interval = setInterval(() => {
