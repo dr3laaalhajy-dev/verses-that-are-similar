@@ -2,13 +2,13 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Users, Lock, Globe, Loader2, Trash2, ArrowRight, LogOut,
-  UserPlus, ChevronDown, ChevronUp, Check, Swords, Sparkles, Clock, X
+  UserPlus, ChevronDown, ChevronUp, Check, Swords, Sparkles, Clock, X, UserX
 } from 'lucide-react';
 import { View } from '../types/challenges';
 import { LiveReactionsOverlay } from '../components/LiveReactionsOverlay';
 import { friendsRealtimeService } from '../services/friendsRealtimeService';
 import { supabase } from '../services/supabase';
-import { useApp } from '../contexts/AppContext';
+import { useApp, toast } from '../contexts/AppContext';
 
 export interface FriendInviteStateItem {
   status: 'idle' | 'sent' | 'declined' | 'accepted';
@@ -48,6 +48,69 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
   const [friendsList, setFriendsList] = useState<any[]>([]);
   const [isLoadingFriends, setIsLoadingFriends] = useState(false);
   const [sendingInviteId, setSendingInviteId] = useState<string | number | null>(null);
+  const [kickingPlayerId, setKickingPlayerId] = useState<string | number | null>(null);
+
+  // Resilient determination of creator/host status that persists across re-renders
+  const currentMyId = String(app?.playerId || localStorage.getItem('quran_player_id') || '');
+  const currentMyUser = String(playerUsername || localStorage.getItem('quran_player_username') || '').toLowerCase().replace(/^@+/, '');
+  const currentMyName = String(playerName || localStorage.getItem('quran_player_name') || '').trim().toLowerCase();
+  const currentMyUnique = String(app?.uniquePlayerId || localStorage.getItem('quran_unique_player_id') || '').toUpperCase();
+
+  const creatorId = String(room?.creator_id || room?.player1Id || room?.player1_id || room?.hostId || room?.host_id || room?.player1?.id || '');
+  const creatorUser = String(room?.player1?.username || room?.hostUsername || room?.creator_username || '').toLowerCase().replace(/^@+/, '');
+  const creatorName = String(room?.player1?.name || room?.hostName || room?.creator_name || '').trim().toLowerCase();
+
+  const isCreator = Boolean(
+    (creatorId && currentMyId && creatorId === currentMyId) ||
+    (creatorUser && currentMyUser && creatorUser === currentMyUser) ||
+    (creatorName && currentMyName && creatorName === currentMyName) ||
+    (creatorId && (creatorId === currentMyUser || creatorId === currentMyName || creatorId === currentMyUnique)) ||
+    (room?.isHost === true) ||
+    (room?.id && sessionStorage.getItem(`is_creator_${room.id}`) === 'true')
+  );
+
+  // Requirement 2: Function to kick player from room and invalidate invitation
+  const handleKickPlayer = async (targetPlayer: any) => {
+    if (!room?.id || !targetPlayer) return;
+    const confirmKick = window.confirm(`هل أنت متأكد من طرد اللاعب "${targetPlayer.name || 'اللاعب'}" من الغرفة؟`);
+    if (!confirmKick) return;
+
+    setKickingPlayerId(targetPlayer.id);
+    try {
+      const myHostId = app?.playerId || playerUsername || playerName;
+      const res = await fetch('/api/1v1', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'kick-player',
+          roomId: room.id,
+          hostId: myHostId,
+          targetPlayerId: targetPlayer.id,
+          targetPlayerName: targetPlayer.name
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        toast.success(`تم طرد ${targetPlayer.name || 'اللاعب'} من الغرفة بنجاح`);
+        if (data.room) {
+          setRoom(data.room);
+        } else {
+          setRoom((prev: any) => ({
+            ...prev,
+            participants: (prev?.participants || []).filter((p: any) => String(p.id) !== String(targetPlayer.id) && p.name !== targetPlayer.name)
+          }));
+        }
+      } else {
+        toast.error(data.error || data.message || 'فشل طرد اللاعب');
+      }
+    } catch (e: any) {
+      console.error('Error kicking player:', e);
+      toast.error('حدث خطأ أثناء محاولة طرد اللاعب');
+    } finally {
+      setKickingPlayerId(null);
+    }
+  };
 
   // Requirement 4: Sender State per friend ID (inviteStatuses[friendId]) tracking idle, sent (10s), declined (30s), accepted
   const [inviteStatuses, setInviteStatuses] = useState<Record<string | number, FriendInviteStateItem>>({});
@@ -189,7 +252,12 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
     roomChannel
       .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms', filter: `id=eq.${room.id}` }, (payload: any) => {
         if (payload?.new) {
-          setRoom((prev: any) => ({ ...prev, ...payload.new }));
+          setRoom((prev: any) => ({
+            ...prev,
+            ...payload.new,
+            player1: prev?.player1 || payload.new.player1,
+            participants: prev?.participants
+          }));
         }
       })
       .on('broadcast', { event: 'player_left' }, ({ payload }) => {
@@ -222,6 +290,55 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
           setInviteStatuses(prev => {
             const next = { ...prev };
             delete next[target];
+            return next;
+          });
+        }
+      })
+      .on('broadcast', { event: 'player_kicked' }, ({ payload }) => {
+        if (!payload) return;
+        const myIds = [
+          String(app?.playerId || ''),
+          String(playerUsername || '').toLowerCase().replace(/^@+/, ''),
+          String(playerName || '').trim().toLowerCase(),
+          String(app?.uniquePlayerId || '').toUpperCase()
+        ].filter(Boolean);
+
+        const kickedTargets = [
+          String(payload.playerId || ''),
+          String(payload.targetPlayerId || ''),
+          String(payload.playerUsername || '').toLowerCase().replace(/^@+/, ''),
+          String(payload.playerName || '').trim().toLowerCase()
+        ].filter(Boolean);
+
+        const amIKicked = myIds.some(id => kickedTargets.includes(id));
+        if (amIKicked) {
+          toast.error('تم إخراجك من الغرفة من قِبل المنشئ');
+          setRoom(null);
+          localStorage.removeItem('activeRoomId');
+          setView('home');
+          return;
+        }
+
+        // Another player was kicked: update participants list immediately
+        setRoom((prev: any) => {
+          if (!prev) return prev;
+          const updatedParts = (prev.participants || []).filter((p: any) =>
+            !kickedTargets.includes(String(p.id)) &&
+            !kickedTargets.includes(String(p.name || '').trim().toLowerCase()) &&
+            !kickedTargets.includes(String(p.username || '').trim().toLowerCase().replace(/^@+/, ''))
+          );
+          return { ...prev, participants: updatedParts };
+        });
+
+        // Reset invite status for kicked player if in friends list
+        const match = friendsList.find(f =>
+          (payload.playerId && String(f.id) === String(payload.playerId)) ||
+          (payload.playerName && f.name && f.name.trim().toLowerCase() === String(payload.playerName).trim().toLowerCase())
+        );
+        if (match) {
+          setInviteStatuses(prev => {
+            const next = { ...prev };
+            delete next[match.id];
             return next;
           });
         }
@@ -534,31 +651,57 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
             <span className="text-xs md:text-sm font-black text-slate-800">المتسابقون ({room?.participants?.length || 1})</span>
             <span className="flex h-2 w-2 rounded-full bg-orange-500 animate-ping" />
           </div>
-          <div className="grid grid-cols-2 gap-2 sm:gap-2.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-2.5">
             {(room?.participants || []).map((p: any, i: number) => {
-              const isMe = p?.id === (playerUsername || playerName) || p?.name === playerName;
+              const isMe = p?.id === (playerUsername || playerName) || p?.name === playerName || String(p?.id) === currentMyId || (p?.username && currentMyUser && p.username.toLowerCase().replace(/^@+/, '') === currentMyUser);
               const nameColorToDisplay = isMe ? (equippedNameColor || p?.equippedNameColor) : p?.equippedNameColor;
+              const isThisPlayerCreator = String(p?.id) === creatorId || (p?.name && creatorName && p.name.trim().toLowerCase() === creatorName) || p?.id === room?.player1Id;
+
               return (
                 <motion.div
                   initial={{ opacity: 0, x: -10 }}
                   animate={{ opacity: 1, x: 0 }}
                   key={p?.id || i}
-                  className="flex items-center gap-2 sm:gap-2.5 p-2.5 sm:p-3 bg-white rounded-xl border border-slate-100 shadow-xs min-w-0"
+                  className="flex items-center justify-between gap-2 p-2.5 sm:p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 shadow-xs min-w-0"
                 >
-                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center font-black text-xs shrink-0">
-                    {i + 1}
-                  </div>
-                  <div className="flex-1 min-w-0 text-right">
-                    <div className="flex items-center gap-1.5 justify-end">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-orange-100 dark:bg-orange-950/60 text-orange-600 dark:text-orange-400 flex items-center justify-center font-black text-xs shrink-0">
+                      {i + 1}
+                    </div>
+                    <div className="min-w-0 text-right flex-1">
                       <span
-                        className="font-bold text-slate-700 text-xs sm:text-sm truncate"
+                        className="font-bold text-slate-700 dark:text-slate-100 text-xs sm:text-sm truncate block"
                         style={nameColorToDisplay ? { color: nameColorToDisplay } : undefined}
                       >
-                        {p?.name || 'لاعب'}
+                        {p?.name || 'لاعب'} {isMe && '(أنت)'}
                       </span>
                     </div>
                   </div>
-                  {p?.id === room?.player1Id && <span className="px-1.5 py-0.5 bg-orange-500 text-white text-[9px] font-black rounded shrink-0">المنشئ</span>}
+
+                  <div className="flex items-center gap-1 shrink-0">
+                    {isThisPlayerCreator ? (
+                      <span className="px-1.5 py-0.5 bg-orange-500 text-white text-[9px] font-black rounded shrink-0">المنشئ</span>
+                    ) : (
+                      isCreator && !isMe && (
+                        <button
+                          type="button"
+                          onClick={() => handleKickPlayer(p)}
+                          disabled={kickingPlayerId === p?.id}
+                          title="طرد اللاعب من الغرفة"
+                          className="px-2 py-1 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 transition-all active:scale-95 flex items-center gap-1 text-[11px] font-black cursor-pointer shrink-0"
+                        >
+                          {kickingPlayerId === p?.id ? (
+                            <Loader2 className="w-3 h-3 animate-spin text-red-600" />
+                          ) : (
+                            <>
+                              <UserX className="w-3.5 h-3.5 text-red-500" />
+                              <span>طرد</span>
+                            </>
+                          )}
+                        </button>
+                      )
+                    )}
+                  </div>
                 </motion.div>
               );
             })}
@@ -567,12 +710,7 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
 
         {/* Fixed / Sticky Action Controls at bottom */}
         <div className="sticky bottom-2 sm:bottom-4 z-30 pt-3 pb-1 w-full bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border border-slate-100 dark:border-slate-800 rounded-2xl shadow-xl p-2.5 sm:p-3.5 space-y-2 mt-4">
-          {(
-            room?.player1?.name === playerName ||
-            (room?.player1?.username && playerUsername && room.player1.username.toLowerCase() === playerUsername.toLowerCase()) ||
-            (room?.hostName && playerName && room.hostName === playerName) ||
-            (room?.hostUsername && playerUsername && room.hostUsername.toLowerCase() === playerUsername.toLowerCase())
-          ) ? (
+          {isCreator ? (
             <div className="space-y-2 sm:space-y-2.5">
               <button
                 onClick={handleStartRoomV1}

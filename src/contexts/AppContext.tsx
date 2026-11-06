@@ -2446,6 +2446,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
         const data = await res.json();
         if (res.ok) {
+          try {
+            sessionStorage.setItem(`is_creator_${data.id}`, 'true');
+          } catch (_) {}
           setRoom(data);
           setView('group_waiting');
         } else {
@@ -2548,6 +2551,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
       const data = await res.json();
       if (res.ok) {
+        try {
+          sessionStorage.setItem(`is_creator_${data.id}`, 'true');
+        } catch (_) {}
         setRoom(data);
         setView('group_waiting');
       } else {
@@ -3184,6 +3190,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         recordDailyGiftRoomMatch?.();
         router.push('/challenge/results');
         setView('group_game');
+      })
+      .on('broadcast', { event: 'player_kicked' }, ({ payload }: any) => {
+        if (!payload) return;
+        const myIds = [
+          String(playerId || ''),
+          String(playerUsername || '').toLowerCase().replace(/^@+/, ''),
+          String(playerName || '').trim().toLowerCase(),
+          String(uniquePlayerId || '').toUpperCase()
+        ].filter(Boolean);
+
+        const kickedTargets = [
+          String(payload.playerId || ''),
+          String(payload.targetPlayerId || ''),
+          String(payload.playerUsername || '').toLowerCase().replace(/^@+/, ''),
+          String(payload.playerName || '').trim().toLowerCase()
+        ].filter(Boolean);
+
+        if (myIds.some(id => kickedTargets.includes(id))) {
+          toast.error('تم إخراجك من الغرفة من قِبل المنشئ');
+          setRoom(null);
+          localStorage.removeItem('activeRoomId');
+          setView('home');
+        }
       })
       .subscribe((status, err) => {
         if (err) console.warn('[Supabase Room Channel Error]:', err);
