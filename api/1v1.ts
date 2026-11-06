@@ -303,8 +303,9 @@ async function handleJoin(req: VercelRequest, res: VercelResponse) {
     if (room.status === 'CANCELLED') return res.status(410).json({ message: 'تم إلغاء هذه الغرفة من قبل المضيف' })
 
     // Check 10-minute TTL for WAITING rooms
-    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000)
-    if (room.status === 'WAITING' && room.createdAt < tenMinutesAgo) {
+    const tenMinutesAgoMs = Date.now() - 10 * 60 * 1000
+    const roomCreatedMs = room.createdAt ? new Date(room.createdAt).getTime() : 0
+    if (room.status === 'WAITING' && roomCreatedMs < tenMinutesAgoMs) {
       await prisma.room.update({
         where: { id: room.id },
         data: { status: 'EXPIRED' }
@@ -405,7 +406,7 @@ async function handleJoin(req: VercelRequest, res: VercelResponse) {
 
 async function handleListRooms(req: VercelRequest, res: VercelResponse) {
   try {
-    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000)
+    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString()
 
     // Automatically mark orphaned WAITING rooms older than 10 minutes as EXPIRED
     await prisma.room.updateMany({
@@ -1197,7 +1198,7 @@ async function handleCheckActive(req: VercelRequest, res: VercelResponse) {
     const player = await findPlayer(playerId)
     if (!player) return res.status(404).json({ error: 'Player not found' })
 
-    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000)
+    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString()
 
     // 1. Check if user is the host of an active WAITING room (< 10 mins old)
     const hostWaitingRoom = await prisma.room.findFirst({
@@ -1215,7 +1216,7 @@ async function handleCheckActive(req: VercelRequest, res: VercelResponse) {
     }
 
     // 2. Check if user is participant or host of an ongoing PLAYING room (< 2 hours old)
-    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000)
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
     const rooms = await prisma.room.findMany({
       where: {
         status: 'PLAYING',

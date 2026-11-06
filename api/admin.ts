@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { prisma } from './_lib/prisma.js'
+import { supabaseAdmin } from './_lib/supabaseAdmin.js'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import { v4 as uuidv4 } from 'uuid'
@@ -408,12 +409,12 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, currentAdmin
       const cleanN = (name || '').trim();
 
       if (cleanU && cleanU !== player.username?.replace(/^@+/, '')) {
-        const existing = await prisma.player.findFirst({
-          where: {
-            OR: [{ username: cleanU }, { username: '@' + cleanU }],
-            NOT: { id: player.id }
-          }
-        });
+        const { data: existing } = await supabaseAdmin
+          .from('players')
+          .select('id')
+          .or(`username.eq.${cleanU},username.eq.@${cleanU}`)
+          .neq('id', player.id)
+          .maybeSingle();
         if (existing) {
           return res.status(400).json({ message: 'اسم المستخدم هذا مستخدم بالفعل لمستخدم آخر' });
         }
@@ -439,19 +440,22 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, currentAdmin
 
       // Synchronize any duplicate records matching this username or name to prevent stale cache resurrection
       if (cleanN || cleanU) {
-        await prisma.player.updateMany({
-          where: {
-            OR: [
-              ...(cleanN ? [{ name: { equals: cleanN, mode: 'insensitive' as const } }] : []),
-              ...(cleanU ? [{ username: cleanU }, { username: '@' + cleanU }] : [])
-            ],
-            NOT: { id: player.id }
-          },
-          data: {
-            ...(parsedPoints !== undefined ? { points: parsedPoints } : {}),
-            ...(parsedCups !== undefined ? { cups: parsedCups } : {})
-          }
-        }).catch(() => {});
+        const orConditions: string[] = [];
+        if (cleanN) orConditions.push(`name.ilike.${cleanN}`);
+        if (cleanU) orConditions.push(`username.eq.${cleanU}`, `username.eq.@${cleanU}`);
+
+        if (orConditions.length > 0) {
+          try {
+            await supabaseAdmin
+              .from('players')
+              .update({
+                ...(parsedPoints !== undefined ? { points: parsedPoints } : {}),
+                ...(parsedCups !== undefined ? { cups: parsedCups } : {})
+              })
+              .or(orConditions.join(','))
+              .neq('id', player.id);
+          } catch (_) {}
+        }
       }
 
       // Next.js ISR path revalidation fallback if run in a Next.js environment

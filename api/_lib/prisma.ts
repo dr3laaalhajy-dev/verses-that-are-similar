@@ -28,26 +28,117 @@ function resolveTableName(modelName: string): string {
   return snake.endsWith('s') ? snake : `${snake}s`;
 }
 
+/**
+ * Normalizes values for Supabase queries.
+ * Converts Date instances and valid date-like strings to ISO strings.
+ */
+function normalizeValue(val: any): any {
+  if (val === undefined) return undefined;
+  if (val === null) return null;
+  if (val instanceof Date) {
+    return val.toISOString();
+  }
+  if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}/.test(val)) {
+    const d = new Date(val);
+    if (!isNaN(d.getTime())) {
+      return d.toISOString();
+    }
+  }
+  if (Array.isArray(val)) {
+    return val.map(normalizeValue);
+  }
+  return val;
+}
+
+/**
+ * Normalizes data payload before insert/update in Supabase.
+ * Recursively converts Dates to ISO strings while preserving primitives and increments.
+ */
+function normalizeData(data: any): any {
+  if (!data || typeof data !== 'object') return data;
+  if (data instanceof Date) return data.toISOString();
+  if (Array.isArray(data)) return data.map(normalizeData);
+
+  const result: any = {};
+  for (const [k, v] of Object.entries(data)) {
+    if (v instanceof Date) {
+      result[k] = v.toISOString();
+    } else if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}/.test(v)) {
+      const d = new Date(v);
+      result[k] = !isNaN(d.getTime()) ? d.toISOString() : v;
+    } else if (Array.isArray(v)) {
+      result[k] = v.map(normalizeValue);
+    } else if (typeof v === 'object' && v !== null && (v as any).increment === undefined) {
+      result[k] = normalizeData(v);
+    } else {
+      result[k] = v;
+    }
+  }
+  return result;
+}
+
 function applyWhere(query: any, where: any): any {
   if (!where || typeof where !== 'object') return query;
 
-  for (const [key, value] of Object.entries(where)) {
-    if (value === undefined) continue;
+  for (const [key, rawValue] of Object.entries(where)) {
+    if (rawValue === undefined) continue;
 
-    if (key === 'OR' && Array.isArray(value)) {
-      const orParts: string[] = [];
-      for (const cond of value) {
+    // 1. Prisma Top-Level NOT: { NOT: { id: ... } } or { NOT: [{ ... }] }
+    if (key === 'NOT') {
+      const notConditions = Array.isArray(rawValue) ? rawValue : [rawValue];
+      for (const cond of notConditions) {
         if (!cond || typeof cond !== 'object') continue;
-        for (const [cKey, cVal] of Object.entries(cond)) {
-          if (cVal === undefined) continue;
+        for (const [cKey, cRawVal] of Object.entries(cond)) {
+          if (cRawVal === undefined) continue;
+          const cVal = normalizeValue(cRawVal);
+          if (cVal === null) {
+            query = query.not(cKey, 'is', null);
+          } else if (typeof cVal === 'object' && cVal !== null) {
+            const cv = cVal as any;
+            if (cv.in && Array.isArray(cv.in)) {
+              query = query.not(cKey, 'in', `(${cv.in.map(normalizeValue).join(',')})`);
+            } else if (cv.equals !== undefined) {
+              query = query.neq(cKey, normalizeValue(cv.equals));
+            } else if (cv.not !== undefined || cv.NOT !== undefined) {
+              query = query.eq(cKey, normalizeValue(cv.not !== undefined ? cv.not : cv.NOT));
+            } else {
+              query = query.neq(cKey, cVal);
+            }
+          } else {
+            query = query.neq(cKey, cVal);
+          }
+        }
+      }
+      continue;
+    }
+
+    // 2. Prisma Top-Level OR: { OR: [ ... ] }
+    if (key === 'OR' && Array.isArray(rawValue)) {
+      const orParts: string[] = [];
+      for (const cond of rawValue) {
+        if (!cond || typeof cond !== 'object') continue;
+        for (const [cKey, cRawVal] of Object.entries(cond)) {
+          if (cRawVal === undefined) continue;
+          const cVal = normalizeValue(cRawVal);
           if (cVal === null) {
             orParts.push(`${cKey}.is.null`);
           } else if (typeof cVal === 'object' && (cVal as any).equals !== undefined) {
+            const eqVal = normalizeValue((cVal as any).equals);
             if ((cVal as any).mode === 'insensitive') {
-              orParts.push(`${cKey}.ilike.${(cVal as any).equals}`);
+              orParts.push(`${cKey}.ilike.${eqVal}`);
             } else {
-              orParts.push(`${cKey}.eq.${(cVal as any).equals}`);
+              orParts.push(`${cKey}.eq.${eqVal}`);
             }
+          } else if (typeof cVal === 'object' && (cVal as any).contains !== undefined) {
+            const pattern = `%${(cVal as any).contains}%`;
+            if ((cVal as any).mode === 'insensitive') {
+              orParts.push(`${cKey}.ilike.${pattern}`);
+            } else {
+              orParts.push(`${cKey}.like.${pattern}`);
+            }
+          } else if (typeof cVal === 'object' && ((cVal as any).not !== undefined || (cVal as any).NOT !== undefined)) {
+            const notVal = normalizeValue((cVal as any).not !== undefined ? (cVal as any).not : (cVal as any).NOT);
+            orParts.push(`${cKey}.neq.${notVal}`);
           } else if (typeof cVal === 'string' || typeof cVal === 'number' || typeof cVal === 'boolean') {
             orParts.push(`${cKey}.eq.${cVal}`);
           }
@@ -59,37 +150,67 @@ function applyWhere(query: any, where: any): any {
       continue;
     }
 
-    if (key === 'AND' && Array.isArray(value)) {
-      for (const cond of value) {
+    // 3. Prisma Top-Level AND: { AND: [ ... ] }
+    if (key === 'AND' && Array.isArray(rawValue)) {
+      for (const cond of rawValue) {
         query = applyWhere(query, cond);
       }
       continue;
     }
+
+    const value = normalizeValue(rawValue);
 
     if (value === null) {
       query = query.is(key, null);
     } else if (typeof value === 'object') {
       const v = value as any;
       if (v.in && Array.isArray(v.in)) {
-        query = query.in(key, v.in);
+        query = query.in(key, v.in.map(normalizeValue));
       } else if (v.notIn && Array.isArray(v.notIn)) {
-        query = query.not(key, 'in', `(${v.notIn.join(',')})`);
+        query = query.not(key, 'in', `(${v.notIn.map(normalizeValue).join(',')})`);
       } else if (v.equals !== undefined) {
+        const eqVal = normalizeValue(v.equals);
         if (v.mode === 'insensitive') {
-          query = query.ilike(key, v.equals);
+          query = query.ilike(key, eqVal);
         } else {
-          query = query.eq(key, v.equals);
+          query = query.eq(key, eqVal);
         }
-      } else if (v.not !== undefined) {
-        query = query.neq(key, v.not);
+      } else if (v.contains !== undefined) {
+        const pattern = `%${v.contains}%`;
+        if (v.mode === 'insensitive') {
+          query = query.ilike(key, pattern);
+        } else {
+          query = query.like(key, pattern);
+        }
+      } else if (v.startsWith !== undefined) {
+        const pattern = `${v.startsWith}%`;
+        if (v.mode === 'insensitive') {
+          query = query.ilike(key, pattern);
+        } else {
+          query = query.like(key, pattern);
+        }
+      } else if (v.endsWith !== undefined) {
+        const pattern = `%${v.endsWith}`;
+        if (v.mode === 'insensitive') {
+          query = query.ilike(key, pattern);
+        } else {
+          query = query.like(key, pattern);
+        }
+      } else if (v.not !== undefined || v.NOT !== undefined) {
+        const notVal = normalizeValue(v.not !== undefined ? v.not : v.NOT);
+        if (typeof notVal === 'object' && notVal !== null && notVal.in && Array.isArray(notVal.in)) {
+          query = query.not(key, 'in', `(${notVal.in.map(normalizeValue).join(',')})`);
+        } else {
+          query = query.neq(key, notVal);
+        }
       } else if (v.gte !== undefined) {
-        query = query.gte(key, v.gte);
+        query = query.gte(key, normalizeValue(v.gte));
       } else if (v.lte !== undefined) {
-        query = query.lte(key, v.lte);
+        query = query.lte(key, normalizeValue(v.lte));
       } else if (v.gt !== undefined) {
-        query = query.gt(key, v.gt);
+        query = query.gt(key, normalizeValue(v.gt));
       } else if (v.lt !== undefined) {
-        query = query.lt(key, v.lt);
+        query = query.lt(key, normalizeValue(v.lt));
       } else {
         query = query.eq(key, v);
       }
@@ -173,7 +294,7 @@ class SupabaseModelDelegate {
   }
 
   async create(params: any): Promise<any> {
-    const payload = { ...params?.data };
+    const payload = normalizeData({ ...params?.data });
     delete payload.player1;
     delete payload.player2;
     delete payload.winner;
@@ -189,7 +310,7 @@ class SupabaseModelDelegate {
   }
 
   async update(params: any): Promise<any> {
-    let updateData = { ...params?.data };
+    let updateData = normalizeData({ ...params?.data });
     let needsFetch = false;
     for (const [, v] of Object.entries(updateData)) {
       if (v && typeof v === 'object' && (v as any).increment !== undefined) {
@@ -225,7 +346,8 @@ class SupabaseModelDelegate {
   }
 
   async updateMany(params: any): Promise<{ count: number }> {
-    let q = supabaseAdmin.from(this.tableName).update(params?.data || {});
+    const updateData = normalizeData({ ...params?.data });
+    let q = supabaseAdmin.from(this.tableName).update(updateData || {});
     q = applyWhere(q, params?.where);
     const { data, error } = await q.select();
     if (error) {
@@ -275,7 +397,7 @@ class SupabaseModelDelegate {
     return count ?? 0;
   }
 
-  async groupBy(params: any): Promise<any[]> {
+  async groupBy(_params: any): Promise<any[]> {
     return [];
   }
 }
