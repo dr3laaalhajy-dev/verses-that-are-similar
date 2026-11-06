@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { parseRequestUrl } from './url.js';
 
 export function handleCors(req: VercelRequest, res: VercelResponse): boolean {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -11,3 +12,5 @@ export function handleCors(req: VercelRequest, res: VercelResponse): boolean {
   }
   return false;
 }
+
+export { parseRequestUrl };
