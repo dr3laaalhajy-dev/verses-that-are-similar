@@ -277,22 +277,34 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
 
       {/* Multiplayer Cancel / Resign Button if in a room */}
       {app.room && (app.view === 'challenge' || app.view === 'group_waiting' || app.view === 'group_game') && (
-        <div className="w-full max-w-6xl mx-auto px-4 sm:px-8 pt-3 pb-1 flex justify-end items-center">
+        <div className="w-full max-w-6xl mx-auto px-4 sm:px-8 pt-3 pb-1 flex justify-end items-center gap-2">
           {app.isRoomLeader ? (
-            <button
-              type="button"
-              onClick={() => app.setIsCancelRoomModalOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-red-500/10 hover:bg-red-500/20 text-red-600 border border-red-200/80 shadow-sm transition-all text-xs sm:text-sm font-black active:scale-95 group cursor-pointer"
-              title="إلغاء الغرفة وحذفها"
-            >
-              <Trash2 className="w-4 h-4 text-red-500 group-hover:scale-110 transition-transform" />
-              <span>إلغاء الغرفة</span>
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={() => app.setIsResignModalOpen(true)}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 shadow-xs transition-all text-xs sm:text-sm font-black active:scale-95 group cursor-pointer"
+                title="الانسحاب من التحدي ونقل القيادة للاعب التالي"
+              >
+                <LogOut className="w-4 h-4 text-slate-500 group-hover:rotate-180 transition-transform" />
+                <span>انسحاب</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => app.setIsCancelRoomModalOpen(true)}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-red-500/10 hover:bg-red-500/20 text-red-600 border border-red-200/80 shadow-xs transition-all text-xs sm:text-sm font-black active:scale-95 group cursor-pointer"
+                title="إلغاء الغرفة وحذفها وإنهاء التحدي للجميع"
+              >
+                <Trash2 className="w-4 h-4 text-red-500 group-hover:scale-110 transition-transform" />
+                <span>إلغاء الغرفة</span>
+              </button>
+            </>
           ) : (
             <button
               type="button"
               onClick={() => app.setIsResignModalOpen(true)}
-              className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-red-500/10 hover:bg-red-500/20 text-red-600 border border-red-200/80 shadow-sm transition-all text-xs sm:text-sm font-black active:scale-95 group cursor-pointer"
+              className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-red-500/10 hover:bg-red-500/20 text-red-600 border border-red-200/80 shadow-xs transition-all text-xs sm:text-sm font-black active:scale-95 group cursor-pointer"
               title="الانسحاب من التحدي الجماعي"
             >
               <LogOut className="w-4 h-4 text-red-500 group-hover:rotate-180 transition-transform" />

@@ -324,11 +324,11 @@ export const GlobalOverlays: React.FC = () => {
         onClose={() => app.setIsResignModalOpen(false)}
         onConfirm={app.handleWithdraw || app.handleResignGroupChallenge}
         isLoading={app.isRoomActionLoading}
-        title="تأكيد الانسحاب من التحدي"
-        message="هل أنت متأكد من الانسحاب من هذا التحدي الجماعي؟ سيتم مغادرة الغرفة وتوجيهك إلى قائمة التحديات."
+        title="تأكيد الانسحاب"
+        message="هل أنت متأكد من الانسحاب من التحدي؟ ستستمر اللعبة لباقي المتسابقين دون توقف."
         confirmText="تأكيد الانسحاب"
-        cancelText="إلغاء"
-        isDanger={true}
+        cancelText="تراجع"
+        isDanger={false}
       />
 
       <ConfirmModal
@@ -340,8 +340,8 @@ export const GlobalOverlays: React.FC = () => {
         onConfirm={app.confirmCancelRoomByHost}
         isLoading={app.isRoomActionLoading}
         title="تأكيد إلغاء الغرفة"
-        message="هل أنت متأكد من إلغاء الغرفة؟ سيتم حذفها وإشعار جميع المتسابقين المتواجدين."
-        confirmText="تأكيد الإلغاء"
+        message="هل أنت متأكد من إلغاء الغرفة؟ سيتم إنهاء التحدي وطرد جميع المتسابقين"
+        confirmText="نعم، ألغِ الغرفة"
         cancelText="تراجع"
         isDanger={true}
       />

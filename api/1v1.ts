@@ -1450,26 +1450,56 @@ async function handleResign(req: VercelRequest, res: VercelResponse) {
 
     // -------------------------------------------------------------------------
     // 1. قبل بدء التحدي (status === 'WAITING'):
-    // إذا انسحب المالك، تُلغى الغرفة.
-    // إذا انسحب ضيف (ليس المالك)، يُحذف فقط من الغرفة والمشاركين،
-    // ويُبلّغ المتواجدون، وتظل الغرفة في حالة WAITING دون إنهائها أبداً.
+    // إذا انسحب المالك، يتم نقل القيادة (Host Migration) لأول متسابق متبقٍ
+    // وتظل الغرفة في حالة WAITING لتستمر قاعة الانتظار بدون توقف.
+    // إذا لم يتبق أي متسابق آخر في الغرفة، يتم إلغاؤها.
     // -------------------------------------------------------------------------
     if (room.status === 'WAITING') {
+      // حذف اللاعب المنسحب من مصفوفة التقدم والمشاركين
+      delete playersProgress[String(player.id)]
+      delete playersProgress[player.id]
+
+      await supabaseAdmin.from('room_participants').delete().match({ room_id: room.id, user_id: player.id })
+      await supabaseAdmin.from('room_participants').delete().match({ room_id: room.id, name: player.name })
+
+      const remainingGuestIds = Object.keys(playersProgress)
+        .map(gid => parseInt(gid))
+        .filter(gid => !isNaN(gid) && gid !== player.id)
+
       if (isHost) {
-        await supabaseAdmin.from('rooms').update({ status: 'CANCELLED' }).eq('id', room.id)
+        if (remainingGuestIds.length === 0) {
+          await supabaseAdmin.from('rooms').update({ status: 'CANCELLED' }).eq('id', room.id)
+          const fullRoom = await getFullRoom(room.id)
+          return res.status(200).json(fullRoom)
+        }
+
+        // تدوير القيادة (Host Migration): نقل قيادة الغرفة إلى اللاعب التالي
+        const newHostId = remainingGuestIds[0]
+        const newPlayer2Id = remainingGuestIds.length > 1 ? remainingGuestIds[1] : null
+
+        const leaveNotification = {
+          type: 'LEAVE',
+          action: 'player_left',
+          playerId: player.id,
+          playerName: player.name,
+          timestamp: Date.now()
+        }
+        playersProgress.__lastReaction = leaveNotification
+
+        await supabaseAdmin.from('rooms').update({
+          playersProgress,
+          player1Id: newHostId,
+          player2Id: newPlayer2Id,
+          status: 'WAITING',
+          lastReaction: leaveNotification
+        }).eq('id', room.id)
+
         const fullRoom = await getFullRoom(room.id)
         return res.status(200).json(fullRoom)
       } else {
-        // حذف الضيف المنسحب من مصفوفة التقدم والمشاركين
-        delete playersProgress[String(player.id)]
-        delete playersProgress[player.id]
-
         // إعادة ضبط player2Id إذا كان الضيف هو player2
         let newPlayer2Id = room.player2Id
         if (room.player2Id === player.id) {
-          const remainingGuestIds = Object.keys(playersProgress)
-            .map(gid => parseInt(gid))
-            .filter(gid => !isNaN(gid) && gid !== room.player1Id)
           newPlayer2Id = remainingGuestIds.length > 0 ? remainingGuestIds[0] : null
         }
 
@@ -1533,6 +1563,10 @@ async function handleResign(req: VercelRequest, res: VercelResponse) {
     }
     playersProgress.__lastReaction = abandonNotification
 
+    // حذف السجل من جدول room_participants
+    await supabaseAdmin.from('room_participants').delete().match({ room_id: room.id, user_id: player.id })
+    await supabaseAdmin.from('room_participants').delete().match({ room_id: room.id, name: player.name })
+
     // فحص اللاعبين النشطين المتبقين (الذين لم ينسحبوا)
     const remainingActivePlayers = Object.entries(playersProgress).filter(([id, p]: [string, any]) => {
       if (id === '__lastReaction' || id === String(player.id)) return false
@@ -1559,6 +1593,14 @@ async function handleResign(req: VercelRequest, res: VercelResponse) {
     } else {
       // لا ننهي التحدي للبقية أبداً ويستمر اللعب
       updateData.status = 'PLAYING'
+
+      // تدوير القيادة (Host Migration): إذا كان المنسحب هو المضيف، نقل القيادة لأول لاعب نشط متبقٍ
+      if (isHost && remainingActivePlayers.length > 0) {
+        const firstActiveId = parseInt(remainingActivePlayers[0][0])
+        if (!isNaN(firstActiveId)) {
+          updateData.player1Id = firstActiveId
+        }
+      }
 
       // في وضع التزامن SYNC: إذا كان باقي اللاعبين النشطين قد أجابوا بالفعل على السؤال الحالي،
       // ننتقل فوراً للسؤال التالي دون تركهم معلقين بانتظار المنسحب

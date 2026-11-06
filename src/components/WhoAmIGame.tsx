@@ -450,26 +450,10 @@ export default function WhoAmIGame({
             <button className="wai-btn" onClick={startNext}>
               ابدأ التحدي
             </button>
-            <button
-              type="button"
-              className="wai-btn"
-              onClick={onCancelRoom || onExit}
-              style={{ backgroundColor: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5' }}
-            >
-              إلغاء الغرفة
-            </button>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', marginTop: '12px' }}>
             <p className="wai-muted">بانتظار القائد لبدء التحدي...</p>
-            <button
-              type="button"
-              className="wai-btn"
-              onClick={onWithdraw || onExit}
-              style={{ backgroundColor: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', width: 'auto', padding: '6px 14px' }}
-            >
-              الانسحاب
-            </button>
           </div>
         )}
       </div>
@@ -521,45 +505,6 @@ export default function WhoAmIGame({
           )}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          {isLeader ? (
-            <button
-              type="button"
-              onClick={onCancelRoom || onExit}
-              className="wai-btn-leave"
-              style={{
-                backgroundColor: '#fee2e2',
-                color: '#dc2626',
-                border: '1px solid #fca5a5',
-                padding: '4px 10px',
-                borderRadius: '8px',
-                fontSize: '12px',
-                fontWeight: 'bold',
-                cursor: 'pointer'
-              }}
-              title="إلغاء الغرفة"
-            >
-              إلغاء الغرفة
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={onWithdraw || onExit}
-              className="wai-btn-leave"
-              style={{
-                backgroundColor: '#fef2f2',
-                color: '#dc2626',
-                border: '1px solid #fecaca',
-                padding: '4px 10px',
-                borderRadius: '8px',
-                fontSize: '12px',
-                fontWeight: 'bold',
-                cursor: 'pointer'
-              }}
-              title="الانسحاب من التحدي"
-            >
-              الانسحاب
-            </button>
-          )}
           {!revealed && <span className={`wai-timer ph${phase}`}>{remaining}s</span>}
         </div>
       </div>
