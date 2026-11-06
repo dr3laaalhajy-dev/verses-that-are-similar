@@ -51,7 +51,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       const { count, data, error } = await supabase
         .from('friendships')
         .select('*', { count: 'exact' })
-        .or(`addresseeId.eq.${viewerId},receiver_id.eq.${viewerId},addressee_id.eq.${viewerId}`)
+        .eq('friend_id', String(viewerId))
         .in('status', ['pending', 'PENDING']);
 
       if (error) {

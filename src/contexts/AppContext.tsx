@@ -2755,11 +2755,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  // Poll room status
+  // Sync room status via Supabase Realtime — legacy HTTP polling replaced with one-time fetch on mount
+  // The setInterval was removed: real-time updates now come from postgres_changes / broadcast channels
   useEffect(() => {
     if (!room?.id || (view !== 'group_waiting' && view !== 'group_game' && view !== 'challenge')) return;
     if (room.status === 'FINISHED' && view === 'group_game') return;
 
+    // One-time fetch on dependency change (e.g. view transition) — not a polling loop
     const poll = async () => {
       try {
         const playerIdParam = encodeURIComponent(playerUsername || playerName || '');
@@ -2953,8 +2955,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     };
 
-    const interval = setInterval(poll, 1000); // Poll every 1 second for real-time multiplayer sync
-    return () => clearInterval(interval);
+    // Single fetch on effect run — Realtime handles ongoing updates
+    poll();
   }, [room?.id, view, room?.status, currentChallengeIndex, playerName, playerUsername, hasAnsweredCurrentQuestion, challenges, resetQuestionUIState]);
 
   // Presence & Connection Management: Track online/offline status & background lifecycle

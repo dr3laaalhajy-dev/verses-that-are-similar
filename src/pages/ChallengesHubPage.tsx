@@ -72,7 +72,7 @@ export const ChallengesHubPage: React.FC<ChallengesHubPageProps> = ({
       }
     } catch {}
 
-    // ب. استعلام Supabase للتحقق من جدول إتمامات التحديات (challenge_completions / user_challenges)
+    // ب. التحقق من جدول اللاعبين (players.completedChallengeIds) والتخزين المحلي
     try {
       const activeUser = userId || 
                          localStorage.getItem('quran_player_id') || 
@@ -84,39 +84,38 @@ export const ChallengesHubPage: React.FC<ChallengesHubPageProps> = ({
 
       const challengeId = dailyChallenge?.id;
 
-      // 1. التحقق من جدول challenge_completions
-      let query = supabase
-        .from('challenge_completions')
-        .select('*')
-        .or(`user_id.eq.${activeUser},player_id.eq.${activeUser},username.eq.${activeUser}`);
-
+      // 1. فحص التخزين المحلي للتحديات المكتملة
       if (challengeId) {
-        query = query.eq('challenge_id', challengeId);
+        const localCompleted = localStorage.getItem('quran_completed_challenges') || localStorage.getItem('quran_completed_ids');
+        if (localCompleted) {
+          try {
+            const ids = JSON.parse(localCompleted);
+            if (Array.isArray(ids) && ids.includes(challengeId)) {
+              setIsDailyCompleted(true);
+              localStorage.setItem('quran_daily_completed', today);
+              return;
+            }
+          } catch {}
+        }
+      }
+
+      // 2. فحص جدول players لقائمة completedChallengeIds
+      const isNum = !isNaN(Number(activeUser)) && Number(activeUser) > 0;
+      let query = supabase.from('players').select('completedChallengeIds');
+      if (isNum) {
+        query = query.or(`id.eq.${activeUser},uniquePlayerId.eq.${activeUser}`);
       } else {
-        query = query.gte('created_at', today);
+        query = query.or(`uniquePlayerId.eq.${activeUser},username.eq.${activeUser},name.eq.${activeUser}`);
       }
 
-      const { data: completions, error: compErr } = await query.limit(1);
+      const { data: playerData, error: playerErr } = await query.limit(1).maybeSingle();
 
-      if (!compErr && completions && completions.length > 0) {
-        setIsDailyCompleted(true);
-        localStorage.setItem('quran_daily_completed', today);
-        return;
-      }
-
-      // 2. فحص جدول user_challenges كخيار بديل
-      const { data: userChallenges, error: userChErr } = await supabase
-        .from('user_challenges')
-        .select('*')
-        .or(`user_id.eq.${activeUser},player_id.eq.${activeUser}`)
-        .eq('is_completed', true)
-        .gte('completed_at', today)
-        .limit(1);
-
-      if (!userChErr && userChallenges && userChallenges.length > 0) {
-        setIsDailyCompleted(true);
-        localStorage.setItem('quran_daily_completed', today);
-        return;
+      if (!playerErr && playerData?.completedChallengeIds && Array.isArray(playerData.completedChallengeIds)) {
+        if (challengeId && playerData.completedChallengeIds.includes(challengeId)) {
+          setIsDailyCompleted(true);
+          localStorage.setItem('quran_daily_completed', today);
+          return;
+        }
       }
     } catch (err) {
       console.error('[ChallengesHubPage] Safe catch verifying daily challenge completion:', err);

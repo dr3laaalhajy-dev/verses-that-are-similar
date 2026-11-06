@@ -1,5 +1,4 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { prisma } from './_lib/prisma.js'
 import { supabaseAdmin } from './_lib/supabaseAdmin.js'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -55,63 +54,105 @@ async function findPlayer(idOrUsernameOrName: any, nameFallback?: string) {
   const cleanU = str.replace(/^@+/, '');
   const numId = Number(idOrUsernameOrName);
 
-  return await prisma.player.findFirst({
-    where: {
-      OR: [
-        ...(str ? [{ uniquePlayerId: str.toUpperCase() }] : []),
-        ...(cleanU ? [{ username: cleanU }, { username: '@' + cleanU }] : []),
-        ...(str ? [{ name: { equals: str, mode: 'insensitive' as const } }] : []),
-        ...(nameFallback ? [{ name: { equals: nameFallback.trim(), mode: 'insensitive' as const } }] : []),
-        ...(Number.isInteger(numId) && numId > 0 ? [{ id: numId }] : [])
-      ] as any
+  const orConditions: string[] = [];
+  if (Number.isInteger(numId) && numId > 0) {
+    orConditions.push(`id.eq.${numId}`);
+  }
+  if (str) {
+    orConditions.push(`uniquePlayerId.eq.${str.toUpperCase()}`);
+    orConditions.push(`name.ilike.${str}`);
+  }
+  if (cleanU) {
+    orConditions.push(`username.ilike.${cleanU}`);
+  }
+  if (nameFallback && nameFallback.trim()) {
+    orConditions.push(`name.ilike.${nameFallback.trim()}`);
+  }
+
+  if (orConditions.length === 0) return null;
+
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('players')
+      .select('*')
+      .or(orConditions.join(','))
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      console.warn('[findPlayer] Supabase query error:', error.message);
+      return null;
     }
-  });
+    return data;
+  } catch (err: any) {
+    console.error('[findPlayer] catch:', err);
+    return null;
+  }
 }
 
 async function getFullRoom(roomId: string) {
-  const room = await prisma.room.findUnique({
-    where: { id: roomId },
-    include: { player1: true, player2: true, winner: true }
-  })
-  if (!room) return null
+  const { data: room, error: rErr } = await supabaseAdmin
+    .from('rooms')
+    .select('*')
+    .eq('id', roomId)
+    .maybeSingle();
 
-  const progress: any = room.playersProgress || {}
-  const playerIds = Object.keys(progress).map(id => parseInt(id)).filter(id => !isNaN(id))
-  const players = await prisma.player.findMany({
-    where: { id: { in: playerIds } },
-    select: { id: true, name: true, username: true, activeFrame: true, seerahCompleted: true, generalCompleted: true }
-  })
+  if (rErr || !room) return null;
 
-  let orderedChallenges: any[] = []
-  if (Array.isArray(room.challengeIds) && room.challengeIds.length > 0 && typeof room.challengeIds[0] === 'object') {
-    orderedChallenges = room.challengeIds as any[]
-  } else {
-    const challenges = await prisma.challenge.findMany({ 
-      where: { id: { in: room.challengeIds as number[] } }
-    })
-    const challengeMap = new Map(challenges.map(c => [c.id, c]))
-    orderedChallenges = (room.challengeIds as number[])
-      .map(id => challengeMap.get(id))
-      .filter(Boolean)
+  const progress: any = room.playersProgress || {};
+  const playerIds: number[] = Object.keys(progress)
+    .map(id => parseInt(id))
+    .filter(id => !isNaN(id));
+
+  if (room.player1Id && !playerIds.includes(room.player1Id)) {
+    playerIds.push(room.player1Id);
+  }
+  if (room.player2Id && !playerIds.includes(room.player2Id)) {
+    playerIds.push(room.player2Id);
   }
 
-  const answers: Record<string, any> = (room.currentAnswers as any) || {}
-  const curQIndex = room.currentQuestionIndex || 0
-  const validAnswers: Record<string, any> = {}
+  let players: any[] = [];
+  if (playerIds.length > 0) {
+    const { data: pData } = await supabaseAdmin
+      .from('players')
+      .select('id, name, username, activeFrame, seerahCompleted, generalCompleted')
+      .in('id', playerIds);
+    players = pData || [];
+  }
+
+  const playerMap = new Map(players.map(p => [p.id, p]));
+
+  let orderedChallenges: any[] = [];
+  if (Array.isArray(room.challengeIds) && room.challengeIds.length > 0 && typeof room.challengeIds[0] === 'object') {
+    orderedChallenges = room.challengeIds as any[];
+  } else if (Array.isArray(room.challengeIds) && room.challengeIds.length > 0) {
+    const { data: challenges } = await supabaseAdmin
+      .from('challenges')
+      .select('*')
+      .in('id', room.challengeIds as number[]);
+    const challengeMap = new Map((challenges || []).map(c => [c.id, c]));
+    orderedChallenges = (room.challengeIds as number[])
+      .map(id => challengeMap.get(id))
+      .filter(Boolean);
+  }
+
+  const answers: Record<string, any> = (room.currentAnswers as any) || {};
+  const curQIndex = room.currentQuestionIndex || 0;
+  const validAnswers: Record<string, any> = {};
   for (const [k, v] of Object.entries(answers)) {
     if (v && (v.questionIndex === undefined || v.questionIndex === curQIndex)) {
-      validAnswers[k] = v
+      validAnswers[k] = v;
     }
   }
 
   const playersWithPresence = players.map(p => {
-    const pProg = progress[String(p.id)] || {}
+    const pProg = progress[String(p.id)] || {};
     const isAbandoned = Boolean(
       pProg.isAbandoned ||
       pProg.status === 'abandoned' ||
       pProg.isResigned ||
       pProg.hasLeft
-    )
+    );
     return {
       ...p,
       activeFrame: (p.activeFrame === 'seerah' || p.activeFrame === 'general') ? p.activeFrame : null,
@@ -120,15 +161,18 @@ async function getFullRoom(roomId: string) {
       status: isAbandoned ? 'abandoned' : (pProg.status || 'joined'),
       lastSeen: pProg.lastSeen || 0,
       score: pProg.score || 0
-    }
-  })
+    };
+  });
 
-  const participantsCount = playersWithPresence.length || 1
-  const answeredCount = Object.keys(validAnswers).length
-  const onlineCount = playersWithPresence.filter(p => p.isOnline).length || 1
+  const participantsCount = playersWithPresence.length || 1;
+  const answeredCount = Object.keys(validAnswers).length;
+  const onlineCount = playersWithPresence.filter(p => p.isOnline).length || 1;
 
-  return { 
-    ...room, 
+  return {
+    ...room,
+    player1: playerMap.get(room.player1Id) || null,
+    player2: room.player2Id ? playerMap.get(room.player2Id) || null : null,
+    winner: room.winnerId ? playerMap.get(room.winnerId) || null : null,
     lastReaction: (room as any).lastReaction || progress.__lastReaction || null,
     transitionMode: (room as any).transitionMode || 'SYNC',
     currentQuestionIndex: room.currentQuestionIndex || 0,
@@ -137,9 +181,10 @@ async function getFullRoom(roomId: string) {
     onlineParticipantsCount: onlineCount,
     totalParticipants: participantsCount,
     currentAnswers: validAnswers,
-    participants: playersWithPresence, 
-    challenges: mapChallenges(orderedChallenges) 
-  }
+    participants: playersWithPresence,
+    players,
+    challenges: mapChallenges(orderedChallenges)
+  };
 }
 
 async function handleCreate(req: VercelRequest, res: VercelResponse) {
@@ -160,360 +205,363 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
       
       // Auto-register if not found
       if (!player1 && player1Name) {
-        player1 = await prisma.player.create({
-          data: { name: player1Name }
-        })
+        const { data: newP } = await supabaseAdmin
+          .from('players')
+          .insert({ name: player1Name })
+          .select()
+          .single();
+        player1 = newP;
       }
 
       if (!player1) return res.status(400).json({ message: 'اللاعب غير مسجل (Player not found)' })
 
-    let code = ''
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
-    let isUnique = false
-    while (!isUnique) {
-      code = ''
-      for (let i = 0; i < 6; i++) code += chars.charAt(Math.floor(Math.random() * chars.length))
-      const existing = await prisma.room.findUnique({ where: { code } })
-      if (!existing) isUnique = true
-    }
-
-    let selectedChallenges: any[] = []
-    if (Array.isArray(customChallenges) && customChallenges.length > 0) {
-      selectedChallenges = customChallenges
-    } else if (Array.isArray(questionIds) && questionIds.length > 0) {
-      if (questionIds.length !== maxQuestions) {
-        return res.status(400).json({ message: `يجب اختيار ${maxQuestions} أسئلة بالضبط` })
-      }
-      selectedChallenges = await prisma.challenge.findMany({
-        where: { id: { in: questionIds.map(id => Number(id)) } }
-      })
-      if (selectedChallenges.length !== questionIds.length) {
-        return res.status(400).json({ message: 'بعض الأسئلة المختارة غير موجودة' })
-      }
-    } else {
-      let whereClause: any = {}
-      
-      // Multi-Category Filtering (WHERE category IN (...))
-      const cats = Array.isArray(categories) && categories.length > 0 
-        ? categories 
-        : (category && category !== "" ? [category] : []);
-      if (cats.length > 0) {
-        whereClause.category = { in: cats };
+      let code = ''
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+      let isUnique = false
+      while (!isUnique) {
+        code = ''
+        for (let i = 0; i < 6; i++) code += chars.charAt(Math.floor(Math.random() * chars.length))
+        const { data: existing } = await supabaseAdmin
+          .from('rooms')
+          .select('id')
+          .eq('code', code)
+          .maybeSingle();
+        if (!existing) isUnique = true
       }
 
-      // Multi-Level Filtering (WHERE level IN (...))
-      const lvls = Array.isArray(levels) && levels.length > 0
-        ? levels.map(Number).filter(n => !isNaN(n))
-        : (level ? [Number(level)] : []);
-      if (lvls.length > 0) {
-        whereClause.level = { in: lvls };
-      }
-
-      // Multi-Mode Filtering (WHERE type IN (...))
-      const modesList: string[] = Array.isArray(gameModes) && gameModes.length > 0 
-        ? gameModes 
-        : (gameMode ? [gameMode] : []);
-
-      const typeConditions: string[] = [];
-      for (const m of modesList) {
-        const upper = String(m).toUpperCase();
-        if (upper === 'COMPLETION' || upper === 'COMPLETE') typeConditions.push('COMPLETION');
-        else if (upper === 'SURAH') typeConditions.push('SURAH');
-        else if (upper === 'STANDARD' || upper === 'AUDIO') typeConditions.push('STANDARD', 'AUDIO', '');
-      }
-
-      if (typeConditions.length > 0) {
-        whereClause.type = { in: Array.from(new Set(typeConditions)) };
-      }
-
-      // In group/room challenges, select randomly from ALL matching challenges
-      // so all players get the exact same questions and it's not restricted by player history.
-      const allMatching = await prisma.challenge.findMany({
-        where: whereClause,
-        select: { id: true }
-      })
-
-      if (allMatching.length === 0) {
-        return res.status(400).json({ 
-          message: 'لا توجد تحديات متوفرة تطابق هذا التصنيف أو النمط. يرجى اختيار تصنيف آخر.' 
-        })
-      }
-
-      const shuffledIds = allMatching.map(c => c.id).sort(() => Math.random() - 0.5)
-      const chosenIds = shuffledIds.slice(0, maxQuestions)
-
-      const fetchedChallenges = await prisma.challenge.findMany({
-        where: { id: { in: chosenIds } }
-      })
-      const mapById = new Map(fetchedChallenges.map(c => [c.id, c]))
-      selectedChallenges = chosenIds.map(id => mapById.get(id)).filter(Boolean) as any[]
-    }
-
-    const selectedIds = (Array.isArray(customChallenges) && customChallenges.length > 0)
-      ? customChallenges
-      : selectedChallenges.map(c => c.id)
-    const finalQuestionCount = selectedChallenges.length
-
-    const roomData = await prisma.room.create({
-      data: {
-        code,
-        name: finalRoomName,
-        isPrivate: finalIsPrivate,
-        password: finalPassword,
-        player1Id: player1.id,
-        challengeIds: selectedIds,
-        status: 'WAITING',
-        surahFilters: categories_config || (Array.isArray(categories) ? categories : []),
-        categoryFilter: category || (Array.isArray(categories_config) ? categories_config.map((c: any) => c.category).join('، ') : ""),
-        questionCount: finalQuestionCount,
-        maxPlayers: 999,
-        gameMode: gameMode || "STANDARD",
-        transitionMode: finalTransitionMode,
-        timePerQuestion: (timePerQuestion !== undefined && !isNaN(Number(timePerQuestion))) ? Number(timePerQuestion) : 0,
-        playersProgress: { [String(player1.id)]: { progress: 0, name: player1.name, joinedAt: Date.now() } }
-      } as any,
-      include: { player1: true }
-    })
-
-    const fullRoom = await getFullRoom(roomData.id)
-    return res.status(201).json(fullRoom)
-  } catch (error: any) {
-    console.error('Failed to create room:', error)
-    return res.status(500).json({ message: 'Failed to create room', error: error.message, stack: error.stack })
-  }
-}
-
-async function handleJoin(req: VercelRequest, res: VercelResponse) {
-  const { code, roomId, id, player2Id, playerName, password, isInvite, invitedUserId } = req.body || {}
-  const targetId = String(roomId || id || '').trim()
-  const cleanCode = String(code || '').trim()
-  if (!targetId && !cleanCode) return res.status(400).json({ message: 'يرجى تحديد الغرفة' })
-
-  const effectivePlayerId = player2Id || req.body?.player2Name || req.headers['x-player-id'] || req.headers['x-player-username']
-  const effectivePlayerName = playerName || req.body?.player2Name || req.headers['x-player-name']
-  if (!effectivePlayerId && !effectivePlayerName) return res.status(400).json({ message: 'Missing player2Id' })
-
-  try {
-    const room = await prisma.room.findFirst({ 
-      where: targetId 
-        ? { id: targetId } 
-        : { code: { equals: cleanCode, mode: 'insensitive' } }, 
-      include: { player1: true } 
-    })
-    
-    if (!room) return res.status(404).json({ message: 'الغرفة غير موجودة' })
-    
-    // Status can be WAITING or PLAYING (allow late join if within maxPlayers)
-    if (room.status === 'FINISHED') return res.status(400).json({ message: 'هذا التحدي انتهى بالفعل' })
-    if (room.status === 'CANCELLED') return res.status(410).json({ message: 'تم إلغاء هذه الغرفة من قبل المضيف' })
-
-    // Check 10-minute TTL for WAITING rooms
-    const tenMinutesAgoMs = Date.now() - 10 * 60 * 1000
-    const roomCreatedMs = room.createdAt ? new Date(room.createdAt).getTime() : 0
-    if (room.status === 'WAITING' && roomCreatedMs < tenMinutesAgoMs) {
-      await prisma.room.update({
-        where: { id: room.id },
-        data: { status: 'EXPIRED' }
-      }).catch(() => {})
-      return res.status(410).json({ message: 'انتهت صلاحية هذه الغرفة (تجاوزت 10 دقائق دون بدء)' })
-    }
-    if (room.status === 'EXPIRED') {
-      return res.status(410).json({ message: 'انتهت صلاحية هذه الغرفة' })
-    }
-
-    let player = await findPlayer(effectivePlayerId, effectivePlayerName)
-    
-    // Auto-register player if not in database yet
-    if (!player) {
-      const defaultName = (effectivePlayerName && String(effectivePlayerName).trim()) || 'متسابق جديد'
-      player = await prisma.player.create({
-        data: {
-          name: defaultName
+      let selectedChallenges: any[] = []
+      if (Array.isArray(customChallenges) && customChallenges.length > 0) {
+        selectedChallenges = customChallenges
+      } else if (Array.isArray(questionIds) && questionIds.length > 0) {
+        if (questionIds.length !== maxQuestions) {
+          return res.status(400).json({ message: `يجب اختيار ${maxQuestions} أسئلة بالضبط` })
         }
-      })
-    } else if (effectivePlayerName && String(effectivePlayerName).trim() && player.name !== String(effectivePlayerName).trim()) {
-      player = await prisma.player.update({
-        where: { id: player.id },
-        data: { name: String(effectivePlayerName).trim() }
-      })
+        const { data: challenges } = await supabaseAdmin
+          .from('challenges')
+          .select('*')
+          .in('id', questionIds.map(id => Number(id)));
+        selectedChallenges = challenges || [];
+        if (selectedChallenges.length !== questionIds.length) {
+          return res.status(400).json({ message: 'بعض الأسئلة المختارة غير موجودة' })
+        }
+      } else {
+        let query = supabaseAdmin.from('challenges').select('id');
+        
+        // Multi-Category Filtering (WHERE category IN (...))
+        const cats = Array.isArray(categories) && categories.length > 0 
+          ? categories 
+          : (category && category !== "" ? [category] : []);
+        if (cats.length > 0) {
+          query = query.in('category', cats);
+        }
+
+        // Multi-Level Filtering (WHERE level IN (...))
+        const lvls = Array.isArray(levels) && levels.length > 0
+          ? levels.map(Number).filter(n => !isNaN(n))
+          : (level ? [Number(level)] : []);
+        if (lvls.length > 0) {
+          query = query.in('level', lvls);
+        }
+
+        // Multi-Mode Filtering (WHERE type IN (...))
+        const modesList: string[] = Array.isArray(gameModes) && gameModes.length > 0 
+          ? gameModes 
+          : (gameMode ? [gameMode] : []);
+
+        const typeConditions: string[] = [];
+        for (const m of modesList) {
+          const upper = String(m).toUpperCase();
+          if (upper === 'COMPLETION' || upper === 'COMPLETE') typeConditions.push('COMPLETION');
+          else if (upper === 'SURAH') typeConditions.push('SURAH');
+          else if (upper === 'STANDARD' || upper === 'AUDIO') typeConditions.push('STANDARD', 'AUDIO', '');
+        }
+
+        if (typeConditions.length > 0) {
+          query = query.in('type', Array.from(new Set(typeConditions)));
+        }
+
+        const { data: allMatching, error: matchErr } = await query;
+
+        if (matchErr || !allMatching || allMatching.length === 0) {
+          return res.status(400).json({ 
+            message: 'لا توجد تحديات متوفرة تطابق هذا التصنيف أو النمط. يرجى اختيار تصنيف آخر.' 
+          })
+        }
+
+        const shuffledIds = allMatching.map(c => c.id).sort(() => Math.random() - 0.5)
+        const chosenIds = shuffledIds.slice(0, maxQuestions)
+
+        const { data: fetchedChallenges } = await supabaseAdmin
+          .from('challenges')
+          .select('*')
+          .in('id', chosenIds);
+        const mapById = new Map((fetchedChallenges || []).map(c => [c.id, c]))
+        selectedChallenges = chosenIds.map(id => mapById.get(id)).filter(Boolean) as any[]
+      }
+
+      const selectedIds = (Array.isArray(customChallenges) && customChallenges.length > 0)
+        ? customChallenges
+        : selectedChallenges.map(c => c.id)
+      const finalQuestionCount = selectedChallenges.length
+
+      const { data: roomData, error: createError } = await supabaseAdmin
+        .from('rooms')
+        .insert({
+          code,
+          name: finalRoomName,
+          isPrivate: finalIsPrivate,
+          password: finalPassword,
+          player1Id: player1.id,
+          challengeIds: selectedIds,
+          status: 'WAITING',
+          surahFilters: categories_config || (Array.isArray(categories) ? categories : []),
+          categoryFilter: category || (Array.isArray(categories_config) ? categories_config.map((c: any) => c.category).join('، ') : ""),
+          questionCount: finalQuestionCount,
+          maxPlayers: 999,
+          gameMode: gameMode || "STANDARD",
+          transitionMode: finalTransitionMode,
+          timePerQuestion: (timePerQuestion !== undefined && !isNaN(Number(timePerQuestion))) ? Number(timePerQuestion) : 0,
+          playersProgress: { [String(player1.id)]: { progress: 0, name: player1.name, joinedAt: Date.now() } }
+        })
+        .select()
+        .single();
+
+      if (createError || !roomData) {
+        console.error('Failed to create room in supabaseAdmin:', createError)
+        return res.status(500).json({ message: 'Failed to create room', error: createError?.message })
+      }
+
+      const fullRoom = await getFullRoom(roomData.id)
+      return res.status(201).json(fullRoom)
+    } catch (error: any) {
+      console.error('Failed to create room:', error)
+      return res.status(500).json({ message: 'Failed to create room', error: error.message, stack: error.stack })
     }
+  }
 
-    const isHost = player.id === room.player1Id
+  async function handleJoin(req: VercelRequest, res: VercelResponse) {
+    const { code, roomId, id, player2Id, playerName, password, isInvite, invitedUserId } = req.body || {}
+    const targetId = String(roomId || id || '').trim()
+    const cleanCode = String(code || '').trim()
+    if (!targetId && !cleanCode) return res.status(400).json({ message: 'يرجى تحديد الغرفة' })
 
-    // 1. Check if the player has been kicked from this room:
-    let playersProgress = (room.playersProgress as any) || {}
-    const kickedList: string[] = Array.isArray(playersProgress.__kicked) ? playersProgress.__kicked : []
-    const myIdentifiers = [
-      String(player.id),
-      String(player.name || '').trim().toLowerCase(),
-      player.username ? String(player.username).trim().toLowerCase().replace(/^@+/, '') : null,
-      player.uniquePlayerId ? String(player.uniquePlayerId).toUpperCase() : null
-    ].filter(Boolean) as string[]
+    const effectivePlayerId = player2Id || req.body?.player2Name || req.headers['x-player-id'] || req.headers['x-player-username']
+    const effectivePlayerName = playerName || req.body?.player2Name || req.headers['x-player-name']
+    if (!effectivePlayerId && !effectivePlayerName) return res.status(400).json({ message: 'Missing player2Id' })
 
-    const isKicked = myIdentifiers.some(ident => kickedList.includes(ident))
-    if (isKicked) {
-      return res.status(403).json({ message: 'تم إخراجك من هذه الغرفة من قِبل المنشئ ولا يمكنك الانضمام إليها مجدداً' })
-    }
-
-    // 2. Check if the player is friend with the host:
-    let isFriendWithHost = false
     try {
-      const { data: friendship } = await supabaseAdmin
-        .from('friendships')
-        .select('id, status')
-        .eq('status', 'ACCEPTED')
-        .or(`and(user_id.eq.${player.id},friend_id.eq.${room.player1Id}),and(user_id.eq.${room.player1Id},friend_id.eq.${player.id})`)
-        .maybeSingle()
-      if (friendship) isFriendWithHost = true
-    } catch (_) {}
-
-    // Check if the player is invited to this room:
-    const isInvited = Boolean(
-      isInvite ||
-      (invitedUserId && (
-        String(invitedUserId) === String(player.id) ||
-        String(invitedUserId).toLowerCase() === String(player.username || '').toLowerCase().replace(/^@+/, '') ||
-        String(invitedUserId).toUpperCase() === String(player.uniquePlayerId || '').toUpperCase() ||
-        String(invitedUserId).toLowerCase() === String(player.name || '').toLowerCase()
-      ))
-    )
-
-    // Private Room Password Verification (Host, Invited players, or Friends bypass password verification)
-    if (room.isPrivate && !isHost && !isInvited && !isFriendWithHost) {
-      const enteredPass = password ? String(password).trim() : ''
-      const actualPass = room.password ? String(room.password).trim() : ''
-      if (!enteredPass || enteredPass !== actualPass) {
-        return res.status(403).json({ message: 'غير مصرح لك بالدخول أو الدعوة غير صالحة' })
+      let query = supabaseAdmin.from('rooms').select('*');
+      if (targetId) {
+        query = query.eq('id', targetId);
+      } else {
+        query = query.ilike('code', cleanCode);
       }
-    }
+      const { data: room, error: roomErr } = await query.maybeSingle();
+      
+      if (!room) return res.status(404).json({ message: 'الغرفة غير موجودة' })
+      
+      // Status can be WAITING or PLAYING (allow late join if within maxPlayers)
+      if (room.status === 'FINISHED') return res.status(400).json({ message: 'هذا التحدي انتهى بالفعل' })
+      if (room.status === 'CANCELLED') return res.status(410).json({ message: 'تم إلغاء هذه الغرفة من قبل المضيف' })
 
-    let playersProgress = (room.playersProgress as any) || {}
-
-    // Requirement 3: Backend Re-join Logic
-    // If the player was previously in the room or marked as abandoned/resigned, update their status to joined in the same record
-    const existingParticipant = playersProgress[player.id]
-    if (!existingParticipant) {
-      playersProgress[player.id] = { 
-        progress: 0, 
-        joinedAt: Date.now(),
-        name: player.name,
-        status: 'joined',
-        isAbandoned: false,
-        isResigned: false,
-        isDisqualified: false,
-        hasLeft: false,
-        isOnline: true
+      // Check 10-minute TTL for WAITING rooms
+      const tenMinutesAgoMs = Date.now() - 10 * 60 * 1000
+      const roomCreatedMs = room.createdAt ? new Date(room.createdAt).getTime() : 0
+      if (room.status === 'WAITING' && roomCreatedMs < tenMinutesAgoMs) {
+        await supabaseAdmin.from('rooms').update({ status: 'EXPIRED' }).eq('id', room.id)
+        return res.status(410).json({ message: 'انتهت صلاحية هذه الغرفة (تجاوزت 10 دقائق دون بدء)' })
       }
-    } else {
-      // Re-activate existing record without creating duplicate entries
-      playersProgress[player.id] = {
-        ...existingParticipant,
-        name: player.name || existingParticipant.name,
-        status: 'joined',
-        isAbandoned: false,
-        isResigned: false,
-        isDisqualified: false,
-        hasLeft: false,
-        isOnline: true,
-        rejoinedAt: Date.now()
+      if (room.status === 'EXPIRED') {
+        return res.status(410).json({ message: 'انتهت صلاحية هذه الغرفة' })
       }
-    }
 
-    await prisma.room.update({
-      where: { id: room.id },
-      data: { 
+      let player = await findPlayer(effectivePlayerId, effectivePlayerName)
+      
+      // Auto-register player if not in database yet
+      if (!player) {
+        const defaultName = (effectivePlayerName && String(effectivePlayerName).trim()) || 'متسابق جديد'
+        const { data: newP } = await supabaseAdmin.from('players').insert({ name: defaultName }).select().single()
+        player = newP
+      } else if (effectivePlayerName && String(effectivePlayerName).trim() && player.name !== String(effectivePlayerName).trim()) {
+        const { data: updatedP } = await supabaseAdmin.from('players').update({ name: String(effectivePlayerName).trim() }).eq('id', player.id).select().single()
+        player = updatedP || player
+      }
+
+      const isHost = player.id === room.player1Id
+
+      // 1. Check if the player has been kicked from this room:
+      let playersProgress = (room.playersProgress as any) || {}
+      const kickedList: string[] = Array.isArray(playersProgress.__kicked) ? playersProgress.__kicked : []
+      const myIdentifiers = [
+        String(player.id),
+        String(player.name || '').trim().toLowerCase(),
+        player.username ? String(player.username).trim().toLowerCase().replace(/^@+/, '') : null,
+        player.uniquePlayerId ? String(player.uniquePlayerId).toUpperCase() : null
+      ].filter(Boolean) as string[]
+
+      const isKicked = myIdentifiers.some(ident => kickedList.includes(ident))
+      if (isKicked) {
+        return res.status(403).json({ message: 'تم إخراجك من هذه الغرفة من قِبل المنشئ ولا يمكنك الانضمام إليها مجدداً' })
+      }
+
+      // 2. Check if the player is friend with the host:
+      let isFriendWithHost = false
+      try {
+        const { data: friendship } = await supabaseAdmin
+          .from('friendships')
+          .select('id, status')
+          .eq('status', 'ACCEPTED')
+          .or(`and(user_id.eq.${player.id},friend_id.eq.${room.player1Id}),and(user_id.eq.${room.player1Id},friend_id.eq.${player.id})`)
+          .maybeSingle()
+        if (friendship) isFriendWithHost = true
+      } catch (_) {}
+
+      // Check if the player is invited to this room:
+      const isInvited = Boolean(
+        isInvite ||
+        (invitedUserId && (
+          String(invitedUserId) === String(player.id) ||
+          String(invitedUserId).toLowerCase() === String(player.username || '').toLowerCase().replace(/^@+/, '') ||
+          String(invitedUserId).toUpperCase() === String(player.uniquePlayerId || '').toUpperCase() ||
+          String(invitedUserId).toLowerCase() === String(player.name || '').toLowerCase()
+        ))
+      )
+
+      // Private Room Password Verification (Host, Invited players, or Friends bypass password verification)
+      if (room.isPrivate && !isHost && !isInvited && !isFriendWithHost) {
+        const enteredPass = password ? String(password).trim() : ''
+        const actualPass = room.password ? String(room.password).trim() : ''
+        if (!enteredPass || enteredPass !== actualPass) {
+          return res.status(403).json({ message: 'غير مصرح لك بالدخول أو الدعوة غير صالحة' })
+        }
+      }
+
+      // Requirement 3: Backend Re-join Logic
+      const existingParticipant = playersProgress[player.id]
+      if (!existingParticipant) {
+        playersProgress[player.id] = { 
+          progress: 0, 
+          joinedAt: Date.now(),
+          name: player.name,
+          status: 'joined',
+          isAbandoned: false,
+          isResigned: false,
+          isDisqualified: false,
+          hasLeft: false,
+          isOnline: true
+        }
+      } else {
+        // Re-activate existing record without creating duplicate entries
+        playersProgress[player.id] = {
+          ...existingParticipant,
+          name: player.name || existingParticipant.name,
+          status: 'joined',
+          isAbandoned: false,
+          isResigned: false,
+          isDisqualified: false,
+          hasLeft: false,
+          isOnline: true,
+          rejoinedAt: Date.now()
+        }
+      }
+
+      await supabaseAdmin.from('rooms').update({
         playersProgress,
         // Keep player2Id compatibility for 1v1 if needed, but primary is playersProgress
         player2Id: room.player2Id || (room.player1Id !== player.id ? player.id : room.player2Id)
-      }
-    })
+      }).eq('id', room.id)
 
-    const fullRoom = await getFullRoom(room.id)
-    return res.status(200).json(fullRoom)
-  } catch (error: any) {
-    console.error('Error in handleJoin:', error)
-    return res.status(500).json({ message: 'فشل الانضمام للغرفة', error: error.message })
+      const fullRoom = await getFullRoom(room.id)
+      return res.status(200).json(fullRoom)
+    } catch (error: any) {
+      console.error('Error in handleJoin:', error)
+      return res.status(500).json({ message: 'فشل الانضمام للغرفة', error: error.message })
+    }
   }
-}
 
-async function handleListRooms(req: VercelRequest, res: VercelResponse) {
-  try {
-    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString()
+  async function handleListRooms(req: VercelRequest, res: VercelResponse) {
+    try {
+      const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString()
 
-    // Automatically mark orphaned WAITING rooms older than 10 minutes as EXPIRED
-    await prisma.room.updateMany({
-      where: {
-        status: 'WAITING',
-        createdAt: { lt: tenMinutesAgo }
-      },
-      data: {
-        status: 'EXPIRED'
+      // Automatically mark orphaned WAITING rooms older than 10 minutes as EXPIRED
+      await supabaseAdmin
+        .from('rooms')
+        .update({ status: 'EXPIRED' })
+        .eq('status', 'WAITING')
+        .lt('createdAt', tenMinutesAgo);
+
+      // Only return active WAITING rooms created within the last 10 minutes
+      const { data: rooms, error: roomsErr } = await supabaseAdmin
+        .from('rooms')
+        .select('*')
+        .eq('status', 'WAITING')
+        .gte('createdAt', tenMinutesAgo)
+        .order('createdAt', { ascending: false })
+        .limit(40);
+
+      if (roomsErr) {
+        console.error('Error fetching rooms:', roomsErr);
+        return res.status(500).json({ message: 'فشل جلب قائمة الغرف', error: roomsErr.message });
       }
-    }).catch(e => console.error('Error auto-expiring old rooms:', e))
 
-    // Only return active WAITING rooms created within the last 10 minutes
-    const rooms = await prisma.room.findMany({
-      where: {
-        status: 'WAITING',
-        createdAt: { gte: tenMinutesAgo }
-      },
-      orderBy: {
-        createdAt: 'desc'
-      },
-      take: 40,
-      include: {
-        player1: {
-          select: { id: true, name: true, username: true }
+      const hostIds = Array.from(new Set((rooms || []).map(r => r.player1Id).filter(Boolean)));
+      let hostMap = new Map<number, any>();
+      if (hostIds.length > 0) {
+        const { data: hosts } = await supabaseAdmin
+          .from('players')
+          .select('id, name, username')
+          .in('id', hostIds);
+        (hosts || []).forEach(h => hostMap.set(h.id, h));
+      }
+
+      const formattedRooms = (rooms || []).map(r => {
+        const progress = (r.playersProgress as any) || {}
+        const participantCount = Object.keys(progress).length || 1
+        const host = hostMap.get(r.player1Id)
+        return {
+          id: r.id,
+          name: r.name || 'غرفة التحدي',
+          isPrivate: Boolean(r.isPrivate),
+          status: r.status,
+          questionCount: r.questionCount,
+          timePerQuestion: r.timePerQuestion,
+          gameMode: r.gameMode,
+          transitionMode: (r as any).transitionMode || 'SYNC',
+          participantCount,
+          hostId: r.player1Id,
+          hostName: host?.name || 'مجهول',
+          hostUsername: host?.username || null,
+          createdAt: r.createdAt
         }
-      }
-    })
+      })
 
-    const formattedRooms = rooms.map(r => {
-      const progress = (r.playersProgress as any) || {}
-      const participantCount = Object.keys(progress).length || 1
-      return {
-        id: r.id,
-        name: r.name || 'غرفة التحدي',
-        isPrivate: Boolean(r.isPrivate),
-        status: r.status,
-        questionCount: r.questionCount,
-        timePerQuestion: r.timePerQuestion,
-        gameMode: r.gameMode,
-        transitionMode: (r as any).transitionMode || 'SYNC',
-        participantCount,
-        hostId: r.player1Id,
-        hostName: r.player1?.name || 'مجهول',
-        hostUsername: r.player1?.username || null,
-        createdAt: r.createdAt
-      }
-    })
-
-    return res.status(200).json({ rooms: formattedRooms })
-  } catch (err: any) {
-    console.error('Error in handleListRooms:', err)
-    return res.status(500).json({ message: 'فشل جلب قائمة الغرف', error: err.message })
+      return res.status(200).json({ rooms: formattedRooms })
+    } catch (err: any) {
+      console.error('Error in handleListRooms:', err)
+      return res.status(500).json({ message: 'فشل جلب قائمة الغرف', error: err.message })
+    }
   }
-}
 
-async function handleAvailableCounts(req: VercelRequest, res: VercelResponse) {
-  try {
-    const [audio, complete, surah] = await Promise.all([
-      prisma.challenge.count({ where: { type: { in: ['STANDARD', 'AUDIO', ''] } } }),
-      prisma.challenge.count({ where: { type: 'COMPLETION' } }),
-      prisma.challenge.count({ where: { type: 'SURAH' } })
-    ])
-    return res.status(200).json({
-      counts: {
-        audio: audio || 0,
-        complete: complete || 0,
-        surah: surah || 0
-      }
-    })
-  } catch (err: any) {
-    console.error('Error in handleAvailableCounts:', err)
-    return res.status(500).json({ message: 'فشل جلب الأعداد المتاحة', error: err.message })
+  async function handleAvailableCounts(req: VercelRequest, res: VercelResponse) {
+    try {
+      const [audioRes, completeRes, surahRes] = await Promise.all([
+        supabaseAdmin.from('challenges').select('*', { count: 'exact', head: true }).in('type', ['STANDARD', 'AUDIO', '']),
+        supabaseAdmin.from('challenges').select('*', { count: 'exact', head: true }).eq('type', 'COMPLETION'),
+        supabaseAdmin.from('challenges').select('*', { count: 'exact', head: true }).eq('type', 'SURAH')
+      ]);
+
+      return res.status(200).json({
+        counts: {
+          audio: audioRes.count || 0,
+          complete: completeRes.count || 0,
+          surah: surahRes.count || 0
+        }
+      });
+    } catch (err: any) {
+      console.error('Error in handleAvailableCounts:', err)
+      return res.status(500).json({ message: 'فشل جلب الأعداد المتاحة', error: err.message })
+    }
   }
-}
 
 function calculateResults(room: any, playersProgress: Record<string, any>) {
   const totalQuestions = room.questionCount || room.totalQuestions || 1
@@ -633,7 +681,7 @@ function calculateResults(room: any, playersProgress: Record<string, any>) {
 
 const finalizeRoomScores = calculateResults
 
-async function applyRoomTrophies(tx: any, room: any, progress: Record<string, any>) {
+async function applyRoomTrophies(_tx: any, room: any, progress: Record<string, any>) {
   const totalQuestions = room.questionCount || room.totalQuestions || 1
   const ranked = Object.entries(progress)
     .filter(([id, p]: [string, any]) => {
@@ -666,10 +714,10 @@ async function applyRoomTrophies(tx: any, room: any, progress: Record<string, an
     const targetId = ranked[i].id
     const cups = rewards[i]
     try {
-      await tx.player.update({
-        where: { id: targetId },
-        data: { cups: { increment: cups } }
-      })
+      const { data: p } = await supabaseAdmin.from('players').select('cups').eq('id', targetId).maybeSingle();
+      if (p) {
+        await supabaseAdmin.from('players').update({ cups: (p.cups || 0) + cups }).eq('id', targetId);
+      }
     } catch (e) {
       console.error(`Failed to award ${cups} trophies to player ${targetId}:`, e)
     }
@@ -731,7 +779,7 @@ function evaluateQuestionScores(
   return updatedProgress
 }
 
-async function advanceRoomToNextQuestionTx(tx: any, room: any, currentAnswers: Record<string, any>) {
+async function advanceRoomToNextQuestionTx(_tx: any, room: any, currentAnswers: Record<string, any>) {
   const playersProgress = (room.playersProgress as any) || {}
   const now = Date.now()
 
@@ -775,33 +823,30 @@ async function advanceRoomToNextQuestionTx(tx: any, room: any, currentAnswers: R
     finalProgress = finalized.updatedProgress
     winnerId = finalized.winnerId
 
-    await applyRoomTrophies(tx, room, finalProgress)
+    await applyRoomTrophies(null, room, finalProgress)
   }
 
-  const updatedRoom = await tx.room.update({
-    where: { id: room.id },
-    data: {
-      currentQuestionIndex: nextIndex,
-      questionStartTime: Date.now(),
-      currentAnswers: {}, // Clear answers for new question
-      playersProgress: finalProgress,
-      status: isFinished ? 'FINISHED' : 'PLAYING',
-      winnerId
-    }
-  })
+  const { data: updatedRoom } = await supabaseAdmin.from('rooms').update({
+    currentQuestionIndex: nextIndex,
+    questionStartTime: Date.now(),
+    currentAnswers: {}, // Clear answers for new question
+    playersProgress: finalProgress,
+    status: isFinished ? 'FINISHED' : 'PLAYING',
+    winnerId
+  }).eq('id', room.id).select().single()
 
-  return updatedRoom
+  return updatedRoom || room
 }
 
 async function advanceRoomToNextQuestion(room: any, currentAnswers: Record<string, any>) {
-  const updatedRoom = await advanceRoomToNextQuestionTx(prisma, room, currentAnswers)
+  const updatedRoom = await advanceRoomToNextQuestionTx(null, room, currentAnswers)
   return await getFullRoom(updatedRoom.id)
 }
 
 async function handlePoll(req: VercelRequest, res: VercelResponse) {
   const { roomId, playerId } = req.query
   try {
-    const room = await prisma.room.findUnique({ where: { id: roomId as string } })
+    const { data: room } = await supabaseAdmin.from('rooms').select('*').eq('id', roomId as string).maybeSingle()
     if (!room) return res.status(404).json({ error: 'Room not found' })
 
     if (room.status === 'CANCELLED') {
@@ -842,20 +887,19 @@ async function handlePoll(req: VercelRequest, res: VercelResponse) {
       const isLastQuestion = curQ >= totalQ - 1
 
       if (!isLastQuestion && (isTimerExpired || allOnlineAnswered)) {
-        await prisma.$transaction(async (tx) => {
-          const freshRoom = await tx.room.findUnique({ where: { id: room.id } })
+        try {
+          const { data: freshRoom } = await supabaseAdmin.from('rooms').select('*').eq('id', room.id).maybeSingle()
           if (freshRoom && freshRoom.status === 'PLAYING' && freshRoom.currentQuestionIndex === curQ) {
-            await advanceRoomToNextQuestionTx(tx, freshRoom, (freshRoom.currentAnswers as any) || {})
+            await advanceRoomToNextQuestionTx(null, freshRoom, (freshRoom.currentAnswers as any) || {})
           }
-        }).catch(err => console.error('Error auto-advancing in poll:', err))
+        } catch (err) {
+          console.error('Error auto-advancing in poll:', err)
+        }
       }
     }
 
     if (needUpdate) {
-      await prisma.room.update({
-        where: { id: room.id },
-        data: { playersProgress }
-      })
+      await supabaseAdmin.from('rooms').update({ playersProgress }).eq('id', room.id)
     }
 
     const fullRoom = await getFullRoom(roomId as string)
@@ -868,15 +912,12 @@ async function handlePoll(req: VercelRequest, res: VercelResponse) {
 async function handleStart(req: VercelRequest, res: VercelResponse) {
   const { roomId } = req.body
   try {
-    await prisma.room.update({
-      where: { id: roomId as string },
-      data: { 
-        status: 'PLAYING',
-        currentQuestionIndex: 0,
-        questionStartTime: Date.now(),
-        currentAnswers: {}
-      }
-    })
+    await supabaseAdmin.from('rooms').update({ 
+      status: 'PLAYING',
+      currentQuestionIndex: 0,
+      questionStartTime: Date.now(),
+      currentAnswers: {}
+    }).eq('id', roomId as string)
     const fullRoom = await getFullRoom(roomId as string)
     return res.status(200).json(fullRoom)
   } catch (err: any) {
@@ -897,122 +938,112 @@ async function handleSubmitAnswer(req: VercelRequest, res: VercelResponse) {
     const pIdStr = String(player.id)
     const subTime = Number(timestamp) || Date.now()
 
-    // Requirement 2: ATOMIC TRANSACTION
-    // Guarantees no answer is dropped or overwritten by concurrent submissions
-    await prisma.$transaction(async (tx) => {
-      const room = await tx.room.findUnique({ where: { id: roomId as string } })
-      if (!room || room.status !== 'PLAYING') return
+    const { data: room } = await supabaseAdmin.from('rooms').select('*').eq('id', roomId as string).maybeSingle()
+    if (!room || room.status !== 'PLAYING') {
+      const fullRoom = await getFullRoom(roomId as string)
+      return res.status(200).json(fullRoom)
+    }
 
-      const isAsync = (room as any).transitionMode === 'ASYNC'
+    const isAsync = (room as any).transitionMode === 'ASYNC'
 
-      if (isAsync) {
-        // ASYNC MODE
-        const currentAnswers = (room.currentAnswers as any) || {}
-        const qKey = String(questionIndex)
-        currentAnswers[qKey] = currentAnswers[qKey] || {}
+    if (isAsync) {
+      // ASYNC MODE
+      const currentAnswers = (room.currentAnswers as any) || {}
+      const qKey = String(questionIndex)
+      currentAnswers[qKey] = currentAnswers[qKey] || {}
 
-        const playersProgress = (room.playersProgress as any) || {}
-        if (!playersProgress[pIdStr]) {
-          playersProgress[pIdStr] = { name: player.name, score: 0, correctCount: 0, speedBonusCount: 0 }
-        }
-        const pData = playersProgress[pIdStr]
-
-        if (!currentAnswers[qKey][pIdStr]) {
-          currentAnswers[qKey][pIdStr] = {
-            playerId: player.id,
-            name: player.name,
-            isCorrect: Boolean(isCorrect),
-            timestamp: subTime,
-            questionIndex: Number(questionIndex)
-          }
-
-          if (Boolean(isCorrect)) {
-            pData.correctCount = (pData.correctCount || 0) + 1
-            pData.basePoints = (pData.correctCount || 0) * 1
-
-            // Requirement 5: Track firstCorrectUserId per question on server
-            if (!currentAnswers[qKey]._firstCorrectUserId) {
-              currentAnswers[qKey]._firstCorrectUserId = player.id;
-              pData.speedBonusCount = (pData.speedBonusCount || 0) + 1;
-            }
-          } else {
-            pData.basePoints = (pData.correctCount || 0) * 1
-          }
-
-          const qNum = Number(questionIndex)
-          pData.answersCount = (pData.answersCount || 0) + 1
-          pData.progress = Math.round(((qNum + 1) / room.questionCount) * 100)
-          pData.playerCurrentQuestionIndex = qNum + 1
-          pData.lastSeen = Date.now()
-          pData.isOnline = true
-
-          if (qNum + 1 >= room.questionCount) {
-            pData.finishTime = pData.finishTime || subTime
-            pData.progress = 100
-          }
-        }
-
-        const totalParticipants = Object.keys(playersProgress).filter(k => k !== '__lastReaction').length
-        const allFinished = totalParticipants > 0 &&
-          Object.values(playersProgress).every((p: any) => p && (p.finishTime || p.isAbandoned || p.status === 'abandoned' || p.isResigned))
-
-        const { updatedProgress, winnerId } = finalizeRoomScores(room, playersProgress)
-
-        if (allFinished) {
-          await applyRoomTrophies(tx, room, updatedProgress)
-        }
-
-        await tx.room.update({
-          where: { id: room.id },
-          data: {
-            currentAnswers,
-            playersProgress: updatedProgress,
-            status: allFinished ? 'FINISHED' : 'PLAYING',
-            winnerId: allFinished ? winnerId : room.winnerId
-          }
-        })
-      } else {
-        // SYNC MODE:
-        // Only accept answers for the active question
-        if (Number(questionIndex) !== room.currentQuestionIndex) {
-          return
-        }
-
-        const currentAnswers: Record<string, any> = (room.currentAnswers as any) || {}
-        if (!currentAnswers[pIdStr]) {
-          currentAnswers[pIdStr] = {
-            playerId: player.id,
-            name: player.name,
-            isCorrect: Boolean(isCorrect),
-            timestamp: subTime,
-            questionIndex: Number(questionIndex)
-          }
-
-          // Requirement 5: Atomically record firstCorrectUserId on the server
-          if (Boolean(isCorrect) && !currentAnswers._firstCorrectUserId) {
-            currentAnswers._firstCorrectUserId = player.id;
-          }
-        }
-
-        const playersProgress = (room.playersProgress as any) || {}
-        if (!playersProgress[pIdStr]) {
-          playersProgress[pIdStr] = { name: player.name }
-        }
-        playersProgress[pIdStr].isOnline = true
-        playersProgress[pIdStr].lastSeen = Date.now()
-
-        // Requirement 1: Host-Only Transition Validation
-        // Save the answer atomically. Do NOT advance question here.
-        // The Host's device (or server timeout fallback) will validate and trigger the transition.
-        await tx.room.update({
-          where: { id: room.id },
-          data: {
-            currentAnswers,
-            playersProgress
-          }
-        })
+      const playersProgress = (room.playersProgress as any) || {}
+      if (!playersProgress[pIdStr]) {
+        playersProgress[pIdStr] = { name: player.name, score: 0, correctCount: 0, speedBonusCount: 0 }
       }
-    })
+      const pData = playersProgress[pIdStr]
+
+      if (!currentAnswers[qKey][pIdStr]) {
+        currentAnswers[qKey][pIdStr] = {
+          playerId: player.id,
+          name: player.name,
+          isCorrect: Boolean(isCorrect),
+          timestamp: subTime,
+          questionIndex: Number(questionIndex)
+        }
+
+        if (Boolean(isCorrect)) {
+          pData.correctCount = (pData.correctCount || 0) + 1
+          pData.basePoints = (pData.correctCount || 0) * 1
+
+          // Track firstCorrectUserId per question on server
+          if (!currentAnswers[qKey]._firstCorrectUserId) {
+            currentAnswers[qKey]._firstCorrectUserId = player.id;
+            pData.speedBonusCount = (pData.speedBonusCount || 0) + 1;
+          }
+        } else {
+          pData.basePoints = (pData.correctCount || 0) * 1
+        }
+
+        const qNum = Number(questionIndex)
+        pData.answersCount = (pData.answersCount || 0) + 1
+        pData.progress = Math.round(((qNum + 1) / room.questionCount) * 100)
+        pData.playerCurrentQuestionIndex = qNum + 1
+        pData.lastSeen = Date.now()
+        pData.isOnline = true
+
+        if (qNum + 1 >= room.questionCount) {
+          pData.finishTime = pData.finishTime || subTime
+          pData.progress = 100
+        }
+      }
+
+      const totalParticipants = Object.keys(playersProgress).filter(k => k !== '__lastReaction').length
+      const allFinished = totalParticipants > 0 &&
+        Object.values(playersProgress).every((p: any) => p && (p.finishTime || p.isAbandoned || p.status === 'abandoned' || p.isResigned))
+
+      const { updatedProgress, winnerId } = finalizeRoomScores(room, playersProgress)
+
+      if (allFinished) {
+        await applyRoomTrophies(null, room, updatedProgress)
+      }
+
+      await supabaseAdmin.from('rooms').update({
+        currentAnswers,
+        playersProgress: updatedProgress,
+        status: allFinished ? 'FINISHED' : 'PLAYING',
+        winnerId: allFinished ? winnerId : room.winnerId
+      }).eq('id', room.id)
+    } else {
+      // SYNC MODE:
+      // Only accept answers for the active question
+      if (Number(questionIndex) !== room.currentQuestionIndex) {
+        const fullRoom = await getFullRoom(roomId as string)
+        return res.status(200).json(fullRoom)
+      }
+
+      const currentAnswers: Record<string, any> = (room.currentAnswers as any) || {}
+      if (!currentAnswers[pIdStr]) {
+        currentAnswers[pIdStr] = {
+          playerId: player.id,
+          name: player.name,
+          isCorrect: Boolean(isCorrect),
+          timestamp: subTime,
+          questionIndex: Number(questionIndex)
+        }
+
+        if (Boolean(isCorrect) && !currentAnswers._firstCorrectUserId) {
+          currentAnswers._firstCorrectUserId = player.id;
+        }
+      }
+
+      const playersProgress = (room.playersProgress as any) || {}
+      if (!playersProgress[pIdStr]) {
+        playersProgress[pIdStr] = { name: player.name }
+      }
+      playersProgress[pIdStr].isOnline = true
+      playersProgress[pIdStr].lastSeen = Date.now()
+
+      await supabaseAdmin.from('rooms').update({
+        currentAnswers,
+        playersProgress
+      }).eq('id', room.id)
+    }
 
     const fullRoom = await getFullRoom(roomId as string)
     return res.status(200).json(fullRoom)
@@ -1029,27 +1060,30 @@ async function handleAdvanceQuestion(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    await prisma.$transaction(async (tx) => {
-      const room = await tx.room.findUnique({ where: { id: roomId as string } })
-      if (!room || room.status !== 'PLAYING') return
+    const { data: room } = await supabaseAdmin.from('rooms').select('*').eq('id', roomId as string).maybeSingle()
+    if (!room || room.status !== 'PLAYING') {
+      const fullRoom = await getFullRoom(roomId as string)
+      return res.status(200).json(fullRoom)
+    }
 
-      // Requirement 1: Host validation
-      if (playerId) {
-        const player = await findPlayer(playerId)
-        if (player && player.id !== room.player1Id) {
-          console.warn(`Non-host player ${playerId} attempted to advance question`)
-          return
-        }
+    // Host validation
+    if (playerId) {
+      const player = await findPlayer(playerId)
+      if (player && player.id !== room.player1Id) {
+        console.warn(`Non-host player ${playerId} attempted to advance question`)
+        const fullRoom = await getFullRoom(roomId as string)
+        return res.status(200).json(fullRoom)
       }
+    }
 
-      // Guard against race conditions / double advancement:
-      if (Number(questionIndex) !== room.currentQuestionIndex) {
-        return
-      }
+    // Guard against race conditions / double advancement:
+    if (Number(questionIndex) !== room.currentQuestionIndex) {
+      const fullRoom = await getFullRoom(roomId as string)
+      return res.status(200).json(fullRoom)
+    }
 
-      const currentAnswers = (room.currentAnswers as any) || {}
-      await advanceRoomToNextQuestionTx(tx, room, currentAnswers)
-    })
+    const currentAnswers = (room.currentAnswers as any) || {}
+    await advanceRoomToNextQuestionTx(null, room, currentAnswers)
 
     const fullRoom = await getFullRoom(roomId as string)
     return res.status(200).json(fullRoom)
@@ -1066,7 +1100,7 @@ async function handleEndRoom(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const room = await prisma.room.findUnique({ where: { id: roomId as string } })
+    const { data: room } = await supabaseAdmin.from('rooms').select('*').eq('id', roomId as string).maybeSingle()
     if (!room) {
       return res.status(404).json({ message: 'Room not found' })
     }
@@ -1120,17 +1154,12 @@ async function handleEndRoom(req: VercelRequest, res: VercelResponse) {
     const finalProgress = finalized.updatedProgress
     const winnerId = finalized.winnerId
 
-    await prisma.$transaction(async (tx) => {
-      await applyRoomTrophies(tx, room, finalProgress)
-      await tx.room.update({
-        where: { id: room.id },
-        data: {
-          playersProgress: finalProgress,
-          status: 'completed',
-          winnerId
-        }
-      })
-    })
+    await applyRoomTrophies(null, room, finalProgress)
+    await supabaseAdmin.from('rooms').update({
+      playersProgress: finalProgress,
+      status: 'completed',
+      winnerId
+    }).eq('id', room.id)
 
     const fullRoom = await getFullRoom(room.id)
     return res.status(200).json(fullRoom)
@@ -1145,7 +1174,7 @@ async function handleSubmitProgress(req: VercelRequest, res: VercelResponse) {
   if (!roomId || !playerId || progress === undefined) return res.status(400).json({ message: 'Missing fields' })
 
   try {
-    const room = await prisma.room.findUnique({ where: { id: roomId as string } })
+    const { data: room } = await supabaseAdmin.from('rooms').select('*').eq('id', roomId as string).maybeSingle()
     if (!room || room.status === 'FINISHED') return res.status(404).json({ message: 'Room not found or finished' })
 
     const player = await findPlayer(playerId)
@@ -1167,7 +1196,6 @@ async function handleSubmitProgress(req: VercelRequest, res: VercelResponse) {
       playersProgress[player.id].progress = 100
       playersProgress[player.id].answersCount = room.questionCount || 5
 
-      // If everyone finished or abandoned, set room status to FINISHED and run final scoring
       const allFinished = Object.entries(playersProgress)
         .filter(([k]) => k !== '__lastReaction')
         .every(([_, p]: [string, any]) => p && (p.finishTime || p.isAbandoned || p.status === 'abandoned' || p.isResigned))
@@ -1176,17 +1204,14 @@ async function handleSubmitProgress(req: VercelRequest, res: VercelResponse) {
 
       if (allFinished) {
         updateData.status = 'FINISHED'
-        await applyRoomTrophies(prisma, room, updatedProgress)
+        await applyRoomTrophies(null, room, updatedProgress)
       }
       if (winnerId) {
         updateData.winnerId = winnerId
       }
     }
 
-    await prisma.room.update({
-      where: { id: room.id },
-      data: updateData
-    })
+    await supabaseAdmin.from('rooms').update(updateData).eq('id', room.id)
 
     const fullRoom = await getFullRoom(room.id)
     return res.status(200).json(fullRoom)
@@ -1198,26 +1223,17 @@ async function handleSubmitProgress(req: VercelRequest, res: VercelResponse) {
 async function handleListChallenges(req: VercelRequest, res: VercelResponse) {
   const { type } = req.query
   try {
-    let whereClause: any = {}
-    if (type === 'COMPLETION') whereClause.type = 'COMPLETION'
-    else if (type === 'SURAH') whereClause.type = 'SURAH'
-    else if (type === 'STANDARD' || !type) whereClause.type = { in: ['STANDARD', 'AUDIO', ''] }
+    let query = supabaseAdmin.from('challenges').select('id, keyword, category, level, type, options, correctText, verses');
+    if (type === 'COMPLETION') query = query.eq('type', 'COMPLETION');
+    else if (type === 'SURAH') query = query.eq('type', 'SURAH');
+    else if (type === 'STANDARD' || !type) query = query.in('type', ['STANDARD', 'AUDIO', '']);
 
-    const challenges = await prisma.challenge.findMany({
-      where: whereClause,
-      select: { 
-        id: true, 
-        keyword: true, 
-        category: true, 
-        level: true, 
-        type: true,
-        options: true,
-        correctText: true,
-        verses: true
-      } as any,
-      orderBy: { keyword: 'asc' }
-    })
-    return res.status(200).json(mapChallenges(challenges))
+    const { data: challenges, error } = await query.order('keyword', { ascending: true });
+    if (error) {
+      console.error('Error fetching challenges:', error);
+      return res.status(500).json({ error: error.message });
+    }
+    return res.status(200).json(mapChallenges(challenges || []))
   } catch (err: any) {
     return res.status(500).json({ error: err.message })
   }
@@ -1234,14 +1250,15 @@ async function handleCheckActive(req: VercelRequest, res: VercelResponse) {
     const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString()
 
     // 1. Check if user is the host of an active WAITING room (< 10 mins old)
-    const hostWaitingRoom = await prisma.room.findFirst({
-      where: {
-        player1Id: player.id,
-        status: 'WAITING',
-        createdAt: { gte: tenMinutesAgo }
-      },
-      orderBy: { createdAt: 'desc' }
-    })
+    const { data: hostWaitingRoom } = await supabaseAdmin
+      .from('rooms')
+      .select('*')
+      .eq('player1Id', player.id)
+      .eq('status', 'WAITING')
+      .gte('createdAt', tenMinutesAgo)
+      .order('createdAt', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
     if (hostWaitingRoom) {
       const fullRoom = await getFullRoom(hostWaitingRoom.id)
@@ -1250,17 +1267,16 @@ async function handleCheckActive(req: VercelRequest, res: VercelResponse) {
 
     // 2. Check if user is participant or host of an ongoing PLAYING room (< 2 hours old)
     const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
-    const rooms = await prisma.room.findMany({
-      where: {
-        status: 'PLAYING',
-        createdAt: { gte: twoHoursAgo }
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 20
-    })
+    const { data: rooms } = await supabaseAdmin
+      .from('rooms')
+      .select('*')
+      .eq('status', 'PLAYING')
+      .gte('createdAt', twoHoursAgo)
+      .order('createdAt', { ascending: false })
+      .limit(20);
 
     const pIdStr = String(player.id)
-    const activeRoom = rooms.find(r => {
+    const activeRoom = (rooms || []).find(r => {
       const progress = (r.playersProgress as any) || {}
       const pData = progress[pIdStr]
 
@@ -1296,7 +1312,7 @@ async function handlePresence(req: VercelRequest, res: VercelResponse) {
     const player = await findPlayer(playerId)
     if (!player) return res.status(404).json({ message: 'Player not found' })
 
-    const room = await prisma.room.findUnique({ where: { id: String(roomId) } })
+    const { data: room } = await supabaseAdmin.from('rooms').select('*').eq('id', String(roomId)).maybeSingle()
     if (!room) return res.status(404).json({ message: 'Room not found' })
 
     const pIdStr = String(player.id)
@@ -1335,26 +1351,21 @@ async function handlePresence(req: VercelRequest, res: VercelResponse) {
       })
 
       if (!isLastQuestion && allRemainingAnswered) {
-        await prisma.$transaction(async (tx) => {
-          const freshRoom = await tx.room.findUnique({ where: { id: room.id } })
-          if (freshRoom && freshRoom.status === 'PLAYING' && freshRoom.currentQuestionIndex === curQ) {
-            const freshProgress = (freshRoom.playersProgress as any) || {}
-            if (freshProgress[pIdStr]) {
-              freshProgress[pIdStr].isOnline = false
-              freshProgress[pIdStr].lastSeen = Date.now()
-            }
-            await advanceRoomToNextQuestionTx(tx, { ...freshRoom, playersProgress: freshProgress }, (freshRoom.currentAnswers as any) || {})
+        const { data: freshRoom } = await supabaseAdmin.from('rooms').select('*').eq('id', room.id).maybeSingle()
+        if (freshRoom && freshRoom.status === 'PLAYING' && freshRoom.currentQuestionIndex === curQ) {
+          const freshProgress = (freshRoom.playersProgress as any) || {}
+          if (freshProgress[pIdStr]) {
+            freshProgress[pIdStr].isOnline = false
+            freshProgress[pIdStr].lastSeen = Date.now()
           }
-        })
+          await advanceRoomToNextQuestionTx(null, { ...freshRoom, playersProgress: freshProgress }, (freshRoom.currentAnswers as any) || {})
+        }
         const fullRoom = await getFullRoom(room.id)
         return res.status(200).json(fullRoom)
       }
     }
 
-    await prisma.room.update({
-      where: { id: room.id },
-      data: { playersProgress }
-    })
+    await supabaseAdmin.from('rooms').update({ playersProgress }).eq('id', room.id)
 
     const fullRoom = await getFullRoom(room.id)
     return res.status(200).json(fullRoom)
@@ -1372,7 +1383,7 @@ async function handleCancelRoom(req: VercelRequest, res: VercelResponse) {
     const player = await findPlayer(playerId)
     if (!player) return res.status(404).json({ message: 'Player not found' })
 
-    const room = await prisma.room.findUnique({ where: { id: String(roomId) } })
+    const { data: room } = await supabaseAdmin.from('rooms').select('*').eq('id', String(roomId)).maybeSingle()
     if (!room) return res.status(404).json({ message: 'Room not found' })
 
     // Security check: Only the host can cancel the room
@@ -1380,10 +1391,7 @@ async function handleCancelRoom(req: VercelRequest, res: VercelResponse) {
       return res.status(403).json({ message: 'غير مصرح لك بإلغاء الغرفة. المضيف فقط يمكنه الإلغاء.' })
     }
 
-    await prisma.room.update({
-      where: { id: room.id },
-      data: { status: 'CANCELLED' }
-    })
+    await supabaseAdmin.from('rooms').update({ status: 'CANCELLED' }).eq('id', room.id)
 
     const fullRoom = await getFullRoom(room.id)
     return res.status(200).json(fullRoom)
@@ -1405,9 +1413,7 @@ async function handleResign(req: VercelRequest, res: VercelResponse) {
     const player = await findPlayer(targetPlayerId, playerName)
     if (!player) return res.status(404).json({ error: 'Player not found' })
 
-    const room = await prisma.room.findUnique({
-      where: { id: targetRoomId }
-    })
+    const { data: room } = await supabaseAdmin.from('rooms').select('*').eq('id', targetRoomId).maybeSingle()
     if (!room) return res.status(404).json({ error: 'Room not found' })
 
     // If room is already FINISHED or CANCELLED, return current state
@@ -1427,10 +1433,7 @@ async function handleResign(req: VercelRequest, res: VercelResponse) {
     // -------------------------------------------------------------------------
     if (room.status === 'WAITING') {
       if (isHost) {
-        await prisma.room.update({
-          where: { id: room.id },
-          data: { status: 'CANCELLED' }
-        })
+        await supabaseAdmin.from('rooms').update({ status: 'CANCELLED' }).eq('id', room.id)
         const fullRoom = await getFullRoom(room.id)
         return res.status(200).json(fullRoom)
       } else {
@@ -1458,15 +1461,12 @@ async function handleResign(req: VercelRequest, res: VercelResponse) {
         playersProgress.__lastReaction = leaveNotification
 
         // الحفاظ على حالة الغرفة كـ WAITING حصراً وعدم إنهائها أبداً
-        await prisma.room.update({
-          where: { id: room.id },
-          data: {
-            playersProgress,
-            player2Id: newPlayer2Id,
-            status: 'WAITING',
-            lastReaction: leaveNotification
-          }
-        })
+        await supabaseAdmin.from('rooms').update({
+          playersProgress,
+          player2Id: newPlayer2Id,
+          status: 'WAITING',
+          lastReaction: leaveNotification
+        }).eq('id', room.id)
 
         const fullRoom = await getFullRoom(room.id)
         return res.status(200).json(fullRoom)
@@ -1551,26 +1551,18 @@ async function handleResign(req: VercelRequest, res: VercelResponse) {
         })
 
         if (!isLastQuestion && allRemainingAnswered) {
-          await prisma.$transaction(async (tx) => {
-            await tx.room.update({
-              where: { id: room.id },
-              data: updateData
-            })
-            const freshRoom = await tx.room.findUnique({ where: { id: room.id } })
-            if (freshRoom && freshRoom.status === 'PLAYING') {
-              await advanceRoomToNextQuestionTx(tx, freshRoom, curAnswers)
-            }
-          })
+          await supabaseAdmin.from('rooms').update(updateData).eq('id', room.id)
+          const { data: freshRoom } = await supabaseAdmin.from('rooms').select('*').eq('id', room.id).maybeSingle()
+          if (freshRoom && freshRoom.status === 'PLAYING') {
+            await advanceRoomToNextQuestionTx(null, freshRoom, curAnswers)
+          }
           const fullRoom = await getFullRoom(room.id)
           return res.status(200).json(fullRoom)
         }
       }
     }
 
-    await prisma.room.update({
-      where: { id: room.id },
-      data: updateData
-    })
+    await supabaseAdmin.from('rooms').update(updateData).eq('id', room.id)
 
     const fullRoom = await getFullRoom(room.id)
     return res.status(200).json(fullRoom)
@@ -1593,10 +1585,7 @@ async function handleKickPlayer(req: VercelRequest, res: VercelResponse) {
     const host = await findPlayer(targetHostId)
     if (!host) return res.status(404).json({ error: 'Host not found' })
 
-    const room = await prisma.room.findUnique({
-      where: { id: targetRoomId },
-      include: { player1: true }
-    })
+    const { data: room } = await supabaseAdmin.from('rooms').select('*').eq('id', targetRoomId).maybeSingle()
     if (!room) return res.status(404).json({ error: 'Room not found' })
 
     // Security check: Only room creator / host can kick players
@@ -1653,14 +1642,11 @@ async function handleKickPlayer(req: VercelRequest, res: VercelResponse) {
     playersProgress.__lastReaction = kickEventPayload
 
     // 4. Update room in DB
-    await prisma.room.update({
-      where: { id: room.id },
-      data: {
-        playersProgress,
-        player2Id: newPlayer2Id,
-        lastReaction: kickEventPayload
-      }
-    })
+    await supabaseAdmin.from('rooms').update({
+      playersProgress,
+      player2Id: newPlayer2Id,
+      lastReaction: kickEventPayload
+    }).eq('id', room.id)
 
     // 5. Clean up in Supabase:
     // a) Remove from room_participants table
@@ -1726,7 +1712,7 @@ async function handleReaction(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const room = await prisma.room.findUnique({ where: { id: String(roomId) } })
+    const { data: room } = await supabaseAdmin.from('rooms').select('*').eq('id', String(roomId)).maybeSingle()
     if (!room) return res.status(404).json({ error: 'Room not found' })
 
     const reactionData = {
@@ -1746,10 +1732,7 @@ async function handleReaction(req: VercelRequest, res: VercelResponse) {
       playersProgress
     }
 
-    await prisma.room.update({
-      where: { id: String(roomId) },
-      data: updateData
-    })
+    await supabaseAdmin.from('rooms').update(updateData).eq('id', String(roomId))
 
     return res.status(200).json({ success: true, reaction: reactionData })
   } catch (err: any) {

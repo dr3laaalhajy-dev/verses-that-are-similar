@@ -215,12 +215,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const { data: friendships } = await supabaseAdmin
           .from('friendships')
           .select('*')
-          .or(`requesterId.eq.${viewer.id},addresseeId.eq.${viewer.id}`);
+          .or(`user_id.eq.${viewer.id},friend_id.eq.${viewer.id}`);
 
         if (friendships) {
           for (const f of friendships) {
-            const reqId = Number(f.requesterId || f.user_id);
-            const addId = Number(f.addresseeId || f.friend_id);
+            const reqId = Number(f.user_id || f.requesterId);
+            const addId = Number(f.friend_id || f.addresseeId);
             if (f.status === 'ACCEPTED') {
               const otherId = reqId === viewer.id ? addId : reqId;
               if (playerIds.includes(otherId)) friendshipMap.set(otherId, 'ACCEPTED');
@@ -263,7 +263,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const { data: existingList } = await supabaseAdmin
         .from('friendships')
         .select('*')
-        .or(`and(requesterId.eq.${requester.id},addresseeId.eq.${target.id}),and(requesterId.eq.${target.id},addresseeId.eq.${requester.id})`);
+        .or(`and(user_id.eq.${requester.id},friend_id.eq.${target.id}),and(user_id.eq.${target.id},friend_id.eq.${requester.id})`);
 
       const existing = existingList && existingList.length > 0 ? existingList[0] : null;
 
@@ -272,8 +272,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return res.status(200).json({ success: true, message: 'أنتم أصدقاء بالفعل', status: 'ACCEPTED' });
         }
         if (existing.status === 'PENDING') {
-          const reqId = Number(existing.requesterId || existing.user_id);
-          const addId = Number(existing.addresseeId || existing.friend_id);
+          const reqId = Number(existing.user_id || existing.requesterId);
+          const addId = Number(existing.friend_id || existing.addresseeId);
           // If the target had already sent request to me, auto-accept!
           if (reqId === target.id && addId === requester.id) {
             const { data: accepted } = await supabaseAdmin
@@ -291,8 +291,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const { data: updated } = await supabaseAdmin
           .from('friendships')
           .update({
-            requesterId: requester.id,
-            addresseeId: target.id,
             user_id: String(requester.id),
             friend_id: String(target.id),
             status: 'PENDING',
@@ -308,8 +306,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const { data: created, error } = await supabaseAdmin
         .from('friendships')
         .insert({
-          requesterId: requester.id,
-          addresseeId: target.id,
           user_id: String(requester.id),
           friend_id: String(target.id),
           status: 'PENDING'
@@ -351,14 +347,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const { data } = await supabaseAdmin
             .from('friendships')
             .select('*')
-            .or(`and(requesterId.eq.${otherPlayer.id},addresseeId.eq.${viewer.id}),and(user_id.eq.${otherPlayer.id},friend_id.eq.${viewer.id})`)
+            .eq('user_id', String(otherPlayer.id))
+            .eq('friend_id', String(viewer.id))
             .eq('status', 'PENDING')
             .maybeSingle();
           friendshipRecord = data;
         }
       }
 
-      const recAddressee = Number(friendshipRecord?.addresseeId || friendshipRecord?.friend_id);
+      const recAddressee = Number(friendshipRecord?.friend_id || friendshipRecord?.addresseeId);
       if (!friendshipRecord || recAddressee !== viewer.id) {
         return res.status(404).json({ error: 'طلب الصداقة غير موجود أو تم معالجته بالفعل' });
       }
@@ -395,7 +392,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       await supabaseAdmin
         .from('friendships')
         .delete()
-        .or(`and(requesterId.eq.${viewer.id},addresseeId.eq.${friend.id}),and(requesterId.eq.${friend.id},addresseeId.eq.${viewer.id}),and(user_id.eq.${viewer.id},friend_id.eq.${friend.id}),and(user_id.eq.${friend.id},friend_id.eq.${viewer.id})`);
+        .or(`and(user_id.eq.${viewer.id},friend_id.eq.${friend.id}),and(user_id.eq.${friend.id},friend_id.eq.${viewer.id})`);
 
       return res.status(200).json({ success: true, message: 'تمت إزالة الصداقة بنجاح' });
     }
@@ -415,7 +412,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const { data: friendships, error: fErr } = await supabaseAdmin
         .from('friendships')
         .select('*')
-        .or(`requesterId.eq.${viewer.id},addresseeId.eq.${viewer.id},user_id.eq.${viewer.id},friend_id.eq.${viewer.id}`)
+        .or(`user_id.eq.${viewer.id},friend_id.eq.${viewer.id}`)
         .order('created_at', { ascending: false });
 
       if (fErr) {
@@ -426,8 +423,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Collect all other player IDs to hydrate their profiles in a single query
       const otherPlayerIds = new Set<number>();
       for (const f of (friendships || [])) {
-        const reqId = Number(f.requesterId || f.user_id);
-        const addId = Number(f.addresseeId || f.friend_id);
+        const reqId = Number(f.user_id || f.requesterId);
+        const addId = Number(f.friend_id || f.addresseeId);
         if (reqId) otherPlayerIds.add(reqId);
         if (addId) otherPlayerIds.add(addId);
       }
@@ -448,8 +445,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const seenFriendIds = new Set<number>();
 
       for (const f of (friendships || [])) {
-        const reqId = Number(f.requesterId || f.user_id);
-        const addId = Number(f.addresseeId || f.friend_id);
+        const reqId = Number(f.user_id || f.requesterId);
+        const addId = Number(f.friend_id || f.addresseeId);
         const requesterData = playerMap.get(reqId) || { id: reqId, name: 'لاعب' };
         const addresseeData = playerMap.get(addId) || { id: addId, name: 'لاعب' };
 
@@ -509,16 +506,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const { data: existingFriendships } = await supabaseAdmin
           .from('friendships')
           .select('*')
-          .or(`and(requesterId.eq.${viewer.id},addresseeId.eq.${target.id}),and(requesterId.eq.${target.id},addresseeId.eq.${viewer.id}),and(user_id.eq.${viewer.id},friend_id.eq.${target.id}),and(user_id.eq.${target.id},friend_id.eq.${viewer.id})`)
+          .or(`and(user_id.eq.${viewer.id},friend_id.eq.${target.id}),and(user_id.eq.${target.id},friend_id.eq.${viewer.id})`)
           .limit(1);
 
         const friendship = existingFriendships && existingFriendships.length > 0 ? existingFriendships[0] : null;
         if (friendship) {
           friendshipId = friendship.id;
-          if (friendship.status === 'ACCEPTED') {
+          const status = String(friendship.status || '').toUpperCase();
+          if (status === 'ACCEPTED') {
             friendshipStatus = 'ACCEPTED';
-          } else if (friendship.status === 'PENDING') {
-            const reqId = Number(friendship.requesterId || friendship.user_id);
+          } else if (status === 'PENDING') {
+            const reqId = Number(friendship.user_id || friendship.requesterId);
             friendshipStatus = reqId === viewer.id ? 'PENDING_SENT' : 'PENDING_RECEIVED';
           }
         }
