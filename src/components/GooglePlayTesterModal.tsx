@@ -322,8 +322,8 @@ export const GooglePlayTesterModal: React.FC<GooglePlayTesterModalProps> = ({
                         </span>
                         <div>
                           <strong className="text-white font-black block text-xs sm:text-sm">تنزيل التطبيق من متجر Google Play:</strong>
-                          <span className="text-amber-100/90">
-                            افتح متجر Google Play على هاتفك بنفس الحساب (<span className="text-white font-bold" dir="ltr">{testerEmail}</span>)، واضغط على رابط التنزيل لتثبيت التطبيق ومتابعة التحديثات تلقائياً.
+                          <span className="text-amber-100/90 leading-relaxed block mt-0.5">
+                            بعد الضغط على قبول الدعوة <strong className="text-white font-black">(Become a tester)</strong>، سيظهر لك فوراً في نفس الصفحة رابط باللون الأزرق مكتوب عليه <strong className="text-emerald-300 font-black underline underline-offset-2">(Download it on Google Play)</strong> أو <strong className="text-emerald-300 font-black underline underline-offset-2">(تنزيله من Google Play)</strong>. يجب الضغط على هذا الرابط ليأخذك مباشرة إلى المتجر لتثبيت التطبيق.
                           </span>
                         </div>
                       </div>
