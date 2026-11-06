@@ -139,6 +139,45 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
     (room?.player1?.username && playerUsername && room.player1.username.toLowerCase() === playerUsername.toLowerCase())
   );
 
+  // Supabase Presence: online IDs tracked in AppContext
+  const roomPresenceOnlineIds: Set<string | number> = (app as any)?.roomPresenceOnlineIds || new Set();
+
+  // Host migration: if original host is offline, first online non-host participant acts as effective host
+  const presenceReady = roomPresenceOnlineIds.size > 0;
+  const participants = room?.participants || [];
+
+  const isParticipantOnlineFn = (p: any): boolean => {
+    if (!presenceReady) return p.isOnline !== false;
+    return (
+      (p.id != null && roomPresenceOnlineIds.has(String(p.id))) ||
+      (p.name && roomPresenceOnlineIds.has(String(p.name).trim().toLowerCase())) ||
+      (p.username && roomPresenceOnlineIds.has(String(p.username).trim().toLowerCase().replace(/^@+/, '')))
+    );
+  };
+
+  const hostParticipant = participants.find((p: any) =>
+    String(p.id) === String(room?.player1Id) ||
+    (p.name && room?.player1?.name && p.name === room.player1.name) ||
+    (p.username && room?.player1?.username && p.username === room.player1.username)
+  );
+  const hostIsOffline = presenceReady && hostParticipant ? !isParticipantOnlineFn(hostParticipant) : false;
+
+  const onlineNonHostParticipants = participants.filter((p: any) =>
+    !( String(p.id) === String(room?.player1Id) ||
+       (p.name && room?.player1?.name && p.name === room.player1.name) ||
+       (p.username && room?.player1?.username && p.username === room.player1.username) ) &&
+    isParticipantOnlineFn(p)
+  );
+  const amIFirstOnline = Boolean(
+    onlineNonHostParticipants[0] && (
+      onlineNonHostParticipants[0].name === playerName ||
+      onlineNonHostParticipants[0].username === playerUsername
+    )
+  );
+
+  // isEffectiveHost = original host OR (host offline AND I am first online non-host)
+  const isEffectiveHost = isHost || (hostIsOffline && amIFirstOnline);
+
   const totalQuestions = room?.questionCount || challenges.length || room?.challenges?.length || 5;
   const currentQuestionIdx = room?.currentQuestionIndex ?? currentChallengeIndex;
   const isLastQuestion = currentQuestionIdx >= totalQuestions - 1;
@@ -473,7 +512,7 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
           handlePromptNextChallenge={handlePromptNextChallenge}
           onViewTafsir={handleOpenTafsir}
           isRoom={!!room}
-          isHost={isHost}
+          isHost={isEffectiveHost}
           isLastQuestion={isLastQuestion}
           onEndRoom={handleEndRoom}
           isEndingRoom={isEndingRoom}
@@ -502,7 +541,7 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
           currentChallenge={currentChallenge}
           surahFeedbackData={surahFeedbackData}
           isRoom={!!room}
-          isHost={isHost}
+          isHost={isEffectiveHost}
           isLastQuestion={isLastQuestion}
           onEndRoom={handleEndRoom}
           isEndingRoom={isEndingRoom}
@@ -529,7 +568,7 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
           currentChallenge={currentChallenge}
           eliminatedIndices={eliminatedOptionIndices}
           isRoom={!!room}
-          isHost={isHost}
+          isHost={isEffectiveHost}
           isLastQuestion={isLastQuestion}
           onEndRoom={handleEndRoom}
           isEndingRoom={isEndingRoom}
@@ -586,6 +625,7 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
               const isMe = p.name === playerName || p.username === playerUsername || pId === String(currentUserId);
               const hasAns = Boolean(ans && (ans.questionIndex === undefined || ans.questionIndex === currentQuestionIdx));
               const isAnsCorrect = hasAns && Boolean(ans.isCorrect);
+              const isOnline = isParticipantOnlineFn(p);
 
               return (
                 <div
@@ -599,6 +639,9 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
                   }`}
                 >
                   <span className="flex items-center gap-1.5 truncate">
+                    {presenceReady && !isOnline && (
+                      <span title="غير متصل" className="text-[9px] leading-none">🔴</span>
+                    )}
                     <span className="truncate">{p.name || p.username || 'لاعب'}</span>
                     {isMe && <span className="text-[10px] opacity-75">(أنت)</span>}
                   </span>
@@ -638,25 +681,33 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
             </h4>
           </div>
 
-          {isHost ? (
-            <button
-              type="button"
-              onClick={handleEndRoom}
-              disabled={isEndingRoom}
-              className="w-full py-3.5 px-6 rounded-2xl bg-gradient-to-r from-brand-emerald to-teal-600 hover:from-brand-emerald/90 hover:to-teal-700 text-white font-black text-sm sm:text-base shadow-lg shadow-brand-emerald/30 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer"
-            >
-              {isEndingRoom ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  <span>جاري إنهاء التحدي والانتقال للنتائج...</span>
-                </>
-              ) : (
-                <>
-                  <Trophy className="w-5 h-5 text-amber-300" />
-                  <span>إنهاء الغرفة وإظهار النتائج</span>
-                </>
+          {isEffectiveHost ? (
+            <div className="space-y-2">
+              {!isHost && hostIsOffline && (
+                <div className="inline-flex items-center gap-1.5 py-1 px-3 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 text-xs font-black">
+                  <span>👑</span>
+                  <span>أنت تدير الغرفة حالياً لأن المنشئ غير متصل</span>
+                </div>
               )}
-            </button>
+              <button
+                type="button"
+                onClick={handleEndRoom}
+                disabled={isEndingRoom}
+                className="w-full py-3.5 px-6 rounded-2xl bg-gradient-to-r from-brand-emerald to-teal-600 hover:from-brand-emerald/90 hover:to-teal-700 text-white font-black text-sm sm:text-base shadow-lg shadow-brand-emerald/30 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                {isEndingRoom ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <span>جاري إنهاء التحدي والانتقال للنتائج...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trophy className="w-5 h-5 text-amber-300" />
+                    <span>إنهاء الغرفة وإظهار النتائج</span>
+                  </>
+                )}
+              </button>
+            </div>
           ) : (
             <div className="flex items-center justify-center gap-2.5 py-2.5 px-4 rounded-xl bg-white/80 dark:bg-slate-800/80 border border-amber-200 dark:border-amber-700/40 text-amber-800 dark:text-amber-200 text-xs sm:text-sm font-black">
               <Loader2 className="w-4 h-4 animate-spin text-amber-600" />

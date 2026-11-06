@@ -51,6 +51,7 @@ export const GroupGameResultsPage: React.FC<GroupGameResultsPageProps> = ({
               (room?.hostName && playerName && room.hostName === playerName) ||
               (room?.hostUsername && playerUsername && room.hostUsername.toLowerCase() === playerUsername.toLowerCase())
             )}
+            leaderId={String(room?.player1Id || room?.hostUsername || room?.hostName || '')}
             players={(room.participants || []).map((p: any) => ({
               id: String(p.username || p.name || p.id),
               name: p.name || p.username || 'لاعب'

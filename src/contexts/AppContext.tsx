@@ -2633,6 +2633,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const isAdvancingRef = useRef(false);
   const notifiedWithdrawnPlayersRef = useRef<Set<string>>(new Set());
+  // Set of player IDs currently tracked as online via Supabase Presence in the active room.
+  // Populated by the roomPresence useEffect below and exposed to advance-question logic.
+  const [roomPresenceOnlineIds, setRoomPresenceOnlineIds] = useState<Set<string | number>>(new Set());
 
   // Requirement 4: Reset UI State immediately on question transition
   const resetQuestionUIState = useCallback((newIndex: number, currentRoomData?: any) => {
@@ -2878,7 +2881,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 setSkillsFeedback(true);
               }
 
-              // 3. Requirement 1 & 3: Host-Only Transition Validation
+              // 3. Requirement 1 & 3: Host-Only Transition Validation + Host Migration
               const isHost = Boolean(
                 (room?.player1?.name && playerName && room.player1.name === playerName) ||
                 (room?.player1?.username && playerUsername && room.player1.username.toLowerCase() === playerUsername.toLowerCase()) ||
@@ -2890,12 +2893,57 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 (data?.hostUsername && playerUsername && data.hostUsername.toLowerCase() === playerUsername.toLowerCase())
               );
 
-              if (isHost && !isAdvancingRef.current) {
-                const participants = data.participants || [];
-                // Active players: exclude those who left (hasLeft), resigned (isResigned), abandoned (isAbandoned), or went offline
+              // ── Host Migration Logic ──────────────────────────────────────
+              // If the room creator is offline (not in Supabase Presence), the first
+              // online non-host player inherits the ability to advance questions.
+              const participants = data.participants || [];
+
+              // Helper: is a participant currently online in Supabase Presence?
+              const isParticipantOnline = (p: any): boolean => {
+                if (roomPresenceOnlineIds.size === 0) {
+                  // Presence not yet populated — fall back to isOnline flag from API
+                  return p.isOnline !== false;
+                }
+                return (
+                  (p.id != null && roomPresenceOnlineIds.has(String(p.id))) ||
+                  (p.name  && roomPresenceOnlineIds.has(String(p.name).trim().toLowerCase())) ||
+                  (p.username && roomPresenceOnlineIds.has(String(p.username).trim().toLowerCase().replace(/^@+/, '')))
+                );
+              };
+
+              // Determine if the original host is offline
+              const hostParticipant = participants.find((p: any) =>
+                String(p.id) === String(data?.player1Id || room?.player1Id) ||
+                (p.name && data?.player1?.name && p.name === data.player1.name) ||
+                (p.username && data?.player1?.username && p.username === data.player1.username)
+              );
+              const hostIsOffline = hostParticipant ? !isParticipantOnline(hostParticipant) : false;
+
+              // Find the first online non-host participant
+              const onlineNonHostParticipants = participants.filter((p: any) =>
+                String(p.id) !== String(data?.player1Id || room?.player1Id) &&
+                isParticipantOnline(p) &&
+                !p.hasLeft && !p.isResigned && !p.isAbandoned && p.status !== 'abandoned'
+              );
+              const firstOnlinePlayer = onlineNonHostParticipants[0] || null;
+
+              // Am I the first online non-host player (potential host migration target)?
+              const amIFirstOnline = Boolean(
+                firstOnlinePlayer && (
+                  (firstOnlinePlayer.name && playerName && firstOnlinePlayer.name === playerName) ||
+                  (firstOnlinePlayer.username && playerUsername && firstOnlinePlayer.username.toLowerCase() === playerUsername.toLowerCase()) ||
+                  (firstOnlinePlayer.id && playerId && String(firstOnlinePlayer.id) === String(playerId))
+                )
+              );
+
+              // Effective host: original host OR (host is offline AND I am the first online player)
+              const isEffectiveHost = isHost || (hostIsOffline && amIFirstOnline);
+
+              if (isEffectiveHost && !isAdvancingRef.current) {
+                // Active players: online (by presence) + not abandoned/left
                 const activeParticipants = participants.filter((p: any) => {
                   const pProg = data.playersProgress ? data.playersProgress[String(p.id)] : null;
-                  return p.isOnline !== false && !p.hasLeft && !p.isResigned && !p.isAbandoned && p.status !== 'abandoned' &&
+                  return isParticipantOnline(p) && !p.hasLeft && !p.isResigned && !p.isAbandoned && p.status !== 'abandoned' &&
                     (!pProg || (!pProg.hasLeft && !pProg.isResigned && !pProg.isAbandoned && pProg.status !== 'abandoned'));
                 });
                 const activeCount = activeParticipants.length;
@@ -2957,7 +3005,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // Single fetch on effect run — Realtime handles ongoing updates
     poll();
-  }, [room?.id, view, room?.status, currentChallengeIndex, playerName, playerUsername, hasAnsweredCurrentQuestion, challenges, resetQuestionUIState]);
+  }, [room?.id, view, room?.status, currentChallengeIndex, playerName, playerUsername, hasAnsweredCurrentQuestion, challenges, resetQuestionUIState, roomPresenceOnlineIds, playerId, uniquePlayerId]);
 
   // Presence & Connection Management: Track online/offline status & background lifecycle
   useEffect(() => {
@@ -3007,6 +3055,66 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
   }, [room?.id, view, playerName, playerUsername]);
+
+  // ── Room Presence via Supabase Presence ──────────────────────────────────
+  // Tracks which player IDs are truly online inside the active room using
+  // Supabase Realtime Presence (not HTTP API). This powers:
+  //  1. Offline indicator on participant list (roomPresenceOnlineIds)
+  //  2. Host migration: first online non-host player inherits advance rights
+  //  3. Auto-advance: if all online players answered, advance without waiting
+  //     for offline players who will never respond
+  useEffect(() => {
+    if (!room?.id || view !== 'challenge') return;
+
+    const myPresenceId = String(playerId || playerUsername || playerName || '');
+    if (!myPresenceId) return;
+
+    const channelName = `room_presence_${room.id}`;
+    // Clean up any stale channel from a previous room
+    const existing = supabase.getChannels().find(ch => ch.topic === `realtime:${channelName}`);
+    if (existing) { try { supabase.removeChannel(existing); } catch (_) {} }
+
+    const presenceChannel = supabase.channel(channelName, {
+      config: { presence: { key: myPresenceId } }
+    });
+
+    const syncPresence = () => {
+      const state = presenceChannel.presenceState();
+      const onlineIds = new Set<string | number>();
+      Object.entries(state).forEach(([key, presences]) => {
+        onlineIds.add(key);
+        if (Array.isArray(presences)) {
+          presences.forEach((p: any) => {
+            if (p.playerId != null)   onlineIds.add(String(p.playerId));
+            if (p.playerName)         onlineIds.add(String(p.playerName).trim().toLowerCase());
+            if (p.playerUsername)     onlineIds.add(String(p.playerUsername).trim().toLowerCase().replace(/^@+/, ''));
+          });
+        }
+      });
+      setRoomPresenceOnlineIds(onlineIds);
+    };
+
+    presenceChannel
+      .on('presence', { event: 'sync' },  syncPresence)
+      .on('presence', { event: 'join' },  syncPresence)
+      .on('presence', { event: 'leave' }, syncPresence)
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await presenceChannel.track({
+            playerId:       playerId        || null,
+            playerName:     playerName      || null,
+            playerUsername: playerUsername  || null,
+            uniquePlayerId: uniquePlayerId  || null,
+            joinedAt: new Date().toISOString()
+          });
+        }
+      });
+
+    return () => {
+      try { supabase.removeChannel(presenceChannel); } catch (_) {}
+      setRoomPresenceOnlineIds(new Set());
+    };
+  }, [room?.id, view, playerId, playerName, playerUsername, uniquePlayerId]);
 
   // Check for active unfinished challenges on the Home screen
   useEffect(() => {
@@ -5690,6 +5798,8 @@ ${versesList}
     fetchAvailableRooms,
     handleJoinV1,
     privateRoomModal, setPrivateRoomModal,
+    // Room Presence: Set of IDs (player id/name/username) currently online in the active game room
+    roomPresenceOnlineIds,
     handleRoomTimeout,
     resetQuestionUIState,
     moveToNextQuestion,

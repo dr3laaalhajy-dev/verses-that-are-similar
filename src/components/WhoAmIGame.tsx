@@ -19,6 +19,7 @@ export interface WhoAmIGameProps {
   roomId: string;
   currentUser: { id: string; name: string };
   isLeader: boolean;
+  leaderId?: string;
   players: Player[];
   category?: string;
   categoriesConfig?: Array<{ category: string; count: number }>;
@@ -32,6 +33,7 @@ export default function WhoAmIGame({
   roomId,
   currentUser,
   isLeader,
+  leaderId,
   players,
   category = 'الصحابة',
   categoriesConfig,
@@ -50,11 +52,57 @@ export default function WhoAmIGame({
   const [busy, setBusy] = useState(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [isRoomCompleted, setIsRoomCompleted] = useState(false);
+  const [onlinePlayerIds, setOnlinePlayerIds] = useState<Set<string>>(new Set());
   const revealingRef = useRef<string | null>(null);
   const queueRef = useRef<any[]>([]);
 
   const round = rounds[rounds.length - 1] || null;
   const roundId = round?.id;
+
+  // Supabase Presence Tracking for "Who Am I" challenge
+  useEffect(() => {
+    if (!roomId) return;
+    const channelName = `who_am_i_presence_${roomId}`;
+    const presenceCh = supabase.channel(channelName);
+
+    presenceCh
+      .on('presence', { event: 'sync' }, () => {
+        try {
+          const state = presenceCh.presenceState();
+          const online = new Set<string>();
+          Object.values(state).forEach((presences: any) => {
+            if (Array.isArray(presences)) {
+              presences.forEach((p: any) => {
+                if (p.id) online.add(String(p.id).trim().toLowerCase());
+                if (p.userId) online.add(String(p.userId).trim().toLowerCase());
+                if (p.name) online.add(String(p.name).trim().toLowerCase());
+              });
+            }
+          });
+          setOnlinePlayerIds(online);
+        } catch (e) {
+          console.warn('[WhoAmIGame Presence sync error]:', e);
+        }
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          try {
+            await presenceCh.track({
+              id: currentUser.id,
+              userId: currentUser.id,
+              name: currentUser.name,
+              joinedAt: new Date().toISOString(),
+            });
+          } catch (_) {}
+        }
+      });
+
+    return () => {
+      try {
+        supabase.removeChannel(presenceCh);
+      } catch (_) {}
+    };
+  }, [roomId, currentUser.id, currentUser.name]);
 
   // ---------- تحميل البيانات ----------
   const refresh = useCallback(async () => {
@@ -191,10 +239,62 @@ export default function WhoAmIGame({
 
   const finished = isRoomCompleted;
 
-  // ---------- الكشف التلقائي (القائد) ----------
+  // ---------- تتبع الاتصال وتخطي غير المتصلين وتدوير القيادة ----------
+  const isPlayerOnline = useCallback(
+    (p: Player) => {
+      if (onlinePlayerIds.size === 0) return true; // إذا لم تكتمل المزامنة بعد نعتبره متصلاً
+      const pId = String(p.id).trim().toLowerCase();
+      const pName = (p.name || '').trim().toLowerCase();
+      return onlinePlayerIds.has(pId) || onlinePlayerIds.has(pName);
+    },
+    [onlinePlayerIds]
+  );
+
+  // قائمة اللاعبين النشطين المتواجدين حالياً
+  const activeOnlinePlayers = useMemo(() => {
+    const list = players.filter(isPlayerOnline);
+    return list.length > 0 ? list : players;
+  }, [players, isPlayerOnline]);
+
+  // التحقق من اتصال المنشئ/القائد الأصلي
+  const originalLeaderOnline = useMemo(() => {
+    if (isLeader) return true;
+    if (onlinePlayerIds.size === 0) return true;
+    if (!leaderId) return true;
+    const lId = leaderId.trim().toLowerCase();
+    return onlinePlayerIds.has(lId);
+  }, [isLeader, onlinePlayerIds, leaderId]);
+
+  // القائد الفعلي (Host Migration): إذا غاب المنشئ يتولى أول لاعب متصل
+  const effectiveLeaderPlayer = useMemo(() => {
+    if (isLeader) return currentUser;
+    if (originalLeaderOnline) return null;
+    const lId = (leaderId || '').trim().toLowerCase();
+    return activeOnlinePlayers.find((p) => String(p.id).toLowerCase() !== lId && (p.name || '').toLowerCase() !== lId) || null;
+  }, [isLeader, currentUser, originalLeaderOnline, activeOnlinePlayers, leaderId]);
+
+  const isEffectiveLeader = isLeader || Boolean(
+    effectiveLeaderPlayer &&
+      (String(effectiveLeaderPlayer.id).toLowerCase() === String(currentUser.id).toLowerCase() ||
+        effectiveLeaderPlayer.name.toLowerCase() === currentUser.name.toLowerCase())
+  );
+
+  // احتساب إجابات اللاعبين المتصلين فقط (Auto-Skip Offline)
+  const activeSubsCount = useMemo(() => {
+    return roundSubs.filter((s) =>
+      activeOnlinePlayers.some(
+        (p) =>
+          String(p.id).toLowerCase() === String(s.user_id).toLowerCase() ||
+          (p.name && s.player_name && p.name.toLowerCase() === s.player_name.toLowerCase())
+      )
+    ).length;
+  }, [roundSubs, activeOnlinePlayers]);
+
+  const allIn = activeOnlinePlayers.length > 0 && activeSubsCount >= activeOnlinePlayers.length;
+
+  // ---------- الكشف التلقائي (القائد / القائد البديل) ----------
   useEffect(() => {
-    if (!isLeader || !round || round.status !== 'active') return;
-    const allIn = players.length > 0 && roundSubs.length >= players.length;
+    if (!isEffectiveLeader || !round || round.status !== 'active') return;
     if ((allIn || timeUp) && revealingRef.current !== round.id) {
       revealingRef.current = round.id;
       supabase
@@ -204,7 +304,7 @@ export default function WhoAmIGame({
         .eq('status', 'active')
         .then(refresh);
     }
-  }, [isLeader, round, roundSubs.length, players.length, timeUp, refresh]);
+  }, [isEffectiveLeader, round, allIn, timeUp, refresh]);
 
   // ---------- الإجراءات ----------
   // تحميل وخلط الأسئلة الموزعة حسب الفئات
@@ -322,7 +422,7 @@ export default function WhoAmIGame({
 
   // نظام VAR: اعتماد الإجابة (للقائد فقط)
   const override = async (a: any) => {
-    if (!isLeader) return;
+    if (!isEffectiveLeader) return;
     const pts = POINTS[a.phase] || 1;
     const { error } = await supabase
       .from('who_am_i_answers')
@@ -340,7 +440,12 @@ export default function WhoAmIGame({
         <p className="wai-muted" style={{ marginTop: 4, marginBottom: 12 }}>
           {category ? `الفئات المحددة: ${category}` : 'تحدي التلميحات المتدرجة'}
         </p>
-        {isLeader ? (
+        {!isLeader && isEffectiveLeader && (
+          <div style={{ backgroundColor: '#fef3c7', color: '#92400e', border: '1px solid #fde68a', padding: '6px 12px', borderRadius: '10px', fontSize: '12px', fontWeight: 900, marginBottom: '10px', textAlign: 'center' }}>
+            👑 أنت تدير التحدي حالياً لأن القائد غير متصل
+          </div>
+        )}
+        {isEffectiveLeader ? (
           <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginTop: '12px' }}>
             <button className="wai-btn" onClick={startNext}>
               ابدأ التحدي
@@ -389,6 +494,11 @@ export default function WhoAmIGame({
 
   return (
     <div className="wai" dir="rtl">
+      {!isLeader && isEffectiveLeader && (
+        <div style={{ backgroundColor: '#fef3c7', color: '#92400e', border: '1px solid #fde68a', padding: '6px 12px', borderRadius: '10px', fontSize: '12px', fontWeight: 900, marginBottom: '10px', textAlign: 'center' }}>
+          👑 أنت تدير التحدي حالياً لأن القائد غير متصل
+        </div>
+      )}
       <div className="wai-head">
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span>
@@ -493,12 +603,18 @@ export default function WhoAmIGame({
               const pIdStr = String(p.id);
               const sub = roundSubs.some((s) => String(s.user_id) === pIdStr);
               const ans = roundAnswers.find((a) => String(a.user_id) === pIdStr);
+              const isOnline = isPlayerOnline(p);
 
               if (!revealed) {
                 // حالة الإخفاء: اسم رمادي + (✓) بدون النص
                 return (
                   <li key={p.id} className={`wai-player neutral ${sub ? 'done' : ''}`}>
-                    <span>{p.name}</span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                      {onlinePlayerIds.size > 0 && !isOnline && (
+                        <span title="غير متصل" style={{ fontSize: '10px', lineHeight: 1 }}>🔴</span>
+                      )}
+                      <span>{p.name}</span>
+                    </span>
                     {sub && <span className="tick">✓</span>}
                   </li>
                 );
@@ -507,18 +623,28 @@ export default function WhoAmIGame({
               if (!ans) {
                 return (
                   <li key={p.id} className="wai-player neutral">
-                    <span>{p.name}</span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                      {onlinePlayerIds.size > 0 && !isOnline && (
+                        <span title="غير متصل" style={{ fontSize: '10px', lineHeight: 1 }}>🔴</span>
+                      )}
+                      <span>{p.name}</span>
+                    </span>
                     <span className="wai-muted">لم يجب</span>
                   </li>
                 );
               }
               return (
                 <li key={p.id} className={`wai-player ${ans.is_correct ? 'correct' : 'wrong'}`}>
-                  <span>{p.name}</span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                    {onlinePlayerIds.size > 0 && !isOnline && (
+                      <span title="غير متصل" style={{ fontSize: '10px', lineHeight: 1 }}>🔴</span>
+                    )}
+                    <span>{p.name}</span>
+                  </span>
                   <span className="ans">{ans.answer_text}</span>
                   <span className="pts">{ans.points > 0 ? `+${ans.points}` : ''}</span>
                   {ans.overridden && <span className="badge">VAR</span>}
-                  {isLeader && !ans.is_correct && (
+                  {isEffectiveLeader && !ans.is_correct && (
                     <button className="wai-var" onClick={() => override(ans)}>
                       اعتماد الإجابة ✓
                     </button>
@@ -534,7 +660,7 @@ export default function WhoAmIGame({
                 الإجابة الصحيحة: <b>{question.answer.split('|')[0]}</b>
               </p>
               <Scoreboard scores={scores} meId={currentUser.id} />
-              {isLeader ? (
+              {isEffectiveLeader ? (
                 <button
                   className="wai-btn"
                   onClick={async () => {
