@@ -55,6 +55,11 @@ export const SkillsResultsPage: React.FC<SkillsResultsPageProps> = ({
   const mistakesList = Array.isArray(sessionMistakes) ? sessionMistakes : [];
   const hasAnswers = mistakesList.length > 0 || (sessionCorrect + sessionWrong > 0);
 
+  // 1 point per correct answer (strictly 1x multiplier)
+  const earnedPoints = sessionCorrect * 1;
+  // Ensure total balance displayed incorporates newly earned points correctly and is never lower than points earned
+  const displayTotalPoints = Math.max(Number(totalPoints || 0), earnedPoints);
+
   return (
     <motion.div
       key="skills_results"
@@ -91,12 +96,14 @@ export const SkillsResultsPage: React.FC<SkillsResultsPageProps> = ({
           <div className="flex items-center gap-2">
             <Sparkles className="w-5 h-5 text-brand-gold shrink-0" />
             <span className="text-slate-600 font-bold text-xs sm:text-sm">النقاط المكتسبة:</span>
-            <span className="text-brand-emerald font-black text-lg sm:text-xl">+{sessionCorrect * 10} نقطة</span>
+            <span className="text-brand-emerald font-black text-lg sm:text-xl">
+              +{earnedPoints} {earnedPoints === 1 ? 'نقطة' : earnedPoints === 2 ? 'نقطتان' : (earnedPoints >= 3 && earnedPoints <= 10) ? 'نقاط' : 'نقطة'}
+            </span>
           </div>
           <div className="flex items-center gap-2">
             <Trophy className="w-5 h-5 text-amber-500 shrink-0" />
             <span className="text-slate-600 font-bold text-xs sm:text-sm">إجمالي رصيدك:</span>
-            <span className="text-slate-800 font-black text-sm sm:text-base">{totalPoints} نقطة • {cups} كأس</span>
+            <span className="text-slate-800 font-black text-sm sm:text-base">{displayTotalPoints} نقطة • {cups} كأس</span>
           </div>
         </div>
 

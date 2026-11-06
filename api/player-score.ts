@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { prisma } from './_lib/prisma.js'
+import { supabaseAdmin } from './_lib/supabaseAdmin.js'
 import { handleCors } from './_lib/cors.js'
 import { getOrGenerateUniquePlayerId } from './_lib/uniquePlayerId.js'
 import { compareLeaderboardUsers, LeaderboardUser } from './_lib/ranking.js'
@@ -253,17 +254,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const updateData: any = {};
 
-    // 1. Points handling:
+    // 1. Points handling: strictly 1 point per correct answer, never multiplied by 10
     const addedPoints = Number(points || 0);
     const explicitTotalPoints = req.body.totalPoints !== undefined ? Number(req.body.totalPoints) : null;
     const clientScore = req.body.score !== undefined ? Number(req.body.score) : null;
+    const currentPts = Number(player.points || 0);
 
     if (addedPoints > 0) {
-      updateData.points = { increment: addedPoints };
+      // Direct 1-to-1 point increment (strictly 1 point per correct answer)
+      const pointsToAward = Math.max(1, Math.min(addedPoints, 5));
+      const nextTotal = explicitTotalPoints !== null && !isNaN(explicitTotalPoints)
+        ? Math.max(currentPts + pointsToAward, explicitTotalPoints)
+        : currentPts + pointsToAward;
+      updateData.points = nextTotal;
     } else if (explicitTotalPoints !== null && !isNaN(explicitTotalPoints)) {
-      updateData.points = explicitTotalPoints;
+      updateData.points = Math.max(currentPts, explicitTotalPoints);
     } else if (clientScore !== null && !isNaN(clientScore)) {
-      updateData.points = clientScore;
+      updateData.points = Math.max(currentPts, clientScore);
     }
 
     // 2. Cups handling:
@@ -302,10 +309,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.body.powerUps !== undefined && typeof req.body.powerUps === 'object') updateData.powerUps = req.body.powerUps;
 
     if (Object.keys(updateData).length > 0) {
-      const updatedPlayer = await prisma.player.update({
-        where: { id: player.id },
-        data: updateData
-      });
+      const { data: updatedPlayer, error: updateErr } = await supabaseAdmin
+        .from('players')
+        .update(updateData)
+        .eq('id', player.id)
+        .select()
+        .single();
+
+      if (updateErr) {
+        console.warn('Supabase update player score fallback to Prisma:', updateErr.message);
+        const fallbackPlayer = await prisma.player.update({
+          where: { id: player.id },
+          data: updateData
+        });
+        return res.status(200).json(fallbackPlayer);
+      }
       return res.status(200).json(updatedPlayer);
     }
 

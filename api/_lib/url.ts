@@ -36,3 +36,4 @@ if (typeof process !== 'undefined' && typeof process.on === 'function') {
 }
 
 export default parseRequestUrl;
+
