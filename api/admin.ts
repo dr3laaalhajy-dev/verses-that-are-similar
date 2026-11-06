@@ -367,42 +367,36 @@ async function handleChangePassword(req: VercelRequest, res: VercelResponse, cur
 async function handleUsers(req: VercelRequest, res: VercelResponse, currentAdmin: any) {
   if (req.method === 'GET') {
     const search = (req.query.search as string || '').trim();
-    const players = await prisma.player.findMany({
-      where: search ? {
-        OR: [
-          { name: { contains: search, mode: 'insensitive' as const } },
-          { username: { contains: search, mode: 'insensitive' as const } }
-        ]
-      } : undefined,
-      orderBy: [
-        { cups: 'desc' },
-        { points: 'desc' },
-        { createdAt: 'desc' }
-      ],
-      select: {
-        id: true,
-        name: true,
-        username: true,
-        points: true,
-        cups: true,
-        isBlocked: true,
-        activeFrame: true,
-        seerahCompleted: true,
-        generalCompleted: true,
-        quranCompleted: true,
-        createdAt: true,
-        updatedAt: true
-      }
-    });
-    return res.status(200).json(players);
+    let query = supabaseAdmin
+      .from('players')
+      .select('id, name, username, points, cups, isBlocked, activeFrame, seerahCompleted, generalCompleted, quranCompleted, createdAt, updatedAt')
+      .order('cups', { ascending: false })
+      .order('points', { ascending: false })
+      .order('createdAt', { ascending: false });
+
+    if (search) {
+      query = query.or(`name.ilike.%${search}%,username.ilike.%${search}%`);
+    }
+
+    const { data: players, error } = await query;
+    if (error) {
+      console.error('[Admin handleUsers GET error]:', error);
+      return res.status(500).json({ message: 'فشل جلب المستخدمين', error: error.message });
+    }
+    return res.status(200).json(players || []);
   }
 
   if (req.method === 'POST') {
     const { subAction, id, name, username, points, cups, newPassword, isBlocked } = req.body;
     if (!id) return res.status(400).json({ message: 'معرف المستخدم مطلوب' });
 
-    const player = await prisma.player.findUnique({ where: { id: Number(id) } });
-    if (!player) return res.status(404).json({ message: 'المستخدم غير موجود' });
+    const { data: player, error: fetchErr } = await supabaseAdmin
+      .from('players')
+      .select('*')
+      .eq('id', Number(id))
+      .maybeSingle();
+
+    if (fetchErr || !player) return res.status(404).json({ message: 'المستخدم غير موجود' });
 
     if (subAction === 'update-info') {
       const cleanU = (username || '').trim().replace(/^@+/, '');
@@ -427,16 +421,24 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, currentAdmin
         ? Math.max(0, parseInt(String(cups), 10))
         : undefined;
 
-      // Absolute Direct Override: Update target player directly without cumulative increments
-      const updated = await prisma.player.update({
-        where: { id: player.id },
-        data: {
-          ...(cleanN ? { name: cleanN } : {}),
-          ...(cleanU ? { username: cleanU } : {}),
-          ...(parsedPoints !== undefined ? { points: parsedPoints } : {}),
-          ...(parsedCups !== undefined ? { cups: parsedCups } : {})
-        }
-      });
+      const updateData: any = {};
+      if (cleanN) updateData.name = cleanN;
+      if (cleanU) updateData.username = cleanU;
+      if (parsedPoints !== undefined) updateData.points = parsedPoints;
+      if (parsedCups !== undefined) updateData.cups = parsedCups;
+
+      // Absolute Direct Override: Update target player directly via Supabase
+      const { data: updated, error: updateErr } = await supabaseAdmin
+        .from('players')
+        .update(updateData)
+        .eq('id', player.id)
+        .select()
+        .single();
+
+      if (updateErr) {
+        console.error('[Admin update-info error]:', updateErr);
+        return res.status(500).json({ message: 'فشل تحديث بيانات المستخدم', error: updateErr.message });
+      }
 
       // Synchronize any duplicate records matching this username or name to prevent stale cache resurrection
       if (cleanN || cleanU) {
@@ -476,18 +478,28 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, currentAdmin
       if (!newPassword || !String(newPassword).trim()) {
         return res.status(400).json({ message: 'كلمة المرور الجديدة مطلوبة' });
       }
-      await prisma.player.update({
-        where: { id: player.id },
-        data: { password: String(newPassword).trim() }
-      });
+      const { error: resetErr } = await supabaseAdmin
+        .from('players')
+        .update({ password: String(newPassword).trim() })
+        .eq('id', player.id);
+
+      if (resetErr) {
+        return res.status(500).json({ message: 'فشل إعادة تعيين كلمة المرور', error: resetErr.message });
+      }
       return res.status(200).json({ success: true, message: 'تم إعادة تعيين كلمة المرور بنجاح' });
     }
 
     if (subAction === 'toggle-block') {
-      const updated = await prisma.player.update({
-        where: { id: player.id },
-        data: { isBlocked: Boolean(isBlocked) }
-      });
+      const { data: updated, error: blockErr } = await supabaseAdmin
+        .from('players')
+        .update({ isBlocked: Boolean(isBlocked) })
+        .eq('id', player.id)
+        .select()
+        .single();
+
+      if (blockErr) {
+        return res.status(500).json({ message: 'فشل تغيير حالة الحظر', error: blockErr.message });
+      }
       return res.status(200).json({
         success: true,
         message: updated.isBlocked ? 'تم حظر المستخدم ومنعه من تسجيل الدخول' : 'تم إلغاء حظر المستخدم بنجاح',
@@ -503,17 +515,21 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, currentAdmin
     if (!id) return res.status(400).json({ message: 'معرف المستخدم مطلوب' });
 
     // Safely delete associated rooms
-    await prisma.room.deleteMany({
-      where: {
-        OR: [
-          { player1Id: id },
-          { player2Id: id },
-          { winnerId: id }
-        ]
-      }
-    }).catch(() => {});
+    try {
+      await supabaseAdmin
+        .from('rooms')
+        .delete()
+        .or(`player1Id.eq.${id},player2Id.eq.${id},winnerId.eq.${id}`);
+    } catch (_) {}
 
-    await prisma.player.delete({ where: { id } });
+    const { error: delErr } = await supabaseAdmin
+      .from('players')
+      .delete()
+      .eq('id', id);
+
+    if (delErr) {
+      return res.status(500).json({ message: 'فشل حذف حساب المستخدم', error: delErr.message });
+    }
     return res.status(200).json({ success: true, message: 'تم حذف حساب المستخدم نهائياً' });
   }
 

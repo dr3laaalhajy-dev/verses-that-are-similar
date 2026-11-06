@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { prisma } from './_lib/prisma.js'
+import { supabaseAdmin } from './_lib/supabaseAdmin.js'
 import { handleCors } from './_lib/cors.js'
 import { getOrGenerateUniquePlayerId } from './_lib/uniquePlayerId.js'
 
@@ -236,12 +237,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // 1. Check Display Name
       if (trimmedName && trimmedName !== player.name) {
-        const existingName = await prisma.player.findFirst({
-          where: {
-            name: { equals: trimmedName, mode: 'insensitive' },
-            NOT: { id: player.id }
-          }
-        });
+        const { data: existingName } = await supabaseAdmin
+          .from('players')
+          .select('id')
+          .ilike('name', trimmedName)
+          .neq('id', player.id)
+          .maybeSingle();
+
         if (existingName) {
           return res.status(400).json({ error: 'هذا الاسم مستخدم بالفعل، يرجى اختيار اسم آخر' });
         }
@@ -265,22 +267,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         // Check if username taken by another player
-        const existingUsername = await prisma.player.findFirst({
-          where: {
-            OR: [
-              { username: cleanNewUsername },
-              { username: '@' + cleanNewUsername }
-            ],
-            NOT: { id: player.id }
-          }
-        });
+        const { data: existingUsername } = await supabaseAdmin
+          .from('players')
+          .select('id')
+          .or(`username.eq.${cleanNewUsername},username.eq.@${cleanNewUsername}`)
+          .neq('id', player.id)
+          .maybeSingle();
 
         if (existingUsername) {
           return res.status(400).json({ error: 'اسم المستخدم هذا مستخدم بالفعل، يرجى اختيار اسم آخر' });
         }
 
         updateData.username = cleanNewUsername;
-        updateData.usernameChangedAt = new Date();
+        updateData.usernameChangedAt = new Date().toISOString();
       }
 
       if (Object.keys(updateData).length === 0) {
