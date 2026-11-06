@@ -247,30 +247,153 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
     const channelName = `room_sync_${room.id}`;
     const existingChannel = supabase.getChannels().find(ch => ch.topic === `realtime:${channelName}`);
     if (existingChannel) {
-      try {
-        supabase.removeChannel(existingChannel);
-      } catch (_) {}
+      try { supabase.removeChannel(existingChannel); } catch (_) {}
     }
 
     const roomChannel = supabase.channel(channelName);
 
-    roomChannel
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms', filter: `id=eq.${room.id}` }, (payload: any) => {
-        if (payload?.new) {
-          setRoom((prev: any) => ({
-            ...prev,
-            ...payload.new,
-            player1: prev?.player1 || payload.new.player1,
-            participants: prev?.participants
+    // Helper: given a new rooms row, rebuild the participants array by merging
+    // existing participants with any new player IDs found in playersProgress.
+    const syncParticipants = async (newRoomRow: any, prevParticipants: any[]) => {
+      const prog: Record<string, any> = newRoomRow?.playersProgress || {};
+      const kickedList: string[] = Array.isArray(prog.__kicked) ? prog.__kicked : [];
+
+      // Collect numeric player IDs from playersProgress keys (skip meta keys like __kicked)
+      const progIds = Object.keys(prog)
+        .filter(k => !k.startsWith('__'))
+        .map(k => parseInt(k))
+        .filter(n => !isNaN(n) && n > 0);
+
+      // Always include player1Id
+      if (newRoomRow?.player1Id && !progIds.includes(Number(newRoomRow.player1Id))) {
+        progIds.push(Number(newRoomRow.player1Id));
+      }
+
+      // Find IDs not yet in the participants list
+      const existingIds = new Set(prevParticipants.map((p: any) => Number(p.id)));
+      const missingIds = progIds.filter(id => !existingIds.has(id));
+
+      let newEntries: any[] = [];
+      if (missingIds.length > 0) {
+        try {
+          const { data } = await supabase
+            .from('players')
+            .select('id, name, username, uniquePlayerId, activeFrame, seerahCompleted, generalCompleted')
+            .in('id', missingIds);
+          newEntries = (data || []).map((p: any) => ({
+            ...p,
+            isOnline: true,
+            status: 'joined',
+            score: prog[String(p.id)]?.score || 0
           }));
+        } catch (_) {}
+      }
+
+      // Remove kicked players and merge new ones
+      const merged = [
+        ...prevParticipants.filter((p: any) => {
+          const pIdStr = String(p.id);
+          const pName = String(p.name || '').trim().toLowerCase();
+          const pUser = String(p.username || '').trim().toLowerCase().replace(/^@+/, '');
+          return !kickedList.includes(pIdStr) && !kickedList.includes(pName) && !kickedList.includes(pUser);
+        }),
+        ...newEntries
+      ];
+
+      // Deduplicate by id
+      const seen = new Set<number>();
+      return merged.filter((p: any) => {
+        const n = Number(p.id);
+        if (seen.has(n)) return false;
+        seen.add(n);
+        return true;
+      });
+    };
+
+    roomChannel
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms', filter: `id=eq.${room.id}` }, async (payload: any) => {
+        if (!payload?.new) return;
+        const newRow = payload.new;
+
+        // We need current participants — capture via a ref snapshot before async work
+        setRoom((prev: any) => {
+          // Schedule async update: fetch missing players then apply
+          (async () => {
+            const updatedParticipants = await syncParticipants(newRow, prev?.participants || []);
+            setRoom((p: any) => p ? {
+              ...p,
+              ...newRow,
+              player1: p?.player1 || newRow.player1,
+              participants: updatedParticipants
+            } : p);
+          })();
+          // Synchronous interim update: merge room fields, keep existing participants
+          return prev ? {
+            ...prev,
+            ...newRow,
+            player1: prev?.player1 || newRow.player1,
+            participants: prev?.participants || []
+          } : prev;
+        });
+      })
+      .on('broadcast', { event: 'player_joined' }, ({ payload }) => {
+        // A player accepted invite and joined — add them to participants immediately
+        if (!payload) return;
+        const joinedId   = payload.playerId   || payload.userId;
+        const joinedName = payload.playerName || payload.name;
+        if (!joinedId && !joinedName) return;
+
+        setRoom((prev: any) => {
+          if (!prev) return prev;
+          const existing = (prev.participants || []).some((p: any) =>
+            (joinedId   && String(p.id) === String(joinedId)) ||
+            (joinedName && p.name && p.name.trim().toLowerCase() === String(joinedName).trim().toLowerCase())
+          );
+          if (existing) return prev;
+          const newParticipant = {
+            id: joinedId,
+            name: joinedName || payload.name || 'متسابق',
+            username: payload.playerUsername || payload.username || null,
+            isOnline: true,
+            status: 'joined',
+            score: 0
+          };
+          return { ...prev, participants: [...(prev.participants || []), newParticipant] };
+        });
+
+        // Reset invite status so button returns to idle
+        const match = friendsList.find(f =>
+          (joinedId   && String(f.id) === String(joinedId)) ||
+          (joinedName && f.name && f.name.trim().toLowerCase() === String(joinedName).trim().toLowerCase())
+        );
+        const target = match ? match.id : joinedId;
+        if (target) {
+          setInviteStatuses(prev => {
+            const next = { ...prev };
+            delete next[target];
+            return next;
+          });
         }
       })
       .on('broadcast', { event: 'player_left' }, ({ payload }) => {
         if (!payload) return;
         const leftId = payload.playerId || payload.friendId || payload.userId;
         const leftName = payload.playerName || payload.friendName || payload.name;
+
+        // Remove from participants immediately on leave
+        if (leftId || leftName) {
+          setRoom((prev: any) => {
+            if (!prev) return prev;
+            const updatedParts = (prev.participants || []).filter((p: any) =>
+              !(leftId   && String(p.id) === String(leftId)) &&
+              !(leftName && p.name && p.name.trim().toLowerCase() === String(leftName).trim().toLowerCase())
+            );
+            return { ...prev, participants: updatedParts };
+          });
+        }
+
         const match = friendsList.find(f =>
-          (leftId && String(f.id) === String(leftId)) ||
+          (leftId   && String(f.id) === String(leftId)) ||
           (leftName && f.name && f.name.trim().toLowerCase() === String(leftName).trim().toLowerCase())
         );
         const target = match ? match.id : leftId;

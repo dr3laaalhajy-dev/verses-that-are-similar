@@ -481,6 +481,19 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
         player2Id: room.player2Id || (room.player1Id !== player.id ? player.id : room.player2Id)
       }).eq('id', room.id)
 
+      // Broadcast player_joined so all waiting clients update their participants list immediately
+      supabaseAdmin.channel(`room_sync_${room.id}`).send({
+        type: 'broadcast',
+        event: 'player_joined',
+        payload: {
+          playerId: player.id,
+          playerName: player.name,
+          playerUsername: player.username || null,
+          roomId: room.id,
+          timestamp: Date.now()
+        }
+      }).catch(e => console.warn('[Join] Broadcast player_joined error:', e))
+
       const fullRoom = await getFullRoom(room.id)
       return res.status(200).json(fullRoom)
     } catch (error: any) {
