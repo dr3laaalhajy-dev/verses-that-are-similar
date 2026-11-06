@@ -55,10 +55,45 @@ export const SkillsResultsPage: React.FC<SkillsResultsPageProps> = ({
   const mistakesList = Array.isArray(sessionMistakes) ? sessionMistakes : [];
   const hasAnswers = mistakesList.length > 0 || (sessionCorrect + sessionWrong > 0);
 
-  // 1 point per correct answer (strictly 1x multiplier)
+  // 1 point per correct answer (strictly 1x multiplier, never multiplied by 10)
   const earnedPoints = sessionCorrect * 1;
-  // Ensure total balance displayed incorporates newly earned points correctly and is never lower than points earned
-  const displayTotalPoints = Math.max(Number(totalPoints || 0), earnedPoints);
+
+  // Real-time total balance: ensures total balance incorporates newly earned points and matches the database
+  const [liveTotalPoints, setLiveTotalPoints] = React.useState<number>(() => {
+    return Math.max(Number(totalPoints || 0), earnedPoints);
+  });
+
+  React.useEffect(() => {
+    setLiveTotalPoints(prev => Math.max(prev, Number(totalPoints || 0), earnedPoints));
+  }, [totalPoints, earnedPoints]);
+
+  React.useEffect(() => {
+    // Live query to fetch actual points from Supabase database
+    const pName = localStorage.getItem('quran_player_name');
+    const pUsername = localStorage.getItem('quran_player_username');
+    const pId = localStorage.getItem('quran_player_id');
+    const params = new URLSearchParams();
+    if (pId) params.append('playerId', pId);
+    if (pUsername) params.append('username', pUsername);
+    if (pName) params.append('name', pName);
+
+    if (pId || pUsername || pName) {
+      fetch(`/api/player-score?${params.toString()}`, { cache: 'no-store' })
+        .then(res => res.json())
+        .then(player => {
+          if (player && typeof player.points === 'number') {
+            const dbPoints = player.points;
+            setLiveTotalPoints(prev => Math.max(prev, dbPoints, earnedPoints));
+            try {
+              localStorage.setItem('quran_total_points', String(dbPoints));
+            } catch (_) {}
+          }
+        })
+        .catch(err => console.warn('[SkillsResultsPage] Error syncing live balance from DB:', err));
+    }
+  }, [earnedPoints]);
+
+  const displayTotalPoints = Math.max(liveTotalPoints, earnedPoints);
 
   return (
     <motion.div

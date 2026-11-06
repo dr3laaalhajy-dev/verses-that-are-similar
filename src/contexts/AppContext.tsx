@@ -1763,7 +1763,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           challengeId: metadata?.challengeId,
           roomId: metadata?.roomId
         })
-      }).catch(err => console.error('Failed to sync point to backend:', err));
+      })
+      .then(res => res.json())
+      .then(data => {
+        const p = data?.player || data?.user || data;
+        if (p && typeof p.points === 'number') {
+          setTotalPoints(p.points);
+          try {
+            localStorage.setItem('quran_total_points', String(p.points));
+          } catch (e) {}
+        }
+      })
+      .catch(err => console.error('Failed to sync point to backend:', err));
     }
 
     return nextVal;
@@ -4287,8 +4298,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       type: 'SURAH',
       userInputs: [...surahInputs],
       correctSurahsList: correctSurahs,
-      pointsEarned: correctCount,
-      totalPossible: correctSurahs.length,
+      pointsEarned: isFullyCorrect ? 1 : 0,
+      totalPossible: 1,
       isFullyCorrect
     }]);
 
@@ -5425,6 +5436,9 @@ ${versesList}
 
   const handleSelectChallenge = (c: any, idx: number) => {
     setCurrentChallengeIndex(idx);
+    setSessionCorrect(0);
+    setSessionWrong(0);
+    setSessionMistakes([]);
     setView('challenge');
   };
 

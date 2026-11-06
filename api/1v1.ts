@@ -559,9 +559,10 @@ function calculateResults(room: any, playersProgress: Record<string, any>) {
       pData.trophiesAwarded = 0
       continue
     }
-    const total = (pData.basePoints || 0) + (pData.speedBonusCount || 0) + (pData.accuracyBonus || 0) + (pData.completionBonus || 0)
-    pData.score = total
-    pData.finalTotalScore = total
+    // Unified score: score strictly represents the actual correct answers (1 point per correct answer, no multiplier)
+    const basePts = typeof pData.basePoints === 'number' ? pData.basePoints : (typeof pData.correctCount === 'number' ? pData.correctCount : 0)
+    pData.score = basePts
+    pData.finalTotalScore = basePts + (pData.speedBonusCount || 0) + (pData.accuracyBonus || 0) + (pData.completionBonus || 0)
   }
 
   // 4. Determine winner by highest final total score among qualified players only!
