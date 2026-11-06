@@ -77,7 +77,12 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
 
     setKickingPlayerId(targetPlayer.id);
     try {
-      const myHostId = app?.playerId || playerUsername || playerName;
+      // Send numeric playerId first (most reliable), then username/name as fallbacks
+      // The server findPlayer() supports all three formats
+      const myHostId =
+        app?.playerId != null ? app.playerId :
+        app?.uniquePlayerId || playerUsername || playerName;
+
       const res = await fetch('/api/1v1', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

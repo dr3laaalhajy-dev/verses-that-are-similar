@@ -1582,48 +1582,59 @@ async function handleKickPlayer(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const host = await findPlayer(targetHostId)
-    if (!host) return res.status(404).json({ error: 'Host not found' })
-
+    // Load room first so we can verify host by player1Id directly
     const { data: room } = await supabaseAdmin.from('rooms').select('*').eq('id', targetRoomId).maybeSingle()
     if (!room) return res.status(404).json({ error: 'Room not found' })
 
+    // Resolve host player (supports numeric id, username, name, uniquePlayerId)
+    const host = await findPlayer(targetHostId)
+    if (!host) {
+      console.warn('[Kick] Host not found for hostId:', targetHostId)
+      return res.status(404).json({ error: 'Host not found' })
+    }
+
     // Security check: Only room creator / host can kick players
-    if (host.id !== room.player1Id) {
+    // Use loose string comparison to handle type mismatches (number vs string from JSON)
+    if (String(host.id) !== String(room.player1Id)) {
+      console.warn('[Kick] Host mismatch — host.id:', host.id, 'room.player1Id:', room.player1Id)
       return res.status(403).json({ error: 'فقط منشئ الغرفة يمتلك صلاحية طرد اللاعبين' })
     }
 
+    // Resolve target player
     const targetPlayer = await findPlayer(targetPlayerId, targetPlayerName)
-    if (!targetPlayer) return res.status(404).json({ error: 'Target player not found' })
+    if (!targetPlayer) {
+      console.warn('[Kick] Target player not found — targetPlayerId:', targetPlayerId, 'targetPlayerName:', targetPlayerName)
+      return res.status(404).json({ error: 'Target player not found' })
+    }
 
-    if (targetPlayer.id === room.player1Id) {
+    // Cannot kick the host
+    if (String(targetPlayer.id) === String(room.player1Id)) {
       return res.status(400).json({ error: 'لا يمكن طرد منشئ الغرفة' })
     }
 
     let playersProgress = (room.playersProgress as any) || {}
 
-    // 1. Remove from active participants & progress
+    // 1. Remove kicked player from active progress entries
     delete playersProgress[String(targetPlayer.id)]
     delete playersProgress[targetPlayer.id]
-    delete playersProgress[targetPlayer.name]
+    if (targetPlayer.name) delete playersProgress[targetPlayer.name]
 
-    // 2. Add to banned/kicked list so they can never rejoin
+    // 2. Add all identifiers to __kicked ban-list so they can never rejoin
     const kickedList: string[] = Array.isArray(playersProgress.__kicked) ? playersProgress.__kicked : []
-    const newIdentifiers = [
+    const newIdentifiers: string[] = [
       String(targetPlayer.id),
       String(targetPlayer.name || '').trim().toLowerCase(),
       targetPlayer.username ? String(targetPlayer.username).trim().toLowerCase().replace(/^@+/, '') : null,
       targetPlayer.uniquePlayerId ? String(targetPlayer.uniquePlayerId).toUpperCase() : null
     ].filter(Boolean) as string[]
-
     playersProgress.__kicked = Array.from(new Set([...kickedList, ...newIdentifiers]))
 
-    // 3. Reset player2Id if the kicked player was player2
+    // 3. Reassign player2Id if the kicked player was occupying that slot
     let newPlayer2Id = room.player2Id
-    if (room.player2Id === targetPlayer.id) {
+    if (room.player2Id != null && String(room.player2Id) === String(targetPlayer.id)) {
       const remainingGuestIds = Object.keys(playersProgress)
         .map(gid => parseInt(gid))
-        .filter(gid => !isNaN(gid) && gid !== room.player1Id)
+        .filter(gid => !isNaN(gid) && String(gid) !== String(room.player1Id))
       newPlayer2Id = remainingGuestIds.length > 0 ? remainingGuestIds[0] : null
     }
 
@@ -1638,70 +1649,64 @@ async function handleKickPlayer(req: VercelRequest, res: VercelResponse) {
       playerUsername: targetPlayer.username,
       timestamp: Date.now()
     }
-
     playersProgress.__lastReaction = kickEventPayload
 
-    // 4. Update room in DB
-    await supabaseAdmin.from('rooms').update({
-      playersProgress,
-      player2Id: newPlayer2Id,
-      lastReaction: kickEventPayload
-    }).eq('id', room.id)
+    // 4. Persist updated room state
+    const { error: updateError } = await supabaseAdmin
+      .from('rooms')
+      .update({ playersProgress, player2Id: newPlayer2Id, lastReaction: kickEventPayload })
+      .eq('id', room.id)
 
-    // 5. Clean up in Supabase:
-    // a) Remove from room_participants table
-    try {
-      await Promise.allSettled([
-        supabaseAdmin.from('room_participants').delete().match({ room_id: room.id, user_id: String(targetPlayer.id) }),
-        supabaseAdmin.from('room_participants').delete().match({ room_id: room.id, user_id: targetPlayer.name }),
-        supabaseAdmin.from('room_participants').delete().match({ room_id: room.id, name: targetPlayer.name }),
-        supabaseAdmin.from('who_am_i_submissions').delete().match({ room_id: room.id, user_id: String(targetPlayer.id) }),
-        supabaseAdmin.from('who_am_i_answers').delete().match({ room_id: room.id, user_id: String(targetPlayer.id) })
-      ])
-    } catch (e) {
-      console.warn('[Kick] Error cleaning room_participants:', e)
+    if (updateError) {
+      console.error('[Kick] Failed to update room:', updateError.message)
+      return res.status(500).json({ error: 'فشل تحديث بيانات الغرفة', message: updateError.message })
     }
 
-    // b) Invalidate invitation in notifications table
+    // 5a. Clean up auxiliary tables — errors here are non-fatal
+    await Promise.allSettled([
+      supabaseAdmin.from('room_participants').delete().eq('room_id', room.id).eq('user_id', String(targetPlayer.id)),
+      supabaseAdmin.from('room_participants').delete().eq('room_id', room.id).eq('player_id', String(targetPlayer.id)),
+    ]).catch(e => console.warn('[Kick] Cleanup room_participants error:', e))
+
+    // 5b. Invalidate any pending room-invite notifications for the kicked player
     try {
-      await supabaseAdmin
+      const { error: nErr } = await supabaseAdmin
         .from('notifications')
         .delete()
         .eq('user_id', targetPlayer.id)
         .like('data', `%"roomId":"${room.id}"%`)
+      if (nErr) console.warn('[Kick] Notification cleanup error:', nErr.message)
     } catch (e) {
-      console.warn('[Kick] Error invalidating notifications:', e)
+      console.warn('[Kick] Notification cleanup catch:', e)
     }
 
-    // c) Broadcast Realtime event so client exits immediately
-    try {
-      await supabaseAdmin.channel(`room_sync_${room.id}`).send({
-        type: 'broadcast',
-        event: 'player_kicked',
-        payload: kickEventPayload
-      })
-      await supabaseAdmin.channel(`room_sync_app_${room.id}`).send({
-        type: 'broadcast',
-        event: 'player_kicked',
-        payload: kickEventPayload
-      })
+    // 5c. Broadcast kick event over all relevant Realtime channels
+    const broadcastKick = async () => {
+      const channels = [
+        `room_sync_${room.id}`,
+        `room_sync_app_${room.id}`
+      ]
       const targetIdent = (targetPlayer.username || targetPlayer.name || '').toLowerCase().replace(/^@+/, '')
-      if (targetIdent) {
-        await supabaseAdmin.channel(`player-invites:${targetIdent}`).send({
-          type: 'broadcast',
-          event: 'player_kicked',
-          payload: kickEventPayload
-        })
-      }
-    } catch (e) {
-      console.warn('[Kick] Error broadcasting kick event:', e)
+      if (targetIdent) channels.push(`player-invites:${targetIdent}`)
+
+      await Promise.allSettled(
+        channels.map(ch =>
+          supabaseAdmin.channel(ch).send({
+            type: 'broadcast',
+            event: 'player_kicked',
+            payload: kickEventPayload
+          })
+        )
+      )
     }
+    broadcastKick().catch(e => console.warn('[Kick] Broadcast error:', e))
 
     const fullRoom = await getFullRoom(room.id)
     return res.status(200).json({ success: true, message: 'تم طرد اللاعب بنجاح', room: fullRoom })
+
   } catch (error: any) {
-    console.error('Error in handleKickPlayer:', error)
-    return res.status(500).json({ error: 'فشل طرد اللاعب', message: error.message })
+    console.error('[Kick] Unhandled error in handleKickPlayer:', error)
+    return res.status(500).json({ error: 'فشل طرد اللاعب', message: error?.message || String(error) })
   }
 }
 
