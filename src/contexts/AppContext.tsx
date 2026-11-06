@@ -3211,8 +3211,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         if (myIds.some(id => kickedTargets.includes(id))) {
           toast.error('تم إخراجك من الغرفة من قِبل المنشئ');
+
+          // Full room state reset — ensures no stale state blocks incoming invite for same room
           setRoom(null);
+          setSkillsType(null);
+          setSkillsFeedback(false);
+          setHasAnsweredCurrentQuestion(false);
+          setSelectedOption(null);
+          setMatchedIds(new Set());
+          setIsRoomLoading(false);
+          setIncomingRoomInvite(null);  // clear any stale invite modal
+          setChallenges([]);
+          setCurrentChallengeIndex(0);
+
           localStorage.removeItem('activeRoomId');
+          localStorage.removeItem('currentRoomId');
+          sessionStorage.removeItem(`is_creator_${payload.roomId || ''}`);
+
+          // Re-subscribe invite channels in case the kick handler caused a re-render that
+          // dropped the callback. Channels themselves stay alive (singleton pattern).
+          const identifiers = [
+            uniquePlayerId,
+            playerUsername,
+            playerName,
+            playerId ? String(playerId) : null,
+            playerId ? `user_${playerId}` : null
+          ].filter(Boolean) as string[];
+          friendsRealtimeService.subscribeToInvites(identifiers, (invite) => {
+            const myName = (playerName || '').trim().toLowerCase();
+            const myUser = (playerUsername || '').trim().toLowerCase().replace(/^@+/, '');
+            const hostN = (invite.hostName || '').trim().toLowerCase();
+            const hostU = (invite.hostUsername || '').trim().toLowerCase().replace(/^@+/, '');
+            if ((hostN && hostN === myName) || (hostU && hostU === myUser)) return;
+            setIncomingRoomInvite(invite);
+          });
+
           setView('home');
         }
       })

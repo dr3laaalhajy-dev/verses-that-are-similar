@@ -43,6 +43,8 @@ class FriendsRealtimeService {
   private onlineIdentities: Set<string> = new Set();
   private presenceListeners: Set<(onlineKeys: Set<string>) => void> = new Set();
   private isTracking = false;
+  // Callback registered by the current subscriber — replaced on every subscribeToInvites() call
+  private inviteCallback: ((invite: RoomInvitePayload) => void) | null = null;
 
   /**
    * Initializes Presence tracking for the current player.
@@ -179,39 +181,68 @@ class FriendsRealtimeService {
   /**
    * Listen for incoming room invites for current user
    */
+  /**
+   * Listen for incoming room invites for current user.
+   *
+   * Channels are persistent singletons keyed by identifier — they are created
+   * once and reused across re-renders / re-subscriptions so that a kick or
+   * view transition never silently drops the invite listener.
+   *
+   * Calling subscribeToInvites() again (e.g. after a dependency change) simply
+   * replaces the callback — existing channels stay alive.
+   */
   public subscribeToInvites(
     identifiers: string[],
     onInviteReceived: (invite: RoomInvitePayload) => void
   ): () => void {
-    const activeSubs: RealtimeChannel[] = [];
+    // Store the latest callback so existing channels always call the fresh one
+    this.inviteCallback = onInviteReceived;
 
     identifiers.forEach(raw => {
       const clean = String(raw || '').trim().replace(/^@+/, '').toLowerCase();
       if (!clean) return;
+
+      // Skip if this channel is already open
+      if (this.inviteChannels.has(clean)) return;
 
       const channelName = `player-invites:${clean}`;
       const channel = supabase.channel(channelName);
 
       channel
         .on('broadcast', { event: 'room-invite' }, ({ payload }) => {
-          if (payload && payload.roomId) {
-            onInviteReceived(payload as RoomInvitePayload);
+          if (payload && payload.roomId && this.inviteCallback) {
+            this.inviteCallback(payload as RoomInvitePayload);
           }
         })
-        .subscribe();
+        .subscribe((status) => {
+          if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+            // Channel died — remove from map so it gets recreated on next subscribe call
+            this.inviteChannels.delete(clean);
+            console.warn(`[FriendsRealtime] Invite channel for "${clean}" closed, will reconnect on next subscription`);
+          }
+        });
 
-      activeSubs.push(channel);
+      this.inviteChannels.set(clean, channel);
     });
 
+    // Return a "unsubscribe" function that only replaces the callback — channels remain open
     return () => {
-      activeSubs.forEach(ch => {
-        try {
-          supabase.removeChannel(ch);
-        } catch (e) {
-          console.warn('Error removing invite channel:', e);
-        }
-      });
+      // Only clear the callback; DO NOT remove channels (they must survive view transitions)
+      if (this.inviteCallback === onInviteReceived) {
+        this.inviteCallback = null;
+      }
     };
+  }
+
+  /**
+   * Tear down ALL invite channels (call only on full app logout/unmount).
+   */
+  public removeAllInviteChannels() {
+    this.inviteChannels.forEach(ch => {
+      try { supabase.removeChannel(ch); } catch (_) {}
+    });
+    this.inviteChannels.clear();
+    this.inviteCallback = null;
   }
 
   /**
