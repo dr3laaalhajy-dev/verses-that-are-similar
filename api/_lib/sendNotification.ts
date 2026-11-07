@@ -140,7 +140,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Realtime broadcast via Supabase channel if record was created
     if (savedNotification) {
       try {
-        await supabaseAdmin.channel('realtime_public_notifications').send({
+        await supabaseAdmin.channel('public:notifications').send({
           type: 'broadcast',
           event: 'NOTIFICATION_UPDATED',
           payload: savedNotification

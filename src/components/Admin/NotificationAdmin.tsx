@@ -802,6 +802,16 @@ export const NotificationAdmin: React.FC<NotificationAdminProps> = ({
           }
 
           if (!sbErr) {
+            try {
+              for (const p of insertPayload) {
+                supabase.channel('public:notifications').send({
+                  type: 'broadcast',
+                  event: 'NOTIFICATION_UPDATED',
+                  payload: p
+                }).catch(() => {});
+              }
+            } catch {}
+
             setResultMessage({
               type: 'success',
               text: successToastText

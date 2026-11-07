@@ -582,7 +582,7 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
     // تنفيذ استعلام جلب الإشعارات هنا
     fetchNotifications(currentUser.id);
 
-    const channelName = `realtime_notifications_${currentUser.id}`;
+    const channelName = 'public:notifications';
     const channel = supabase
       .channel(channelName)
       .on(
@@ -593,8 +593,15 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
           const newNotif = payload.new as NotificationItem;
           if (!newNotif) return;
 
-          // أضف الإشعار للواجهة فقط إذا كان مخصصاً لهذا المستخدم أو إذا كان إشعاراً عاماً (null)
-          if (newNotif.receiver_id === currentUser.id || newNotif.receiver_id === null || !newNotif.receiver_id) {
+          // فلترة الإشعار: هل هو عام؟ أو هل يطابق آي دي المستخدم الحالي؟
+          const isGlobal = newNotif.receiver_id === null || !newNotif.receiver_id;
+          const isForMe = Boolean(
+            newNotif.receiver_id !== null &&
+            newNotif.receiver_id !== undefined &&
+            String(newNotif.receiver_id) === String(currentUser.id)
+          );
+
+          if (isGlobal || isForMe) {
             setNotifications(prev => {
               if (prev.some(n => n.id === newNotif.id)) return prev;
               const nextList = [newNotif, ...prev];
@@ -618,7 +625,14 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
           console.log('[NotificationBell] Notification updated via Realtime:', payload.new);
           const updated = payload.new as NotificationItem;
           if (updated?.id) {
-            if (updated.receiver_id === currentUser.id || updated.receiver_id === null || !updated.receiver_id) {
+            const isGlobal = updated.receiver_id === null || !updated.receiver_id;
+            const isForMe = Boolean(
+              updated.receiver_id !== null &&
+              updated.receiver_id !== undefined &&
+              String(updated.receiver_id) === String(currentUser.id)
+            );
+
+            if (isGlobal || isForMe) {
               setNotifications(prev => {
                 const nextList = prev.map(n => n.id === updated.id ? { ...n, ...updated } : n);
                 // Recalculate unread with updated item's updated_at timestamp!

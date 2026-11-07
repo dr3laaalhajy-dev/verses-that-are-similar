@@ -103,7 +103,7 @@ export async function broadcastNotification({
 
       if (savedNotification) {
         try {
-          await supabaseAdmin.channel('realtime_public_notifications').send({
+          await supabaseAdmin.channel('public:notifications').send({
             type: 'broadcast',
             event: 'NOTIFICATION_UPDATED',
             payload: savedNotification
