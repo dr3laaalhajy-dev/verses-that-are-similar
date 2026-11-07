@@ -15,6 +15,7 @@ export interface SurahFeedbackData {
   isFullyCorrect: boolean;
   correctSurahs: string[];
   outOfRangeAnswers?: OutOfRangeSurah[];
+  discoveredBonusSurahs?: string[];
 }
 
 export interface SurahChallengeUIProps {
@@ -77,11 +78,18 @@ export const SurahChallengeUI: React.FC<SurahChallengeUIProps> = ({
         {inputs.map((input: string, idx: number) => {
           let inputStyle = "bg-white border-slate-100 focus:border-brand-gold";
           let isMatch = false;
+          let isBonus = false;
           if (feedback && surahFeedbackData) {
-            isMatch = surahFeedbackData.correctSurahs.some((c: string) => normalizeSurahName(c) === normalizeSurahName(input));
-            inputStyle = isMatch
-              ? "bg-emerald-50 border-emerald-500 text-emerald-800 ring-2 ring-emerald-300"
-              : "bg-red-50 border-red-500 text-red-800 ring-2 ring-red-300";
+            const normInput = normalizeSurahName(input);
+            const isReqMatch = surahFeedbackData.correctSurahs.some((c: string) => normalizeSurahName(c) === normInput);
+            const isBonMatch = (surahFeedbackData.discoveredBonusSurahs || []).some((b: string) => normalizeSurahName(b) === normInput);
+            isMatch = isReqMatch || isBonMatch;
+            isBonus = isBonMatch && !isReqMatch;
+            inputStyle = isBonus
+              ? "bg-amber-50 border-amber-500 text-amber-900 ring-2 ring-amber-300"
+              : isMatch
+                ? "bg-emerald-50 border-emerald-500 text-emerald-800 ring-2 ring-emerald-300"
+                : "bg-red-50 border-red-500 text-red-800 ring-2 ring-red-300";
           }
           return (
             <motion.div key={idx} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: idx * 0.1 }} className="relative">
@@ -97,7 +105,9 @@ export const SurahChallengeUI: React.FC<SurahChallengeUIProps> = ({
               />
               {feedback && surahFeedbackData && (
                 <div className="absolute left-3 top-1/2 -translate-y-1/2">
-                  {isMatch ? (
+                  {isBonus ? (
+                    <span className="text-base animate-bounce" title="مكافأة الحُفّاظ!">🎁</span>
+                  ) : isMatch ? (
                     <CheckCircle className="w-5 h-5 text-emerald-600 animate-bounce" />
                   ) : (
                     <XCircle className="w-5 h-5 text-red-500" />
@@ -142,6 +152,27 @@ export const SurahChallengeUI: React.FC<SurahChallengeUIProps> = ({
                     {surahFeedbackData.correctSurahs.join('، ')}
                   </span>
                 </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {/* بانر مكافأة الحُفّاظ عند اكتشاف إجابات بونص خارج النطاق */}
+        {feedback && surahFeedbackData?.discoveredBonusSurahs && surahFeedbackData.discoveredBonusSurahs.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="w-full p-3 sm:p-3.5 rounded-xl md:rounded-2xl bg-amber-500/10 border-2 border-amber-400 text-amber-950 dark:text-amber-200 text-right shadow-xs"
+          >
+            <div className="flex items-center gap-2.5">
+              <span className="text-2xl animate-bounce">🎁</span>
+              <div>
+                <span className="font-black text-xs sm:text-sm text-amber-800 dark:text-amber-200 block">
+                  مكافأة الحُفّاظ (+{surahFeedbackData.discoveredBonusSurahs.length * 2} نقطة بونص)!
+                </span>
+                <p className="text-[11px] sm:text-xs font-bold text-amber-700 dark:text-amber-300 mt-0.5">
+                  ما شاء الله! لقد اكتشفت مواضع إضافية للآية الكريمة خارج النطاق: {surahFeedbackData.discoveredBonusSurahs.map(s => `سورة ${s}`).join('، ')}
+                </p>
               </div>
             </div>
           </motion.div>

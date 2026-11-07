@@ -46,6 +46,7 @@ export interface SpeedChallengePageProps {
   skillsCorrectAnswer: any;
   playerUsername: string | null;
   playerName: string | null;
+  handleSurahInputChange?: (idx: number, val: string) => void;
 }
 
 export const SpeedChallengePage: React.FC<SpeedChallengePageProps> = ({
@@ -76,6 +77,7 @@ export const SpeedChallengePage: React.FC<SpeedChallengePageProps> = ({
   wordStates,
   surahInputs,
   setSurahInputs,
+  handleSurahInputChange,
   handleSubmitSurah,
   skillsFeedback,
   surahFeedbackData,
@@ -296,11 +298,11 @@ export const SpeedChallengePage: React.FC<SpeedChallengePageProps> = ({
             <SurahChallengeUI
               verseText={KEYWORD}
               inputs={surahInputs}
-              onInputChange={(idx: number, val: string) => {
+              onInputChange={handleSurahInputChange || ((idx: number, val: string) => {
                 const newInputs = [...surahInputs];
                 newInputs[idx] = val;
                 setSurahInputs(newInputs);
-              }}
+              })}
               onSubmit={handleSubmitSurah}
               feedback={skillsFeedback}
               surahFeedbackData={surahFeedbackData}

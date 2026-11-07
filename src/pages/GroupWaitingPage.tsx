@@ -1167,6 +1167,14 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
                   handleCreateV1={handleSaveRoomSettings}
                   isCreatingRoom={isSavingSettings || app?.isSavingRoomSettings}
                   setView={setView}
+                  roomScopeMode={app?.roomScopeMode}
+                  setRoomScopeMode={app?.setRoomScopeMode}
+                  roomSelectedJuzs={app?.roomSelectedJuzs}
+                  setRoomSelectedJuzs={app?.setRoomSelectedJuzs}
+                  roomSelectedSurahs={app?.roomSelectedSurahs}
+                  setRoomSelectedSurahs={app?.setRoomSelectedSurahs}
+                  roomSurahSearch={app?.roomSurahSearch}
+                  setRoomSurahSearch={app?.setRoomSurahSearch}
                 />
               </motion.div>
             </div>

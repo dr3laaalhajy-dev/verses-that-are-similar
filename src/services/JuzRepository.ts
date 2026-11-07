@@ -361,17 +361,111 @@ export const getSelectedJuzRange = (
   return [];
 };
 
+export interface ActiveScope {
+  scopeMode: 'juz' | 'surah';
+  selectedJuzs: number[];
+  selectedSurahs: string[];
+}
+
 /**
- * Splits correct surah answers into in-range and out-of-range based on the active Juz range.
- * Includes a fallback safety guarantee: if all answers fall out of range, at least one is kept in range.
+ * Extracts currently active scope (Juzs or Surahs) from room configuration,
+ * solo skills selection, or single juz selection.
  */
-export const splitSurahAnswersByJuzRange = (
+export const getActiveScope = (
+  room?: any,
+  selectedSkillJuzs?: number[] | null,
+  selectedSkillSurahs?: string[] | null,
+  selectedJuz?: number | null
+): ActiveScope => {
+  // 1. Room configuration
+  if (room) {
+    let rJuzs: number[] = [];
+    if (Array.isArray(room.selected_juz) && room.selected_juz.length > 0) {
+      rJuzs = room.selected_juz;
+    } else if (Array.isArray(room.selectedJuzRange) && room.selectedJuzRange.length > 0) {
+      rJuzs = room.selectedJuzRange;
+    } else if (Array.isArray(room.selectedJuzs) && room.selectedJuzs.length > 0) {
+      rJuzs = room.selectedJuzs;
+    } else if (room.surahFilters && Array.isArray(room.surahFilters.selected_juz)) {
+      rJuzs = room.surahFilters.selected_juz;
+    } else if (room.surahFilters && Array.isArray(room.surahFilters.juzs)) {
+      rJuzs = room.surahFilters.juzs;
+    } else if (Array.isArray(room.surahFilters) && typeof room.surahFilters[0] === 'number') {
+      rJuzs = room.surahFilters;
+    }
+
+    let rSurahs: string[] = [];
+    if (Array.isArray(room.selected_surahs) && room.selected_surahs.length > 0) {
+      rSurahs = room.selected_surahs;
+    } else if (Array.isArray(room.selectedSurahs) && room.selectedSurahs.length > 0) {
+      rSurahs = room.selectedSurahs;
+    } else if (room.surahFilters && Array.isArray(room.surahFilters.selected_surahs)) {
+      rSurahs = room.surahFilters.selected_surahs;
+    } else if (room.surahFilters && Array.isArray(room.surahFilters.surahs)) {
+      rSurahs = room.surahFilters.surahs;
+    } else if (Array.isArray(room.surahFilters) && typeof room.surahFilters[0] === 'string') {
+      rSurahs = room.surahFilters;
+    }
+
+    const rMode: 'juz' | 'surah' = (room.scopeMode || room.surahFilters?.scopeMode) === 'surah' || (rSurahs.length > 0 && rJuzs.length === 0)
+      ? 'surah'
+      : 'juz';
+
+    if (rMode === 'surah' && rSurahs.length > 0) {
+      return { scopeMode: 'surah', selectedJuzs: [], selectedSurahs: rSurahs };
+    }
+    if (rJuzs.length > 0 && rJuzs.length < 30) {
+      return { scopeMode: 'juz', selectedJuzs: rJuzs, selectedSurahs: [] };
+    }
+
+    // Check room category or categoryFilter
+    const catStr = String(room.categoryFilter || room.category || '');
+    if (catStr) {
+      const parsedJuzs: number[] = [];
+      for (const [juzStr, name] of Object.entries(JUZ_NAMES_AR)) {
+        const jNum = Number(juzStr);
+        if (catStr.includes(name) || catStr.includes(`الجزء ${jNum}`) || catStr.includes(`جزء ${jNum}`)) {
+          if (!parsedJuzs.includes(jNum)) parsedJuzs.push(jNum);
+        }
+      }
+      if (parsedJuzs.length > 0 && parsedJuzs.length < 30) {
+        return { scopeMode: 'juz', selectedJuzs: parsedJuzs.sort((a, b) => a - b), selectedSurahs: [] };
+      }
+    }
+  }
+
+  // 2. Solo skills selection
+  if (Array.isArray(selectedSkillSurahs) && selectedSkillSurahs.length > 0) {
+    return { scopeMode: 'surah', selectedJuzs: [], selectedSurahs: selectedSkillSurahs };
+  }
+  if (Array.isArray(selectedSkillJuzs) && selectedSkillJuzs.length > 0 && selectedSkillJuzs.length < 30) {
+    return { scopeMode: 'juz', selectedJuzs: selectedSkillJuzs, selectedSurahs: [] };
+  }
+
+  // 3. Single selected Juz
+  if (typeof selectedJuz === 'number' && selectedJuz >= 1 && selectedJuz <= 30) {
+    return { scopeMode: 'juz', selectedJuzs: [selectedJuz], selectedSurahs: [] };
+  }
+
+  return { scopeMode: 'juz', selectedJuzs: [], selectedSurahs: [] };
+};
+
+/**
+ * Splits correct surah answers into required answers (within scope) and bonus answers (outside scope).
+ * Includes Easter Egg / Fallback safety guarantee: if all answers fall out of scope, at least one is kept required.
+ */
+export const splitSurahAnswersByScope = (
   rawSurahs: string[],
-  selectedJuzRange?: number[] | null,
+  scope?: { scopeMode?: 'juz' | 'surah'; selectedJuzs?: number[] | null; selectedSurahs?: string[] | null },
   verses?: any[]
-): SplitSurahAnswersResult => {
+): {
+  requiredAnswers: SurahAnswerWithDetails[];
+  bonusAnswers: SurahAnswerWithDetails[];
+  inRangeAnswers: SurahAnswerWithDetails[];
+  outOfRangeAnswers: SurahAnswerWithDetails[];
+} => {
   if (!rawSurahs || rawSurahs.length === 0) {
-    return { inRangeAnswers: [], outOfRangeAnswers: [] };
+    return { requiredAnswers: [], bonusAnswers: [], inRangeAnswers: [], outOfRangeAnswers: [] };
   }
 
   const normalize = (name: string) =>
@@ -414,35 +508,67 @@ export const splitSurahAnswersByJuzRange = (
     };
   });
 
-  const hasRangeFilter = Array.isArray(selectedJuzRange) && selectedJuzRange.length > 0 && selectedJuzRange.length < 30;
-  if (!hasRangeFilter) {
+  const scopeMode = scope?.scopeMode || (scope?.selectedSurahs?.length ? 'surah' : 'juz');
+  const selectedSurahs = scope?.selectedSurahs || [];
+  const selectedJuzs = scope?.selectedJuzs || [];
+
+  const isSurahFilterActive = scopeMode === 'surah' && selectedSurahs.length > 0;
+  const isJuzFilterActive = scopeMode === 'juz' && selectedJuzs.length > 0 && selectedJuzs.length < 30;
+
+  if (!isSurahFilterActive && !isJuzFilterActive) {
     return {
+      requiredAnswers: allAnswers,
+      bonusAnswers: [],
       inRangeAnswers: allAnswers,
       outOfRangeAnswers: []
     };
   }
 
-  const rangeSet = new Set(selectedJuzRange);
-  const inRangeAnswers: SurahAnswerWithDetails[] = [];
-  let outOfRangeAnswers: SurahAnswerWithDetails[] = [];
+  const requiredAnswers: SurahAnswerWithDetails[] = [];
+  let bonusAnswers: SurahAnswerWithDetails[] = [];
 
-  allAnswers.forEach(ans => {
-    const isInRange = ans.juzs.some(j => rangeSet.has(j));
-    if (isInRange) {
-      inRangeAnswers.push(ans);
-    } else {
-      outOfRangeAnswers.push(ans);
-    }
-  });
+  if (isSurahFilterActive) {
+    const normSelected = selectedSurahs.map(s => normalize(s));
+    allAnswers.forEach(ans => {
+      const normAns = normalize(ans.surah);
+      if (normSelected.includes(normAns)) {
+        requiredAnswers.push(ans);
+      } else {
+        bonusAnswers.push(ans);
+      }
+    });
+  } else {
+    const rangeSet = new Set(selectedJuzs);
+    allAnswers.forEach(ans => {
+      if (ans.juzs.some(j => rangeSet.has(j))) {
+        requiredAnswers.push(ans);
+      } else {
+        bonusAnswers.push(ans);
+      }
+    });
+  }
 
-  // Fallback: If all surahs fell outside range, pick the first answer as inRange
-  if (inRangeAnswers.length === 0 && allAnswers.length > 0) {
-    inRangeAnswers.push(allAnswers[0]);
-    outOfRangeAnswers = allAnswers.slice(1);
+  // Fallback: If all surahs fell outside range, pick the first answer as required
+  if (requiredAnswers.length === 0 && allAnswers.length > 0) {
+    requiredAnswers.push(allAnswers[0]);
+    bonusAnswers = allAnswers.slice(1);
   }
 
   return {
-    inRangeAnswers,
-    outOfRangeAnswers
+    requiredAnswers,
+    bonusAnswers,
+    inRangeAnswers: requiredAnswers,
+    outOfRangeAnswers: bonusAnswers
   };
+};
+
+/**
+ * Backwards compatibility wrapper for splitSurahAnswersByJuzRange.
+ */
+export const splitSurahAnswersByJuzRange = (
+  rawSurahs: string[],
+  selectedJuzRange?: number[] | null,
+  verses?: any[]
+): SplitSurahAnswersResult => {
+  return splitSurahAnswersByScope(rawSurahs, { scopeMode: 'juz', selectedJuzs: selectedJuzRange }, verses);
 };

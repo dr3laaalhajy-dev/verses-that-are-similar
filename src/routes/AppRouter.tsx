@@ -135,6 +135,14 @@ export const AppRouter: React.FC = () => {
           handleCreateV1={app.handleCreateV1}
           isCreatingRoom={app.isCreatingRoom}
           setView={app.setView}
+          roomScopeMode={app.roomScopeMode}
+          setRoomScopeMode={app.setRoomScopeMode}
+          roomSelectedJuzs={app.roomSelectedJuzs}
+          setRoomSelectedJuzs={app.setRoomSelectedJuzs}
+          roomSelectedSurahs={app.roomSelectedSurahs}
+          setRoomSelectedSurahs={app.setRoomSelectedSurahs}
+          roomSurahSearch={app.roomSurahSearch}
+          setRoomSurahSearch={app.setRoomSurahSearch}
         />
       ) : app.view === "group_waiting" ? (
         <GroupWaitingPage
@@ -202,6 +210,7 @@ export const AppRouter: React.FC = () => {
           wordStates={app.wordStates}
           surahInputs={app.surahInputs}
           setSurahInputs={app.setSurahInputs}
+          handleSurahInputChange={app.handleSurahInputChange}
           handleSubmitSurah={app.handleSubmitSurah}
           skillsFeedback={app.skillsFeedback}
           surahFeedbackData={app.surahFeedbackData}
@@ -621,6 +630,7 @@ export const AppRouter: React.FC = () => {
           handleOpenTafsir={app.handleOpenTafsir}
           surahInputs={app.surahInputs}
           setSurahInputs={app.setSurahInputs}
+          handleSurahInputChange={app.handleSurahInputChange}
           handleSubmitSurah={app.handleSubmitSurah}
           skillsFeedback={app.skillsFeedback}
           surahFeedbackData={app.surahFeedbackData}

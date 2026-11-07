@@ -67,6 +67,7 @@ export interface ChallengeGamePageProps {
   playerUsername: string | null;
   playerName: string | null;
   transcript: string;
+  handleSurahInputChange?: (idx: number, val: string) => void;
 }
 
 export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
@@ -124,7 +125,8 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
   setRoom,
   playerUsername,
   playerName,
-  transcript
+  transcript,
+  handleSurahInputChange
 }) => {
   const app = useApp();
   const appRef = useRef(app);
@@ -678,11 +680,11 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
         <SurahChallengeUI
           verseText={KEYWORD}
           inputs={surahInputs}
-          onInputChange={(idx: number, val: string) => {
+          onInputChange={handleSurahInputChange || app?.handleSurahInputChange || ((idx: number, val: string) => {
             const newInputs = [...surahInputs];
             newInputs[idx] = val;
             setSurahInputs(newInputs);
-          }}
+          })}
           onSubmit={handleSubmitSurah}
           feedback={skillsFeedback}
           onSkip={handleSkip}

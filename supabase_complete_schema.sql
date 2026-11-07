@@ -135,6 +135,8 @@ CREATE TABLE IF NOT EXISTS public.rooms (
 );
 CREATE INDEX IF NOT EXISTS idx_rooms_code ON public.rooms(code);
 CREATE INDEX IF NOT EXISTS idx_rooms_status ON public.rooms(status);
+ALTER TABLE public.rooms ADD COLUMN IF NOT EXISTS selected_juz JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE public.rooms ADD COLUMN IF NOT EXISTS selected_surahs JSONB DEFAULT '[]'::jsonb;
 
 -- 9. جدول إعدادات النظام وإصدارات التطبيق (system_settings)
 CREATE TABLE IF NOT EXISTS public.system_settings (

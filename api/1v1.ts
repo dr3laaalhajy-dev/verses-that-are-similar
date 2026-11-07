@@ -308,27 +308,40 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
         : selectedChallenges.map(c => c.id)
       const finalQuestionCount = selectedChallenges.length
 
-      const { data: roomData, error: createError } = await supabaseAdmin
+      const insertObj: any = {
+        code,
+        name: finalRoomName,
+        isPrivate: finalIsPrivate,
+        password: finalPassword,
+        player1Id: player1.id,
+        challengeIds: selectedIds,
+        status: 'WAITING',
+        surahFilters: categories_config || req.body?.surahFilters || (Array.isArray(categories) ? categories : []),
+        categoryFilter: category || (Array.isArray(categories_config) ? categories_config.map((c: any) => c.category).join('، ') : ""),
+        questionCount: finalQuestionCount,
+        maxPlayers: 999,
+        gameMode: gameMode || "STANDARD",
+        transitionMode: finalTransitionMode,
+        timePerQuestion: (timePerQuestion !== undefined && !isNaN(Number(timePerQuestion))) ? Number(timePerQuestion) : 0,
+        playersProgress: { [String(player1.id)]: { progress: 0, name: player1.name, joinedAt: Date.now() } }
+      };
+
+      if (req.body?.selected_juz) insertObj.selected_juz = req.body.selected_juz;
+      if (req.body?.selected_surahs) insertObj.selected_surahs = req.body.selected_surahs;
+
+      let { data: roomData, error: createError } = await supabaseAdmin
         .from('rooms')
-        .insert({
-          code,
-          name: finalRoomName,
-          isPrivate: finalIsPrivate,
-          password: finalPassword,
-          player1Id: player1.id,
-          challengeIds: selectedIds,
-          status: 'WAITING',
-          surahFilters: categories_config || (Array.isArray(categories) ? categories : []),
-          categoryFilter: category || (Array.isArray(categories_config) ? categories_config.map((c: any) => c.category).join('، ') : ""),
-          questionCount: finalQuestionCount,
-          maxPlayers: 999,
-          gameMode: gameMode || "STANDARD",
-          transitionMode: finalTransitionMode,
-          timePerQuestion: (timePerQuestion !== undefined && !isNaN(Number(timePerQuestion))) ? Number(timePerQuestion) : 0,
-          playersProgress: { [String(player1.id)]: { progress: 0, name: player1.name, joinedAt: Date.now() } }
-        })
+        .insert(insertObj)
         .select()
         .single();
+
+      if (createError && createError.message && createError.message.includes('selected_')) {
+        delete insertObj.selected_juz;
+        delete insertObj.selected_surahs;
+        const retry = await supabaseAdmin.from('rooms').insert(insertObj).select().single();
+        roomData = retry.data;
+        createError = retry.error;
+      }
 
       if (createError || !roomData) {
         console.error('Failed to create room in supabaseAdmin:', createError)
@@ -1870,10 +1883,19 @@ async function handleUpdateRoomSettings(req: VercelRequest, res: VercelResponse)
   }
 
   try {
-    const { error: updateErr } = await supabaseAdmin
+    let { error: updateErr } = await supabaseAdmin
       .from('rooms')
       .update(updatePayload)
-      .eq('id', roomId)
+      .eq('id', roomId);
+
+    if (updateErr && updateErr.message && updateErr.message.includes('selected_')) {
+      const safePayload = { ...updatePayload };
+      delete safePayload.selected_juz;
+      delete safePayload.selected_surahs;
+      delete safePayload.scopeMode;
+      const retry = await supabaseAdmin.from('rooms').update(safePayload).eq('id', roomId);
+      updateErr = retry.error;
+    }
 
     if (updateErr) {
       console.error('Failed to update room settings in supabaseAdmin:', updateErr)

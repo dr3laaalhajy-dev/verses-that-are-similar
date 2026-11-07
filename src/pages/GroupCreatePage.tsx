@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   Globe, Lock, Eye, EyeOff, Mic, CheckCircle, BookOpen, Sparkles, HelpCircle,
@@ -7,6 +7,7 @@ import {
 import { View } from '../types/challenges';
 import { WhoAmIInfoAlert } from '../components/WhoAmISettings';
 import { islamicCategoriesList } from '../data/islamicCategories';
+import { ScopeSelector } from '../components/challenge/ScopeSelector';
 
 export interface GroupCreatePageProps {
   mode?: 'create' | 'edit';
@@ -55,6 +56,14 @@ export interface GroupCreatePageProps {
   handleCreateV1: () => void;
   isCreatingRoom: boolean;
   setView: (view: View) => void;
+  roomScopeMode?: 'juz' | 'surah';
+  setRoomScopeMode?: (mode: 'juz' | 'surah') => void;
+  roomSelectedJuzs?: number[];
+  setRoomSelectedJuzs?: React.Dispatch<React.SetStateAction<number[]>> | ((juzs: number[] | ((prev: number[]) => number[])) => void);
+  roomSelectedSurahs?: string[];
+  setRoomSelectedSurahs?: React.Dispatch<React.SetStateAction<string[]>> | ((surahs: string[] | ((prev: string[]) => string[])) => void);
+  roomSurahSearch?: string;
+  setRoomSurahSearch?: (search: string) => void;
 }
 
 export const GroupCreatePage: React.FC<GroupCreatePageProps> = ({
@@ -98,9 +107,31 @@ export const GroupCreatePage: React.FC<GroupCreatePageProps> = ({
   setV1TransitionMode,
   handleCreateV1,
   isCreatingRoom,
-  setView
+  setView,
+  roomScopeMode,
+  setRoomScopeMode,
+  roomSelectedJuzs,
+  setRoomSelectedJuzs,
+  roomSelectedSurahs,
+  setRoomSelectedSurahs,
+  roomSurahSearch,
+  setRoomSurahSearch
 }) => {
   const isEditMode = mode === 'edit';
+
+  const [localScopeMode, setLocalScopeMode] = useState<'juz' | 'surah'>('juz');
+  const [localSelectedJuzs, setLocalSelectedJuzs] = useState<number[]>([]);
+  const [localSelectedSurahs, setLocalSelectedSurahs] = useState<string[]>([]);
+  const [localSurahSearch, setLocalSurahSearch] = useState<string>('');
+
+  const activeScopeMode = roomScopeMode ?? localScopeMode;
+  const activeSetScopeMode = setRoomScopeMode ?? setLocalScopeMode;
+  const activeSelectedJuzs = roomSelectedJuzs ?? localSelectedJuzs;
+  const activeSetSelectedJuzs = setRoomSelectedJuzs ?? setLocalSelectedJuzs;
+  const activeSelectedSurahs = roomSelectedSurahs ?? localSelectedSurahs;
+  const activeSetSelectedSurahs = setRoomSelectedSurahs ?? setLocalSelectedSurahs;
+  const activeSurahSearch = roomSurahSearch ?? localSurahSearch;
+  const activeSetSurahSearch = setRoomSurahSearch ?? setLocalSurahSearch;
 
   return (
     <motion.div
@@ -439,6 +470,28 @@ export const GroupCreatePage: React.FC<GroupCreatePageProps> = ({
                 >
                   تخصيص الأسئلة ⚙️
                 </button>
+              </motion.div>
+            )}
+
+            {/* Scope Selector for Quran Challenges (Complete & Surah) in Rooms */}
+            {(v1GameModes.includes('complete') || v1GameModes.includes('surah')) && (
+              <motion.div
+                initial={{ opacity: 0, y: -5 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="mt-3.5"
+              >
+                <ScopeSelector
+                  scopeMode={activeScopeMode}
+                  setScopeMode={activeSetScopeMode}
+                  selectedJuzs={activeSelectedJuzs}
+                  setSelectedJuzs={activeSetSelectedJuzs}
+                  selectedSurahs={activeSelectedSurahs}
+                  setSelectedSurahs={activeSetSelectedSurahs}
+                  surahSearch={activeSurahSearch}
+                  setSurahSearch={activeSetSurahSearch}
+                  title="نطاق أسئلة القرآن (الأجزاء أو السور)"
+                  description="حدد أجزاء أو سور معينة لحصر أسئلة التحدي داخلها، وتفعيل مكافأة الحُفّاظ للآيات المتشابهة"
+                />
               </motion.div>
             )}
           </div>
