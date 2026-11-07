@@ -65,7 +65,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // 3. Extract and validate notification payload
-    const { title, body, target_url, targetUrl, metadata, receiver_id, receiverId, type } = req.body || {};
+    const { title, body, target_url, targetUrl, metadata, receiver_id, receiverId, receiver_ids, receiverIds, type } = req.body || {};
     if (!title || !title.trim() || !body || !body.trim()) {
       return res.status(400).json({ error: 'بيانات ناقصة', details: 'يرجى إدخال عنوان الإشعار ونصه بالكامل' });
     }
@@ -73,10 +73,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const cleanTitle = title.trim();
     const cleanBody = body.trim();
     const cleanTargetUrl = (target_url || targetUrl || '').trim() || null;
-    const effectiveReceiverId = receiver_id !== undefined ? receiver_id : (receiverId !== undefined ? receiverId : null);
-    const cleanReceiverId = effectiveReceiverId !== null && effectiveReceiverId !== undefined && String(effectiveReceiverId).trim() !== ''
-      ? String(effectiveReceiverId).trim()
-      : null;
+    
+    // Resolve single or multiple receiver IDs
+    let targetReceiverIds: string[] = [];
+    if (Array.isArray(receiver_ids)) {
+      targetReceiverIds = receiver_ids.map(id => String(id).trim()).filter(Boolean);
+    } else if (Array.isArray(receiverIds)) {
+      targetReceiverIds = receiverIds.map(id => String(id).trim()).filter(Boolean);
+    } else {
+      const effectiveReceiverId = receiver_id !== undefined ? receiver_id : (receiverId !== undefined ? receiverId : null);
+      if (effectiveReceiverId !== null && effectiveReceiverId !== undefined && String(effectiveReceiverId).trim() !== '') {
+        targetReceiverIds = [String(effectiveReceiverId).trim()];
+      }
+    }
 
     // If target_url starts with '/' (relative path), resolve it to full URL using base URL
     const fullTargetUrl = resolveFullUrl(cleanTargetUrl);
@@ -86,27 +95,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // 4. Mandatory Supabase persistence using Service Role client (Single Source of Truth)
     let savedNotification: any = null;
     try {
-      const insertData: any = {
-        title: cleanTitle,
-        body: cleanBody,
-        receiver_id: cleanReceiverId
-      };
-      if (cleanTargetUrl) insertData.target_url = cleanTargetUrl;
-      if (senderRole) insertData.sender_role = senderRole;
-      if (senderName) insertData.sender_name = senderName;
+      const insertRows = targetReceiverIds.length > 0
+        ? targetReceiverIds.map(rId => ({
+            title: cleanTitle,
+            body: cleanBody,
+            receiver_id: rId,
+            ...(cleanTargetUrl ? { target_url: cleanTargetUrl } : {}),
+            ...(senderRole ? { sender_role: senderRole } : {}),
+            ...(senderName ? { sender_name: senderName } : {})
+          }))
+        : [{
+            title: cleanTitle,
+            body: cleanBody,
+            receiver_id: null,
+            ...(cleanTargetUrl ? { target_url: cleanTargetUrl } : {}),
+            ...(senderRole ? { sender_role: senderRole } : {}),
+            ...(senderName ? { sender_name: senderName } : {})
+          }];
 
-      const { data, error } = await supabaseAdmin.from('notifications').insert(insertData).select();
+      const { data, error } = await supabaseAdmin.from('notifications').insert(insertRows).select();
 
       if (error) {
         console.error('Failed to save notification to Supabase:', error);
         // Schema fallback in case target_url, sender_role, or sender_name columns are not yet in Supabase schema
         if (error.code === 'PGRST204' || error.code === '42703' || error.message?.includes('column')) {
-          console.warn('[sendNotification] Schema column mismatch on notifications table, retrying with core columns {title, body, receiver_id}...');
-          const retry = await supabaseAdmin.from('notifications').insert({
-            title: cleanTitle,
-            body: cleanBody,
-            receiver_id: cleanReceiverId
-          }).select();
+          console.warn('[sendNotification] Schema column mismatch on notifications table, retrying with core columns...');
+          const retryRows = targetReceiverIds.length > 0
+            ? targetReceiverIds.map(rId => ({ title: cleanTitle, body: cleanBody, receiver_id: rId }))
+            : [{ title: cleanTitle, body: cleanBody, receiver_id: null }];
+          const retry = await supabaseAdmin.from('notifications').insert(retryRows).select();
           if (retry.error) {
             console.error('Failed to save notification to Supabase (core retry):', retry.error);
           } else if (retry.data && retry.data.length > 0) {
@@ -142,21 +159,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       senderRole,
       senderName,
       savedNotification,
-      receiverId: cleanReceiverId,
+      receiverId: targetReceiverIds.length === 1 ? targetReceiverIds[0] : null,
+      receiverIds: targetReceiverIds.length > 0 ? targetReceiverIds : null,
       metadata: {
         ...(metadata || {}),
         fullUrl: fullTargetUrl,
         sentByAdminId: currentAdmin.id || decoded.adminId,
-        receiverId: cleanReceiverId,
+        receiverIds: targetReceiverIds,
         sentAt: new Date().toISOString()
       }
     });
 
+    const successMessage = targetReceiverIds.length > 1
+      ? `تم إرسال التنبيه وحفظه بنجاح إلى ${targetReceiverIds.length} مستخدمين`
+      : targetReceiverIds.length === 1
+        ? `تم إرسال التنبيه وحفظه بنجاح للمستخدم (المعرف: ${targetReceiverIds[0]})`
+        : 'تم إرسال التنبيه وحفظه بنجاح لجميع المشتركين';
+
     return res.status(200).json({
       success: true,
-      message: cleanReceiverId
-        ? `تم إرسال التنبيه وحفظه بنجاح للمستخدم (المعرف: ${cleanReceiverId})`
-        : 'تم إرسال التنبيه وحفظه بنجاح لجميع المشتركين',
+      message: successMessage,
       notification: savedNotification || result.savedNotification,
       stats: result.stats
     });

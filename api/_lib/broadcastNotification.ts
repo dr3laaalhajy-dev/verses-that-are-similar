@@ -23,6 +23,7 @@ export interface BroadcastNotificationParams {
   senderName?: string;
   savedNotification?: any;
   receiverId?: string | null;
+  receiverIds?: string[] | null;
   metadata?: Record<string, any>;
 }
 
@@ -45,6 +46,7 @@ export async function broadcastNotification({
   senderName = 'تطبيق متين',
   savedNotification: initialSavedNotification = null,
   receiverId = null,
+  receiverIds = null,
   metadata = {}
 }: BroadcastNotificationParams): Promise<BroadcastNotificationResult> {
   const cleanTitle = title.trim();
@@ -52,32 +54,47 @@ export async function broadcastNotification({
   const cleanTargetUrl = targetUrl ? targetUrl.trim() : null;
   const resolvedFullUrl = fullUrl ? fullUrl.trim() : resolveFullUrl(cleanTargetUrl);
   const cleanReceiverId = receiverId && String(receiverId).trim() ? String(receiverId).trim() : null;
+  const cleanReceiverIds = Array.isArray(receiverIds) && receiverIds.length > 0
+    ? receiverIds.map(id => String(id).trim()).filter(Boolean)
+    : (cleanReceiverId ? [cleanReceiverId] : null);
   
   let savedNotification: any = initialSavedNotification || null;
 
   // 1. Mandatory Supabase persistence (Force save)
   if (!savedNotification) {
     try {
-      const insertData: any = {
-        title: cleanTitle,
-        body: cleanBody,
-        receiver_id: cleanReceiverId
-      };
-      if (cleanTargetUrl) insertData.target_url = cleanTargetUrl;
-      if (senderRole) insertData.sender_role = senderRole;
-      if (senderName) insertData.sender_name = senderName;
+      const insertRows = (cleanReceiverIds && cleanReceiverIds.length > 0)
+        ? cleanReceiverIds.map(rId => ({
+            title: cleanTitle,
+            body: cleanBody,
+            receiver_id: rId,
+            ...(cleanTargetUrl ? { target_url: cleanTargetUrl } : {}),
+            ...(senderRole ? { sender_role: senderRole } : {}),
+            ...(senderName ? { sender_name: senderName } : {})
+          }))
+        : [{
+            title: cleanTitle,
+            body: cleanBody,
+            receiver_id: null,
+            ...(cleanTargetUrl ? { target_url: cleanTargetUrl } : {}),
+            ...(senderRole ? { sender_role: senderRole } : {}),
+            ...(senderName ? { sender_name: senderName } : {})
+          }];
 
       const { data: sbData, error: sbErr } = await supabaseAdmin
         .from('notifications')
-        .insert(insertData)
+        .insert(insertRows)
         .select();
 
       if (sbErr) {
         console.error('[Broadcast] Critical Supabase Insert Error:', sbErr);
         // Force simple insert if schema mismatch
+        const retryRows = (cleanReceiverIds && cleanReceiverIds.length > 0)
+          ? cleanReceiverIds.map(rId => ({ title: cleanTitle, body: cleanBody, receiver_id: rId }))
+          : [{ title: cleanTitle, body: cleanBody, receiver_id: null }];
         const retry = await supabaseAdmin
           .from('notifications')
-          .insert({ title: cleanTitle, body: cleanBody, receiver_id: cleanReceiverId })
+          .insert(retryRows)
           .select();
         if (retry.data && retry.data.length > 0) savedNotification = retry.data[0];
       } else if (sbData && sbData.length > 0) {
@@ -111,9 +128,9 @@ export async function broadcastNotification({
       .select('*')
       .order('created_at', { ascending: false });
 
-    // إذا كان الإشعار موجهاً لمستخدم محدد، نقوم بجلب التوكنز التابعة له فقط
-    if (cleanReceiverId) {
-      tokenQuery = tokenQuery.eq('user_id', cleanReceiverId);
+    // إذا كان الإشعار موجهاً لمستخدمين محددين، نقوم بجلب التوكنز التابعة لهم فقط
+    if (cleanReceiverIds && cleanReceiverIds.length > 0) {
+      tokenQuery = tokenQuery.in('user_id', cleanReceiverIds);
     }
 
     const { data: sbTokens, error: tokenErr } = await tokenQuery;
