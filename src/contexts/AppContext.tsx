@@ -18,8 +18,55 @@ import {
   getActiveScope,
   splitSurahAnswersByScope,
   splitSurahAnswersByJuzRange,
-  SurahAnswerWithDetails
+  SurahAnswerWithDetails,
+  getAvailableSurahChallenges,
+  formatScopeSummary
 } from '../services/JuzRepository';
+
+export interface AyahCompletionSettings {
+  isSelected: boolean;
+  questionsCount: number;
+  scopeMode: 'juz' | 'surah';
+  selectedJuzRange: number[];
+  selectedSurahs: string[];
+}
+
+export interface SurahNameSettings {
+  isSelected: boolean;
+  questionsCount: number;
+  scopeMode: 'juz' | 'surah';
+  selectedJuzRange: number[];
+  selectedSurahs: string[];
+}
+
+export interface IslamicQuestionsSettings {
+  isSelected: boolean;
+  questionsCount: number;
+  categories: string[];
+  topics: string[];
+  topicCounts: Record<string, number>;
+  levels: any[];
+}
+
+export interface AudioSettings {
+  isSelected: boolean;
+  questionsCount: number;
+}
+
+export interface WhoAmISettings {
+  isSelected: boolean;
+  questionsCount: number;
+  categories: string[];
+  categoryCounts: Record<string, number>;
+}
+
+export interface ModularRoomSettings {
+  ayahCompletion: AyahCompletionSettings;
+  surahName: SurahNameSettings;
+  islamicQuestions: IslamicQuestionsSettings;
+  audio?: AudioSettings;
+  whoAmI?: WhoAmISettings;
+}
 import { getPageNumber, juzStartPages, surahStartPages } from '../services/PageRepository';
 import { adhkarData, Dhikr, resolveAdhkarCategoryId } from '../services/AdhkarRepository';
 import { router } from '../services/router';
@@ -889,6 +936,40 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [roomSelectedJuzs, setRoomSelectedJuzs] = useState<number[]>([]);
   const [roomSelectedSurahs, setRoomSelectedSurahs] = useState<string[]>([]);
   const [roomSurahSearch, setRoomSurahSearch] = useState<string>('');
+  const [roomSettings, setRoomSettings] = useState<ModularRoomSettings>({
+    ayahCompletion: {
+      isSelected: true,
+      questionsCount: 5,
+      scopeMode: 'juz',
+      selectedJuzRange: [],
+      selectedSurahs: []
+    },
+    surahName: {
+      isSelected: false,
+      questionsCount: 5,
+      scopeMode: 'juz',
+      selectedJuzRange: [],
+      selectedSurahs: []
+    },
+    islamicQuestions: {
+      isSelected: false,
+      questionsCount: 5,
+      categories: ['العقيدة'],
+      topics: ['all'],
+      topicCounts: { all: 5 },
+      levels: [1, 2, 3]
+    },
+    audio: {
+      isSelected: false,
+      questionsCount: 5
+    },
+    whoAmI: {
+      isSelected: false,
+      questionsCount: 10,
+      categories: ['أنبياء ورسل'],
+      categoryCounts: { 'أنبياء ورسل': 10 }
+    }
+  });
   const [discoveredBonusSurahs, setDiscoveredBonusSurahs] = useState<string[]>([]);
   const [surahFeedbackData, setSurahFeedbackData] = useState<{
     isFullyCorrect: boolean;
@@ -2716,20 +2797,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       // 2. Completion challenges
-      if (effectiveGameModes.includes('complete') && !systemSettings.hideCompletionChallenge) {
-        const completeCount = Math.max(0, Number(skillQuestionCounts.complete) || 0);
+      if ((roomSettings.ayahCompletion.isSelected || effectiveGameModes.includes('complete')) && !systemSettings.hideCompletionChallenge) {
+        const completeCount = Math.max(0, Number(roomSettings.ayahCompletion.questionsCount || skillQuestionCounts.complete) || 0);
         if (completeCount > 0) {
           let pool = allChallenges.filter(c => (c.type || '').toUpperCase() === 'COMPLETION');
-          if (roomScopeMode === 'surah' && roomSelectedSurahs.length > 0) {
+          const cScopeMode = roomSettings.ayahCompletion.scopeMode || roomScopeMode;
+          const cSurahs = roomSettings.ayahCompletion.selectedSurahs?.length ? roomSettings.ayahCompletion.selectedSurahs : roomSelectedSurahs;
+          const cJuzs = roomSettings.ayahCompletion.selectedJuzRange?.length ? roomSettings.ayahCompletion.selectedJuzRange : roomSelectedJuzs;
+
+          if (cScopeMode === 'surah' && cSurahs.length > 0) {
             const filtered = pool.filter(c => {
               const s = c.verses?.[0]?.surah || c.category || c.keyword || '';
-              return roomSelectedSurahs.some(rs => normalizeSurahName(rs) === normalizeSurahName(s) || s.includes(rs));
+              return cSurahs.some(rs => normalizeSurahName(rs) === normalizeSurahName(s) || s.includes(rs));
             });
             if (filtered.length >= Math.min(3, completeCount)) pool = filtered;
-          } else if (roomScopeMode === 'juz' && roomSelectedJuzs.length > 0 && roomSelectedJuzs.length < 30) {
+          } else if (cScopeMode === 'juz' && cJuzs.length > 0 && cJuzs.length < 30) {
             const filtered = pool.filter(c => {
               const j = c.verses?.[0]?.juz || (c.verses?.[0]?.surah ? getJuzsForSurah(c.verses[0].surah)[0] : null);
-              return j ? roomSelectedJuzs.includes(Number(j)) : true;
+              return j ? cJuzs.includes(Number(j)) : true;
             });
             if (filtered.length >= Math.min(3, completeCount)) pool = filtered;
           }
@@ -2739,60 +2824,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       // 3. Surah challenges
-      if (effectiveGameModes.includes('surah') && !systemSettings.hideSurahChallenge) {
-        const surahCount = Math.max(0, Number(skillQuestionCounts.surah) || 0);
+      if ((roomSettings.surahName.isSelected || effectiveGameModes.includes('surah')) && !systemSettings.hideSurahChallenge) {
+        const surahCount = Math.max(0, Number(roomSettings.surahName.questionsCount || skillQuestionCounts.surah) || 0);
         if (surahCount > 0) {
-          let pool = allChallenges.filter(c => (c.type || '').toUpperCase() === 'SURAH');
-          allChallenges.forEach(c => {
-            if ((!c.type || c.type === 'STANDARD') && Array.isArray(c.verses) && c.verses.length > 0) {
-              const surahs = Array.from(new Set(c.verses.map((v: any) => v.surah).filter(Boolean)));
-              if (surahs.length > 0) {
-                pool.push({
-                  ...c,
-                  type: 'SURAH',
-                  correctText: JSON.stringify(surahs),
-                  verses: c.verses
-                });
-              }
-            }
-          });
+          const sScopeMode = roomSettings.surahName.scopeMode || roomScopeMode;
+          const sSurahs = roomSettings.surahName.selectedSurahs?.length ? roomSettings.surahName.selectedSurahs : roomSelectedSurahs;
+          const sJuzs = roomSettings.surahName.selectedJuzRange?.length ? roomSettings.surahName.selectedJuzRange : roomSelectedJuzs;
 
-          if (roomScopeMode === 'surah' && roomSelectedSurahs.length > 0) {
-            const filtered = pool.filter(c => {
-              let surahs: string[] = [];
-              const text = c.correctText || '';
-              try {
-                if (text.startsWith('[')) surahs = JSON.parse(text);
-                else if (text) surahs = [text];
-              } catch {}
-              if (Array.isArray(c.verses)) {
-                c.verses.forEach((v: any) => {
-                  if (v?.surah && !surahs.includes(v.surah)) surahs.push(v.surah);
-                });
-              }
-              const { inRangeAnswers } = splitSurahAnswersByScope(surahs, { scopeMode: 'surah', selectedSurahs: roomSelectedSurahs }, c.verses);
-              return inRangeAnswers.length > 0;
-            });
-            if (filtered.length > 0) pool = filtered;
-          } else if (roomScopeMode === 'juz' && roomSelectedJuzs.length > 0 && roomSelectedJuzs.length < 30) {
-            const filtered = pool.filter(c => {
-              let surahs: string[] = [];
-              const text = c.correctText || '';
-              try {
-                if (text.startsWith('[')) surahs = JSON.parse(text);
-                else if (text) surahs = [text];
-              } catch {}
-              if (Array.isArray(c.verses)) {
-                c.verses.forEach((v: any) => {
-                  if (v?.surah && !surahs.includes(v.surah)) surahs.push(v.surah);
-                });
-              }
-              const { inRangeAnswers } = splitSurahAnswersByScope(surahs, { scopeMode: 'juz', selectedJuzs: roomSelectedJuzs }, c.verses);
-              return inRangeAnswers.length > 0;
-            });
-            if (filtered.length > 0) pool = filtered;
-          }
-          const picked = [...pool].sort(() => Math.random() - 0.5).slice(0, surahCount);
+          const available = getAvailableSurahChallenges(allChallenges, {
+            scopeMode: sScopeMode,
+            selectedJuzs: sJuzs,
+            selectedSurahs: sSurahs
+          });
+          const picked = [...available].sort(() => Math.random() - 0.5).slice(0, surahCount);
           customChallenges.push(...picked);
         }
       }
@@ -2833,13 +2877,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         timePerQuestion: v1Timer ? v1TimePerQuestion : 0,
         transitionMode: v1TransitionMode,
         customChallenges: finalCustomChallenges,
-        selected_juz: roomScopeMode === 'juz' ? roomSelectedJuzs : [],
-        selected_surahs: roomScopeMode === 'surah' ? roomSelectedSurahs : [],
-        scopeMode: roomScopeMode,
-        surahFilters: isIslamicIncluded ? islamicRoomTopics : {
-          scopeMode: roomScopeMode,
-          selected_juz: roomScopeMode === 'juz' ? roomSelectedJuzs : [],
-          selected_surahs: roomScopeMode === 'surah' ? roomSelectedSurahs : []
+        roomSettings: roomSettings,
+        room_settings: roomSettings,
+        selected_juz: (roomSettings.surahName.isSelected ? roomSettings.surahName.selectedJuzRange : roomSettings.ayahCompletion.selectedJuzRange) || (roomScopeMode === 'juz' ? roomSelectedJuzs : []),
+        selected_surahs: (roomSettings.surahName.isSelected ? roomSettings.surahName.selectedSurahs : roomSettings.ayahCompletion.selectedSurahs) || (roomScopeMode === 'surah' ? roomSelectedSurahs : []),
+        scopeMode: (roomSettings.surahName.isSelected ? roomSettings.surahName.scopeMode : roomSettings.ayahCompletion.scopeMode) || roomScopeMode,
+        surahFilters: {
+          roomSettings: roomSettings,
+          ayahCompletion: roomSettings.ayahCompletion,
+          surahName: roomSettings.surahName,
+          islamicQuestions: roomSettings.islamicQuestions,
+          scopeMode: (roomSettings.surahName.isSelected ? roomSettings.surahName.scopeMode : roomSettings.ayahCompletion.scopeMode) || roomScopeMode,
+          selected_juz: (roomSettings.surahName.isSelected ? roomSettings.surahName.selectedJuzRange : roomSettings.ayahCompletion.selectedJuzRange) || (roomScopeMode === 'juz' ? roomSelectedJuzs : []),
+          selected_surahs: (roomSettings.surahName.isSelected ? roomSettings.surahName.selectedSurahs : roomSettings.ayahCompletion.selectedSurahs) || (roomScopeMode === 'surah' ? roomSelectedSurahs : [])
         }
       };
 
@@ -3101,20 +3151,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
 
         // 2. Completion
-        if (effectiveGameModes.includes('complete') && !systemSettings.hideCompletionChallenge) {
-          const completeCount = Math.max(0, Number(skillQuestionCounts.complete) || 0);
+        if ((roomSettings.ayahCompletion.isSelected || effectiveGameModes.includes('complete')) && !systemSettings.hideCompletionChallenge) {
+          const completeCount = Math.max(0, Number(roomSettings.ayahCompletion.questionsCount || skillQuestionCounts.complete) || 0);
           if (completeCount > 0) {
             let pool = allChallenges.filter(c => (c.type || '').toUpperCase() === 'COMPLETION');
-            if (roomScopeMode === 'surah' && roomSelectedSurahs.length > 0) {
+            const cScopeMode = roomSettings.ayahCompletion.scopeMode || roomScopeMode;
+            const cSurahs = roomSettings.ayahCompletion.selectedSurahs?.length ? roomSettings.ayahCompletion.selectedSurahs : roomSelectedSurahs;
+            const cJuzs = roomSettings.ayahCompletion.selectedJuzRange?.length ? roomSettings.ayahCompletion.selectedJuzRange : roomSelectedJuzs;
+
+            if (cScopeMode === 'surah' && cSurahs.length > 0) {
               const filtered = pool.filter(c => {
                 const s = c.verses?.[0]?.surah || c.category || c.keyword || '';
-                return roomSelectedSurahs.some(rs => normalizeSurahName(rs) === normalizeSurahName(s) || s.includes(rs));
+                return cSurahs.some(rs => normalizeSurahName(rs) === normalizeSurahName(s) || s.includes(rs));
               });
               if (filtered.length >= Math.min(3, completeCount)) pool = filtered;
-            } else if (roomScopeMode === 'juz' && roomSelectedJuzs.length > 0 && roomSelectedJuzs.length < 30) {
+            } else if (cScopeMode === 'juz' && cJuzs.length > 0 && cJuzs.length < 30) {
               const filtered = pool.filter(c => {
                 const j = c.verses?.[0]?.juz || (c.verses?.[0]?.surah ? getJuzsForSurah(c.verses[0].surah)[0] : null);
-                return j ? roomSelectedJuzs.includes(Number(j)) : true;
+                return j ? cJuzs.includes(Number(j)) : true;
               });
               if (filtered.length >= Math.min(3, completeCount)) pool = filtered;
             }
@@ -3124,60 +3178,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
 
         // 3. Surah
-        if (effectiveGameModes.includes('surah') && !systemSettings.hideSurahChallenge) {
-          const surahCount = Math.max(0, Number(skillQuestionCounts.surah) || 0);
+        if ((roomSettings.surahName.isSelected || effectiveGameModes.includes('surah')) && !systemSettings.hideSurahChallenge) {
+          const surahCount = Math.max(0, Number(roomSettings.surahName.questionsCount || skillQuestionCounts.surah) || 0);
           if (surahCount > 0) {
-            let pool = allChallenges.filter(c => (c.type || '').toUpperCase() === 'SURAH');
-            allChallenges.forEach(c => {
-              if ((!c.type || c.type === 'STANDARD') && Array.isArray(c.verses) && c.verses.length > 0) {
-                const surahs = Array.from(new Set(c.verses.map((v: any) => v.surah).filter(Boolean)));
-                if (surahs.length > 0) {
-                  pool.push({
-                    ...c,
-                    type: 'SURAH',
-                    correctText: JSON.stringify(surahs),
-                    verses: c.verses
-                  });
-                }
-              }
-            });
+            const sScopeMode = roomSettings.surahName.scopeMode || roomScopeMode;
+            const sSurahs = roomSettings.surahName.selectedSurahs?.length ? roomSettings.surahName.selectedSurahs : roomSelectedSurahs;
+            const sJuzs = roomSettings.surahName.selectedJuzRange?.length ? roomSettings.surahName.selectedJuzRange : roomSelectedJuzs;
 
-            if (roomScopeMode === 'surah' && roomSelectedSurahs.length > 0) {
-              const filtered = pool.filter(c => {
-                let surahs: string[] = [];
-                const text = c.correctText || '';
-                try {
-                  if (text.startsWith('[')) surahs = JSON.parse(text);
-                  else if (text) surahs = [text];
-                } catch {}
-                if (Array.isArray(c.verses)) {
-                  c.verses.forEach((v: any) => {
-                    if (v?.surah && !surahs.includes(v.surah)) surahs.push(v.surah);
-                  });
-                }
-                const { inRangeAnswers } = splitSurahAnswersByScope(surahs, { scopeMode: 'surah', selectedSurahs: roomSelectedSurahs }, c.verses);
-                return inRangeAnswers.length > 0;
-              });
-              if (filtered.length > 0) pool = filtered;
-            } else if (roomScopeMode === 'juz' && roomSelectedJuzs.length > 0 && roomSelectedJuzs.length < 30) {
-              const filtered = pool.filter(c => {
-                let surahs: string[] = [];
-                const text = c.correctText || '';
-                try {
-                  if (text.startsWith('[')) surahs = JSON.parse(text);
-                  else if (text) surahs = [text];
-                } catch {}
-                if (Array.isArray(c.verses)) {
-                  c.verses.forEach((v: any) => {
-                    if (v?.surah && !surahs.includes(v.surah)) surahs.push(v.surah);
-                  });
-                }
-                const { inRangeAnswers } = splitSurahAnswersByScope(surahs, { scopeMode: 'juz', selectedJuzs: roomSelectedJuzs }, c.verses);
-                return inRangeAnswers.length > 0;
-              });
-              if (filtered.length > 0) pool = filtered;
-            }
-            const picked = [...pool].sort(() => Math.random() - 0.5).slice(0, surahCount);
+            const available = getAvailableSurahChallenges(allChallenges, {
+              scopeMode: sScopeMode,
+              selectedJuzs: sJuzs,
+              selectedSurahs: sSurahs
+            });
+            const picked = [...available].sort(() => Math.random() - 0.5).slice(0, surahCount);
             customChallenges.push(...picked);
           }
         }
@@ -3206,19 +3219,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           gameMode: effectiveGameModes.length === 1
             ? (effectiveGameModes[0] === 'islamic' ? 'ISLAMIC' : effectiveGameModes[0] === 'audio' ? 'STANDARD' : effectiveGameModes[0] === 'complete' ? 'COMPLETION' : 'SURAH')
             : 'MIXED',
-          surahFilters: isIslamicIncluded ? islamicRoomTopics : {
-            scopeMode: roomScopeMode,
-            selected_juz: roomScopeMode === 'juz' ? roomSelectedJuzs : [],
-            selected_surahs: roomScopeMode === 'surah' ? roomSelectedSurahs : []
+          roomSettings: roomSettings,
+          room_settings: roomSettings,
+          surahFilters: {
+            roomSettings: roomSettings,
+            ayahCompletion: roomSettings.ayahCompletion,
+            surahName: roomSettings.surahName,
+            islamicQuestions: roomSettings.islamicQuestions,
+            scopeMode: (roomSettings.surahName.isSelected ? roomSettings.surahName.scopeMode : roomSettings.ayahCompletion.scopeMode) || roomScopeMode,
+            selected_juz: (roomSettings.surahName.isSelected ? roomSettings.surahName.selectedJuzRange : roomSettings.ayahCompletion.selectedJuzRange) || (roomScopeMode === 'juz' ? roomSelectedJuzs : []),
+            selected_surahs: (roomSettings.surahName.isSelected ? roomSettings.surahName.selectedSurahs : roomSettings.ayahCompletion.selectedSurahs) || (roomScopeMode === 'surah' ? roomSelectedSurahs : [])
           },
           categoryFilter: isIslamicIncluded ? (islamicRoomCategories[0] || 'إسلامي') : (v1Category || ''),
           questionCount: finalCustomChallenges.length,
           timePerQuestion: v1Timer ? v1TimePerQuestion : 0,
           transitionMode: v1TransitionMode,
           challengeIds: finalCustomChallenges,
-          selected_juz: roomScopeMode === 'juz' ? roomSelectedJuzs : [],
-          selected_surahs: roomScopeMode === 'surah' ? roomSelectedSurahs : [],
-          scopeMode: roomScopeMode
+          selected_juz: (roomSettings.surahName.isSelected ? roomSettings.surahName.selectedJuzRange : roomSettings.ayahCompletion.selectedJuzRange) || (roomScopeMode === 'juz' ? roomSelectedJuzs : []),
+          selected_surahs: (roomSettings.surahName.isSelected ? roomSettings.surahName.selectedSurahs : roomSettings.ayahCompletion.selectedSurahs) || (roomScopeMode === 'surah' ? roomSelectedSurahs : []),
+          scopeMode: (roomSettings.surahName.isSelected ? roomSettings.surahName.scopeMode : roomSettings.ayahCompletion.scopeMode) || roomScopeMode
         };
       }
 
@@ -3228,11 +3247,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         .update(updatePayload)
         .eq('id', roomId);
 
-      if (updateError && updateError.message && updateError.message.includes('selected_')) {
+      if (updateError && (updateError.message.includes('selected_') || updateError.message.includes('room_settings'))) {
         const safePayload = { ...updatePayload };
         delete (safePayload as any).selected_juz;
         delete (safePayload as any).selected_surahs;
         delete (safePayload as any).scopeMode;
+        delete (safePayload as any).room_settings;
+        delete (safePayload as any).roomSettings;
         const retryRes = await supabase.from('rooms').update(safePayload).eq('id', roomId);
         updateError = retryRes.error;
       }
@@ -4730,7 +4751,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       const validSurahs = surahs.filter(s => s.trim());
-      const activeScope = getActiveScope(room, selectedSkillJuzs, selectedSkillSurahs, selectedJuz);
+      const activeScope = getActiveScope(room, selectedSkillJuzs, selectedSkillSurahs, selectedJuz, currentChallenge?.type || 'SURAH');
       const { inRangeAnswers } = splitSurahAnswersByScope(
         validSurahs,
         activeScope,
@@ -4760,7 +4781,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (currentChallenge.correctText) allCorrect = [currentChallenge.correctText];
         }
 
-        const activeScope = getActiveScope(room, selectedSkillJuzs, selectedSkillSurahs, selectedJuz);
+        const activeScope = getActiveScope(room, selectedSkillJuzs, selectedSkillSurahs, selectedJuz, currentChallenge?.type || 'SURAH');
         const { bonusAnswers } = splitSurahAnswersByScope(allCorrect, activeScope, currentChallenge.verses);
 
         const matchedBonus = bonusAnswers.find(b => normalizeSurahName(b.surah) === normVal);
@@ -4800,7 +4821,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (currentChallenge.correctText) allCorrect = [currentChallenge.correctText];
       }
 
-      const activeScope = getActiveScope(room, selectedSkillJuzs, selectedSkillSurahs, selectedJuz);
+      const activeScope = getActiveScope(room, selectedSkillJuzs, selectedSkillSurahs, selectedJuz, currentChallenge?.type || 'SURAH');
       const { inRangeAnswers } = splitSurahAnswersByScope(allCorrect, activeScope, currentChallenge.verses);
       const normalizedRequired = inRangeAnswers.map(a => normalizeSurahName(a.surah));
 
@@ -5275,7 +5296,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     correctSurahs = correctSurahs.filter(s => s.trim());
 
     // 2. Partition into inRange and outOfRange answers based on active scope
-    const activeScope = getActiveScope(room, selectedSkillJuzs, selectedSkillSurahs, selectedJuz);
+    const activeScope = getActiveScope(room, selectedSkillJuzs, selectedSkillSurahs, selectedJuz, currentQuestion?.type || 'SURAH');
     const { inRangeAnswers, outOfRangeAnswers } = splitSurahAnswersByScope(
       correctSurahs,
       activeScope,
@@ -6657,6 +6678,7 @@ ${versesList}
     roomSelectedJuzs, setRoomSelectedJuzs,
     roomSelectedSurahs, setRoomSelectedSurahs,
     roomSurahSearch, setRoomSurahSearch,
+    roomSettings, setRoomSettings,
     availableSkillCounts, setAvailableSkillCounts,
     skillQuestionCounts, setSkillQuestionCounts,
     whoAmIQuestionCount, setWhoAmIQuestionCount,

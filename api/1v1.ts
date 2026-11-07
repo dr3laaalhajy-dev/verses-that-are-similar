@@ -328,6 +328,9 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
 
       if (req.body?.selected_juz) insertObj.selected_juz = req.body.selected_juz;
       if (req.body?.selected_surahs) insertObj.selected_surahs = req.body.selected_surahs;
+      if (req.body?.room_settings || req.body?.roomSettings) {
+        insertObj.room_settings = req.body.room_settings || req.body.roomSettings;
+      }
 
       let { data: roomData, error: createError } = await supabaseAdmin
         .from('rooms')
@@ -335,9 +338,10 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
         .select()
         .single();
 
-      if (createError && createError.message && createError.message.includes('selected_')) {
+      if (createError && (createError.message.includes('selected_') || createError.message.includes('room_settings'))) {
         delete insertObj.selected_juz;
         delete insertObj.selected_surahs;
+        delete insertObj.room_settings;
         const retry = await supabaseAdmin.from('rooms').insert(insertObj).select().single();
         roomData = retry.data;
         createError = retry.error;
@@ -1888,11 +1892,13 @@ async function handleUpdateRoomSettings(req: VercelRequest, res: VercelResponse)
       .update(updatePayload)
       .eq('id', roomId);
 
-    if (updateErr && updateErr.message && updateErr.message.includes('selected_')) {
+    if (updateErr && (updateErr.message.includes('selected_') || updateErr.message.includes('room_settings'))) {
       const safePayload = { ...updatePayload };
       delete safePayload.selected_juz;
       delete safePayload.selected_surahs;
       delete safePayload.scopeMode;
+      delete safePayload.room_settings;
+      delete safePayload.roomSettings;
       const retry = await supabaseAdmin.from('rooms').update(safePayload).eq('id', roomId);
       updateErr = retry.error;
     }

@@ -370,15 +370,47 @@ export interface ActiveScope {
 /**
  * Extracts currently active scope (Juzs or Surahs) from room configuration,
  * solo skills selection, or single juz selection.
+ * Supports modular room settings per challenge type (e.g. ayahCompletion, surahName).
  */
 export const getActiveScope = (
   room?: any,
   selectedSkillJuzs?: number[] | null,
   selectedSkillSurahs?: string[] | null,
-  selectedJuz?: number | null
+  selectedJuz?: number | null,
+  challengeType?: string | null
 ): ActiveScope => {
   // 1. Room configuration
   if (room) {
+    // Check if room has modular roomSettings
+    const modular = room.roomSettings || room.room_settings || room.surahFilters?.roomSettings;
+    if (modular) {
+      const cType = (challengeType || '').toUpperCase();
+      let targetSkill: any = null;
+      if (cType === 'COMPLETION' || cType === 'COMPLETE') {
+        targetSkill = modular.ayahCompletion;
+      } else if (cType === 'SURAH') {
+        targetSkill = modular.surahName;
+      }
+
+      if (targetSkill && targetSkill.isSelected) {
+        const sMode: 'juz' | 'surah' = targetSkill.scopeMode || (targetSkill.selectedSurahs?.length ? 'surah' : 'juz');
+        const sJuzs: number[] = Array.isArray(targetSkill.selectedJuzRange)
+          ? targetSkill.selectedJuzRange
+          : Array.isArray(targetSkill.selectedJuzs)
+          ? targetSkill.selectedJuzs
+          : [];
+        const sSurahs: string[] = Array.isArray(targetSkill.selectedSurahs) ? targetSkill.selectedSurahs : [];
+
+        if (sMode === 'surah' && sSurahs.length > 0) {
+          return { scopeMode: 'surah', selectedJuzs: [], selectedSurahs: sSurahs };
+        }
+        if (sJuzs.length > 0 && sJuzs.length < 30) {
+          return { scopeMode: 'juz', selectedJuzs: sJuzs, selectedSurahs: [] };
+        }
+        return { scopeMode: sMode, selectedJuzs: [], selectedSurahs: [] };
+      }
+    }
+
     let rJuzs: number[] = [];
     if (Array.isArray(room.selected_juz) && room.selected_juz.length > 0) {
       rJuzs = room.selected_juz;
@@ -741,4 +773,28 @@ export const validateSurahChallengeScope = (
     isNotEnoughQuestions,
     errorMessage
   };
+};
+
+/**
+ * Returns a concise Arabic summary for a selected scope.
+ * Examples: 'القرآن كاملاً', 'الجزء 30', '3 أجزاء', 'سورة البقرة', '3 سور'.
+ */
+export const formatScopeSummary = (
+  scopeMode: 'juz' | 'surah' = 'juz',
+  selectedJuzs: number[] = [],
+  selectedSurahs: string[] = []
+): string => {
+  if (scopeMode === 'surah') {
+    if (!selectedSurahs || selectedSurahs.length === 0) return 'القرآن كاملاً';
+    if (selectedSurahs.length === 1) return `سورة ${selectedSurahs[0]}`;
+    if (selectedSurahs.length <= 3) return selectedSurahs.join('، ');
+    return `${selectedSurahs.length} سور (${selectedSurahs.slice(0, 2).join('، ')}...)`;
+  }
+  if (!selectedJuzs || selectedJuzs.length === 0 || selectedJuzs.length >= 30) return 'القرآن كاملاً';
+  if (selectedJuzs.length === 1) {
+    const jName = JUZ_NAMES_AR[selectedJuzs[0]];
+    return jName ? `${jName}` : `الجزء ${selectedJuzs[0]}`;
+  }
+  if (selectedJuzs.length <= 3) return `الأجزاء (${selectedJuzs.join('، ')})`;
+  return `${selectedJuzs.length} أجزاء`;
 };
