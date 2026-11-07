@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { ChallengeCertificate } from './ChallengeCertificate';
+import { fetchUserMilestones, UserMilestonesStats } from '../services/milestoneProgressService';
 
 export interface MilestoneItem {
   id: string;
@@ -39,7 +40,7 @@ const MILESTONES_CONFIG: MilestoneItem[] = [
     target: 100,
     scope: 'كامل القرآن الكريم',
     rank: 'حافظ متقن',
-    fallbackProgress: 100,
+    fallbackProgress: 0,
   },
   {
     id: 'figh_quiz',
@@ -49,7 +50,7 @@ const MILESTONES_CONFIG: MilestoneItem[] = [
     target: 100,
     scope: 'العبادات والمعاملات',
     rank: 'فقيه متقن ومتميز',
-    fallbackProgress: 100,
+    fallbackProgress: 0,
   },
   {
     id: 'surah_50',
@@ -59,7 +60,7 @@ const MILESTONES_CONFIG: MilestoneItem[] = [
     target: 50,
     scope: 'أجزاء عم وتبارك والمفصل',
     rank: 'خبير المتشابهات',
-    fallbackProgress: 35,
+    fallbackProgress: 0,
   },
   {
     id: 'seerah_60',
@@ -69,7 +70,7 @@ const MILESTONES_CONFIG: MilestoneItem[] = [
     target: 60,
     scope: 'العهد المكي والمدني والغزوات',
     rank: 'عالم بالسيرة النبوية',
-    fallbackProgress: 60,
+    fallbackProgress: 0,
   },
   {
     id: 'akida_bank',
@@ -79,7 +80,7 @@ const MILESTONES_CONFIG: MilestoneItem[] = [
     target: 100,
     scope: 'أركان الإيمان والتوحيد الخالص',
     rank: 'راسخ في العقيدة',
-    fallbackProgress: 100,
+    fallbackProgress: 0,
   },
   {
     id: 'hadith_100',
@@ -89,7 +90,7 @@ const MILESTONES_CONFIG: MilestoneItem[] = [
     target: 100,
     scope: 'متون الحديث والأربعين النووية',
     rank: 'محدث متقن',
-    fallbackProgress: 72,
+    fallbackProgress: 0,
   },
   {
     id: 'tafseer_100',
@@ -99,7 +100,7 @@ const MILESTONES_CONFIG: MilestoneItem[] = [
     target: 100,
     scope: 'معاني الآيات ومقاصد السور',
     rank: 'عالم بالتفسير',
-    fallbackProgress: 100,
+    fallbackProgress: 0,
   },
   {
     id: 'history_conquests',
@@ -109,7 +110,7 @@ const MILESTONES_CONFIG: MilestoneItem[] = [
     target: 100,
     scope: 'سير الخلفاء الراشدين والفتوحات',
     rank: 'خبير بالتاريخ الإسلامي',
-    fallbackProgress: 40,
+    fallbackProgress: 0,
   },
   {
     id: 'arabic_language',
@@ -119,7 +120,7 @@ const MILESTONES_CONFIG: MilestoneItem[] = [
     target: 100,
     scope: 'فصيح الألفاظ والنحو والبلاغة',
     rank: 'أديب فصيح',
-    fallbackProgress: 100,
+    fallbackProgress: 0,
   },
   {
     id: 'daily_streak_30',
@@ -129,7 +130,7 @@ const MILESTONES_CONFIG: MilestoneItem[] = [
     target: 30,
     scope: 'الشهر القرآني المبارك',
     rank: 'مواظب متفوق',
-    fallbackProgress: 30,
+    fallbackProgress: 0,
   },
   {
     id: 'speed_1000',
@@ -139,7 +140,7 @@ const MILESTONES_CONFIG: MilestoneItem[] = [
     target: 1000,
     scope: 'سرعة البديهة في المتشابهات',
     rank: 'فارس السرعة الأول',
-    fallbackProgress: 1000,
+    fallbackProgress: 0,
   },
 ];
 
@@ -187,57 +188,16 @@ export const AchievementsMilestoneTracker: React.FC<AchievementsMilestoneTracker
       const newProgress: Record<string, number> = {};
 
       try {
-        // قراءة القيم المحلية الأساسية
-        const streak = Number(localStorage.getItem('quran_streak') || 0);
-        const savedPoints = Math.max(totalPoints, Number(localStorage.getItem('quran_total_points') || 0));
-        
-        let completedIds: string[] = [];
-        try {
-          const raw = localStorage.getItem('quran_completed_ids') || localStorage.getItem('quran_completed_challenges');
-          if (raw) completedIds = JSON.parse(raw);
-        } catch (_) {}
+        // جلب الإحصائيات الدقيقة مع الالتزام بشرط is_correct === true والعزل التام للأقسام
+        const stats = await fetchUserMilestones({
+          username: playerUsername,
+          playerName: playerName,
+          uniquePlayerId: localStorage.getItem('quran_player_id')
+        });
 
-        // قراءة التقدم المحفوظ لمسابقات الأسئلة
-        let seerahProgress = 0;
-        try {
-          const sRaw = localStorage.getItem('quran_quiz_progress_seerah');
-          if (sRaw) {
-            const sObj = JSON.parse(sRaw);
-            seerahProgress = Number(sObj.answeredCount || sObj.score || 0);
-          }
-        } catch (_) {}
-
-        let generalProgress = 0;
-        try {
-          const gRaw = localStorage.getItem('quran_quiz_progress_general');
-          if (gRaw) {
-            const gObj = JSON.parse(gRaw);
-            generalProgress = Number(gObj.answeredCount || gObj.score || 0);
-          }
-        } catch (_) {}
-
-        // محاولة جلب تقدم المستخدم من Supabase إن وجد اتصال ومُعرف
-        const activeUser = playerUsername || playerName || localStorage.getItem('quran_player_id');
-        if (activeUser) {
-          try {
-            const { data: dbUser } = await supabase
-              .from('players')
-              .select('completedChallengeIds, totalPoints, cups, streak')
-              .or(`uniquePlayerId.eq.${activeUser},username.eq.${activeUser},name.eq.${activeUser}`)
-              .limit(1)
-              .maybeSingle();
-
-            if (dbUser?.completedChallengeIds && Array.isArray(dbUser.completedChallengeIds)) {
-              completedIds = Array.from(new Set([...completedIds, ...dbUser.completedChallengeIds]));
-            }
-          } catch (err) {
-            console.warn('[MilestoneTracker] Supabase progress sync notice:', err);
-          }
-        }
-
-        // مطابقة التقدم لكل إنجاز بدقة
+        // مطابقة التقدم لكل إنجاز بدقة تامة وبدون أي أرقام عشوائية
         MILESTONES_CONFIG.forEach((m) => {
-          // فحص الشهادات المكتسبة مسبقاً
+          // فحص الشهادات المكتسبة مسبقاً والموثقة رسمياً
           const hasClaimed = userCertificates.some(
             (c) => c.category === m.id || c.category === m.category
           );
@@ -247,18 +207,9 @@ export const AchievementsMilestoneTracker: React.FC<AchievementsMilestoneTracker
             return;
           }
 
-          if (m.id === 'daily_streak_30') {
-            newProgress[m.id] = Math.min(streak || m.fallbackProgress, m.target);
-          } else if (m.id === 'speed_1000') {
-            newProgress[m.id] = Math.min(savedPoints || m.fallbackProgress, m.target);
-          } else if (m.id === 'seerah_60') {
-            newProgress[m.id] = seerahProgress >= 60 ? 60 : (m.fallbackProgress || seerahProgress);
-          } else if (m.id === 'figh_quiz' || m.id === 'akida_bank') {
-            newProgress[m.id] = generalProgress >= 100 ? 100 : (m.fallbackProgress || generalProgress);
-          } else {
-            // استخدام القيمة الواقعية مع قيمة الاستعراض المحفوظة
-            newProgress[m.id] = m.fallbackProgress;
-          }
+          // استخدام القيمة الدقيقة المحتسبة حصراً للإجابات الصحيحة في هذا القسم
+          const val = (stats as any)[m.id] ?? 0;
+          newProgress[m.id] = Math.min(Math.max(0, val), m.target);
         });
 
         if (isMounted) {
@@ -285,7 +236,7 @@ export const AchievementsMilestoneTracker: React.FC<AchievementsMilestoneTracker
     const total = MILESTONES_CONFIG.length;
     let completed = 0;
     MILESTONES_CONFIG.forEach((m) => {
-      const prog = progressMap[m.id] ?? m.fallbackProgress;
+      const prog = progressMap[m.id] ?? 0;
       if (prog >= m.target) {
         completed++;
       }
@@ -368,7 +319,7 @@ export const AchievementsMilestoneTracker: React.FC<AchievementsMilestoneTracker
       {/* ========================================================= */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {MILESTONES_CONFIG.map((milestone) => {
-          const currentProgress = progressMap[milestone.id] ?? milestone.fallbackProgress;
+          const currentProgress = progressMap[milestone.id] ?? 0;
           const isUnlocked = currentProgress >= milestone.target;
           const percent = Math.min(100, Math.round((currentProgress / milestone.target) * 100));
 

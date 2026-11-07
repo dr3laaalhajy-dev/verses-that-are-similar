@@ -1,15 +1,18 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>سِجِلِّ إنجازاتي وأوسمتي المعتمدة - تطبيق متين لعلوم القرآن الكريم</title>
-  
+
   <!-- الخطوط العربية الفاخرة المعتمدة في التطبيق -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400;1,700&family=Noto+Naskh+Arabic:wght@400;600;700&family=Tajawal:wght@300;400;500;700;800;900&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
-  
+  <link
+    href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400;1,700&family=Noto+Naskh+Arabic:wght@400;600;700&family=Tajawal:wght@300;400;500;700;800;900&family=Space+Grotesk:wght@500;700&display=swap"
+    rel="stylesheet">
+
   <!-- Tailwind CSS & html2canvas CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -69,14 +72,17 @@
         size: landscape;
         margin: 0;
       }
+
       body {
         background: white !important;
         margin: 0 !important;
         padding: 0 !important;
       }
+
       .no-print {
         display: none !important;
       }
+
       #certificate-wrapper {
         position: fixed !important;
         left: 0 !important;
@@ -95,7 +101,9 @@
     }
   </style>
 </head>
-<body class="min-h-screen flex flex-col items-center justify-start p-3 sm:p-6 md:p-8 selection:bg-amber-500 selection:text-slate-950">
+
+<body
+  class="min-h-screen flex flex-col items-center justify-start p-3 sm:p-6 md:p-8 selection:bg-amber-500 selection:text-slate-950">
 
   <!-- ========================================================= -->
   <!-- 1. واجهة الإنجازات والعدادات (Achievements Dashboard) -->
@@ -103,21 +111,27 @@
   <div class="w-full max-w-6xl space-y-6">
 
     <!-- رأس الصفحة وبطاقة المستخدم الفاخرة (Hero Profile & Summary) -->
-    <header class="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900/95 via-slate-900/80 to-slate-950/95 border border-amber-500/30 p-5 sm:p-8 shadow-2xl backdrop-blur-xl">
+    <header
+      class="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900/95 via-slate-900/80 to-slate-950/95 border border-amber-500/30 p-5 sm:p-8 shadow-2xl backdrop-blur-xl">
       <div class="absolute -top-24 -right-24 w-72 h-72 bg-amber-500/10 rounded-full blur-3xl pointer-events-none"></div>
-      <div class="absolute -bottom-24 -left-24 w-72 h-72 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
+      <div class="absolute -bottom-24 -left-24 w-72 h-72 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none">
+      </div>
 
       <div class="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
-        
+
         <!-- معلومات اللاعب واللقب المعتمد -->
         <div class="flex items-center gap-4 sm:gap-5 w-full md:w-auto">
           <div class="relative">
-            <div class="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-tr from-[#806716] via-[#D4AF37] to-[#FDF8ED] p-1 shadow-xl gold-glow flex items-center justify-center">
-              <div class="w-full h-full rounded-xl bg-slate-950 flex items-center justify-center text-amber-300 font-quran text-2xl sm:text-3xl font-black">
+            <div
+              class="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-tr from-[#806716] via-[#D4AF37] to-[#FDF8ED] p-1 shadow-xl gold-glow flex items-center justify-center">
+              <div
+                class="w-full h-full rounded-xl bg-slate-950 flex items-center justify-center text-amber-300 font-quran text-2xl sm:text-3xl font-black">
                 ع
               </div>
             </div>
-            <div class="absolute -bottom-1 -left-1 w-6 h-6 rounded-full bg-emerald-600 border-2 border-slate-900 flex items-center justify-center text-white text-[11px]" title="حساب معتمد وموثق">
+            <div
+              class="absolute -bottom-1 -left-1 w-6 h-6 rounded-full bg-emerald-600 border-2 border-slate-900 flex items-center justify-center text-white text-[11px]"
+              title="حساب معتمد وموثق">
               ✓
             </div>
           </div>
@@ -125,14 +139,17 @@
           <div>
             <div class="flex items-center gap-2">
               <h1 class="text-xl sm:text-3xl font-black text-white font-quran">
-                مرحباً، <span id="dashboardPlayerName" class="bg-gradient-to-r from-amber-300 via-amber-400 to-amber-200 bg-clip-text text-transparent">علاء</span>
+                مرحباً، <span id="dashboardPlayerName"
+                  class="bg-gradient-to-r from-amber-300 via-amber-400 to-amber-200 bg-clip-text text-transparent">علاء</span>
               </h1>
-              <span class="text-[10px] sm:text-xs font-bold px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+              <span
+                class="text-[10px] sm:text-xs font-bold px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
                 ⭐ متسابق ذهبي
               </span>
             </div>
             <p class="text-xs sm:text-sm text-slate-400 font-medium mt-1">
-              سِجِلُّ الإِنْجَازَاتِ وَالأَوْسِمَةِ الرَّسْمِيَّة لِعُلُومِ القُرْآنِ الكَرِيمِ وَالسُّنَّةِ النَّبَوِيَّة
+              سِجِلُّ الإِنْجَازَاتِ وَالأَوْسِمَةِ الرَّسْمِيَّة لِعُلُومِ القُرْآنِ الكَرِيمِ وَالسُّنَّةِ
+              النَّبَوِيَّة
             </p>
           </div>
         </div>
@@ -164,10 +181,13 @@
       <div class="mt-6 pt-5 border-t border-slate-800/80">
         <div class="flex items-center justify-between text-xs font-bold text-slate-400 mb-2">
           <span>التقدم التراكمي نحو الختم الأكبر لجميع المسابقات:</span>
-          <span class="text-amber-400 font-mono">73% (8 / 11)</span>
+          <span id="statCumulativeSummary" class="text-amber-400 font-mono">0% (0 / 11)</span>
         </div>
         <div class="w-full h-3 bg-slate-950 rounded-full overflow-hidden p-0.5 border border-slate-800">
-          <div class="h-full bg-gradient-to-r from-emerald-500 via-amber-500 to-amber-400 rounded-full transition-all duration-700" style="width: 73%"></div>
+          <div
+            id="statCumulativeBar"
+            class="h-full bg-gradient-to-r from-emerald-500 via-amber-500 to-amber-400 rounded-full transition-all duration-700"
+            style="width: 0%"></div>
         </div>
       </div>
     </header>
@@ -175,13 +195,16 @@
     <!-- شريط تصفية وتوزيع البطاقات (Filter Tabs) -->
     <div class="flex items-center justify-between flex-wrap gap-3">
       <div class="flex items-center gap-2 p-1 bg-slate-900/90 border border-slate-800 rounded-2xl">
-        <button type="button" onclick="filterAchievements('all')" id="tab-all" class="px-4 py-2 rounded-xl text-xs sm:text-sm font-bold bg-amber-500 text-slate-950 transition-all cursor-pointer">
+        <button type="button" onclick="filterAchievements('all')" id="tab-all"
+          class="px-4 py-2 rounded-xl text-xs sm:text-sm font-bold bg-amber-500 text-slate-950 transition-all cursor-pointer">
           الكل (11)
         </button>
-        <button type="button" onclick="filterAchievements('completed')" id="tab-completed" class="px-4 py-2 rounded-xl text-xs sm:text-sm font-bold text-slate-400 hover:text-white transition-all cursor-pointer">
+        <button type="button" onclick="filterAchievements('completed')" id="tab-completed"
+          class="px-4 py-2 rounded-xl text-xs sm:text-sm font-bold text-slate-400 hover:text-white transition-all cursor-pointer">
           المكتملة والجاهزة (8) ✓
         </button>
-        <button type="button" onclick="filterAchievements('pending')" id="tab-pending" class="px-4 py-2 rounded-xl text-xs sm:text-sm font-bold text-slate-400 hover:text-white transition-all cursor-pointer">
+        <button type="button" onclick="filterAchievements('pending')" id="tab-pending"
+          class="px-4 py-2 rounded-xl text-xs sm:text-sm font-bold text-slate-400 hover:text-white transition-all cursor-pointer">
           قيد الإنجاز (3) ⏳
         </button>
       </div>
@@ -202,14 +225,18 @@
   <!-- ========================================================= -->
   <!-- 2. إشعار النجاح / التنزيل (Toast Notification) -->
   <!-- ========================================================= -->
-  <div id="toastNotification" class="fixed bottom-6 right-6 z-50 transform translate-y-32 opacity-0 transition-all duration-300 pointer-events-none max-w-sm w-full">
-    <div class="bg-slate-900/95 border-2 border-emerald-500/60 rounded-2xl p-4 shadow-2xl backdrop-blur-xl flex items-center gap-3 text-white">
-      <div class="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 text-lg">
+  <div id="toastNotification"
+    class="fixed bottom-6 right-6 z-50 transform translate-y-32 opacity-0 transition-all duration-300 pointer-events-none max-w-sm w-full">
+    <div
+      class="bg-slate-900/95 border-2 border-emerald-500/60 rounded-2xl p-4 shadow-2xl backdrop-blur-xl flex items-center gap-3 text-white">
+      <div
+        class="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 text-lg">
         ✓
       </div>
       <div class="flex-1">
         <h4 id="toastTitle" class="text-sm font-bold text-emerald-300">تم تنزيل الشهادة بنجاح!</h4>
-        <p id="toastMessage" class="text-xs text-slate-300 mt-0.5">تم صك الشهادة بالرسم الهندسي وتحميلها بدقة فائقة على جهازك.</p>
+        <p id="toastMessage" class="text-xs text-slate-300 mt-0.5">تم صك الشهادة بالرسم الهندسي وتحميلها بدقة فائقة على
+          جهازك.</p>
       </div>
     </div>
   </div>
@@ -218,10 +245,12 @@
   <!-- 3. قالب الشهادة الفخم المبني بالكامل بـ HTML/CSS/Tailwind -->
   <!-- ========================================================= -->
   <!-- هذا القالب مخفي بصرياً خارج الشاشة، ويحتوي على الإطارات المزدوجة والزخارف الهندسية والختم المذهب -->
-  <div id="export-cert-container" class="fixed -left-[9999px] top-0 pointer-events-none" style="width: 1120px; height: 792px; overflow: hidden;" aria-hidden="true">
-    
-    <div id="certificate-wrapper" class="relative w-[1120px] h-[792px] bg-[#FCFBF7] text-slate-800 rounded-3xl p-10 shadow-2xl border-[4px] border-[#D4AF37] overflow-hidden select-none flex flex-col justify-between"
-         style="box-shadow: 0 30px 80px -20px rgba(6, 78, 59, 0.25), 0 0 0 1px rgba(212, 175, 55, 0.4); background-image: radial-gradient(#F5EEDB 0.75px, transparent 0.75px), radial-gradient(#F5EEDB 0.75px, #FCFBF7 0.75px); background-size: 30px 30px; background-position: 0 0, 15px 15px;">
+  <div id="export-cert-container" class="fixed -left-[9999px] top-0 pointer-events-none"
+    style="width: 1120px; height: 792px; overflow: hidden;" aria-hidden="true">
+
+    <div id="certificate-wrapper"
+      class="relative w-[1120px] h-[792px] bg-[#FCFBF7] text-slate-800 rounded-3xl p-10 shadow-2xl border-[4px] border-[#D4AF37] overflow-hidden select-none flex flex-col justify-between"
+      style="box-shadow: 0 30px 80px -20px rgba(6, 78, 59, 0.25), 0 0 0 1px rgba(212, 175, 55, 0.4); background-image: radial-gradient(#F5EEDB 0.75px, transparent 0.75px), radial-gradient(#F5EEDB 0.75px, #FCFBF7 0.75px); background-size: 30px 30px; background-position: 0 0, 15px 15px;">
 
       <!-- ============================== -->
       <!-- النمط الهندسي الإسلامي المدمج (SVG Pattern 6% Opacity) -->
@@ -230,9 +259,12 @@
         <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <pattern id="islamic-girih-pattern" width="80" height="80" patternUnits="userSpaceOnUse">
-              <path d="M40 0 L51.7 11.7 L68.3 11.7 L68.3 28.3 L80 40 L68.3 51.7 L68.3 68.3 L51.7 68.3 L40 80 L28.3 68.3 L11.7 68.3 L11.7 51.7 L0 40 L11.7 28.3 L11.7 11.7 L28.3 11.7 Z" fill="none" stroke="#064E3B" stroke-width="1.2"/>
+              <path
+                d="M40 0 L51.7 11.7 L68.3 11.7 L68.3 28.3 L80 40 L68.3 51.7 L68.3 68.3 L51.7 68.3 L40 80 L28.3 68.3 L11.7 68.3 L11.7 51.7 L0 40 L11.7 28.3 L11.7 11.7 L28.3 11.7 Z"
+                fill="none" stroke="#064E3B" stroke-width="1.2" />
               <circle cx="40" cy="40" r="18" fill="none" stroke="#D4AF37" stroke-width="1" />
-              <path d="M40 10 L47 23 L61 23 L50 32 L54 46 L40 37 L26 46 L30 32 L19 23 L33 23 Z" fill="none" stroke="#064E3B" stroke-width="0.8"/>
+              <path d="M40 10 L47 23 L61 23 L50 32 L54 46 L40 37 L26 46 L30 32 L19 23 L33 23 Z" fill="none"
+                stroke="#064E3B" stroke-width="0.8" />
             </pattern>
           </defs>
           <rect width="100%" height="100%" fill="url(#islamic-girih-pattern)" />
@@ -260,12 +292,13 @@
         <div class="relative inline-block mt-1">
           <div class="flex items-center justify-center gap-3">
             <span class="text-[#D4AF37] text-xl">✦</span>
-            <h2 class="font-quran text-5xl font-black bg-gradient-to-r from-[#806716] via-[#D4AF37] to-[#806716] bg-clip-text text-transparent drop-shadow-sm">
+            <h2
+              class="font-quran text-5xl font-black bg-gradient-to-r from-[#806716] via-[#D4AF37] to-[#806716] bg-clip-text text-transparent drop-shadow-sm">
               شَهَادَةُ إِنجَازٍ وَتَفَوُّق
             </h2>
             <span class="text-[#D4AF37] text-xl">✦</span>
           </div>
-          
+
           <p class="text-sm font-tajawal font-bold text-[#064E3B] tracking-wider mt-3">
             تَطْبِيقُ مَتِين لِعُلُومِ القُرْآنِ الكَرِيمِ وَالمُتَشَابِهَات
           </p>
@@ -276,14 +309,17 @@
       <!-- 2. المتن النصي الرئيسي للشهادة (Certificate Core Body) -->
       <!-- ========================================================= -->
       <div class="relative z-10 flex flex-col items-center justify-center text-center my-auto px-12 space-y-3">
-        
+
         <p class="text-base font-tajawal font-semibold text-slate-600">
-          تَشْهَدُ إِدَارَةُ تَطْبِيقِ <span class="font-bold text-[#064E3B]">مَتِين لِعُلُومِ القُرْآنِ الكَرِيمِ</span> بِأَنَّ البَطَلَ المُتَسَابِق /
+          تَشْهَدُ إِدَارَةُ تَطْبِيقِ <span class="font-bold text-[#064E3B]">مَتِين لِعُلُومِ القُرْآنِ
+            الكَرِيمِ</span> بِأَنَّ الأَخ المُتَسَابِق /
         </p>
 
         <!-- اسم اللاعب المذهب الفخم المعتمد حصراً -->
         <div class="relative inline-flex items-center justify-center px-12 py-2 my-1">
-          <div class="absolute inset-x-0 bottom-0 h-[2px] bg-gradient-to-r from-transparent via-[#D4AF37] to-transparent"></div>
+          <div
+            class="absolute inset-x-0 bottom-0 h-[2px] bg-gradient-to-r from-transparent via-[#D4AF37] to-transparent">
+          </div>
           <h3 id="certPlayerName" class="font-quran text-5xl font-black text-[#064E3B] tracking-wide drop-shadow-sm">
             علاء
           </h3>
@@ -292,7 +328,8 @@
         <div class="space-y-2 max-w-3xl w-full">
           <p class="text-lg font-tajawal text-slate-700 leading-relaxed">
             قَدْ أَتَمَّ بِنَجَاحٍ وَإِتْقَانٍ خَوْضَ:{' '}
-            <span id="certChallengeName" class="font-black text-[#806716] px-3 py-1 rounded-lg bg-amber-50/80 border border-amber-200/70 inline-block my-1 leading-snug">
+            <span id="certChallengeName"
+              class="font-black text-[#806716] px-3 py-1 rounded-lg bg-amber-50/80 border border-amber-200/70 inline-block my-1 leading-snug">
               إتمام 100 سؤال في تحدي إكمال الآية
             </span>
             <span id="certSurahOrJuz" class="text-sm text-slate-500 font-bold mr-1">
@@ -301,7 +338,8 @@
           </p>
 
           <!-- بطاقة النتيجة -->
-          <div class="inline-flex items-center gap-3 px-6 py-1.5 rounded-full bg-gradient-to-r from-emerald-50 via-amber-50 to-emerald-50 border border-amber-200 shadow-sm text-base font-bold text-[#064E3B]">
+          <div
+            class="inline-flex items-center gap-3 px-6 py-1.5 rounded-full bg-gradient-to-r from-emerald-50 via-amber-50 to-emerald-50 border border-amber-200 shadow-sm text-base font-bold text-[#064E3B]">
             <span>النَّتِيجَة:</span>
             <span id="certScore" class="font-black text-amber-700 font-mono text-lg">
               100%
@@ -310,7 +348,8 @@
 
           <!-- الدعاء الختامي المبارك -->
           <p class="text-sm font-quran text-slate-500 italic pt-1">
-            سَائِلِينَ المَوْلَى عَزَّ وَجَلَّ لَهُ التَّوْفِيقَ وَالسَّدَادَ، وَأَنْ يَجْعَلَ القُرْآنَ العَظِيمَ رَبِيعَ قَلْبِهِ وَنُورَ صَدْرِهِ.
+            سَائِلِينَ المَوْلَى عَزَّ وَجَلَّ لَهُ التَّوْفِيقَ وَالسَّدَادَ، وَأَنْ يَجْعَلَ القُرْآنَ العَظِيمَ
+            رَبِيعَ قَلْبِهِ وَنُورَ صَدْرِهِ.
           </p>
         </div>
       </div>
@@ -319,9 +358,10 @@
       <!-- 3. التذييل والأختام الرسمية المعتمدة (Footer & Seals) -->
       <!-- ========================================================= -->
       <div class="relative z-10 grid grid-cols-3 items-end pt-4 border-t border-[#D4AF37]/30 px-6">
-        
+
         <!-- الجانب الأيمن: تاريخ المنح والاعتماد -->
-        <div class="flex flex-col items-start text-right bg-white/70 backdrop-blur-xs rounded-xl p-2.5 border border-[#D4AF37]/20 shadow-2xs">
+        <div
+          class="flex flex-col items-start text-right bg-white/70 backdrop-blur-xs rounded-xl p-2.5 border border-[#D4AF37]/20 shadow-2xs">
           <span class="text-xs font-bold text-slate-400">تَارِيخُ المَنْح</span>
           <span id="certDate" class="text-sm font-black text-[#064E3B] mt-0.5">
             15 ربيع الأول 1448 هـ
@@ -334,18 +374,22 @@
         <!-- المنتصف: الختم الذهبي الملكي ثلاثي الأبعاد -->
         <div class="flex flex-col items-center justify-center">
           <div class="relative w-24 h-24">
-            
+
             <!-- أشرطة الختم الساتانية المتدلية -->
-            <div class="absolute -bottom-3 left-1/2 -translate-x-1/2 w-10 h-6 flex justify-center gap-1 pointer-events-none">
+            <div
+              class="absolute -bottom-3 left-1/2 -translate-x-1/2 w-10 h-6 flex justify-center gap-1 pointer-events-none">
               <div class="w-3 h-6 bg-[#806716] transform -rotate-12 rounded-b-xs shadow-sm"></div>
               <div class="w-3 h-6 bg-[#AA8B24] transform rotate-12 rounded-b-xs shadow-sm"></div>
             </div>
 
             <!-- الختم الدائري المذهب ثلاثي الأبعاد -->
-            <div class="relative w-full h-full rounded-full bg-gradient-to-tr from-[#806716] via-[#D4AF37] to-[#FDF8ED] p-1 shadow-xl shadow-amber-950/20 flex items-center justify-center">
-              <div class="w-full h-full rounded-full border border-dashed border-[#806716] bg-gradient-to-br from-[#AA8B24] to-[#806716] text-[#FDF8ED] flex flex-col items-center justify-center p-1 text-center">
+            <div
+              class="relative w-full h-full rounded-full bg-gradient-to-tr from-[#806716] via-[#D4AF37] to-[#FDF8ED] p-1 shadow-xl shadow-amber-950/20 flex items-center justify-center">
+              <div
+                class="w-full h-full rounded-full border border-dashed border-[#806716] bg-gradient-to-br from-[#AA8B24] to-[#806716] text-[#FDF8ED] flex flex-col items-center justify-center p-1 text-center">
                 <svg class="w-7 h-7 text-[#FDF8ED] drop-shadow-sm" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                  <path
+                    d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
                 </svg>
                 <span class="text-[9px] font-black uppercase tracking-tighter leading-none mt-0.5">
                   مُعْتَمَدٌ
@@ -360,13 +404,19 @@
         </div>
 
         <!-- الجانب الأيسر: اعتماد وتوثيق إدارة التطبيق -->
-        <div class="flex flex-col items-end text-left bg-white/70 backdrop-blur-xs rounded-xl p-2.5 border border-[#D4AF37]/20 shadow-2xs">
+        <div
+          class="flex flex-col items-end text-left bg-white/70 backdrop-blur-xs rounded-xl p-2.5 border border-[#D4AF37]/20 shadow-2xs">
           <span class="text-xs font-bold text-slate-400">إِدَارَةُ التَّطْبِيقِ</span>
           <div class="font-quran text-lg font-black text-[#064E3B] my-0.5 italic">
             متين لعلوم القرآن
           </div>
-          <div class="flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-md border border-emerald-200/60 shadow-2xs">
-            <svg class="w-3.5 h-3.5 text-emerald-600" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+          <div
+            class="flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-md border border-emerald-200/60 shadow-2xs">
+            <svg class="w-3.5 h-3.5 text-emerald-600" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd"
+                d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                clip-rule="evenodd" />
+            </svg>
             <span>شهادة موثقة رقمياً</span>
           </div>
         </div>
@@ -532,6 +582,90 @@
 
     let currentFilter = 'all';
 
+    // مزامنة الإنجازات بناءً على القواعد الصارمة: تصفية الإجابات الصحيحة فقط والعزل التام للأقسام
+    function syncAchievementsWithStrictFilters() {
+      let completedIds = [];
+      try {
+        const raw = localStorage.getItem('quran_completed_ids') || localStorage.getItem('quran_completed_challenges');
+        if (raw) completedIds = JSON.parse(raw);
+      } catch (_) {}
+
+      const streak = Number(localStorage.getItem('quran_streak') || 0);
+      const points = Number(localStorage.getItem('quran_total_points') || 0);
+
+      function getCategoryCorrects(cat) {
+        try {
+          const raw = localStorage.getItem(`quran_correct_answers_${cat}`);
+          if (raw) {
+            const arr = JSON.parse(raw);
+            if (Array.isArray(arr)) return arr.length;
+          }
+          const tRaw = localStorage.getItem(`quran_quiz_topics_${cat}`);
+          if (tRaw) {
+            const tObj = JSON.parse(tRaw);
+            let count = 0;
+            [1, 2, 3].forEach(l => { if (Array.isArray(tObj[l])) count += tObj[l].length; });
+            return count * 12;
+          }
+        } catch (_) {}
+        return 0;
+      }
+
+      let seerahScore = 0;
+      try {
+        const sRaw = localStorage.getItem('quran_quiz_progress_seerah');
+        if (sRaw) {
+          const sObj = JSON.parse(sRaw);
+          seerahScore = Number(sObj.score || 0);
+        }
+      } catch (_) {}
+
+      ACHIEVEMENTS_DATA.forEach(item => {
+        if (item.id === 'ayah_100') {
+          item.current = Math.min(item.total, completedIds.length);
+        } else if (item.id === 'surah_50') {
+          item.current = Math.min(item.total, getCategoryCorrects('surah'));
+        } else if (item.id === 'figh_quiz') {
+          item.current = Math.min(item.total, getCategoryCorrects('figh'));
+        } else if (item.id === 'seerah_60') {
+          item.current = Math.min(item.total, Math.max(seerahScore, getCategoryCorrects('seerah')));
+        } else if (item.id === 'akida_bank') {
+          item.current = Math.min(item.total, getCategoryCorrects('akida'));
+        } else if (item.id === 'hadith_100') {
+          item.current = Math.min(item.total, getCategoryCorrects('hadith'));
+        } else if (item.id === 'tafseer_100') {
+          item.current = Math.min(item.total, getCategoryCorrects('tafseer'));
+        } else if (item.id === 'history_conquests') {
+          item.current = Math.min(item.total, getCategoryCorrects('history'));
+        } else if (item.id === 'arabic_language') {
+          item.current = Math.min(item.total, Math.max(getCategoryCorrects('arabic'), getCategoryCorrects('arabia')));
+        } else if (item.id === 'daily_streak_30') {
+          item.current = Math.min(item.total, streak);
+        } else if (item.id === 'speed_1000') {
+          item.current = Math.min(item.total, points);
+        }
+
+        item.completed = item.current >= item.total;
+        item.score = `${Math.round((item.current / item.total) * 100)}%`;
+      });
+
+      const completedTotal = ACHIEVEMENTS_DATA.filter(i => i.completed).length;
+      const pendingTotal = ACHIEVEMENTS_DATA.length - completedTotal;
+      const percent = Math.round((completedTotal / ACHIEVEMENTS_DATA.length) * 100);
+
+      const elComp = document.getElementById('statCompletedCount');
+      if (elComp) elComp.textContent = completedTotal;
+      const elPend = document.getElementById('statPendingCount');
+      if (elPend) elPend.textContent = pendingTotal;
+      const elRate = document.getElementById('statCompletionRate');
+      if (elRate) elRate.textContent = `${percent}%`;
+
+      const elCumul = document.getElementById('statCumulativeSummary');
+      if (elCumul) elCumul.textContent = `${percent}% (${completedTotal} / ${ACHIEVEMENTS_DATA.length})`;
+      const elProgBar = document.getElementById('statCumulativeBar');
+      if (elProgBar) elProgBar.style.width = `${percent}%`;
+    }
+
     // تهيئة الصفحة فور تحميلها
     window.addEventListener('DOMContentLoaded', () => {
       // حقن اسم اللاعب المحمي في الترويسة والشهادة مباشرة
@@ -546,7 +680,8 @@
       });
       document.getElementById('certDate').textContent = today;
 
-      // عرض البطاقات في الواجهة
+      // مزامنة الإحصائيات الدقيقة وتصيير البطاقات
+      syncAchievementsWithStrictFilters();
       renderAchievements();
     });
 
@@ -768,4 +903,5 @@
     }
   </script>
 </body>
+
 </html>

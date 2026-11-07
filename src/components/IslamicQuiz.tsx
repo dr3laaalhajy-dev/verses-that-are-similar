@@ -4,6 +4,7 @@ import { Trophy, RotateCcw, ChevronLeft, CheckCircle2, XCircle, Award, Sparkles,
 import { quizQuestions } from '../data/quizQuestionsData';
 import { islamicCategoriesData, islamicCategoriesList, CategoryQuestion } from '../data/islamicCategories';
 import CertificateGenerator from './CertificateGenerator';
+import { recordMilestoneAnswer } from '../services/milestoneProgressService';
 
 const getStorageKey = (category: string | null) => `quran_quiz_progress_${category || 'general'}`;
 
@@ -178,6 +179,13 @@ const IslamicQuiz: React.FC<{
     const isCorrect = option === questions[currentIndex].answer;
     if (isCorrect) {
       setScore(prev => prev + 1);
+      if (selectedCategory) {
+        recordMilestoneAnswer({
+          category: selectedCategory,
+          questionId: questions[currentIndex]?.id || `${selectedCategory}_${currentIndex}`,
+          isCorrect: true
+        });
+      }
     }
 
     setIsAnimating(true);
