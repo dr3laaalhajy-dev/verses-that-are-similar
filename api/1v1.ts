@@ -30,6 +30,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     case 'kick-player':
     case 'kickPlayer':
       return handleKickPlayer(req, res)
+    case 'update-settings':
+    case 'updateSettings':
+    case 'update-room':
+      return handleUpdateRoomSettings(req, res)
     case 'reaction': return handleReaction(req, res)
     case 'dnd-cooldown': return handleDndCooldown(req, res)
     case 'invite':
@@ -1772,6 +1776,31 @@ async function handleKickPlayer(req: VercelRequest, res: VercelResponse) {
   } catch (error: any) {
     console.error('[Kick] Unhandled error in handleKickPlayer:', error)
     return res.status(500).json({ error: 'فشل طرد اللاعب', message: error?.message || String(error) })
+  }
+}
+
+async function handleUpdateRoomSettings(req: VercelRequest, res: VercelResponse) {
+  const { roomId, updatePayload } = req.body || {}
+  if (!roomId || !updatePayload) {
+    return res.status(400).json({ error: 'Missing roomId or updatePayload' })
+  }
+
+  try {
+    const { error: updateErr } = await supabaseAdmin
+      .from('rooms')
+      .update(updatePayload)
+      .eq('id', roomId)
+
+    if (updateErr) {
+      console.error('Failed to update room settings in supabaseAdmin:', updateErr)
+      return res.status(500).json({ error: updateErr.message })
+    }
+
+    const fullRoom = await getFullRoom(roomId)
+    return res.status(200).json({ success: true, room: fullRoom })
+  } catch (err: any) {
+    console.error('Error in handleUpdateRoomSettings:', err)
+    return res.status(500).json({ error: err?.message || String(err) })
   }
 }
 

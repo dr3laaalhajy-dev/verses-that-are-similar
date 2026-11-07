@@ -2,13 +2,18 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import {
   Globe, Lock, Eye, EyeOff, Mic, CheckCircle, BookOpen, Sparkles, HelpCircle,
-  Check, ArrowLeft
+  Check, ArrowLeft, Settings, X, Loader2
 } from 'lucide-react';
 import { View } from '../types/challenges';
 import { WhoAmIInfoAlert } from '../components/WhoAmISettings';
 import { islamicCategoriesList } from '../data/islamicCategories';
 
 export interface GroupCreatePageProps {
+  mode?: 'create' | 'edit';
+  initialData?: any;
+  onClose?: () => void;
+  onSubmitEdit?: () => void;
+  isSaving?: boolean;
   v1RoomName: string;
   setV1RoomName: (name: string) => void;
   v1IsPrivate: boolean;
@@ -53,6 +58,11 @@ export interface GroupCreatePageProps {
 }
 
 export const GroupCreatePage: React.FC<GroupCreatePageProps> = ({
+  mode = 'create',
+  initialData,
+  onClose,
+  onSubmitEdit,
+  isSaving = false,
   v1RoomName,
   setV1RoomName,
   v1IsPrivate,
@@ -90,15 +100,41 @@ export const GroupCreatePage: React.FC<GroupCreatePageProps> = ({
   isCreatingRoom,
   setView
 }) => {
+  const isEditMode = mode === 'edit';
+
   return (
     <motion.div
-      key="group_create"
+      key={isEditMode ? "group_edit" : "group_create"}
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
-      className="w-full max-w-2xl mx-auto py-4 sm:py-6 md:py-8 px-3 sm:px-4 min-h-screen overflow-y-auto pb-32 sm:pb-36"
+      className={isEditMode ? "w-full text-right" : "w-full max-w-2xl mx-auto py-4 sm:py-6 md:py-8 px-3 sm:px-4 min-h-screen overflow-y-auto pb-32 sm:pb-36"}
     >
-      <div className="glass p-4 sm:p-6 md:p-8 rounded-3xl border-orange-100 shadow-xl space-y-5 sm:space-y-6">
-        <h2 className="text-lg sm:text-xl md:text-2xl font-black text-slate-800 text-center">إعدادات التحدي الجماعي</h2>
+      <div className={isEditMode ? "space-y-5 sm:space-y-6" : "glass p-4 sm:p-6 md:p-8 rounded-3xl border-orange-100 shadow-xl space-y-5 sm:space-y-6"}>
+        {isEditMode ? (
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div className="flex items-center gap-2.5">
+              <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center">
+                <Settings className="w-5 h-5" />
+              </div>
+              <div className="text-right">
+                <h2 className="text-lg sm:text-xl font-black text-slate-800">تعديل إعدادات الغرفة</h2>
+                <p className="text-xs text-slate-400 font-bold">تحديث فوري لجميع المتسابقين في القاعة</p>
+              </div>
+            </div>
+            {onClose && (
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={isSaving || isCreatingRoom}
+                className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-all cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            )}
+          </div>
+        ) : (
+          <h2 className="text-lg sm:text-xl md:text-2xl font-black text-slate-800 text-center">إعدادات التحدي الجماعي</h2>
+        )}
 
         <div className="space-y-5 sm:space-y-6">
           {/* 1. اسم الغرفة */}
@@ -709,29 +745,66 @@ export const GroupCreatePage: React.FC<GroupCreatePageProps> = ({
           )}
 
           <div className="pt-4 space-y-3">
-            <button
-              onClick={handleCreateV1}
-              disabled={isCreatingRoom || hasCountValidationErrors || totalConfiguredQuestions <= 0}
-              className={`w-full py-3.5 md:py-4 rounded-2xl font-black text-base md:text-lg shadow-xl transition-all flex items-center justify-center gap-3 group/btn ${
-                isCreatingRoom || hasCountValidationErrors || totalConfiguredQuestions <= 0
-                  ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none'
-                  : 'bg-orange-500 text-white shadow-orange-500/20 hover:bg-orange-600 hover:scale-[1.01] active:scale-95 cursor-pointer'
-              }`}
-            >
-              {isCreatingRoom ? <div className="w-6 h-6 border-3 border-white border-t-transparent rounded-full animate-spin" /> : (
-                <>
-                  <ArrowLeft className="w-5 h-5 transition-transform group-hover/btn:-translate-x-1" />
-                  <span>أنشئ الغرفة الآن</span>
-                </>
-              )}
-            </button>
+            {isEditMode ? (
+              <>
+                <button
+                  type="button"
+                  onClick={onSubmitEdit || handleCreateV1}
+                  disabled={isSaving || isCreatingRoom || hasCountValidationErrors || totalConfiguredQuestions <= 0}
+                  className={`w-full py-3.5 md:py-4 rounded-2xl font-black text-base md:text-lg shadow-xl transition-all flex items-center justify-center gap-3 group/btn ${
+                    isSaving || isCreatingRoom || hasCountValidationErrors || totalConfiguredQuestions <= 0
+                      ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none'
+                      : 'bg-brand-emerald text-white shadow-brand-emerald/20 hover:bg-brand-emerald/90 hover:scale-[1.01] active:scale-95 cursor-pointer'
+                  }`}
+                >
+                  {isSaving || isCreatingRoom ? (
+                    <div className="w-6 h-6 border-3 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <Check className="w-5 h-5 transition-transform group-hover/btn:scale-110" />
+                      <span>حفظ التعديلات</span>
+                    </>
+                  )}
+                </button>
 
-            <button
-              onClick={() => setView('group_join')}
-              className="w-full py-2.5 text-slate-400 font-bold hover:text-slate-600 transition-colors text-xs md:text-sm cursor-pointer"
-            >
-              رجوع لقائمة الغرف
-            </button>
+                {onClose && (
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    disabled={isSaving || isCreatingRoom}
+                    className="w-full py-2.5 text-slate-400 font-bold hover:text-slate-600 transition-colors text-xs md:text-sm cursor-pointer"
+                  >
+                    إلغاء
+                  </button>
+                )}
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={handleCreateV1}
+                  disabled={isCreatingRoom || hasCountValidationErrors || totalConfiguredQuestions <= 0}
+                  className={`w-full py-3.5 md:py-4 rounded-2xl font-black text-base md:text-lg shadow-xl transition-all flex items-center justify-center gap-3 group/btn ${
+                    isCreatingRoom || hasCountValidationErrors || totalConfiguredQuestions <= 0
+                      ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none'
+                      : 'bg-orange-500 text-white shadow-orange-500/20 hover:bg-orange-600 hover:scale-[1.01] active:scale-95 cursor-pointer'
+                  }`}
+                >
+                  {isCreatingRoom ? <div className="w-6 h-6 border-3 border-white border-t-transparent rounded-full animate-spin" /> : (
+                    <>
+                      <ArrowLeft className="w-5 h-5 transition-transform group-hover/btn:-translate-x-1" />
+                      <span>أنشئ الغرفة الآن</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  onClick={() => setView('group_join')}
+                  className="w-full py-2.5 text-slate-400 font-bold hover:text-slate-600 transition-colors text-xs md:text-sm cursor-pointer"
+                >
+                  رجوع لقائمة الغرف
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>

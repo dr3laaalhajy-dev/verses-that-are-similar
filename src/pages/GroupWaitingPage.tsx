@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { View } from '../types/challenges';
 import { LiveReactionsOverlay } from '../components/LiveReactionsOverlay';
+import { GroupCreatePage } from './GroupCreatePage';
 import { friendsRealtimeService } from '../services/friendsRealtimeService';
 import { supabase } from '../services/supabase';
 import { useApp, toast } from '../contexts/AppContext';
@@ -75,25 +76,6 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
 
-  const [editedName, setEditedName] = useState('');
-  const [editedTopic, setEditedTopic] = useState('');
-  const [editedQuestionCount, setEditedQuestionCount] = useState(5);
-  const [editedTimePerQuestion, setEditedTimePerQuestion] = useState(0);
-  const [editedTransitionMode, setEditedTransitionMode] = useState('SYNC');
-  const [editedGameMode, setEditedGameMode] = useState('STANDARD');
-
-  // Synchronize room settings into edit form state
-  useEffect(() => {
-    if (room) {
-      setEditedName(room.name || 'غرفة التحدي');
-      setEditedTopic(room.categoryFilter || room.category || '');
-      setEditedQuestionCount(Number(room.questionCount) || 5);
-      setEditedTimePerQuestion(Number(room.timePerQuestion) || 0);
-      setEditedTransitionMode(room.transitionMode || 'SYNC');
-      setEditedGameMode(room.gameMode || 'STANDARD');
-    }
-  }, [room?.id, room?.name, room?.categoryFilter, room?.questionCount, room?.timePerQuestion, room?.transitionMode, room?.gameMode]);
-
   const formatGameModeName = (mode: string) => {
     switch (String(mode || '').toUpperCase()) {
       case 'COMPLETION':
@@ -107,58 +89,23 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
         return 'تحدي من أنا؟';
       case 'ISLAMIC':
         return 'معلومات إسلامية عامة';
+      case 'MIXED':
+        return 'تحدي مهارات متعددة (مختلط)';
       case 'STANDARD':
       default:
         return 'تحدي المتشابهات (اختيار متعدد)';
     }
   };
 
-  const handleSaveRoomSettings = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSaveRoomSettings = async () => {
     if (!room?.id || !isCreator) return;
 
     setIsSavingSettings(true);
     try {
-      const updatePayload: any = {
-        name: editedName.trim() || 'غرفة التحدي',
-        categoryFilter: editedTopic.trim(),
-        questionCount: Number(editedQuestionCount) || 5,
-        timePerQuestion: Number(editedTimePerQuestion) || 0,
-        transitionMode: editedTransitionMode || 'SYNC',
-        gameMode: editedGameMode || 'STANDARD'
-      };
-
-      const { error } = await supabase
-        .from('rooms')
-        .update(updatePayload)
-        .eq('id', room.id);
-
-      if (error) {
-        console.error('Failed to update room settings:', error);
-        toast.error('فشل حفظ الإعدادات: ' + error.message);
-        return;
+      const success = await app.handleUpdateRoomSettings(room.id);
+      if (success) {
+        setIsEditModalOpen(false);
       }
-
-      // Optimistic local update without dropping connection
-      setRoom((prev: any) => prev ? {
-        ...prev,
-        ...updatePayload
-      } : prev);
-
-      // Broadcast update on room channel so all participants receive it immediately
-      try {
-        const existingChannel = supabase.getChannels().find(ch => ch.topic === `realtime:room_sync_${room.id}`);
-        if (existingChannel && existingChannel.state === 'joined') {
-          existingChannel.send({
-            type: 'broadcast',
-            event: 'room_settings_updated',
-            payload: updatePayload
-          }).catch(() => {});
-        }
-      } catch (_) {}
-
-      toast.success('تم تحديث إعدادات الغرفة بنجاح');
-      setIsEditModalOpen(false);
     } catch (err: any) {
       console.error('Error saving room settings:', err);
       toast.error('حدث خطأ أثناء حفظ الإعدادات');
@@ -744,7 +691,15 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
             {isCreator && (
               <button
                 type="button"
-                onClick={() => setIsEditModalOpen(true)}
+                onClick={() => {
+                  if (app?.fetchAvailableSkillCounts) {
+                    app.fetchAvailableSkillCounts();
+                  }
+                  if (app?.prefillRoomSettingsForEdit) {
+                    app.prefillRoomSettingsForEdit(room);
+                  }
+                  setIsEditModalOpen(true);
+                }}
                 className="flex-1 py-1.5 px-3 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-xs font-black flex items-center justify-center gap-1.5 shadow-xs transition-all active:scale-95 cursor-pointer"
                 title="تعديل إعدادات ونوع التحدي للغرفة"
               >
@@ -1150,147 +1105,56 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
       {/* Edit Room Settings Modal (For Creator Only) */}
       <AnimatePresence>
         {isEditModalOpen && isCreator && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs" dir="rtl">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 bg-slate-900/60 backdrop-blur-xs" dir="rtl">
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              className="bg-white rounded-3xl p-5 sm:p-6 w-full max-w-md shadow-2xl border border-slate-100 text-right space-y-4 max-h-[90vh] overflow-y-auto"
+              className="bg-white rounded-3xl p-4 sm:p-6 md:p-8 w-full max-w-2xl shadow-2xl border border-slate-100 text-right max-h-[92vh] overflow-y-auto"
             >
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
-                    <Settings className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3 className="font-black text-slate-800 text-base">تعديل إعدادات الغرفة</h3>
-                    <p className="text-[11px] text-slate-400 font-bold">تحديث فوري لجميع المتسابقين في القاعة</p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsEditModalOpen(false)}
-                  disabled={isSavingSettings}
-                  className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-all cursor-pointer"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              <form onSubmit={handleSaveRoomSettings} className="space-y-3.5 text-xs sm:text-sm">
-                <div>
-                  <label className="block text-slate-700 font-bold mb-1">اسم الغرفة:</label>
-                  <input
-                    type="text"
-                    value={editedName}
-                    onChange={(e) => setEditedName(e.target.value)}
-                    placeholder="اسم الغرفة..."
-                    required
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-brand-emerald focus:ring-1 focus:ring-brand-emerald outline-none font-bold text-slate-800 text-xs sm:text-sm"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-slate-700 font-bold mb-1">نوع التحدي:</label>
-                  <select
-                    value={editedGameMode}
-                    onChange={(e) => setEditedGameMode(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-brand-emerald outline-none font-bold text-slate-800 bg-white text-xs sm:text-sm cursor-pointer"
-                  >
-                    <option value="STANDARD">تحدي المتشابهات (اختيار متعدد)</option>
-                    <option value="COMPLETION">إكمال الآية الكريمة</option>
-                    <option value="SURAH">تحديد اسم السورة</option>
-                    <option value="AUDIO">تحدي التلاوة الصوتية</option>
-                    <option value="WHO_AM_I">تحدي من أنا؟</option>
-                    <option value="ISLAMIC">معلومات إسلامية عامة</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-slate-700 font-bold mb-1">التصنيف / الفئة (Topic):</label>
-                  <input
-                    type="text"
-                    value={editedTopic}
-                    onChange={(e) => setEditedTopic(e.target.value)}
-                    placeholder="مثال: سورة البقرة، جزء عم، الصحابة..."
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-brand-emerald focus:ring-1 focus:ring-brand-emerald outline-none font-bold text-slate-800 text-xs sm:text-sm"
-                  />
-                  <p className="text-[10px] text-slate-400 mt-1 font-bold">اتركه فارغاً لاختيار أسئلة عشوائية من جميع الأقسام</p>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-slate-700 font-bold mb-1">عدد الأسئلة:</label>
-                    <select
-                      value={editedQuestionCount}
-                      onChange={(e) => setEditedQuestionCount(Number(e.target.value))}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-brand-emerald outline-none font-bold text-slate-800 bg-white text-xs sm:text-sm cursor-pointer"
-                    >
-                      <option value={3}>3 أسئلة</option>
-                      <option value={5}>5 أسئلة</option>
-                      <option value={10}>10 أسئلة</option>
-                      <option value={15}>15 سؤالاً</option>
-                      <option value={20}>20 سؤالاً</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-slate-700 font-bold mb-1">وقت السؤال:</label>
-                    <select
-                      value={editedTimePerQuestion}
-                      onChange={(e) => setEditedTimePerQuestion(Number(e.target.value))}
-                      className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-brand-emerald outline-none font-bold text-slate-800 bg-white text-xs sm:text-sm cursor-pointer"
-                    >
-                      <option value={0}>بدون وقت (مفتوح)</option>
-                      <option value={10}>10 ثوانٍ</option>
-                      <option value={15}>15 ثانية</option>
-                      <option value={20}>20 ثانية</option>
-                      <option value={30}>30 ثانية</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-slate-700 font-bold mb-1">نمط الانتقال:</label>
-                  <select
-                    value={editedTransitionMode}
-                    onChange={(e) => setEditedTransitionMode(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-brand-emerald outline-none font-bold text-slate-800 bg-white text-xs sm:text-sm cursor-pointer"
-                  >
-                    <option value="SYNC">تزامن جماعي (جميع اللاعبين ينتقلون معاً)</option>
-                    <option value="ASYNC">سباق فردي سريع (كل لاعب ينهي بسرعة)</option>
-                  </select>
-                </div>
-
-                <div className="flex items-center gap-2 pt-2">
-                  <button
-                    type="submit"
-                    disabled={isSavingSettings}
-                    className="flex-1 py-2.5 rounded-xl bg-brand-emerald hover:bg-brand-emerald/90 text-white font-bold text-xs sm:text-sm shadow-md transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    {isSavingSettings ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        <span>جاري الحفظ...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Check className="w-4 h-4" />
-                        <span>حفظ التعديلات</span>
-                      </>
-                    )}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setIsEditModalOpen(false)}
-                    disabled={isSavingSettings}
-                    className="py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs sm:text-sm transition-all cursor-pointer"
-                  >
-                    إلغاء
-                  </button>
-                </div>
-              </form>
+              <GroupCreatePage
+                mode="edit"
+                initialData={room}
+                onClose={() => setIsEditModalOpen(false)}
+                onSubmitEdit={handleSaveRoomSettings}
+                isSaving={isSavingSettings || app?.isSavingRoomSettings}
+                v1RoomName={app.v1RoomName}
+                setV1RoomName={app.setV1RoomName}
+                v1IsPrivate={app.v1IsPrivate}
+                setV1IsPrivate={app.setV1IsPrivate}
+                showPasswordText={app.showPasswordText}
+                setShowPasswordText={app.setShowPasswordText}
+                v1RoomPassword={app.v1RoomPassword}
+                setV1RoomPassword={app.setV1RoomPassword}
+                v1GameModes={app.v1GameModes}
+                setV1GameModes={app.setV1GameModes}
+                systemSettings={app.systemSettings}
+                availableSkillCounts={app.availableSkillCounts}
+                skillQuestionCounts={app.skillQuestionCounts}
+                setSkillQuestionCounts={app.setSkillQuestionCounts}
+                whoAmIQuestionCount={app.whoAmIQuestionCount}
+                selectedWhoAmICategories={app.selectedWhoAmICategories}
+                setSelectedWhoAmICategories={app.setSelectedWhoAmICategories}
+                whoAmIAvailableCategories={app.whoAmIAvailableCategories}
+                whoAmICategoryCounts={app.whoAmICategoryCounts}
+                setWhoAmICategoryCounts={app.setWhoAmICategoryCounts}
+                totalConfiguredQuestions={app.totalConfiguredQuestions}
+                islamicRoomCategories={app.islamicRoomCategories}
+                islamicRoomLevels={app.islamicRoomLevels}
+                islamicRoomTopics={app.islamicRoomTopics}
+                islamicTopicQuestionCounts={app.islamicTopicQuestionCounts}
+                setShowIslamicConfigModal={app.setShowIslamicConfigModal}
+                hasCountValidationErrors={app.hasCountValidationErrors}
+                v1Timer={app.v1Timer}
+                setV1Timer={app.setV1Timer}
+                v1TimePerQuestion={app.v1TimePerQuestion}
+                setV1TimePerQuestion={app.setV1TimePerQuestion}
+                v1TransitionMode={app.v1TransitionMode}
+                setV1TransitionMode={app.setV1TransitionMode}
+                handleCreateV1={handleSaveRoomSettings}
+                isCreatingRoom={isSavingSettings || app?.isSavingRoomSettings}
+                setView={setView}
+              />
             </motion.div>
           </div>
         )}

@@ -828,6 +828,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     error: undefined
   });
   const [v1IsStartingRoom, setV1IsStartingRoom] = useState(false);
+  const [isSavingRoomSettings, setIsSavingRoomSettings] = useState(false);
   const [v1Category, setV1Category] = useState<string>('');
   const [skillsType, setSkillsType] = useState<'audio' | 'complete' | 'surah' | null>(null);
   const [isRoomLoading, setIsRoomLoading] = useState<boolean>(false);
@@ -2567,6 +2568,335 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       toast.error(errorMsg);
     } finally {
       setIsCreatingRoom(false);
+    }
+  };
+
+  const prefillRoomSettingsForEdit = useCallback((targetRoom: any) => {
+    if (!targetRoom) return;
+
+    // Refresh available counts in background
+    fetchAvailableSkillCounts();
+
+    // 1. Basic settings
+    setV1RoomName(targetRoom.name || 'غرفة التحدي');
+    setV1IsPrivate(Boolean(targetRoom.isPrivate));
+    setV1RoomPassword(targetRoom.password || '');
+
+    const timeVal = Number(targetRoom.timePerQuestion) || 0;
+    setV1Timer(timeVal > 0);
+    setV1TimePerQuestion(timeVal > 0 ? timeVal : 20);
+    setV1TransitionMode(targetRoom.transitionMode === 'ASYNC' ? 'ASYNC' : 'SYNC');
+
+    // 2. Identify game modes
+    const rawMode = String(targetRoom.gameMode || '').toUpperCase();
+    const rawModes: string[] = Array.isArray(targetRoom.gameModes)
+      ? targetRoom.gameModes.map((m: any) => String(m).toUpperCase())
+      : [];
+
+    const isWhoAmI = rawMode === 'WHO_AM_I' || rawModes.includes('WHO_AM_I') || targetRoom.challenge_type === 'who_am_i';
+    const isIslamic = rawMode === 'ISLAMIC' || rawModes.includes('ISLAMIC');
+
+    if (isWhoAmI) {
+      setV1GameModes(['who_am_i']);
+
+      let configs: { category: string; count: number }[] = [];
+      if (Array.isArray(targetRoom.categories_config) && targetRoom.categories_config.length > 0) {
+        configs = targetRoom.categories_config;
+      } else if (Array.isArray(targetRoom.surahFilters) && targetRoom.surahFilters.length > 0) {
+        if (typeof targetRoom.surahFilters[0] === 'object' && targetRoom.surahFilters[0]?.category) {
+          configs = targetRoom.surahFilters;
+        } else if (typeof targetRoom.surahFilters[0] === 'string') {
+          const perCat = Math.max(1, Math.floor((Number(targetRoom.questionCount) || 10) / targetRoom.surahFilters.length));
+          configs = targetRoom.surahFilters.map((s: string) => ({ category: s, count: perCat }));
+        }
+      } else if (targetRoom.category || targetRoom.categoryFilter) {
+        const catStr = String(targetRoom.categoryFilter || targetRoom.category || '');
+        const parts = catStr.split('+');
+        for (const p of parts) {
+          const m = p.match(/(.*?)\s*\((\d+)\)/);
+          if (m) {
+            configs.push({ category: m[1].trim(), count: parseInt(m[2], 10) || 1 });
+          } else if (p.trim()) {
+            configs.push({ category: p.trim(), count: 5 });
+          }
+        }
+      }
+
+      if (configs.length > 0) {
+        setSelectedWhoAmICategories(configs.map(c => c.category));
+        const countsMap: Record<string, number> = {};
+        configs.forEach(c => {
+          countsMap[c.category] = c.count;
+        });
+        setWhoAmICategoryCounts(prev => ({ ...prev, ...countsMap }));
+      } else {
+        setSelectedWhoAmICategories(['الصحابة']);
+        setWhoAmICategoryCounts(prev => ({ ...prev, 'الصحابة': Number(targetRoom.questionCount) || 5 }));
+      }
+      return;
+    }
+
+    // If not WHO_AM_I
+    const activeModes: ('audio' | 'complete' | 'surah' | 'islamic')[] = [];
+
+    if (isIslamic) {
+      activeModes.push('islamic');
+    }
+
+    if (rawModes.length > 0) {
+      if (rawModes.some(m => m === 'AUDIO' || m === 'STANDARD')) activeModes.push('audio');
+      if (rawModes.some(m => m === 'COMPLETION' || m === 'COMPLETE')) activeModes.push('complete');
+      if (rawModes.some(m => m === 'SURAH')) activeModes.push('surah');
+      if (rawModes.some(m => m === 'ISLAMIC') && !activeModes.includes('islamic')) activeModes.push('islamic');
+    } else if (rawMode === 'COMPLETION' || rawMode === 'COMPLETE') {
+      activeModes.push('complete');
+    } else if (rawMode === 'SURAH') {
+      activeModes.push('surah');
+    } else if (rawMode === 'AUDIO' || rawMode === 'STANDARD') {
+      activeModes.push('audio');
+    } else if (rawMode === 'MIXED') {
+      const challengesList = Array.isArray(targetRoom.challenges)
+        ? targetRoom.challenges
+        : (Array.isArray(targetRoom.challengeIds) && typeof targetRoom.challengeIds[0] === 'object' ? targetRoom.challengeIds : []);
+
+      if (challengesList.length > 0) {
+        if (challengesList.some((c: any) => (c.type || '').toUpperCase() === 'COMPLETION')) activeModes.push('complete');
+        if (challengesList.some((c: any) => (c.type || '').toUpperCase() === 'SURAH')) activeModes.push('surah');
+        if (challengesList.some((c: any) => {
+          const t = (c.type || '').toUpperCase();
+          return t === 'STANDARD' || t === 'AUDIO' || t === '';
+        })) activeModes.push('audio');
+        if (challengesList.some((c: any) => (c.type || '').toUpperCase() === 'ISLAMIC') && !activeModes.includes('islamic')) {
+          activeModes.push('islamic');
+        }
+      } else {
+        activeModes.push('complete', 'surah');
+      }
+    }
+
+    if (activeModes.length === 0) {
+      activeModes.push('complete');
+    }
+
+    setV1GameModes(activeModes);
+
+    // Parse counts per skill
+    const challengesList = Array.isArray(targetRoom.challenges)
+      ? targetRoom.challenges
+      : (Array.isArray(targetRoom.challengeIds) && typeof targetRoom.challengeIds[0] === 'object' ? targetRoom.challengeIds : []);
+
+    if (challengesList.length > 0) {
+      const audioCount = challengesList.filter((c: any) => {
+        const t = (c.type || '').toUpperCase();
+        return t === 'STANDARD' || t === 'AUDIO' || t === '';
+      }).length;
+      const completeCount = challengesList.filter((c: any) => (c.type || '').toUpperCase() === 'COMPLETION').length;
+      const surahCount = challengesList.filter((c: any) => (c.type || '').toUpperCase() === 'SURAH').length;
+
+      setSkillQuestionCounts({
+        audio: activeModes.includes('audio') ? (audioCount || 5) : 0,
+        complete: activeModes.includes('complete') ? (completeCount || 5) : 0,
+        surah: activeModes.includes('surah') ? (surahCount || 5) : 0
+      });
+    } else {
+      const totalQ = Number(targetRoom.questionCount) || 5;
+      const perMode = Math.max(1, Math.floor(totalQ / Math.max(1, activeModes.length)));
+      setSkillQuestionCounts({
+        audio: activeModes.includes('audio') ? perMode : 0,
+        complete: activeModes.includes('complete') ? perMode : 0,
+        surah: activeModes.includes('surah') ? perMode : 0
+      });
+    }
+
+    // Islamic config
+    if (activeModes.includes('islamic')) {
+      if (Array.isArray(targetRoom.surahFilters) && targetRoom.surahFilters.length > 0) {
+        setIslamicRoomTopics(targetRoom.surahFilters);
+      }
+      if (Array.isArray(targetRoom.categories) && targetRoom.categories.length > 0) {
+        setIslamicRoomCategories(targetRoom.categories);
+      } else if (targetRoom.categoryFilter) {
+        setIslamicRoomCategories([targetRoom.categoryFilter]);
+      }
+      if (Array.isArray(targetRoom.levels) && targetRoom.levels.length > 0) {
+        setIslamicRoomLevels(targetRoom.levels);
+      }
+    }
+  }, [fetchAvailableSkillCounts]);
+
+  const handleUpdateRoomSettings = async (roomId: string): Promise<boolean> => {
+    if (!roomId) return false;
+    if (v1IsPrivate && !v1RoomPassword.trim()) {
+      toast.error('يرجى كتابة كلمة المرور للغرفة الخاصة');
+      return false;
+    }
+    if (totalConfiguredQuestions <= 0) {
+      toast.error('يرجى تحديد عدد الأسئلة لمهارة واحدة على الأقل');
+      return false;
+    }
+    if (hasCountValidationErrors) {
+      toast.error('يرجى تصحيح الأعداد التي تتجاوز الحد المتاح');
+      return false;
+    }
+
+    setIsSavingRoomSettings(true);
+    try {
+      let updatePayload: any = {};
+
+      if (v1GameModes.includes('who_am_i')) {
+        const categories_config = selectedWhoAmICategories.map(cat => ({
+          category: cat,
+          count: Math.max(1, Number(whoAmICategoryCounts[cat]) || 1)
+        }));
+        const totalCount = Math.max(1, categories_config.reduce((sum, c) => sum + c.count, 0));
+        const categorySummary = categories_config.map(c => `${c.category} (${c.count})`).join(' + ');
+
+        const customChallenges = Array.from({ length: totalCount }, (_, i) => ({
+          id: i + 1,
+          type: 'WHO_AM_I',
+          keyword: 'من أنا؟',
+          text: 'من أنا؟'
+        }));
+
+        updatePayload = {
+          name: v1RoomName.trim() || 'تحدي من أنا؟',
+          isPrivate: v1IsPrivate,
+          password: v1IsPrivate ? v1RoomPassword.trim() : null,
+          gameMode: 'WHO_AM_I',
+          surahFilters: categories_config,
+          categoryFilter: categorySummary,
+          questionCount: totalCount,
+          timePerQuestion: 40,
+          transitionMode: 'SYNC',
+          challengeIds: customChallenges
+        };
+      } else {
+        const effectiveGameModes = v1GameModes.filter(m => {
+          if (m === 'audio' && systemSettings.hideAudioChallenge) return false;
+          if (m === 'complete' && systemSettings.hideCompletionChallenge) return false;
+          if (m === 'surah' && systemSettings.hideSurahChallenge) return false;
+          return true;
+        });
+
+        const isIslamicIncluded = effectiveGameModes.includes('islamic');
+        let customChallenges: any[] = [];
+
+        // 1. Audio
+        if (effectiveGameModes.includes('audio') && !systemSettings.hideAudioChallenge) {
+          const audioCount = Math.max(0, Number(skillQuestionCounts.audio) || 0);
+          if (audioCount > 0) {
+            const pool = allChallenges.filter(c => {
+              const t = (c.type || '').toUpperCase();
+              return t === 'STANDARD' || t === 'AUDIO' || t === '';
+            });
+            const picked = [...pool].sort(() => Math.random() - 0.5).slice(0, audioCount);
+            customChallenges.push(...picked);
+          }
+        }
+
+        // 2. Completion
+        if (effectiveGameModes.includes('complete') && !systemSettings.hideCompletionChallenge) {
+          const completeCount = Math.max(0, Number(skillQuestionCounts.complete) || 0);
+          if (completeCount > 0) {
+            const pool = allChallenges.filter(c => (c.type || '').toUpperCase() === 'COMPLETION');
+            const picked = [...pool].sort(() => Math.random() - 0.5).slice(0, completeCount);
+            customChallenges.push(...picked);
+          }
+        }
+
+        // 3. Surah
+        if (effectiveGameModes.includes('surah') && !systemSettings.hideSurahChallenge) {
+          const surahCount = Math.max(0, Number(skillQuestionCounts.surah) || 0);
+          if (surahCount > 0) {
+            const pool = allChallenges.filter(c => (c.type || '').toUpperCase() === 'SURAH');
+            const picked = [...pool].sort(() => Math.random() - 0.5).slice(0, surahCount);
+            customChallenges.push(...picked);
+          }
+        }
+
+        // 4. Targeted Islamic
+        if (isIslamicIncluded) {
+          const allocations: Record<string, number> = {};
+          if (islamicRoomTopics.includes('all')) {
+            allocations['all'] = Math.max(0, Number(islamicTopicQuestionCounts['all']) || 0);
+          } else {
+            islamicRoomTopics.forEach(t => {
+              allocations[t] = Math.max(0, Number(islamicTopicQuestionCounts[t]) || 0);
+            });
+          }
+          const islamicQs = getTargetedIslamicQuestions(allocations, islamicRoomLevels, islamicRoomCategories);
+          customChallenges.push(...islamicQs);
+        }
+
+        // Shuffle
+        const finalCustomChallenges = [...customChallenges].sort(() => Math.random() - 0.5);
+
+        updatePayload = {
+          name: v1RoomName.trim() || 'غرفة التحدي',
+          isPrivate: v1IsPrivate,
+          password: v1IsPrivate ? v1RoomPassword.trim() : null,
+          gameMode: effectiveGameModes.length === 1
+            ? (effectiveGameModes[0] === 'islamic' ? 'ISLAMIC' : effectiveGameModes[0] === 'audio' ? 'STANDARD' : effectiveGameModes[0] === 'complete' ? 'COMPLETION' : 'SURAH')
+            : 'MIXED',
+          surahFilters: isIslamicIncluded ? islamicRoomTopics : [],
+          categoryFilter: isIslamicIncluded ? (islamicRoomCategories[0] || 'إسلامي') : (v1Category || ''),
+          questionCount: finalCustomChallenges.length,
+          timePerQuestion: v1Timer ? v1TimePerQuestion : 0,
+          transitionMode: v1TransitionMode,
+          challengeIds: finalCustomChallenges
+        };
+      }
+
+      // Execute update directly in Supabase as required
+      const { error: updateError } = await supabase
+        .from('rooms')
+        .update(updatePayload)
+        .eq('id', roomId);
+
+      if (updateError) {
+        console.warn('Direct supabase update encountered error, falling back to api/1v1:', updateError);
+        const res = await fetch('/api/1v1', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'update-settings',
+            roomId,
+            updatePayload
+          })
+        });
+        const resData = await res.json();
+        if (!res.ok) {
+          throw new Error(resData.error || resData.message || 'فشل تحديث الإعدادات');
+        }
+      }
+
+      // Optimistic local update
+      setRoom((prev: any) => prev ? {
+        ...prev,
+        ...updatePayload,
+        challenges: updatePayload.challengeIds
+      } : prev);
+
+      // Broadcast update on room channel so all participants receive it immediately
+      try {
+        const existingChannel = supabase.getChannels().find(ch => ch.topic === `realtime:room_sync_${roomId}`);
+        if (existingChannel && existingChannel.state === 'joined') {
+          existingChannel.send({
+            type: 'broadcast',
+            event: 'room_settings_updated',
+            payload: updatePayload
+          }).catch(() => {});
+        }
+      } catch (_) {}
+
+      toast.success('تم حفظ إعدادات الغرفة بنجاح');
+      return true;
+    } catch (err: any) {
+      console.error('Error saving room settings:', err);
+      toast.error(err?.message || 'حدث خطأ أثناء حفظ الإعدادات');
+      return false;
+    } finally {
+      setIsSavingRoomSettings(false);
     }
   };
 
@@ -5780,6 +6110,10 @@ ${versesList}
     v1TimePerQuestion, setV1TimePerQuestion,
     v1TransitionMode, setV1TransitionMode,
     handleCreateV1,
+    prefillRoomSettingsForEdit,
+    handleUpdateRoomSettings,
+    isSavingRoomSettings,
+    fetchAvailableSkillCounts,
     handleStartRoomV1,
     handleStartRoom: handleStartRoomV1,
     v1IsStartingRoom,
