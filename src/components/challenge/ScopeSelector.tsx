@@ -277,3 +277,7 @@ export const ScopeSelector: React.FC<ScopeSelectorProps> = ({
     </div>
   );
 };
+
+export const JuzSurahSelector = ScopeSelector;
+export default ScopeSelector;
+

@@ -1234,6 +1234,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setMatchedIds(new Set());
     setSpeedTimeLeft(skillsType === 'audio' ? 30 : 15);
 
+    // Save chosen scope into state so activeScope uses them during challenge
+    if (chosenJuzs && chosenJuzs.length > 0) {
+      setSelectedSkillJuzs(chosenJuzs);
+      setSelectedSkillSurahs([]);
+    } else if (chosenSurahs && chosenSurahs.length > 0) {
+      setSelectedSkillSurahs(chosenSurahs);
+      setSelectedSkillJuzs([]);
+    } else {
+      setSelectedSkillJuzs([]);
+      setSelectedSkillSurahs([]);
+    }
+
     const dbType = skillsType === 'audio' ? 'STANDARD' : skillsType === 'complete' ? 'COMPLETION' : 'SURAH';
     const excludeIds = Array.from(completedChallengeIds);
 
@@ -1280,19 +1292,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }
 
-    // 1. If specific Surahs are chosen (e.g. for completion challenge)
+    // 1. If specific Surahs are chosen (e.g. for completion or surah challenge)
     if (chosenSurahs && chosenSurahs.length > 0 && pool.length > 0) {
       const isSurahMatch = (c: any) => {
-        const vSurah = Array.isArray(c.verses) && c.verses[0]?.surah ? String(c.verses[0].surah).replace(/^سورة\s+/, '').trim() : '';
-        const cat = c.category || '';
-        const kw = c.keyword || '';
+        const surahsInChallenge: string[] = [];
+        if (Array.isArray(c.verses)) {
+          c.verses.forEach((v: any) => {
+            if (v?.surah) surahsInChallenge.push(String(v.surah));
+          });
+        }
+        if (c.correctText) {
+          try {
+            if (String(c.correctText).startsWith('[')) {
+              const parsed = JSON.parse(c.correctText);
+              if (Array.isArray(parsed)) surahsInChallenge.push(...parsed);
+            } else {
+              surahsInChallenge.push(String(c.correctText));
+            }
+          } catch {}
+        }
+        if (c.category) surahsInChallenge.push(String(c.category));
+        if (c.keyword) surahsInChallenge.push(String(c.keyword));
+
         return chosenSurahs.some(s => {
           const cleanS = s.replace(/^سورة\s+/, '').trim();
           const cleanSNorm = cleanS.replace(/[أإآ]/g, 'ا');
-          if (vSurah && (vSurah === cleanS || vSurah.replace(/[أإآ]/g, 'ا') === cleanSNorm)) return true;
-          if (cat && (cat.includes(cleanS) || cat.replace(/[أإآ]/g, 'ا').includes(cleanSNorm))) return true;
-          if (kw && (kw.includes(cleanS) || kw.replace(/[أإآ]/g, 'ا').includes(cleanSNorm))) return true;
-          return false;
+          return surahsInChallenge.some(item => {
+            const cleanItem = String(item).replace(/^سورة\s+/, '').trim();
+            const cleanItemNorm = cleanItem.replace(/[أإآ]/g, 'ا');
+            return cleanItem === cleanS || cleanItemNorm === cleanSNorm || cleanItem.includes(cleanS) || cleanItemNorm.includes(cleanSNorm);
+          });
         });
       };
 
@@ -1332,11 +1361,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }
 
-    // 2. If specific Juzs are chosen (e.g. for completion challenge)
+    // 2. If specific Juzs are chosen (e.g. for completion or surah challenge)
     if (chosenJuzs && chosenJuzs.length > 0 && chosenJuzs.length < 30 && pool.length > 0) {
       const isJuzMatch = (c: any) => {
-        const cJuz = Array.isArray(c.verses) && c.verses[0]?.juz ? Number(c.verses[0].juz) : null;
-        if (cJuz && chosenJuzs.includes(cJuz)) return true;
+        const juzsInChallenge: number[] = [];
+        if (Array.isArray(c.verses)) {
+          c.verses.forEach((v: any) => {
+            if (v?.juz) juzsInChallenge.push(Number(v.juz));
+            if (v?.surah) {
+              const surahJuzs = getJuzsForSurah(v.surah);
+              juzsInChallenge.push(...surahJuzs);
+            }
+          });
+        }
+        if (juzsInChallenge.some(j => chosenJuzs.includes(j))) return true;
+
         if (!c.category) return false;
         return chosenJuzs.some(j => {
           const arOrdinal = JUZ_NAMES_AR[j] || '';
@@ -4573,7 +4612,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [currentChallenge, skillsType, room?.gameMode, view, selectedSkillJuzs, selectedSkillSurahs, selectedJuz, room]);
 
-  const handleSurahInputChange = (idx: number, val: string) => {
+  // دالة البونص للعب الجماعي (الغرف) - نظام المكافأة المخفية
+  const handleSurahInputChangeBonus = (idx: number, val: string) => {
     setSurahInputs(prev => {
       const newInputs = [...prev];
       newInputs[idx] = val;
@@ -4608,6 +4648,60 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       return newInputs;
     });
+  };
+
+  // دالة التجاهل للعب الفردي (تحدي المهارات) - إلغاء البونص تماماً والتنبيه البعدي فقط
+  const handleSurahInputChangeSingle = (idx: number, val: string) => {
+    setSurahInputs(prev => {
+      const newInputs = [...prev];
+      newInputs[idx] = val;
+      return newInputs;
+    });
+
+    // الإنهاء التلقائي الفوري للسؤال عند اكتمال الإجابات المطلوبة ضمن النطاق
+    if (val && val.trim() && currentChallenge && !skillsFeedback && !isComplete) {
+      let allCorrect: string[] = [];
+      try {
+        const text = currentChallenge.correctText || "";
+        if (text.startsWith("[")) allCorrect = JSON.parse(text);
+        else if (text) allCorrect = [text];
+        else if (currentChallenge.verses?.[0]?.surah) allCorrect = [currentChallenge.verses[0].surah];
+      } catch (_) {
+        if (currentChallenge.correctText) allCorrect = [currentChallenge.correctText];
+      }
+
+      const activeScope = getActiveScope(room, selectedSkillJuzs, selectedSkillSurahs, selectedJuz);
+      const { requiredAnswers } = splitSurahAnswersByScope(allCorrect, activeScope, currentChallenge.verses);
+      const normalizedRequired = requiredAnswers.map(a => normalizeSurahName(a.surah));
+
+      const candidateInputs = [...surahInputs];
+      candidateInputs[idx] = val;
+      const normalizedCurrent = candidateInputs.map(s => normalizeSurahName(s)).filter(Boolean);
+
+      const matchedRequiredIndices = new Set<number>();
+      normalizedCurrent.forEach(inp => {
+        const matchIdx = normalizedRequired.findIndex((req, rIdx) => req === inp && !matchedRequiredIndices.has(rIdx));
+        if (matchIdx !== -1) {
+          matchedRequiredIndices.add(matchIdx);
+        }
+      });
+
+      if (matchedRequiredIndices.size === normalizedRequired.length && normalizedRequired.length > 0) {
+        setTimeout(() => {
+          handleSubmitSurah();
+        }, 350);
+      }
+    }
+  };
+
+  // الدالة العامة الموجهة حسب نمط اللعب
+  const handleSurahInputChange = (idx: number, val: string) => {
+    const isMultiplayer = Boolean(room?.id || view === 'group_game');
+    if (isMultiplayer) {
+      handleSurahInputChangeBonus(idx, val);
+    } else {
+      handleSurahInputChangeSingle(idx, val);
+    }
   };
 
   // Handle Speed Challenge progression
@@ -5064,16 +5158,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const normalizedRequired = requiredSurahNames.map(s => normalizeSurahName(s));
     const normalizedInputs = surahInputs.map(s => normalizeSurahName(s)).filter(Boolean);
 
-    // Track newly discovered bonus surahs submitted by the player
-    const currentDiscoveredBonus = [...discoveredBonusSurahs];
-    normalizedInputs.forEach(input => {
-      const matchedBonus = bonusAnswers.find(b => normalizeSurahName(b.surah) === input);
-      if (matchedBonus && !currentDiscoveredBonus.includes(matchedBonus.surah)) {
-        currentDiscoveredBonus.push(matchedBonus.surah);
-        addPoint({ challengeId: currentQuestion?.id, roomId: room?.id, points: 2 });
-      }
-    });
-    setDiscoveredBonusSurahs(currentDiscoveredBonus);
+    const isMultiplayer = Boolean(room?.id || view === 'group_game');
+
+    // Track newly discovered bonus surahs submitted by the player (Multiplayer only)
+    let currentDiscoveredBonus: string[] = [];
+    if (isMultiplayer) {
+      currentDiscoveredBonus = [...discoveredBonusSurahs];
+      normalizedInputs.forEach(input => {
+        const matchedBonus = bonusAnswers.find(b => normalizeSurahName(b.surah) === input);
+        if (matchedBonus && !currentDiscoveredBonus.includes(matchedBonus.surah)) {
+          currentDiscoveredBonus.push(matchedBonus.surah);
+          addPoint({ challengeId: currentQuestion?.id, roomId: room?.id, points: 2 });
+        }
+      });
+      setDiscoveredBonusSurahs(currentDiscoveredBonus);
+    } else {
+      // تعطيل البونص تماماً في اللعب الفردي
+      setDiscoveredBonusSurahs([]);
+    }
 
     // Count matched required answers
     let matchedRequiredCount = 0;
@@ -5107,13 +5209,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setSessionWrong(prev => prev + 1);
     }
 
-    const undiscoveredBonus = bonusAnswers.filter(b => !currentDiscoveredBonus.includes(b.surah));
+    const outOfRangeAnswers = isMultiplayer
+      ? bonusAnswers.filter(b => !currentDiscoveredBonus.includes(b.surah))
+      : bonusAnswers;
 
     setSurahFeedbackData({
       isFullyCorrect,
       correctSurahs: requiredSurahNames,
-      outOfRangeAnswers: undiscoveredBonus,
-      discoveredBonusSurahs: currentDiscoveredBonus
+      outOfRangeAnswers,
+      discoveredBonusSurahs: isMultiplayer ? currentDiscoveredBonus : []
     });
 
     setSessionMistakes(prev => [...prev, {
@@ -5166,7 +5270,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }).catch(err => console.error('Error submitting room surah answer:', err));
 
         if (!isLastQ) {
-          const hasOutOfRange = undiscoveredBonus && undiscoveredBonus.length > 0;
+          const hasOutOfRange = outOfRangeAnswers && outOfRangeAnswers.length > 0;
           const advanceDelay = hasOutOfRange ? (isFullyCorrect ? 2500 : 2800) : (isFullyCorrect ? 900 : 1800);
           setTimeout(() => {
             moveToNextQuestion();
@@ -5198,7 +5302,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
 
-    const hasOutOfRange = undiscoveredBonus && undiscoveredBonus.length > 0;
+    const hasOutOfRange = outOfRangeAnswers && outOfRangeAnswers.length > 0;
     const advanceDelay = hasOutOfRange ? (isFullyCorrect ? 3000 : 3500) : (isFullyCorrect ? 1000 : 2500);
     setTimeout(() => {
       moveToNextQuestion();
@@ -6373,6 +6477,8 @@ ${versesList}
     hasAnsweredCurrentQuestion, setHasAnsweredCurrentQuestion,
     surahInputs, setSurahInputs,
     handleSurahInputChange,
+    handleSurahInputChangeBonus,
+    handleSurahInputChangeSingle,
     discoveredBonusSurahs, setDiscoveredBonusSurahs,
     surahFeedbackData, setSurahFeedbackData,
     handleOptionSelect,

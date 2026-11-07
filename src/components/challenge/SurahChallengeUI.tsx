@@ -37,6 +37,7 @@ export interface SurahChallengeUIProps {
   currentChallenge?: any;
   surahFeedbackData?: SurahFeedbackData | null;
   isRoom?: boolean;
+  isMultiplayer?: boolean;
   isHost?: boolean;
   isLastQuestion?: boolean;
   onEndRoom?: () => void;
@@ -62,11 +63,14 @@ export const SurahChallengeUI: React.FC<SurahChallengeUIProps> = ({
   currentChallenge,
   surahFeedbackData,
   isRoom,
+  isMultiplayer,
   isHost,
   isLastQuestion,
   onEndRoom,
   isEndingRoom
-}) => (
+}) => {
+  const isMultiplayerMode = Boolean(isMultiplayer ?? isRoom);
+  return (
   <div className="flex flex-col items-center gap-2 md:gap-4 w-full max-w-xl md:max-w-3xl lg:max-w-4xl mx-auto">
     <div className="glass p-3.5 md:p-8 lg:p-10 rounded-2xl md:rounded-3xl w-full text-center border-white/80 shadow-lg relative overflow-hidden group">
       <div className="absolute top-0 inset-x-0 h-1 bg-linear-to-r from-transparent via-brand-gold/30 to-transparent" />
@@ -82,7 +86,7 @@ export const SurahChallengeUI: React.FC<SurahChallengeUIProps> = ({
           if (feedback && surahFeedbackData) {
             const normInput = normalizeSurahName(input);
             const isReqMatch = surahFeedbackData.correctSurahs.some((c: string) => normalizeSurahName(c) === normInput);
-            const isBonMatch = (surahFeedbackData.discoveredBonusSurahs || []).some((b: string) => normalizeSurahName(b) === normInput);
+            const isBonMatch = isMultiplayerMode && (surahFeedbackData.discoveredBonusSurahs || []).some((b: string) => normalizeSurahName(b) === normInput);
             isMatch = isReqMatch || isBonMatch;
             isBonus = isBonMatch && !isReqMatch;
             inputStyle = isBonus
@@ -157,8 +161,8 @@ export const SurahChallengeUI: React.FC<SurahChallengeUIProps> = ({
           </motion.div>
         )}
 
-        {/* بانر مكافأة الحُفّاظ عند اكتشاف إجابات بونص خارج النطاق */}
-        {feedback && surahFeedbackData?.discoveredBonusSurahs && surahFeedbackData.discoveredBonusSurahs.length > 0 && (
+        {/* بانر مكافأة الحُفّاظ عند اكتشاف إجابات بونص خارج النطاق (في اللعب الجماعي فقط) */}
+        {isMultiplayerMode && feedback && surahFeedbackData?.discoveredBonusSurahs && surahFeedbackData.discoveredBonusSurahs.length > 0 && (
           <motion.div
             initial={{ opacity: 0, scale: 0.96 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -192,19 +196,25 @@ export const SurahChallengeUI: React.FC<SurahChallengeUIProps> = ({
               </div>
               <div className="flex-1">
                 <span className="font-bold text-xs sm:text-sm text-amber-900 dark:text-amber-200 block">
-                  💡 هل تعلم؟ هذه الآية الكريمة وردت أيضاً في:
+                  {surahFeedbackData.outOfRangeAnswers.length === 1 ? (
+                    <>💡 هل تعلم؟ هذه الآية الكريمة وردت أيضاً في سورة <span className="font-black text-amber-950 dark:text-amber-100">{surahFeedbackData.outOfRangeAnswers[0].surah.replace(/^سورة\s+/, '')}</span> ({surahFeedbackData.outOfRangeAnswers[0].juzText})</>
+                  ) : (
+                    <>💡 هل تعلم؟ هذه الآية الكريمة وردت أيضاً في السور التالية:</>
+                  )}
                 </span>
-                <div className="flex flex-wrap gap-1.5 sm:gap-2 mt-2">
-                  {surahFeedbackData.outOfRangeAnswers.map((item, idx) => (
-                    <span
-                      key={idx}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-100/80 dark:bg-amber-900/50 text-amber-900 dark:text-amber-100 border border-amber-300/60 dark:border-amber-800/60"
-                    >
-                      <span>{item.surah.startsWith('سورة') ? item.surah : `سورة ${item.surah}`}</span>
-                      <span className="text-amber-700 dark:text-amber-300 font-semibold text-[11px]">({item.juzText})</span>
-                    </span>
-                  ))}
-                </div>
+                {surahFeedbackData.outOfRangeAnswers.length > 1 && (
+                  <div className="flex flex-wrap gap-1.5 sm:gap-2 mt-2">
+                    {surahFeedbackData.outOfRangeAnswers.map((item, idx) => (
+                      <span
+                        key={idx}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-100/80 dark:bg-amber-900/50 text-amber-900 dark:text-amber-100 border border-amber-300/60 dark:border-amber-800/60"
+                      >
+                        <span>{item.surah.startsWith('سورة') ? item.surah : `سورة ${item.surah}`}</span>
+                        <span className="text-amber-700 dark:text-amber-300 font-semibold text-[11px]">({item.juzText})</span>
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </motion.div>
@@ -285,6 +295,7 @@ export const SurahChallengeUI: React.FC<SurahChallengeUIProps> = ({
       )}
     </AnimatePresence>
   </div>
-);
+  );
+};
 
 export default SurahChallengeUI;

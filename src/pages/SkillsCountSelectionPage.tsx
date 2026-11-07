@@ -2,7 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
 import { View } from '../types/challenges';
-import { ScopeSelector } from '../components/challenge/ScopeSelector';
+import { ScopeSelector, JuzSurahSelector } from '../components/challenge/ScopeSelector';
 
 export interface SkillsCountSelectionPageProps {
   skillsType: any;
@@ -37,10 +37,11 @@ export const SkillsCountSelectionPage: React.FC<SkillsCountSelectionPageProps> =
   handleStartSkillsSession,
   setView
 }) => {
-  if (skillsType === 'complete') {
+  if (skillsType === 'complete' || skillsType === 'surah') {
+    const isSurah = skillsType === 'surah';
     return (
       <motion.div
-        key="skills_complete_selection"
+        key={isSurah ? 'skills_surah_selection' : 'skills_complete_selection'}
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
@@ -50,13 +51,15 @@ export const SkillsCountSelectionPage: React.FC<SkillsCountSelectionPageProps> =
           {/* Header */}
           <div className="text-center">
             <span className="text-[10px] font-black uppercase tracking-widest px-3 py-1 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 rounded-full border border-amber-200 dark:border-amber-800/60">
-              تحدي إكمال الآية
+              {isSurah ? 'تحدي تحديد اسم السورة' : 'تحدي إكمال الآية'}
             </span>
             <h2 className="text-xl md:text-2xl font-black text-slate-800 dark:text-slate-100 mt-2">
-              إعدادات التحدي وتحديد الأجزاء
+              {isSurah ? 'إعدادات التحدي ونطاق السور' : 'إعدادات التحدي وتحديد الأجزاء'}
             </h2>
             <p className="text-slate-400 font-bold text-xs md:text-sm mt-1">
-              حدد عدد الأسئلة والأجزاء التي تود التحدي في آياتها
+              {isSurah 
+                ? 'حدد عدد الأسئلة ونطاق الأجزاء أو السور لاختبار معرفتك بمواضع الآيات'
+                : 'حدد عدد الأسئلة والأجزاء التي تود التحدي في آياتها'}
             </p>
           </div>
 
@@ -85,7 +88,7 @@ export const SkillsCountSelectionPage: React.FC<SkillsCountSelectionPageProps> =
           </div>
 
           {/* 2. نطاق التحدي (الأجزاء أو السور) */}
-          <ScopeSelector
+          <JuzSurahSelector
             scopeMode={skillsScopeMode}
             setScopeMode={setSkillsScopeMode}
             selectedJuzs={selectedSkillJuzs}
@@ -112,7 +115,7 @@ export const SkillsCountSelectionPage: React.FC<SkillsCountSelectionPageProps> =
               className="w-full py-4 bg-brand-gold hover:bg-amber-600 text-white rounded-2xl font-black text-base shadow-xl shadow-brand-gold/20 active:scale-98 transition-all flex items-center justify-center gap-2"
             >
               <span>
-                ابدأ تحدي إكمال الآية ({selectedSkillCount} أسئلة)
+                ابدأ تحدي {isSurah ? 'اسم السورة' : 'إكمال الآية'} ({selectedSkillCount} أسئلة)
                 {skillsScopeMode === 'surah' && selectedSkillSurahs.length > 0 
                   ? ` • ${selectedSkillSurahs.length} سور` 
                   : skillsScopeMode === 'juz' && selectedSkillJuzs.length > 0 && selectedSkillJuzs.length < 30 

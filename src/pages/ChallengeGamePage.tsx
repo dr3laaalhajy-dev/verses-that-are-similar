@@ -134,6 +134,7 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
     appRef.current = app;
   });
   const [isEndingRoom, setIsEndingRoom] = useState(false);
+  const isMultiplayer = Boolean(room?.id || (room as any)?.room_code || room?.host_id || (room as any)?.participants?.length);
 
   const currentUserId = playerUsername || playerName;
   const isHost = Boolean(
@@ -680,11 +681,28 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
         <SurahChallengeUI
           verseText={KEYWORD}
           inputs={surahInputs}
-          onInputChange={handleSurahInputChange || app?.handleSurahInputChange || ((idx: number, val: string) => {
-            const newInputs = [...surahInputs];
-            newInputs[idx] = val;
-            setSurahInputs(newInputs);
-          })}
+          onInputChange={(idx: number, val: string) => {
+            // توجيه برمجي حسب نمط اللعب (جماعي مع بونص مقابل فردي بدون بونص)
+            if (isMultiplayer) {
+              if (app?.handleSurahInputChangeBonus) {
+                app.handleSurahInputChangeBonus(idx, val);
+              } else if (handleSurahInputChange) {
+                handleSurahInputChange(idx, val);
+              } else if (app?.handleSurahInputChange) {
+                app.handleSurahInputChange(idx, val);
+              }
+            } else {
+              if (app?.handleSurahInputChangeSingle) {
+                app.handleSurahInputChangeSingle(idx, val);
+              } else if (handleSurahInputChange) {
+                handleSurahInputChange(idx, val);
+              } else {
+                const newInputs = [...surahInputs];
+                newInputs[idx] = val;
+                setSurahInputs(newInputs);
+              }
+            }
+          }}
           onSubmit={handleSubmitSurah}
           feedback={skillsFeedback}
           onSkip={handleSkip}
@@ -699,7 +717,8 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
           onViewTafsir={handleOpenTafsir}
           currentChallenge={currentChallenge}
           surahFeedbackData={surahFeedbackData}
-          isRoom={!!room}
+          isRoom={isMultiplayer}
+          isMultiplayer={isMultiplayer}
           isHost={isEffectiveHost}
           isLastQuestion={isLastQuestion}
           onEndRoom={handleEndRoom}
