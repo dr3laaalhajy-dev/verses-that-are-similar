@@ -2,7 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Users, Lock, Globe, Loader2, Trash2, ArrowRight, LogOut,
-  UserPlus, ChevronDown, ChevronUp, Check, Swords, Sparkles, Clock, X, UserX
+  UserPlus, ChevronDown, ChevronUp, Check, Swords, Sparkles, Clock, X, UserX,
+  Info, Settings, BookOpen, Layers, Zap, Hash
 } from 'lucide-react';
 import { View } from '../types/challenges';
 import { LiveReactionsOverlay } from '../components/LiveReactionsOverlay';
@@ -68,6 +69,103 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
     (room?.isHost === true) ||
     (room?.id && sessionStorage.getItem(`is_creator_${room.id}`) === 'true')
   );
+
+  // Room Info & Edit Modals State
+  const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
+
+  const [editedName, setEditedName] = useState('');
+  const [editedTopic, setEditedTopic] = useState('');
+  const [editedQuestionCount, setEditedQuestionCount] = useState(5);
+  const [editedTimePerQuestion, setEditedTimePerQuestion] = useState(0);
+  const [editedTransitionMode, setEditedTransitionMode] = useState('SYNC');
+  const [editedGameMode, setEditedGameMode] = useState('STANDARD');
+
+  // Synchronize room settings into edit form state
+  useEffect(() => {
+    if (room) {
+      setEditedName(room.name || 'غرفة التحدي');
+      setEditedTopic(room.categoryFilter || room.category || '');
+      setEditedQuestionCount(Number(room.questionCount) || 5);
+      setEditedTimePerQuestion(Number(room.timePerQuestion) || 0);
+      setEditedTransitionMode(room.transitionMode || 'SYNC');
+      setEditedGameMode(room.gameMode || 'STANDARD');
+    }
+  }, [room?.id, room?.name, room?.categoryFilter, room?.questionCount, room?.timePerQuestion, room?.transitionMode, room?.gameMode]);
+
+  const formatGameModeName = (mode: string) => {
+    switch (String(mode || '').toUpperCase()) {
+      case 'COMPLETION':
+      case 'COMPLETE':
+        return 'إكمال الآية الكريمة';
+      case 'SURAH':
+        return 'تحديد اسم السورة';
+      case 'AUDIO':
+        return 'تحدي التلاوة الصوتية';
+      case 'WHO_AM_I':
+        return 'تحدي من أنا؟';
+      case 'ISLAMIC':
+        return 'معلومات إسلامية عامة';
+      case 'STANDARD':
+      default:
+        return 'تحدي المتشابهات (اختيار متعدد)';
+    }
+  };
+
+  const handleSaveRoomSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!room?.id || !isCreator) return;
+
+    setIsSavingSettings(true);
+    try {
+      const updatePayload: any = {
+        name: editedName.trim() || 'غرفة التحدي',
+        categoryFilter: editedTopic.trim(),
+        questionCount: Number(editedQuestionCount) || 5,
+        timePerQuestion: Number(editedTimePerQuestion) || 0,
+        transitionMode: editedTransitionMode || 'SYNC',
+        gameMode: editedGameMode || 'STANDARD'
+      };
+
+      const { error } = await supabase
+        .from('rooms')
+        .update(updatePayload)
+        .eq('id', room.id);
+
+      if (error) {
+        console.error('Failed to update room settings:', error);
+        toast.error('فشل حفظ الإعدادات: ' + error.message);
+        return;
+      }
+
+      // Optimistic local update without dropping connection
+      setRoom((prev: any) => prev ? {
+        ...prev,
+        ...updatePayload
+      } : prev);
+
+      // Broadcast update on room channel so all participants receive it immediately
+      try {
+        const existingChannel = supabase.getChannels().find(ch => ch.topic === `realtime:room_sync_${room.id}`);
+        if (existingChannel && existingChannel.state === 'joined') {
+          existingChannel.send({
+            type: 'broadcast',
+            event: 'room_settings_updated',
+            payload: updatePayload
+          }).catch(() => {});
+        }
+      } catch (_) {}
+
+      toast.success('تم تحديث إعدادات الغرفة بنجاح');
+      setIsEditModalOpen(false);
+    } catch (err: any) {
+      console.error('Error saving room settings:', err);
+      toast.error('حدث خطأ أثناء حفظ الإعدادات');
+    } finally {
+      setIsSavingSettings(false);
+    }
+  };
 
   // Requirement 2: Function to kick player from room and invalidate invitation
   const handleKickPlayer = async (targetPlayer: any) => {
@@ -330,6 +428,14 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
             participants: prev?.participants || []
           } : prev;
         });
+      })
+      .on('broadcast', { event: 'room_settings_updated' }, ({ payload }) => {
+        if (!payload) return;
+        setRoom((prev: any) => prev ? {
+          ...prev,
+          ...payload
+        } : prev);
+        toast.info('قام المنشئ بتحديث إعدادات الغرفة');
       })
       .on('broadcast', { event: 'player_joined' }, ({ payload }) => {
         // A player accepted invite and joined — add them to participants immediately
@@ -607,7 +713,7 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
           </div>
         </div>
 
-        <div className="bg-slate-50 p-3.5 sm:p-5 rounded-2xl mb-4 sm:mb-6 border border-slate-100 shadow-inner text-right space-y-2">
+        <div className="bg-slate-50 p-3.5 sm:p-5 rounded-2xl mb-4 sm:mb-6 border border-slate-100 shadow-inner text-right space-y-2.5">
           <div className="flex items-center justify-between">
             <span className="text-sm md:text-base font-black text-slate-800 truncate">{room?.name || 'غرفة التحدي'}</span>
             {room?.isPrivate ? (
@@ -620,6 +726,31 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
                 <Globe className="w-3 h-3" />
                 <span>غرفة عامة</span>
               </span>
+            )}
+          </div>
+
+          {/* Action buttons: Room Details & Edit Settings */}
+          <div className="flex items-center gap-2 pt-1">
+            <button
+              type="button"
+              onClick={() => setIsInfoModalOpen(true)}
+              className="flex-1 py-1.5 px-3 rounded-xl bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 text-xs font-black flex items-center justify-center gap-1.5 shadow-xs transition-all active:scale-95 cursor-pointer"
+              title="عرض معلومات وتفاصيل الغرفة"
+            >
+              <Info className="w-3.5 h-3.5 text-blue-500" />
+              <span>تفاصيل الغرفة</span>
+            </button>
+
+            {isCreator && (
+              <button
+                type="button"
+                onClick={() => setIsEditModalOpen(true)}
+                className="flex-1 py-1.5 px-3 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 text-xs font-black flex items-center justify-center gap-1.5 shadow-xs transition-all active:scale-95 cursor-pointer"
+                title="تعديل إعدادات ونوع التحدي للغرفة"
+              >
+                <Settings className="w-3.5 h-3.5 text-amber-600" />
+                <span>تعديل الإعدادات</span>
+              </button>
             )}
           </div>
           {room?.isPrivate && room?.password && (
@@ -905,6 +1036,265 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
         playerName={playerName || undefined}
         incomingReaction={room?.lastReaction || room?.playersProgress?.__lastReaction}
       />
+
+      {/* Room Details Modal (For All Players) */}
+      <AnimatePresence>
+        {isInfoModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs" dir="rtl">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="bg-white rounded-3xl p-5 sm:p-6 w-full max-w-md shadow-2xl border border-slate-100 text-right space-y-4 max-h-[90vh] overflow-y-auto"
+            >
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                    <Info className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-black text-slate-800 text-base">تفاصيل الغرفة</h3>
+                    <p className="text-[11px] text-slate-400 font-bold">إعدادات وقواعد التحدي الحالي</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsInfoModalOpen(false)}
+                  className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-all cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="space-y-2.5 text-xs sm:text-sm">
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                  <span className="text-slate-500 font-bold">اسم الغرفة:</span>
+                  <span className="font-black text-slate-800">{room?.name || 'غرفة التحدي'}</span>
+                </div>
+
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                  <span className="text-slate-500 font-bold">رمز الدخول (Code):</span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-mono font-black text-amber-700 bg-amber-100 px-2 py-0.5 rounded text-sm">{room?.code}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (room?.code) navigator.clipboard.writeText(room.code);
+                        toast.success('تم نسخ رمز الغرفة');
+                      }}
+                      className="text-[11px] text-amber-600 font-bold underline cursor-pointer"
+                    >
+                      نسخ
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                  <span className="text-slate-500 font-bold">نوع التحدي:</span>
+                  <span className="font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                    {formatGameModeName(room?.gameMode)}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                  <span className="text-slate-500 font-bold">التصنيف / الفئة:</span>
+                  <span className="font-black text-slate-800">
+                    {room?.categoryFilter || room?.category || 'جميع التصنيفات العامة'}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                  <span className="text-slate-500 font-bold">عدد الأسئلة:</span>
+                  <span className="font-black text-slate-800">{room?.questionCount || 5} أسئلة</span>
+                </div>
+
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                  <span className="text-slate-500 font-bold">الوقت لكل سؤال:</span>
+                  <span className="font-black text-slate-800">
+                    {room?.timePerQuestion && Number(room.timePerQuestion) > 0 ? `${room.timePerQuestion} ثانية` : 'بدون وقت محدد (مفتوح)'}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                  <span className="text-slate-500 font-bold">نمط الانتقال:</span>
+                  <span className="font-black text-slate-800">
+                    {room?.transitionMode === 'ASYNC' ? 'سباق فردي سريع (ASYNC)' : 'تزامن جماعي (SYNC)'}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                  <span className="text-slate-500 font-bold">نوع الغرفة:</span>
+                  <span className="font-black text-slate-800">
+                    {room?.isPrivate ? 'غرفة خاصة برمز سري 🔒' : 'غرفة عامة مفتوحة للجميع 🌐'}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                  <span className="text-slate-500 font-bold">منشئ الغرفة:</span>
+                  <span className="font-black text-slate-800">{room?.player1?.name || room?.hostName || 'المنشئ'}</span>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsInfoModalOpen(false)}
+                className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs sm:text-sm transition-all cursor-pointer"
+              >
+                إغلاق
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Edit Room Settings Modal (For Creator Only) */}
+      <AnimatePresence>
+        {isEditModalOpen && isCreator && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs" dir="rtl">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="bg-white rounded-3xl p-5 sm:p-6 w-full max-w-md shadow-2xl border border-slate-100 text-right space-y-4 max-h-[90vh] overflow-y-auto"
+            >
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
+                    <Settings className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-black text-slate-800 text-base">تعديل إعدادات الغرفة</h3>
+                    <p className="text-[11px] text-slate-400 font-bold">تحديث فوري لجميع المتسابقين في القاعة</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsEditModalOpen(false)}
+                  disabled={isSavingSettings}
+                  className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-all cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveRoomSettings} className="space-y-3.5 text-xs sm:text-sm">
+                <div>
+                  <label className="block text-slate-700 font-bold mb-1">اسم الغرفة:</label>
+                  <input
+                    type="text"
+                    value={editedName}
+                    onChange={(e) => setEditedName(e.target.value)}
+                    placeholder="اسم الغرفة..."
+                    required
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-brand-emerald focus:ring-1 focus:ring-brand-emerald outline-none font-bold text-slate-800 text-xs sm:text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-700 font-bold mb-1">نوع التحدي:</label>
+                  <select
+                    value={editedGameMode}
+                    onChange={(e) => setEditedGameMode(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-brand-emerald outline-none font-bold text-slate-800 bg-white text-xs sm:text-sm cursor-pointer"
+                  >
+                    <option value="STANDARD">تحدي المتشابهات (اختيار متعدد)</option>
+                    <option value="COMPLETION">إكمال الآية الكريمة</option>
+                    <option value="SURAH">تحديد اسم السورة</option>
+                    <option value="AUDIO">تحدي التلاوة الصوتية</option>
+                    <option value="WHO_AM_I">تحدي من أنا؟</option>
+                    <option value="ISLAMIC">معلومات إسلامية عامة</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-700 font-bold mb-1">التصنيف / الفئة (Topic):</label>
+                  <input
+                    type="text"
+                    value={editedTopic}
+                    onChange={(e) => setEditedTopic(e.target.value)}
+                    placeholder="مثال: سورة البقرة، جزء عم، الصحابة..."
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-brand-emerald focus:ring-1 focus:ring-brand-emerald outline-none font-bold text-slate-800 text-xs sm:text-sm"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1 font-bold">اتركه فارغاً لاختيار أسئلة عشوائية من جميع الأقسام</p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-slate-700 font-bold mb-1">عدد الأسئلة:</label>
+                    <select
+                      value={editedQuestionCount}
+                      onChange={(e) => setEditedQuestionCount(Number(e.target.value))}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-brand-emerald outline-none font-bold text-slate-800 bg-white text-xs sm:text-sm cursor-pointer"
+                    >
+                      <option value={3}>3 أسئلة</option>
+                      <option value={5}>5 أسئلة</option>
+                      <option value={10}>10 أسئلة</option>
+                      <option value={15}>15 سؤالاً</option>
+                      <option value={20}>20 سؤالاً</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-slate-700 font-bold mb-1">وقت السؤال:</label>
+                    <select
+                      value={editedTimePerQuestion}
+                      onChange={(e) => setEditedTimePerQuestion(Number(e.target.value))}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-brand-emerald outline-none font-bold text-slate-800 bg-white text-xs sm:text-sm cursor-pointer"
+                    >
+                      <option value={0}>بدون وقت (مفتوح)</option>
+                      <option value={10}>10 ثوانٍ</option>
+                      <option value={15}>15 ثانية</option>
+                      <option value={20}>20 ثانية</option>
+                      <option value={30}>30 ثانية</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-slate-700 font-bold mb-1">نمط الانتقال:</label>
+                  <select
+                    value={editedTransitionMode}
+                    onChange={(e) => setEditedTransitionMode(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:border-brand-emerald outline-none font-bold text-slate-800 bg-white text-xs sm:text-sm cursor-pointer"
+                  >
+                    <option value="SYNC">تزامن جماعي (جميع اللاعبين ينتقلون معاً)</option>
+                    <option value="ASYNC">سباق فردي سريع (كل لاعب ينهي بسرعة)</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-2 pt-2">
+                  <button
+                    type="submit"
+                    disabled={isSavingSettings}
+                    className="flex-1 py-2.5 rounded-xl bg-brand-emerald hover:bg-brand-emerald/90 text-white font-bold text-xs sm:text-sm shadow-md transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    {isSavingSettings ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>جاري الحفظ...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-4 h-4" />
+                        <span>حفظ التعديلات</span>
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsEditModalOpen(false)}
+                    disabled={isSavingSettings}
+                    className="py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs sm:text-sm transition-all cursor-pointer"
+                  >
+                    إلغاء
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 };
