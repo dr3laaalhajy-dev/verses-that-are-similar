@@ -59,8 +59,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (cleanIds.length > 0) {
           await supabaseAdmin.from('notifications').update({ is_read: true }).in('id', cleanIds);
         }
-        if (targetUserId && isValidUuid(String(targetUserId))) {
-          await supabaseAdmin.from('notifications').update({ is_read: true }).eq('user_id', String(targetUserId)).eq('is_read', false);
+        if (targetUserId) {
+          try {
+            await supabaseAdmin.from('notifications').update({ is_read: true }).eq('receiver_id', String(targetUserId)).eq('is_read', false);
+          } catch (_) {}
+          if (isValidUuid(String(targetUserId))) {
+            try {
+              await supabaseAdmin.from('notifications').update({ is_read: true }).eq('user_id', String(targetUserId)).eq('is_read', false);
+            } catch (_) {}
+          }
         }
         return res.status(200).json({ success: true, message: 'All notifications marked as read' });
       } catch (err: any) {
@@ -135,11 +142,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === 'GET') {
       try {
         const limit = Math.min(50, Math.max(1, parseInt((req.query.limit as string) || '20', 10)));
-        const { data, error } = await supabase
+        const receiverId = (req.query.receiverId as string) || (req.query.receiver_id as string) || (req.query.userId as string);
+
+        let query = supabase
           .from('notifications')
           .select('*')
           .order('created_at', { ascending: false })
           .limit(limit);
+
+        if (receiverId) {
+          query = query.eq('receiver_id', String(receiverId));
+        }
+
+        const { data, error } = await query;
 
         if (error) {
           console.warn('[Notifications] Supabase fetch warning:', error.message);

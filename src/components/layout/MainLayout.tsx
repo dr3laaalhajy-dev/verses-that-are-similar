@@ -200,7 +200,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
               {/* In-App & Push Notification Bell */}
               <NotificationBell
                 darkMode={app.librarySettings.darkMode}
-                userId={app.playerUsername || app.playerName}
+                userId={String(app.playerId || app.playerUsername || app.playerName || '')}
                 buttonClassName="relative h-9 w-9 sm:h-10 sm:w-auto px-0 sm:px-3 flex items-center justify-center gap-2 rounded-xl bg-white/10 hover:bg-white/20 dark:bg-obsidian-900/70 dark:hover:bg-obsidian-850 text-white dark:text-regalGold-200 border border-white/10 dark:border-regalGold-500/20 transition-all text-xs sm:text-sm font-bold shadow-md hover:scale-105 active:scale-95 cursor-pointer shrink-0"
               />
 

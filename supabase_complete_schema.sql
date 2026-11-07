@@ -34,7 +34,9 @@ CREATE TABLE IF NOT EXISTS public.notifications (
 );
 ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT false;
 ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS user_id TEXT;
+ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS receiver_id TEXT;
 CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON public.notifications(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notifications_receiver_id ON public.notifications(receiver_id);
 
 -- 4. جدول اللاعبين والمستخدمين (players)
 CREATE TABLE IF NOT EXISTS public.players (

@@ -333,18 +333,37 @@ class FriendsRealtimeService {
     const channelName = `player-invites:${clean}`;
     const channel = supabase.channel(channelName);
 
-    // Fallback: Also insert notification row so DB change listener catches it
-    if (payload.invitedUserId) {
-      const isUuid = typeof payload.invitedUserId === 'string' &&
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(payload.invitedUserId);
+    // Requirement 3: Insert single notification row strictly with receiver_id containing ONLY recipient's ID
+    const recipientId = String(payload.invitedUserId || clean.replace(/^user_/, '')).trim();
+    if (recipientId) {
+      const isUuid = typeof recipientId === 'string' &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(recipientId);
+
+      const notificationRow: any = {
+        receiver_id: recipientId,
+        title: `دعوة تحدي من ${payload.hostName || 'صديق'}`,
+        body: `أرسل لك دعوة للانضمام إلى: ${payload.roomName || 'غرفة التحدي'}`,
+        is_read: false
+      };
+      if (isUuid) {
+        notificationRow.user_id = recipientId;
+      }
+
       Promise.resolve(
-        supabase.from('notifications').insert({
-          user_id: isUuid ? payload.invitedUserId : null,
-          title: `دعوة تحدي من ${payload.hostName || 'صديق'}`,
-          body: `أرسل لك دعوة للانضمام إلى: ${payload.roomName || 'غرفة التحدي'}`,
-          is_read: false
-        })
-      ).catch(() => {});
+        supabase.from('notifications').insert(notificationRow)
+      ).catch((err) => {
+        // Safe fallback if receiver_id column is not yet present on table
+        if (err?.message?.includes('receiver_id') && isUuid) {
+          Promise.resolve(
+            supabase.from('notifications').insert({
+              user_id: recipientId,
+              title: notificationRow.title,
+              body: notificationRow.body,
+              is_read: false
+            })
+          ).catch(() => {});
+        }
+      });
     }
 
     return new Promise<boolean>((resolve) => {

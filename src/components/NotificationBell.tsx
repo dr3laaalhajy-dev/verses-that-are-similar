@@ -173,6 +173,15 @@ const getStoredReadMap = (): ReadTimestampsMap => {
 
 export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, userId, buttonClassName }) => {
   const app = useApp();
+  const currentUserId = String(
+    userId ||
+    app?.playerId ||
+    app?.uniquePlayerId ||
+    app?.playerUsername ||
+    app?.playerName ||
+    ''
+  ).trim();
+
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = useState<number>(0);
   const [isOpen, setIsOpen] = useState<boolean>(false);
@@ -240,10 +249,19 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
   // Fetch notifications exclusively from Supabase (Single Source of Truth)
   const fetchNotifications = async () => {
     const stored = getStoredReadMap();
+    if (!currentUserId) {
+      setNotifications([]);
+      setUnreadCount(0);
+      setIsLoading(false);
+      return;
+    }
+
     try {
+      // ⚠️ Protection: Strict filter on receiver_id to prevent leaking notifications across users
       const { data, error } = await supabase
         .from('notifications')
         .select('*')
+        .eq('receiver_id', currentUserId)
         .order('created_at', { ascending: false })
         .limit(40);
 
@@ -256,6 +274,25 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
 
         setNotifications(synchronized);
         calculateUnread(synchronized, stored);
+      } else if (error) {
+        console.warn('[NotificationBell] Supabase fetch warning:', error);
+        // Fallback: If receiver_id column does not exist yet and user has a valid UUID
+        if ((error.code === '42703' || error.message?.includes('receiver_id')) && isValidUuid(currentUserId)) {
+          const { data: fallbackData } = await supabase
+            .from('notifications')
+            .select('*')
+            .eq('user_id', currentUserId)
+            .order('created_at', { ascending: false })
+            .limit(40);
+          if (fallbackData) {
+            const synchronized: NotificationItem[] = fallbackData.map((item: any) => ({
+              ...item,
+              is_read: item.is_read === true || Boolean(stored[item.id])
+            }));
+            setNotifications(synchronized);
+            calculateUnread(synchronized, stored);
+          }
+        }
       }
     } catch (e) {
       console.warn('[NotificationBell] Supabase fetch error:', e);
@@ -504,14 +541,27 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
   useEffect(() => {
     fetchNotifications();
 
+    if (!currentUserId) return;
+
+    const channelName = `realtime_notifications_${currentUserId}`;
     const channel = supabase
-      .channel('realtime_public_notifications')
+      .channel(channelName)
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'notifications' },
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notifications',
+          filter: `receiver_id=eq.${currentUserId}`
+        },
         (payload) => {
           console.log('[NotificationBell] New Realtime notification received:', payload.new);
           const newItem = payload.new as NotificationItem;
+
+          // Extra client-side safeguard: reject notification if receiver_id doesn't match current user
+          if (newItem.receiver_id && String(newItem.receiver_id) !== String(currentUserId)) {
+            return;
+          }
 
           setNotifications(prev => {
             if (prev.some(n => n.id === newItem.id)) return prev;
@@ -530,11 +580,19 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
       )
       .on(
         'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'notifications' },
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'notifications',
+          filter: `receiver_id=eq.${currentUserId}`
+        },
         (payload) => {
           console.log('[NotificationBell] Notification updated via Realtime:', payload.new);
           const updated = payload.new as NotificationItem;
           if (updated?.id) {
+            if (updated.receiver_id && String(updated.receiver_id) !== String(currentUserId)) {
+              return;
+            }
             setNotifications(prev => {
               const nextList = prev.map(n => n.id === updated.id ? { ...n, ...updated } : n);
               // Recalculate unread with updated item's updated_at timestamp!
@@ -571,6 +629,9 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
         (payload) => {
           const updated = payload.payload as NotificationItem;
           if (updated?.id) {
+            if (updated.receiver_id && String(updated.receiver_id) !== String(currentUserId)) {
+              return;
+            }
             setNotifications(prev => {
               const nextList = prev.map(n => n.id === updated.id ? { ...n, ...updated } : n);
               calculateUnread(nextList, readMapRef.current);
@@ -606,7 +667,7 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [currentUserId]);
 
   const formatRelativeTime = (dateStr: string) => {
     try {

@@ -29,9 +29,11 @@ alter table public.notifications add column if not exists updated_at timestamptz
 alter table public.notifications add column if not exists target_url text;
 alter table public.notifications add column if not exists is_read boolean default false;
 alter table public.notifications add column if not exists user_id text;
+alter table public.notifications add column if not exists receiver_id text;
 
 -- إنشاء فهرس لتسريع استرجاع الإشعارات مرتبة تنازلياً حسب وقت الإنشاء
 create index if not exists idx_notifications_created_at on public.notifications (created_at desc);
+create index if not exists idx_notifications_receiver_id on public.notifications (receiver_id);
 
 -- تفعيل نظام حماية الصفوف (Row Level Security - RLS)
 alter table public.notifications enable row level security;

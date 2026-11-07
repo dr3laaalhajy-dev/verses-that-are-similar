@@ -246,6 +246,7 @@ model WhoAmISubmission {
 model Notification {
   id          String   @id @default(uuid())
   user_id     String?
+  receiver_id String?
   title       String
   body        String
   target_url  String?
