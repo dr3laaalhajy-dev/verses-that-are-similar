@@ -70,6 +70,17 @@ export const SurahChallengeUI: React.FC<SurahChallengeUIProps> = ({
   isEndingRoom
 }) => {
   const isMultiplayerMode = Boolean(isMultiplayer ?? isRoom);
+  const deduplicatedOutOfRange = React.useMemo(() => {
+    if (!surahFeedbackData?.outOfRangeAnswers) return [];
+    const seen = new Set<string>();
+    return surahFeedbackData.outOfRangeAnswers.filter(item => {
+      const norm = normalizeSurahName(item.surah);
+      if (seen.has(norm)) return false;
+      seen.add(norm);
+      return true;
+    });
+  }, [surahFeedbackData?.outOfRangeAnswers]);
+
   return (
   <div className="flex flex-col items-center gap-2 md:gap-4 w-full max-w-xl md:max-w-3xl lg:max-w-4xl mx-auto">
     <div className="glass p-3.5 md:p-8 lg:p-10 rounded-2xl md:rounded-3xl w-full text-center border-white/80 shadow-lg relative overflow-hidden group">
@@ -183,7 +194,7 @@ export const SurahChallengeUI: React.FC<SurahChallengeUIProps> = ({
         )}
 
         {/* تنبيه بعدي أنيق للسور المتشابهة خارج النطاق المحدد */}
-        {feedback && surahFeedbackData?.outOfRangeAnswers && surahFeedbackData.outOfRangeAnswers.length > 0 && (
+        {feedback && deduplicatedOutOfRange && deduplicatedOutOfRange.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 5 }}
             animate={{ opacity: 1, y: 0 }}
@@ -196,15 +207,15 @@ export const SurahChallengeUI: React.FC<SurahChallengeUIProps> = ({
               </div>
               <div className="flex-1">
                 <span className="font-bold text-xs sm:text-sm text-amber-900 dark:text-amber-200 block">
-                  {surahFeedbackData.outOfRangeAnswers.length === 1 ? (
-                    <>💡 هل تعلم؟ هذه الآية الكريمة وردت أيضاً في سورة <span className="font-black text-amber-950 dark:text-amber-100">{surahFeedbackData.outOfRangeAnswers[0].surah.replace(/^سورة\s+/, '')}</span> ({surahFeedbackData.outOfRangeAnswers[0].juzText})</>
+                  {deduplicatedOutOfRange.length === 1 ? (
+                    <>💡 هل تعلم؟ هذه الآية الكريمة وردت أيضاً في سورة <span className="font-black text-amber-950 dark:text-amber-100">{deduplicatedOutOfRange[0].surah.replace(/^سورة\s+/, '')}</span> ({deduplicatedOutOfRange[0].juzText})</>
                   ) : (
                     <>💡 هل تعلم؟ هذه الآية الكريمة وردت أيضاً في السور التالية:</>
                   )}
                 </span>
-                {surahFeedbackData.outOfRangeAnswers.length > 1 && (
+                {deduplicatedOutOfRange.length > 1 && (
                   <div className="flex flex-wrap gap-1.5 sm:gap-2 mt-2">
-                    {surahFeedbackData.outOfRangeAnswers.map((item, idx) => (
+                    {deduplicatedOutOfRange.map((item, idx) => (
                       <span
                         key={idx}
                         className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-100/80 dark:bg-amber-900/50 text-amber-900 dark:text-amber-100 border border-amber-300/60 dark:border-amber-800/60"

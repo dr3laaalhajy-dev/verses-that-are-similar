@@ -508,6 +508,19 @@ export const splitSurahAnswersByScope = (
     };
   });
 
+  const deduplicate = (list: SurahAnswerWithDetails[]): SurahAnswerWithDetails[] => {
+    const seen = new Set<string>();
+    const result: SurahAnswerWithDetails[] = [];
+    for (const item of list) {
+      const norm = normalize(item.surah);
+      if (!seen.has(norm)) {
+        seen.add(norm);
+        result.push(item);
+      }
+    }
+    return result;
+  };
+
   const scopeMode = scope?.scopeMode || (scope?.selectedSurahs?.length ? 'surah' : 'juz');
   const selectedSurahs = scope?.selectedSurahs || [];
   const selectedJuzs = scope?.selectedJuzs || [];
@@ -516,49 +529,51 @@ export const splitSurahAnswersByScope = (
   const isJuzFilterActive = scopeMode === 'juz' && selectedJuzs.length > 0 && selectedJuzs.length < 30;
 
   if (!isSurahFilterActive && !isJuzFilterActive) {
+    const deduplicatedAll = deduplicate(allAnswers);
     return {
-      requiredAnswers: allAnswers,
+      requiredAnswers: deduplicatedAll,
       bonusAnswers: [],
-      inRangeAnswers: allAnswers,
+      inRangeAnswers: deduplicatedAll,
       outOfRangeAnswers: []
     };
   }
 
-  const requiredAnswers: SurahAnswerWithDetails[] = [];
-  let bonusAnswers: SurahAnswerWithDetails[] = [];
+  const rawInRange: SurahAnswerWithDetails[] = [];
+  const rawOutOfRange: SurahAnswerWithDetails[] = [];
 
   if (isSurahFilterActive) {
     const normSelected = selectedSurahs.map(s => normalize(s));
     allAnswers.forEach(ans => {
       const normAns = normalize(ans.surah);
       if (normSelected.includes(normAns)) {
-        requiredAnswers.push(ans);
+        rawInRange.push(ans);
       } else {
-        bonusAnswers.push(ans);
+        rawOutOfRange.push(ans);
       }
     });
   } else {
     const rangeSet = new Set(selectedJuzs);
     allAnswers.forEach(ans => {
       if (ans.juzs.some(j => rangeSet.has(j))) {
-        requiredAnswers.push(ans);
+        rawInRange.push(ans);
       } else {
-        bonusAnswers.push(ans);
+        rawOutOfRange.push(ans);
       }
     });
   }
 
-  // Fallback: If all surahs fell outside range, pick the first answer as required
-  if (requiredAnswers.length === 0 && allAnswers.length > 0) {
-    requiredAnswers.push(allAnswers[0]);
-    bonusAnswers = allAnswers.slice(1);
-  }
+  const inRangeAnswers = deduplicate(rawInRange);
+  let outOfRangeAnswers = deduplicate(rawOutOfRange);
+
+  // إزالة أي سورة وردت بالفعل في النطاق من قائمة السور المستبعدة
+  const inRangeNorms = new Set(inRangeAnswers.map(a => normalize(a.surah)));
+  outOfRangeAnswers = outOfRangeAnswers.filter(a => !inRangeNorms.has(normalize(a.surah)));
 
   return {
-    requiredAnswers,
-    bonusAnswers,
-    inRangeAnswers: requiredAnswers,
-    outOfRangeAnswers: bonusAnswers
+    requiredAnswers: inRangeAnswers,
+    bonusAnswers: outOfRangeAnswers,
+    inRangeAnswers,
+    outOfRangeAnswers
   };
 };
 
