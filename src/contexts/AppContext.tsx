@@ -3728,11 +3728,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           // Re-subscribe invite channels in case the kick handler caused a re-render that
           // dropped the callback. Channels themselves stay alive (singleton pattern).
           const identifiers = [
+            playerId ? `user_${playerId}` : null,
             uniquePlayerId,
-            playerUsername,
-            playerName,
-            playerId ? String(playerId) : null,
-            playerId ? `user_${playerId}` : null
+            playerUsername
           ].filter(Boolean) as string[];
           friendsRealtimeService.subscribeToInvites(identifiers, (invite) => {
             const myName = (playerName || '').trim().toLowerCase();
@@ -3770,7 +3768,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, [room?.id]);
 
-  // Realtime Presence & Friend Invites Setup
+  // Realtime Presence Setup
   useEffect(() => {
     if (!playerName && !playerUsername) {
       friendsRealtimeService.stopPresence();
@@ -3802,15 +3800,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       name: playerName,
       activeFrame: userAchievement
     });
+  }, [playerName, playerUsername, uniquePlayerId, playerId, userAchievement]);
 
-    // Subscribe to incoming room invites
+  // Consolidated Root Global Room Invites Listener (Depends ONLY on user identifier)
+  useEffect(() => {
+    const activeUserId = playerId ? `user_${playerId}` : (playerUsername || uniquePlayerId || playerName);
+    if (!activeUserId) return;
+
     const identifiers = [
-      uniquePlayerId,
-      playerUsername,
-      playerName,
-      playerId ? String(playerId) : null,
-      playerId ? `user_${playerId}` : null
+      playerId ? `user_${playerId}` : null,
+      uniquePlayerId || null,
+      playerUsername || null
     ].filter(Boolean) as string[];
+
     const unsubscribeInvites = friendsRealtimeService.subscribeToInvites(
       identifiers,
       (invite) => {
@@ -3829,7 +3831,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => {
       unsubscribeInvites();
     };
-  }, [playerName, playerUsername, uniquePlayerId, playerId, userAchievement]);
+  }, [playerId || playerUsername || playerName]);
 
   const handleAcceptRoomInvite = useCallback(async (roomOrInvite: any) => {
     setIncomingRoomInvite(null);

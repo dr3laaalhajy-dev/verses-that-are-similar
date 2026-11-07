@@ -573,7 +573,7 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
   });
 
   const handleSendInvite = async (friend: any) => {
-    const friendTarget = friend.uniquePlayerId || friend.username || friend.name;
+    const friendTarget = friend.id ? `user_${friend.id}` : (friend.uniquePlayerId || friend.username || friend.name);
     if (!friendTarget || !room?.id) return;
 
     setSendingInviteId(friend.id);

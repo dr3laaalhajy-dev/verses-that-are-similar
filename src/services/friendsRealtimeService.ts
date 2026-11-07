@@ -47,7 +47,24 @@ class FriendsRealtimeService {
   private inviteCallback: ((invite: RoomInvitePayload) => void) | null = null;
   private currentIdentifiers: Set<string> = new Set();
   private reconnectTimers: Map<string, any> = new Map();
+  private failureCounts: Map<string, number> = new Map();
   private watchdogTimer: any = null;
+
+  /**
+   * Cleans and sanitizes player identifiers to ensure valid Phoenix channel names without spaces.
+   */
+  public sanitizeIdentifier(raw: string): string {
+    if (!raw) return '';
+    let clean = String(raw).trim().replace(/^@+/, '').toLowerCase();
+    if (!clean) return '';
+    // If purely numeric (e.g. "51"), prefix with user_
+    if (/^\d+$/.test(clean)) {
+      clean = `user_${clean}`;
+    }
+    // Replace internal spaces, tabs, newlines, and special characters with underscore
+    clean = clean.replace(/[\s\t\n\r/\\:#?]+/g, '_');
+    return clean;
+  }
 
   /**
    * Initializes Presence tracking for the current player.
@@ -198,7 +215,7 @@ class FriendsRealtimeService {
     this.inviteCallback = onInviteReceived;
 
     identifiers.forEach(raw => {
-      const clean = String(raw || '').trim().replace(/^@+/, '').toLowerCase();
+      const clean = this.sanitizeIdentifier(raw);
       if (!clean) return;
       this.currentIdentifiers.add(clean);
       this.ensureInviteChannel(clean);
@@ -214,7 +231,7 @@ class FriendsRealtimeService {
             this.ensureInviteChannel(clean);
           }
         });
-      }, 5000);
+      }, 10000);
     }
 
     // Return a "unsubscribe" function that only clears the callback when no other subscriber exists
@@ -228,7 +245,8 @@ class FriendsRealtimeService {
   /**
    * Ensures an active, healthy invite channel exists for an identifier.
    */
-  private ensureInviteChannel(clean: string) {
+  private ensureInviteChannel(rawClean: string) {
+    const clean = this.sanitizeIdentifier(rawClean);
     if (!clean) return;
 
     if (this.reconnectTimers.has(clean)) {
@@ -239,7 +257,8 @@ class FriendsRealtimeService {
     const channelName = `player-invites:${clean}`;
     let channel = this.inviteChannels.get(clean);
 
-    if (channel && channel.state === 'joined') {
+    // If channel is already joined OR currently joining, do not disrupt it!
+    if (channel && (channel.state === 'joined' || channel.state === 'joining')) {
       return;
     }
 
@@ -259,13 +278,20 @@ class FriendsRealtimeService {
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
           this.inviteChannels.set(clean, channel!);
+          this.failureCounts.set(clean, 0); // reset failure count on success
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
           this.inviteChannels.delete(clean);
-          console.warn(`[FriendsRealtime] Invite channel for "${clean}" entered ${status}, auto-reconnecting in 1.5s...`);
+          const currentFailures = (this.failureCounts.get(clean) || 0) + 1;
+          this.failureCounts.set(clean, currentFailures);
+
+          // Exponential / backed-off retry: if repeated failures (>4), wait 30s instead of rapid loop
+          const retryDelay = currentFailures > 4 ? 30000 : 2500;
+
+          console.warn(`[FriendsRealtime] Invite channel for "${clean}" entered ${status} (attempt ${currentFailures}), auto-reconnecting in ${retryDelay / 1000}s...`);
           if (this.currentIdentifiers.has(clean)) {
             const timer = setTimeout(() => {
               this.ensureInviteChannel(clean);
-            }, 1500);
+            }, retryDelay);
             this.reconnectTimers.set(clean, timer);
           }
         }
@@ -285,6 +311,7 @@ class FriendsRealtimeService {
     this.reconnectTimers.forEach(t => clearTimeout(t));
     this.reconnectTimers.clear();
     this.currentIdentifiers.clear();
+    this.failureCounts.clear();
 
     this.inviteChannels.forEach(ch => {
       try { supabase.removeChannel(ch); } catch (_) {}
@@ -300,7 +327,7 @@ class FriendsRealtimeService {
     targetIdentifier: string,
     payload: RoomInvitePayload
   ): Promise<boolean> {
-    const clean = String(targetIdentifier || '').trim().replace(/^@+/, '').toLowerCase();
+    const clean = this.sanitizeIdentifier(targetIdentifier);
     if (!clean) return false;
 
     const channelName = `player-invites:${clean}`;
