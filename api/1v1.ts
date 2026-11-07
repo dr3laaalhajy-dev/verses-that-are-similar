@@ -639,6 +639,7 @@ function calculateResults(room: any, playersProgress: Record<string, any>) {
       pData.score = 0
       pData.finalTotalScore = 0
       pData.basePoints = 0
+      pData.bonusPoints = 0
       pData.speedBonusCount = 0
       pData.accuracyBonus = 0
       pData.completionBonus = 0
@@ -648,11 +649,15 @@ function calculateResults(room: any, playersProgress: Record<string, any>) {
 
     const correctCount = typeof pData.correctCount === 'number' ? pData.correctCount : 0
     const speedBonusCount = typeof pData.speedBonusCount === 'number' ? pData.speedBonusCount : 0
-    const basePoints = correctCount * 1 // Strictly 1 point per correct answer
+    const basePoints = typeof pData.basePoints === 'number'
+      ? pData.basePoints
+      : (typeof pData.score === 'number' ? pData.score : (correctCount * 1))
+    const bonusPoints = typeof pData.bonusPoints === 'number' ? pData.bonusPoints : 0
     const accuracy = totalQuestions > 0 ? (correctCount / totalQuestions) : 0
     const accuracyBonus = accuracy > 0.90 ? 15 : 0 // Bonus +15 for >90% accuracy
 
     pData.basePoints = basePoints
+    pData.bonusPoints = bonusPoints
     pData.speedBonusCount = speedBonusCount
     pData.accuracyBonus = accuracyBonus
     pData.accuracy = Math.round(accuracy * 100)
@@ -680,13 +685,16 @@ function calculateResults(room: any, playersProgress: Record<string, any>) {
     if (pData.isDisqualified || pData.isAbandoned) {
       pData.score = 0
       pData.finalTotalScore = 0
+      pData.basePoints = 0
+      pData.bonusPoints = 0
       pData.trophiesAwarded = 0
       continue
     }
-    // Unified score: score strictly represents the actual correct answers (1 point per correct answer, no multiplier)
+    // Unified score: basePoints + bonusPoints
     const basePts = typeof pData.basePoints === 'number' ? pData.basePoints : (typeof pData.correctCount === 'number' ? pData.correctCount : 0)
-    pData.score = basePts
-    pData.finalTotalScore = basePts + (pData.speedBonusCount || 0) + (pData.accuracyBonus || 0) + (pData.completionBonus || 0)
+    const bonusPts = typeof pData.bonusPoints === 'number' ? pData.bonusPoints : 0
+    pData.score = basePts + bonusPts
+    pData.finalTotalScore = basePts + bonusPts + (pData.speedBonusCount || 0) + (pData.accuracyBonus || 0) + (pData.completionBonus || 0)
   }
 
   // 4. Determine winner by highest final total score among qualified players only!
@@ -694,7 +702,7 @@ function calculateResults(room: any, playersProgress: Record<string, any>) {
     .filter(([pIdStr, p]) => pIdStr !== '__lastReaction' && !p.isDisqualified && !p.isAbandoned && p.status !== 'abandoned')
     .map(([id, p]: [string, any]) => ({
       id: parseInt(id),
-      score: p.finalTotalScore || 0,
+      score: p.finalTotalScore || p.score || 0,
       finishTime: p.finishTime || Infinity
     }))
     .sort((a, b) => b.score - a.score || a.finishTime - b.finishTime)
@@ -717,6 +725,8 @@ function calculateResults(room: any, playersProgress: Record<string, any>) {
       pData.trophiesAwarded = 0
       pData.score = 0
       pData.finalTotalScore = 0
+      pData.basePoints = 0
+      pData.bonusPoints = 0
     }
   }
 
@@ -770,7 +780,7 @@ async function applyRoomTrophies(_tx: any, room: any, progress: Record<string, a
 
 function evaluateQuestionScores(
   playersProgress: Record<string, any>,
-  currentAnswers: Record<string, { playerId: number; name: string; isCorrect: boolean; timestamp: number }>,
+  currentAnswers: Record<string, { playerId: number; name: string; isCorrect: boolean; timestamp: number; pointsEarned?: number; basePoints?: number; bonusPoints?: number; score?: number }>,
   firstCorrectUserId?: number | null
 ) {
   // 1. Filter only correct answers and sort by timestamp ascending (fastest first)
@@ -791,16 +801,24 @@ function evaluateQuestionScores(
     if (typeof pData.correctCount !== 'number') pData.correctCount = 0
     if (typeof pData.speedBonusCount !== 'number') pData.speedBonusCount = 0
     if (typeof pData.basePoints !== 'number') pData.basePoints = 0
+    if (typeof pData.bonusPoints !== 'number') pData.bonusPoints = 0
     if (!Array.isArray(pData.roundHistory)) pData.roundHistory = []
     pData.answersCount = (pData.answersCount || 0) + 1
 
     let roundPoints = 0
     let earnedSpeedBonus = false
 
-    if (ans && ans.isCorrect) {
-      roundPoints = 1 // نقطة واحدة فقط لكل إجابة صحيحة
-      pData.correctCount += 1
-      pData.basePoints += 1
+    if (ans && (ans.isCorrect || (typeof ans.pointsEarned === 'number' && ans.pointsEarned > 0))) {
+      const qBasePoints = typeof ans.basePoints === 'number' ? ans.basePoints : (ans.isCorrect ? 1 : 0)
+      const qBonusPoints = typeof ans.bonusPoints === 'number' ? ans.bonusPoints : 0
+      const qPointsEarned = typeof ans.pointsEarned === 'number' ? ans.pointsEarned : (qBasePoints + qBonusPoints)
+
+      roundPoints = qPointsEarned
+      if (ans.isCorrect) {
+        pData.correctCount += 1
+      }
+      pData.basePoints += qBasePoints
+      pData.bonusPoints += qBonusPoints
 
       // Speed bonus: إحصائية للسرعة مع الحفاظ على النقاط كنقطة واحدة (+1)
       if (effectiveFirstCorrectUserId !== null && numId === effectiveFirstCorrectUserId) {
@@ -816,6 +834,8 @@ function evaluateQuestionScores(
       roundPoints,
       earnedSpeedBonus,
       isCorrect: ans ? Boolean(ans.isCorrect) : false,
+      basePoints: ans ? ans.basePoints : 0,
+      bonusPoints: ans ? ans.bonusPoints : 0,
       timestamp: ans ? ans.timestamp : null
     })
   }
@@ -996,7 +1016,7 @@ async function handleStart(req: VercelRequest, res: VercelResponse) {
 }
 
 async function handleSubmitAnswer(req: VercelRequest, res: VercelResponse) {
-  const { roomId, playerId, questionIndex, isCorrect, timestamp } = req.body
+  const { roomId, playerId, questionIndex, isCorrect, timestamp, pointsEarned, basePoints, bonusPoints, score } = req.body
   if (!roomId || !playerId || questionIndex === undefined) {
     return res.status(400).json({ message: 'Missing fields' })
   }
@@ -1007,6 +1027,10 @@ async function handleSubmitAnswer(req: VercelRequest, res: VercelResponse) {
 
     const pIdStr = String(player.id)
     const subTime = Number(timestamp) || Date.now()
+
+    const qBase = typeof basePoints === 'number' ? basePoints : (typeof pointsEarned === 'number' ? pointsEarned : (Boolean(isCorrect) ? 1 : 0))
+    const qBonus = typeof bonusPoints === 'number' ? bonusPoints : 0
+    const qTotal = typeof pointsEarned === 'number' ? pointsEarned : (qBase + qBonus)
 
     const { data: room } = await supabaseAdmin.from('rooms').select('*').eq('id', roomId as string).maybeSingle()
     if (!room || room.status !== 'PLAYING') {
@@ -1024,7 +1048,7 @@ async function handleSubmitAnswer(req: VercelRequest, res: VercelResponse) {
 
       const playersProgress = (room.playersProgress as any) || {}
       if (!playersProgress[pIdStr]) {
-        playersProgress[pIdStr] = { name: player.name, score: 0, correctCount: 0, speedBonusCount: 0 }
+        playersProgress[pIdStr] = { name: player.name, score: 0, correctCount: 0, speedBonusCount: 0, basePoints: 0, bonusPoints: 0 }
       }
       const pData = playersProgress[pIdStr]
 
@@ -1034,20 +1058,29 @@ async function handleSubmitAnswer(req: VercelRequest, res: VercelResponse) {
           name: player.name,
           isCorrect: Boolean(isCorrect),
           timestamp: subTime,
-          questionIndex: Number(questionIndex)
+          questionIndex: Number(questionIndex),
+          pointsEarned: qTotal,
+          basePoints: qBase,
+          bonusPoints: qBonus
         }
 
-        if (Boolean(isCorrect)) {
-          pData.correctCount = (pData.correctCount || 0) + 1
-          pData.basePoints = (pData.correctCount || 0) * 1
+        if (Boolean(isCorrect) || qTotal > 0) {
+          if (Boolean(isCorrect)) {
+            pData.correctCount = (pData.correctCount || 0) + 1
+          }
+          pData.basePoints = (pData.basePoints || 0) + qBase
+          pData.bonusPoints = (pData.bonusPoints || 0) + qBonus
+          pData.score = typeof score === 'number' ? score : ((pData.basePoints || 0) + (pData.bonusPoints || 0))
 
           // Track firstCorrectUserId per question on server
-          if (!currentAnswers[qKey]._firstCorrectUserId) {
+          if (Boolean(isCorrect) && !currentAnswers[qKey]._firstCorrectUserId) {
             currentAnswers[qKey]._firstCorrectUserId = player.id;
             pData.speedBonusCount = (pData.speedBonusCount || 0) + 1;
           }
         } else {
-          pData.basePoints = (pData.correctCount || 0) * 1
+          pData.basePoints = pData.basePoints || 0
+          pData.bonusPoints = pData.bonusPoints || 0
+          pData.score = typeof score === 'number' ? score : ((pData.basePoints || 0) + (pData.bonusPoints || 0))
         }
 
         const qNum = Number(questionIndex)
@@ -1094,7 +1127,10 @@ async function handleSubmitAnswer(req: VercelRequest, res: VercelResponse) {
           name: player.name,
           isCorrect: Boolean(isCorrect),
           timestamp: subTime,
-          questionIndex: Number(questionIndex)
+          questionIndex: Number(questionIndex),
+          pointsEarned: qTotal,
+          basePoints: qBase,
+          bonusPoints: qBonus
         }
 
         if (Boolean(isCorrect) && !currentAnswers._firstCorrectUserId) {
@@ -1104,7 +1140,10 @@ async function handleSubmitAnswer(req: VercelRequest, res: VercelResponse) {
 
       const playersProgress = (room.playersProgress as any) || {}
       if (!playersProgress[pIdStr]) {
-        playersProgress[pIdStr] = { name: player.name }
+        playersProgress[pIdStr] = { name: player.name, score: 0, basePoints: 0, bonusPoints: 0 }
+      }
+      if (typeof score === 'number') {
+        playersProgress[pIdStr].score = score
       }
       playersProgress[pIdStr].isOnline = true
       playersProgress[pIdStr].lastSeen = Date.now()
@@ -1125,6 +1164,10 @@ async function handleSubmitAnswer(req: VercelRequest, res: VercelResponse) {
             pIdStr,
             questionIndex: Number(questionIndex),
             isCorrect: Boolean(isCorrect),
+            pointsEarned: qTotal,
+            basePoints: qBase,
+            bonusPoints: qBonus,
+            score: playersProgress[pIdStr]?.score,
             currentAnswers,
             playersProgress
           }

@@ -107,6 +107,7 @@ export const GroupGameResultsPage: React.FC<GroupGameResultsPageProps> = ({
                     const accuracy = isAbandoned ? 0 : (prog.accuracy ?? Math.round((correctCount / totalQ) * 100));
                     const score = isAbandoned ? 0 : (prog.finalTotalScore ?? prog.score ?? 0);
                     const basePoints = isAbandoned ? 0 : (prog.basePoints ?? (correctCount * 1));
+                    const bonusPoints = isAbandoned ? 0 : (prog.bonusPoints || 0);
                     const speedBonusCount = isAbandoned ? 0 : (prog.speedBonusCount || 0);
                     const completionBonus = isAbandoned ? 0 : (prog.completionBonus || 0);
                     const accuracyBonus = isAbandoned ? 0 : (prog.accuracyBonus || 0);
@@ -118,6 +119,7 @@ export const GroupGameResultsPage: React.FC<GroupGameResultsPageProps> = ({
                       finishTime: prog.finishTime,
                       score,
                       basePoints,
+                      bonusPoints,
                       speedBonusCount,
                       completionBonus,
                       accuracyBonus,
@@ -184,7 +186,7 @@ export const GroupGameResultsPage: React.FC<GroupGameResultsPageProps> = ({
                           </span>
                           {!p.isAbandoned && (
                             <span className="text-[10px] text-slate-400 font-bold mt-0.5">
-                              الأساسية: {p.basePoints}
+                              الأساسية: {p.basePoints} {p.bonusPoints > 0 && `• بونص: +${p.bonusPoints}`}
                             </span>
                           )}
                         </div>
@@ -202,6 +204,11 @@ export const GroupGameResultsPage: React.FC<GroupGameResultsPageProps> = ({
                               <span className="bg-amber-100 text-amber-900 px-2 py-0.5 rounded-md flex items-center gap-1 border border-amber-300 shadow-xs">
                                 <Trophy className="w-3 h-3 text-amber-600 fill-amber-600" />
                                 <span>+{4 - idx} {idx === 3 ? 'كأس' : idx === 2 ? 'كأسين' : 'كؤوس'}</span>
+                              </span>
+                            )}
+                            {p.bonusPoints > 0 && (
+                              <span className="bg-amber-100 text-amber-900 px-2 py-0.5 rounded-md flex items-center gap-1 border border-amber-300 shadow-xs">
+                                <span>🎁 +{p.bonusPoints} بونص سور إضافية</span>
                               </span>
                             )}
                             {p.speedBonusCount > 0 && (

@@ -6,6 +6,7 @@ import { normalizeArabicText, normalizeSurahName } from '../utils/arabic';
 
 export interface SkillsResultsPageProps {
   sessionCorrect: number;
+  sessionScore?: number;
   sessionWrong: number;
   skillsType: any;
   totalPoints: number;
@@ -18,6 +19,7 @@ export interface SkillsResultsPageProps {
 
 export const SkillsResultsPage: React.FC<SkillsResultsPageProps> = ({
   sessionCorrect = 0,
+  sessionScore,
   sessionWrong = 0,
   skillsType,
   totalPoints = 0,
@@ -55,8 +57,12 @@ export const SkillsResultsPage: React.FC<SkillsResultsPageProps> = ({
   const mistakesList = Array.isArray(sessionMistakes) ? sessionMistakes : [];
   const hasAnswers = mistakesList.length > 0 || (sessionCorrect + sessionWrong > 0);
 
-  // 1 point per correct answer (strictly 1x multiplier, never multiplied by 10)
-  const earnedPoints = sessionCorrect * 1;
+  // Unified scoring: accurately reflect points from sessionScore or pointsEarned per question
+  const earnedPoints = typeof sessionScore === 'number' && sessionScore > 0
+    ? sessionScore
+    : (mistakesList.length > 0
+        ? mistakesList.reduce((acc, m) => acc + (m.pointsEarned ?? (m.isFullyCorrect ? 1 : 0)), 0)
+        : sessionCorrect * 1);
 
   // Real-time total balance: ensures total balance incorporates newly earned points and matches the database
   const [liveTotalPoints, setLiveTotalPoints] = React.useState<number>(() => {

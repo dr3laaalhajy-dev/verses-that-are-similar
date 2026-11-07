@@ -1000,6 +1000,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [questionsCount, setQuestionsCount] = useState(5);
   const [sessionCorrect, setSessionCorrect] = useState(0);
+  const [sessionScore, setSessionScore] = useState(0);
   const [sessionWrong, setSessionWrong] = useState(0);
   const [sessionMistakes, setSessionMistakes] = useState<any[]>([]);
   const [sessionCurrentIndex, setSessionCurrentIndex] = useState(0);
@@ -1310,6 +1311,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const handleStartSkillsSession = async (count: number, chosenJuzs?: number[], chosenSurahs?: string[]) => {
     setQuestionsCount(count);
     setSessionCorrect(0);
+    setSessionScore(0);
     setSessionWrong(0);
     setSessionMistakes([]);
     setShowMistakes(false);
@@ -2657,6 +2659,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setChallenges(mapped);
           setCurrentChallengeIndex(0);
           setSessionCorrect(0);
+          setSessionScore(0);
           setSessionWrong(0);
           setSessionMistakes([]);
           setSkillsFeedback(false);
@@ -3324,6 +3327,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setChallenges(mapped);
         setCurrentChallengeIndex(0);
         setSessionCorrect(0);
+        setSessionScore(0);
         setSessionWrong(0);
         setSessionMistakes([]);
         setSkillsFeedback(false);
@@ -3557,6 +3561,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             setChallengesLoading(false);
             setCurrentChallengeIndex(data.currentQuestionIndex || 0);
             setSessionCorrect(0);
+            setSessionScore(0);
             setSessionWrong(0);
             setSessionMistakes([]);
             setSkillsFeedback(false);
@@ -4484,7 +4489,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           roomId: room.id,
           playerId: playerUsername || playerName,
           progress,
-          score: forcedScore !== undefined ? forcedScore : sessionCorrect,
+          score: forcedScore !== undefined ? forcedScore : sessionScore,
           isFinished
         })
       });
@@ -4606,6 +4611,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       setActiveRunningRoom(null);
       setSessionCorrect(0);
+      setSessionScore(0);
       setRoom(null);
       setIsResignModalOpen(false);
 
@@ -5174,6 +5180,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       if (isCorrect) {
         setSessionCorrect(prev => prev + 1);
+        setSessionScore(prev => prev + 1);
+        setScore(prev => prev + 1);
 
         // توحيد منح النقاط: نقطة واحدة فقط (+1) عبر الدالة المركزية
         addPoint({ challengeId: currentQuestion?.id, roomId: room?.id });
@@ -5191,7 +5199,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }]);
 
         if (view === 'group_game') {
-          syncGroupProgress(false, sessionCorrect + 1);
+          syncGroupProgress(false, sessionScore + 1);
         }
         if (window.navigator.vibrate) window.navigator.vibrate(50);
 
@@ -5341,6 +5349,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // Track newly discovered bonus surahs submitted by the player (Multiplayer only)
     let currentDiscoveredBonus: string[] = [];
+    let newlyDiscoveredBonusCount = 0;
     if (isMultiplayer) {
       currentDiscoveredBonus = [...discoveredBonusSurahs];
       // Check required input boxes
@@ -5348,7 +5357,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const matchedBonus = outOfRangeAnswers.find(b => normalizeSurahName(b.surah) === input);
         if (matchedBonus && !currentDiscoveredBonus.includes(matchedBonus.surah)) {
           currentDiscoveredBonus.push(matchedBonus.surah);
-          addPoint({ challengeId: currentQuestion?.id, roomId: room?.id, points: 2 });
+          newlyDiscoveredBonusCount++;
         }
       });
       // Check explicit optional bonus box
@@ -5357,7 +5366,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const matchedBonus = outOfRangeAnswers.find(b => normalizeSurahName(b.surah) === normBonus);
         if (matchedBonus && !currentDiscoveredBonus.includes(matchedBonus.surah)) {
           currentDiscoveredBonus.push(matchedBonus.surah);
-          addPoint({ challengeId: currentQuestion?.id, roomId: room?.id, points: 2 });
+          newlyDiscoveredBonusCount++;
         }
       }
       setDiscoveredBonusSurahs(currentDiscoveredBonus);
@@ -5378,24 +5387,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     });
 
+    // 1. Unified Base Points: 1 point per correct in-range surah answer
+    const basePoints = matchedRequiredCount * 1;
+    // 2. Bonus Points: 2 points per correct out-of-range surah (multiplayer ONLY, 0 in solo)
+    const bonusPoints = isMultiplayer ? newlyDiscoveredBonusCount * 2 : 0;
+    // 3. Question Total Score = (correctRequiredCount * 1) + (correctBonusCount * 2)
+    const questionScore = basePoints + bonusPoints;
+
     // Completion condition: all required answers answered (Bonus is strictly decoupled & optional)
     const isFullyCorrect = normalizedRequired.length > 0 && matchedRequiredCount === normalizedRequired.length;
 
     if (isFullyCorrect) {
       setSessionCorrect(prev => prev + 1);
+    } else {
+      setSessionWrong(prev => prev + 1);
+    }
 
-      // توحيد منح النقاط: نقطة واحدة فقط (+1) عبر الدالة المركزية
-      addPoint({ challengeId: currentQuestion?.id, roomId: room?.id });
+    // Update player's active score state immediately
+    if (questionScore > 0) {
+      addPoint({ challengeId: currentQuestion?.id, roomId: room?.id, points: questionScore });
+    }
+    setSessionScore(prev => prev + questionScore);
+    setScore(prev => prev + questionScore);
 
-      if (view === 'group_game') {
-        syncGroupProgress(false, sessionCorrect + 1);
-      }
-      if (view === 'group_game' && currentQuestion.verses) {
+    const newCumulativeScore = sessionScore + questionScore;
+
+    if (view === 'group_game') {
+      syncGroupProgress(false, newCumulativeScore);
+      if (currentQuestion.verses) {
         const allVerseIds = currentQuestion.verses.map((v: any) => v.id);
         setMatchedIds(new Set(allVerseIds));
       }
-    } else {
-      setSessionWrong(prev => prev + 1);
     }
 
     const outOfRangeFinal = isMultiplayer
@@ -5416,8 +5438,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       type: 'SURAH',
       userInputs: [...surahInputs],
       correctSurahsList: requiredSurahNames,
-      pointsEarned: isFullyCorrect ? 1 : 0,
-      totalPossible: 1,
+      pointsEarned: questionScore,
+      basePoints,
+      bonusPoints,
+      totalPossible: requiredSurahNames.length,
       isFullyCorrect
     }]);
 
@@ -5450,6 +5474,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             playerId: playerUsername || playerName,
             questionIndex: currentChallengeIndex,
             isCorrect: isFullyCorrect,
+            pointsEarned: questionScore,
+            basePoints: basePoints,
+            bonusPoints: bonusPoints,
+            score: newCumulativeScore,
             timestamp: Date.now()
           })
         }).then(res => res.json()).then(data => {
@@ -5478,6 +5506,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           playerId: playerUsername || playerName,
           questionIndex: room.currentQuestionIndex ?? currentChallengeIndex,
           isCorrect: isFullyCorrect,
+          pointsEarned: questionScore,
+          basePoints: basePoints,
+          bonusPoints: bonusPoints,
+          score: newCumulativeScore,
           timestamp: Date.now()
         })
       }).then(res => res.json()).then(data => {
@@ -6557,6 +6589,7 @@ ${versesList}
   const handleSelectChallenge = (c: any, idx: number) => {
     setCurrentChallengeIndex(idx);
     setSessionCorrect(0);
+    setSessionScore(0);
     setSessionWrong(0);
     setSessionMistakes([]);
     setView('challenge');
@@ -6656,6 +6689,7 @@ ${versesList}
     isJuzMenuOpen, setIsJuzMenuOpen,
     isSurahMenuOpen, setIsSurahMenuOpen,
     sessionCorrect, setSessionCorrect,
+    sessionScore, setSessionScore,
     sessionWrong, setSessionWrong,
     sessionMistakes, setSessionMistakes,
     showMistakes, setShowMistakes,

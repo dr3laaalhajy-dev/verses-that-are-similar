@@ -263,6 +263,7 @@ export const AppRouter: React.FC = () => {
       ) : app.view === "skills_results" ? (
         <SkillsResultsPage
           sessionCorrect={app.sessionCorrect}
+          sessionScore={app.sessionScore}
           sessionWrong={app.sessionWrong}
           skillsType={app.skillsType}
           totalPoints={app.totalPoints}
