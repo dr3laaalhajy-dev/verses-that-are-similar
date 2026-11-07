@@ -89,98 +89,46 @@ export const ChallengeCertificate: React.FC<ChallengeCertificateProps> = ({
     }
   };
 
-  // معالجة حفظ وتنزيل الشهادة بجودة عالية عبر تقنية HTML Canvas
+  // معالجة حفظ وتنزيل الشهادة بجودة فائقة عبر تصوير HTML/CSS بدقة عالية
   const handleDownloadImage = async () => {
     if (!certificateRef.current) return;
     setIsDownloading(true);
 
     try {
-      // استخدام آلية الرسم السريع أو تحويل العنصر إلى صورة
-      // متوافق مع مكتبة html-to-image إن وُجدت، أو عبر الرسم المباشر على Canvas
       let dataUrl = '';
-      
-      // فحص وجود html-to-image ديناميكياً
-      // @ts-ignore
-      if (window.htmlToImage && typeof window.htmlToImage.toPng === 'function') {
-        // @ts-ignore
-        dataUrl = await window.htmlToImage.toPng(certificateRef.current, {
-          quality: 0.98,
-          pixelRatio: 2
-        });
-      } else {
-        // آلية Canvas احتياطية عالية الدقة مدمجة
-        const certEl = certificateRef.current;
-        const canvas = document.createElement('canvas');
-        const scale = 2; // دقة Retina 2X
-        const rect = certEl.getBoundingClientRect();
-        
-        canvas.width = rect.width * scale;
-        canvas.height = rect.height * scale;
-        const ctx = canvas.getContext('2d');
-        
-        if (ctx) {
-          ctx.scale(scale, scale);
-          
-          // رسم خلفية عاجية إسلامية
-          ctx.fillStyle = '#FCFBF7';
-          ctx.fillRect(0, 0, rect.width, rect.height);
-          
-          // رسم الإطار الخارجي الذهبي
-          ctx.strokeStyle = '#D4AF37';
-          ctx.lineWidth = 6;
-          ctx.strokeRect(12, 12, rect.width - 24, rect.height - 24);
-          
-          // إطار داخلي زمردي
-          ctx.strokeStyle = '#064E3B';
-          ctx.lineWidth = 2;
-          ctx.strokeRect(20, 20, rect.width - 40, rect.height - 40);
-          
-          // النصوص الرئيسية
-          ctx.textAlign = 'center';
-          ctx.direction = 'rtl';
-          
-          // الترويسة
-          ctx.fillStyle = '#064E3B';
-          ctx.font = 'bold 16px "Amiri", "Noto Naskh Arabic", serif';
-          ctx.fillText('بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ', rect.width / 2, 55);
-          
-          ctx.fillStyle = '#B45309';
-          ctx.font = 'bold 26px "Amiri", "Noto Naskh Arabic", serif';
-          ctx.fillText('شهادة إنجاز وتفوق', rect.width / 2, 95);
-          
-          ctx.fillStyle = '#475569';
-          ctx.font = '14px "Tajawal", sans-serif';
-          ctx.fillText('تشهد إدارة تطبيق متين لعلوم القرآن الكريم بأن اللاعب / المتسابق', rect.width / 2, 140);
-          
-          // اسم اللاعب
-          ctx.fillStyle = '#064E3B';
-          ctx.font = 'bold 24px "Amiri", "Noto Naskh Arabic", serif';
-          ctx.fillText(playerName, rect.width / 2, 180);
-          
-          // التحدي
-          ctx.fillStyle = '#475569';
-          ctx.font = '15px "Tajawal", sans-serif';
-          ctx.fillText(`قد أتم بنجاح ومثابرة: ${challengeName}`, rect.width / 2, 220);
-          
-          // النتيجة
-          ctx.fillStyle = '#B45309';
-          ctx.font = 'bold 16px "Tajawal", sans-serif';
-          ctx.fillText(`بنتيجة مُشرّفة: ${score}  |  التقدير: ${rank}`, rect.width / 2, 255);
-          
-          ctx.fillStyle = '#64748B';
-          ctx.font = '13px "Amiri", serif';
-          ctx.fillText('سائلين المولى عز وجل له دوام التوفيق والسداد ونفع الأمة بالقرآن العظيم', rect.width / 2, 290);
-          
-          // التذييل والتوثيق
-          ctx.font = '11px "Tajawal", sans-serif';
-          ctx.textAlign = 'right';
-          ctx.fillText(`التاريخ: ${formattedDate}`, rect.width - 40, rect.height - 35);
-          
-          ctx.textAlign = 'left';
-          ctx.fillText(`الاعتماد: ${finalCertId}`, 40, rect.height - 35);
-          
-          dataUrl = canvas.toDataURL('image/png');
+      const certEl = certificateRef.current;
+
+      // التأكد من توفر مكتبة html2canvas ديناميكياً لتصوير عنصر HTML بالكامل
+      let html2canvasFn = (window as any).html2canvas;
+      if (!html2canvasFn) {
+        try {
+          await new Promise<void>((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+            script.onload = () => resolve();
+            script.onerror = reject;
+            document.head.appendChild(script);
+          });
+          html2canvasFn = (window as any).html2canvas;
+        } catch (e) {
+          console.warn('Could not load html2canvas CDN:', e);
         }
+      }
+
+      if (html2canvasFn && certEl) {
+        const canvas = await html2canvasFn(certEl, {
+          scale: 3,
+          useCORS: true,
+          allowTaint: true,
+          backgroundColor: '#FCFBF7',
+          logging: false
+        });
+        dataUrl = canvas.toDataURL('image/png');
+      } else if ((window as any).htmlToImage && typeof (window as any).htmlToImage.toPng === 'function') {
+        dataUrl = await (window as any).htmlToImage.toPng(certEl, {
+          quality: 0.98,
+          pixelRatio: 3
+        });
       }
 
       if (dataUrl) {
@@ -441,16 +389,11 @@ export const ChallengeCertificate: React.FC<ChallengeCertificateProps> = ({
               )}
             </p>
 
-            {/* النتيجة والرتبة */}
-            <div className="inline-flex items-center gap-2 sm:gap-3 px-4 py-1.5 rounded-full bg-gradient-to-r from-emerald-50 via-amber-50 to-emerald-50 border border-amber-200 shadow-2xs text-xs sm:text-sm md:text-base font-bold text-[#064E3B]">
-              <span>بِالنَّتِيجَةِ المُبَارَكَة:</span>
+            {/* النتيجة */}
+            <div className="inline-flex items-center gap-2 sm:gap-3 px-5 py-1.5 rounded-full bg-gradient-to-r from-emerald-50 via-amber-50 to-emerald-50 border border-amber-200 shadow-2xs text-xs sm:text-sm md:text-base font-bold text-[#064E3B]">
+              <span>النَّتِيجَة:</span>
               <span className="font-black text-amber-700 font-mono text-sm sm:text-lg">
                 {score}
-              </span>
-              <span className="text-amber-400">✦</span>
-              <span>التَّقْدِير:</span>
-              <span className="font-black text-emerald-800">
-                {rank}
               </span>
             </div>
 

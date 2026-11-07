@@ -389,16 +389,11 @@ export const ChallengeCertificate: React.FC<ChallengeCertificateProps> = ({
               )}
             </p>
 
-            {/* النتيجة والرتبة */}
-            <div className="inline-flex items-center gap-2 sm:gap-3 px-4 py-1.5 rounded-full bg-gradient-to-r from-emerald-50 via-amber-50 to-emerald-50 border border-amber-200 shadow-2xs text-xs sm:text-sm md:text-base font-bold text-[#064E3B]">
-              <span>بِالنَّتِيجَةِ المُبَارَكَة:</span>
+            {/* النتيجة */}
+            <div className="inline-flex items-center gap-2 sm:gap-3 px-5 py-1.5 rounded-full bg-gradient-to-r from-emerald-50 via-amber-50 to-emerald-50 border border-amber-200 shadow-2xs text-xs sm:text-sm md:text-base font-bold text-[#064E3B]">
+              <span>النَّتِيجَة:</span>
               <span className="font-black text-amber-700 font-mono text-sm sm:text-lg">
                 {score}
-              </span>
-              <span className="text-amber-400">✦</span>
-              <span>التَّقْدِير:</span>
-              <span className="font-black text-emerald-800">
-                {rank}
               </span>
             </div>
 
