@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Bell, Check, X, Sparkles, Smartphone, CheckCheck, Clock, User, ChevronLeft } from 'lucide-react';
 import { supabase } from '../services/supabase';
@@ -173,14 +173,33 @@ const getStoredReadMap = (): ReadTimestampsMap => {
 
 export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, userId, buttonClassName }) => {
   const app = useApp();
-  const currentUserId = String(
-    userId ||
-    app?.playerId ||
-    app?.uniquePlayerId ||
-    app?.playerUsername ||
-    app?.playerName ||
-    ''
-  ).trim();
+
+  // استخراج وتحضير كائن currentUser بدقة مع مراعاة كافة مسارات التسجيل والذاكرة المحلية
+  const currentUser = useMemo(() => {
+    const rawId =
+      userId ||
+      app?.currentUser?.id ||
+      app?.user?.id ||
+      app?.playerId ||
+      app?.uniquePlayerId ||
+      app?.playerUsername ||
+      app?.playerName ||
+      localStorage.getItem('quran_player_id') ||
+      localStorage.getItem('quran_unique_player_id') ||
+      localStorage.getItem('quran_player_username') ||
+      localStorage.getItem('quran_player_name');
+
+    if (!rawId) return null;
+    return { id: String(rawId).trim() };
+  }, [
+    userId,
+    app?.currentUser?.id,
+    app?.user?.id,
+    app?.playerId,
+    app?.uniquePlayerId,
+    app?.playerUsername,
+    app?.playerName
+  ]);
 
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = useState<number>(0);
@@ -246,24 +265,53 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
     setUnreadCount(count);
   };
 
-  // Fetch notifications exclusively from Supabase (Single Source of Truth)
+  // 2. استعلام جلب الإشعارات من Supabase حصراً مع فحص الأخطاء
   const fetchNotifications = async () => {
-    const stored = getStoredReadMap();
-    if (!currentUserId) {
-      setNotifications([]);
-      setUnreadCount(0);
+    // 1. التحقق من جاهزية مُعرّف المستخدم: لا تنفذ الاستعلام إلا إذا كان currentUser.id متوفراً
+    if (!currentUser?.id) {
+      console.log('[NotificationBell] User ID not ready yet, waiting for currentUser.id...');
       setIsLoading(false);
       return;
     }
 
+    const stored = getStoredReadMap();
+    setIsLoading(true);
+
     try {
-      // ⚠️ Protection: Strict filter on receiver_id to prevent leaking notifications across users
+      console.log('[NotificationBell] Executing fetch query for receiver_id:', currentUser.id);
+
+      // الاستعلام الأساسي لجلب إشعارات المستخدم الحالي
       const { data, error } = await supabase
         .from('notifications')
         .select('*')
-        .eq('receiver_id', currentUserId)
-        .order('created_at', { ascending: false })
-        .limit(40);
+        .eq('receiver_id', currentUser.id)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.log('[NotificationBell Initial Fetch Error]:', error);
+
+        // خطة حماية طارئة في حال لم يكن العمود receiver_id مضافاً بعد في قاعدة بيانات Supabase (خطأ 42703):
+        if (error.code === '42703' || error.message?.includes('receiver_id')) {
+          console.warn('[NotificationBell] العمود receiver_id غير موجود حالياً في جدول notifications. يرجى تشغيل أوامر SQL المرفقة.');
+          const { data: fallbackData, error: fbError } = await supabase
+            .from('notifications')
+            .select('*')
+            .or(`user_id.eq.${currentUser.id},user_id.is.null`)
+            .order('created_at', { ascending: false });
+
+          if (fbError) {
+            console.log('[NotificationBell Fallback Error]:', fbError);
+          } else if (fallbackData) {
+            const synchronized: NotificationItem[] = fallbackData.map((item: any) => ({
+              ...item,
+              is_read: item.is_read === true || Boolean(stored[item.id])
+            }));
+            setNotifications(synchronized);
+            calculateUnread(synchronized, stored);
+            return;
+          }
+        }
+      }
 
       if (!error && data) {
         // Requirement 3: State Sync - Honor is_read directly from DB while syncing with local storage
@@ -274,28 +322,9 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
 
         setNotifications(synchronized);
         calculateUnread(synchronized, stored);
-      } else if (error) {
-        console.warn('[NotificationBell] Supabase fetch warning:', error);
-        // Fallback: If receiver_id column does not exist yet and user has a valid UUID
-        if ((error.code === '42703' || error.message?.includes('receiver_id')) && isValidUuid(currentUserId)) {
-          const { data: fallbackData } = await supabase
-            .from('notifications')
-            .select('*')
-            .eq('user_id', currentUserId)
-            .order('created_at', { ascending: false })
-            .limit(40);
-          if (fallbackData) {
-            const synchronized: NotificationItem[] = fallbackData.map((item: any) => ({
-              ...item,
-              is_read: item.is_read === true || Boolean(stored[item.id])
-            }));
-            setNotifications(synchronized);
-            calculateUnread(synchronized, stored);
-          }
-        }
       }
     } catch (e) {
-      console.warn('[NotificationBell] Supabase fetch error:', e);
+      console.log('[NotificationBell Exception]:', e);
     } finally {
       setIsLoading(false);
     }
@@ -539,11 +568,14 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
 
   // Subscribe to Supabase Realtime updates (INSERT, UPDATE, DELETE & broadcast)
   useEffect(() => {
+    // 1. التحقق من جاهزية مُعرّف المستخدم: لا تنفذ الاستعلام والاشتراك إلا عند توفر currentUser.id
+    if (!currentUser?.id) {
+      return;
+    }
+
     fetchNotifications();
 
-    if (!currentUserId) return;
-
-    const channelName = `realtime_notifications_${currentUserId}`;
+    const channelName = `realtime_notifications_${currentUser.id}`;
     const channel = supabase
       .channel(channelName)
       .on(
@@ -552,14 +584,14 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
           event: 'INSERT',
           schema: 'public',
           table: 'notifications',
-          filter: `receiver_id=eq.${currentUserId}`
+          filter: 'receiver_id=eq.' + currentUser.id
         },
         (payload) => {
           console.log('[NotificationBell] New Realtime notification received:', payload.new);
           const newItem = payload.new as NotificationItem;
 
           // Extra client-side safeguard: reject notification if receiver_id doesn't match current user
-          if (newItem.receiver_id && String(newItem.receiver_id) !== String(currentUserId)) {
+          if (newItem.receiver_id && String(newItem.receiver_id) !== String(currentUser.id)) {
             return;
           }
 
@@ -584,13 +616,13 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
           event: 'UPDATE',
           schema: 'public',
           table: 'notifications',
-          filter: `receiver_id=eq.${currentUserId}`
+          filter: 'receiver_id=eq.' + currentUser.id
         },
         (payload) => {
           console.log('[NotificationBell] Notification updated via Realtime:', payload.new);
           const updated = payload.new as NotificationItem;
           if (updated?.id) {
-            if (updated.receiver_id && String(updated.receiver_id) !== String(currentUserId)) {
+            if (updated.receiver_id && String(updated.receiver_id) !== String(currentUser.id)) {
               return;
             }
             setNotifications(prev => {
@@ -629,7 +661,7 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
         (payload) => {
           const updated = payload.payload as NotificationItem;
           if (updated?.id) {
-            if (updated.receiver_id && String(updated.receiver_id) !== String(currentUserId)) {
+            if (updated.receiver_id && String(updated.receiver_id) !== String(currentUser.id)) {
               return;
             }
             setNotifications(prev => {
@@ -667,7 +699,7 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [currentUserId]);
+  }, [currentUser?.id]);
 
   const formatRelativeTime = (dateStr: string) => {
     try {
