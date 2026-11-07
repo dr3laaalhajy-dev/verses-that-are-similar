@@ -282,11 +282,11 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
     try {
       console.log("1. Current User ID before fetch:", currentUser?.id);
 
-      // الاستعلام الأساسي لجلب إشعارات المستخدم الحالي مع وضع المراقبة الشاملة
+      // الاستعلام الأساسي لجلب إشعارات المستخدم الحالي (الشخصية) بالإضافة للإشعارات العامة (null)
       const { data, error } = await supabase
         .from('notifications')
         .select('*')
-        .eq('receiver_id', currentUser?.id)
+        .or(`receiver_id.eq.${currentUser?.id},receiver_id.is.null`)
         .order('created_at', { ascending: false });
 
       console.log("2. Supabase Response Data:", data);
@@ -587,62 +587,50 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
       .channel(channelName)
       .on(
         'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'notifications',
-          filter: 'receiver_id=eq.' + currentUser.id
-        },
+        { event: 'INSERT', schema: 'public', table: 'notifications' },
         (payload) => {
           console.log('[NotificationBell] New Realtime notification received:', payload.new);
-          const newItem = payload.new as NotificationItem;
+          const newNotif = payload.new as NotificationItem;
+          if (!newNotif) return;
 
-          // Extra client-side safeguard: reject notification if receiver_id doesn't match current user
-          if (newItem.receiver_id && String(newItem.receiver_id) !== String(currentUser.id)) {
-            return;
-          }
+          // أضف الإشعار للواجهة فقط إذا كان مخصصاً لهذا المستخدم أو إذا كان إشعاراً عاماً (null)
+          if (newNotif.receiver_id === currentUser.id || newNotif.receiver_id === null || !newNotif.receiver_id) {
+            setNotifications(prev => {
+              if (prev.some(n => n.id === newNotif.id)) return prev;
+              const nextList = [newNotif, ...prev];
+              calculateUnread(nextList, readMapRef.current);
+              return nextList;
+            });
 
-          setNotifications(prev => {
-            if (prev.some(n => n.id === newItem.id)) return prev;
-            const nextList = [newItem, ...prev];
-            calculateUnread(nextList, readMapRef.current);
-            return nextList;
-          });
-
-          // Haptic feedback if available
-          if (typeof window !== 'undefined' && window.navigator && window.navigator.vibrate) {
-            try {
-              window.navigator.vibrate([100, 80, 100]);
-            } catch {}
+            // Haptic feedback if available
+            if (typeof window !== 'undefined' && window.navigator && window.navigator.vibrate) {
+              try {
+                window.navigator.vibrate([100, 80, 100]);
+              } catch {}
+            }
           }
         }
       )
       .on(
         'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'notifications',
-          filter: 'receiver_id=eq.' + currentUser.id
-        },
+        { event: 'UPDATE', schema: 'public', table: 'notifications' },
         (payload) => {
           console.log('[NotificationBell] Notification updated via Realtime:', payload.new);
           const updated = payload.new as NotificationItem;
           if (updated?.id) {
-            if (updated.receiver_id && String(updated.receiver_id) !== String(currentUser.id)) {
-              return;
-            }
-            setNotifications(prev => {
-              const nextList = prev.map(n => n.id === updated.id ? { ...n, ...updated } : n);
-              // Recalculate unread with updated item's updated_at timestamp!
-              calculateUnread(nextList, readMapRef.current);
-              return nextList;
-            });
+            if (updated.receiver_id === currentUser.id || updated.receiver_id === null || !updated.receiver_id) {
+              setNotifications(prev => {
+                const nextList = prev.map(n => n.id === updated.id ? { ...n, ...updated } : n);
+                // Recalculate unread with updated item's updated_at timestamp!
+                calculateUnread(nextList, readMapRef.current);
+                return nextList;
+              });
 
-            if (typeof window !== 'undefined' && window.navigator && window.navigator.vibrate) {
-              try {
-                window.navigator.vibrate([80, 50, 80]);
-              } catch {}
+              if (typeof window !== 'undefined' && window.navigator && window.navigator.vibrate) {
+                try {
+                  window.navigator.vibrate([80, 50, 80]);
+                } catch {}
+              }
             }
           }
         }
