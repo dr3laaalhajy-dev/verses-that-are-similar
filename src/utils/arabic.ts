@@ -123,3 +123,13 @@ export const getSimilarity = (a: string, b: string): number => {
 export const convertArabicNumbersToEnglish = (str: string): string => {
   return str.replace(/[٠-٩]/g, (d) => (d.charCodeAt(0) - 1632).toString());
 };
+
+/**
+ * توحيد اسم السورة للتحقق المرن من الإجابة في تحدي السور:
+ * تقوم بحذف كلمة 'سورة ' (مع المسافة التي تليها) من الإجابة وتوحيد النص العربي
+ */
+export const normalizeSurahName = (name?: string | null): string => {
+  if (!name) return '';
+  const cleaned = name.replace(/^سورة\s+/g, '').replace(/سورة\s+/g, '').replace(/^سورة/g, '').trim();
+  return normalizeArabicText(cleaned).trim();
+};

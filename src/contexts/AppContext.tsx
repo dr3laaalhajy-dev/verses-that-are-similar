@@ -13,7 +13,7 @@ import { juzBoundaries, JUZ_NAMES_AR, ALL_QURAN_SURAHS, getJuzsForSurah } from '
 import { getPageNumber, juzStartPages, surahStartPages } from '../services/PageRepository';
 import { adhkarData, Dhikr, resolveAdhkarCategoryId } from '../services/AdhkarRepository';
 import { router } from '../services/router';
-import { normalizeArabicText, getSimilarity, convertArabicNumbersToEnglish } from '../utils/arabic';
+import { normalizeArabicText, normalizeSurahName, getSimilarity, convertArabicNumbersToEnglish } from '../utils/arabic';
 import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
 import { motion, AnimatePresence } from 'framer-motion';
 import { GoogleGenAI } from '@google/genai';
@@ -4753,9 +4753,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     correctSurahs = correctSurahs.filter(s => s.trim());
 
-    // 2. Normalize and check matches
-    const normalizedCorrect = correctSurahs.map(s => normalizeArabicText(s).trim());
-    const normalizedInputs = surahInputs.map(s => normalizeArabicText(s).trim());
+    // 2. Normalize and check matches using normalizeSurahName (strips "سورة " and normalizes)
+    const normalizedCorrect = correctSurahs.map(s => normalizeSurahName(s));
+    const normalizedInputs = surahInputs.map(s => normalizeSurahName(s));
 
     let correctCount = 0;
     const matchedCorrectIndices = new Set<number>();

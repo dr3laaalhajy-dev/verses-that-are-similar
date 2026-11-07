@@ -2,7 +2,7 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Trophy, Sparkles, History, XCircle, CheckCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { View } from '../types/challenges';
-import { normalizeArabicText } from '../utils/arabic';
+import { normalizeArabicText, normalizeSurahName } from '../utils/arabic';
 
 export interface SkillsResultsPageProps {
   sessionCorrect: number;
@@ -263,7 +263,7 @@ export const SkillsResultsPage: React.FC<SkillsResultsPageProps> = ({
                                       const inputStr = typeof input === 'string' ? input.trim() : String(input || '');
                                       const isMatch = correctList.some((c: any) => {
                                         const cStr = typeof c === 'string' ? c.trim() : String(c || '');
-                                        return normalizeArabicText(cStr) === normalizeArabicText(inputStr);
+                                        return normalizeSurahName(cStr) === normalizeSurahName(inputStr);
                                       });
                                       return (
                                         <span

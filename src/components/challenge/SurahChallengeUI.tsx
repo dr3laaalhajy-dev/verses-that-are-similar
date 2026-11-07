@@ -2,7 +2,7 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle, XCircle, Trophy, BookOpen } from 'lucide-react';
 import { renderQuranText } from '../../utils/quranUtils';
-import { normalizeArabicText } from '../../utils/arabic';
+import { normalizeArabicText, normalizeSurahName } from '../../utils/arabic';
 import { quranData } from '../../services/QuranRepository';
 
 export interface SurahFeedbackData {
@@ -71,7 +71,7 @@ export const SurahChallengeUI: React.FC<SurahChallengeUIProps> = ({
           let inputStyle = "bg-white border-slate-100 focus:border-brand-gold";
           let isMatch = false;
           if (feedback && surahFeedbackData) {
-            isMatch = surahFeedbackData.correctSurahs.some((c: string) => normalizeArabicText(c).trim() === normalizeArabicText(input).trim());
+            isMatch = surahFeedbackData.correctSurahs.some((c: string) => normalizeSurahName(c) === normalizeSurahName(input));
             inputStyle = isMatch
               ? "bg-emerald-50 border-emerald-500 text-emerald-800 ring-2 ring-emerald-300"
               : "bg-red-50 border-red-500 text-red-800 ring-2 ring-red-300";
