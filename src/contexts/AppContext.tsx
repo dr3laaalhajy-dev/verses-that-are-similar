@@ -2187,10 +2187,51 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const fetchAvailableRooms = useCallback(async (showLoading = false) => {
     if (showLoading) setIsLoadingRooms(true);
     try {
-      const res = await fetch('/api/1v1?action=list-rooms');
-      const data = await res.json();
-      if (res.ok && Array.isArray(data.rooms)) {
-        setAvailableRooms(data.rooms);
+      const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+
+      // 1. Direct query to Supabase (bypasses any intermediate cache layer)
+      const sbPromise = supabase
+        .from('rooms')
+        .select('*')
+        .eq('status', 'WAITING')
+        .gte('createdAt', tenMinutesAgo)
+        .order('createdAt', { ascending: false })
+        .limit(40);
+
+      // 2. Fetch from backend API with cache invalidation (_t timestamp and headers)
+      const apiPromise = fetch(`/api/1v1?action=list-rooms&_t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache'
+        }
+      }).then(res => res.json()).catch(() => null);
+
+      const [sbRes, apiData] = await Promise.all([sbPromise, apiPromise]);
+
+      if (apiData && Array.isArray(apiData.rooms)) {
+        setAvailableRooms(apiData.rooms);
+      } else if (sbRes && !sbRes.error && Array.isArray(sbRes.data)) {
+        const formatted = sbRes.data.map((r: any) => {
+          const progress = (r.playersProgress as any) || {};
+          const participantCount = Object.keys(progress).length || 1;
+          return {
+            id: r.id,
+            name: r.name || 'غرفة التحدي',
+            isPrivate: Boolean(r.isPrivate),
+            status: r.status,
+            questionCount: r.questionCount,
+            timePerQuestion: r.timePerQuestion,
+            gameMode: r.gameMode,
+            transitionMode: r.transitionMode || 'SYNC',
+            participantCount,
+            hostId: r.player1Id,
+            hostName: r.hostName || 'مجهول',
+            hostUsername: r.hostUsername || null,
+            createdAt: r.createdAt
+          };
+        });
+        setAvailableRooms(formatted);
       }
     } catch (e) {
       console.error('Failed to fetch rooms', e);
@@ -2215,22 +2256,49 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [view, fetchAvailableRooms]);
 
-  // تحديث البيانات في الخلفية عند السحب للتحديث (Background Pull to Refresh)
+  // تحديث البيانات الحقيقي عند السحب للتحديث (Pull to Refresh Handler)
   const handlePullToRefresh = useCallback(async () => {
+    setIsLoadingRooms(true);
     try {
       const tasks: Promise<any>[] = [
+        fetchAvailableRooms(true),
         fetchSettings(),
         fetchChallenges(),
         fetchCompletionChallenges()
       ];
-      if (view === 'group_join') {
-        tasks.push(fetchAvailableRooms());
+
+      // Refresh player score and profile
+      const pUnique = uniquePlayerId || localStorage.getItem('quran_unique_player_id');
+      const pUser = playerUsername || localStorage.getItem('quran_player_username');
+      const pName = playerName || localStorage.getItem('quran_player_name');
+      const pId = localStorage.getItem('quran_player_id');
+      if (pUnique || pUser || pName || pId) {
+        const params = new URLSearchParams({ t: Date.now().toString() });
+        if (pId) params.append('id', pId);
+        if (pUnique) params.append('uniquePlayerId', pUnique);
+        if (pUser) params.append('username', pUser);
+        if (pName) params.append('name', pName);
+        tasks.push(
+          fetch(`/api/users/me?${params.toString()}`, {
+            cache: 'no-store',
+            headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
+          }).then(r => r.json()).then(data => {
+            if (data?.user) {
+              if (typeof data.user.points === 'number') setTotalPoints(data.user.points);
+              if (typeof data.user.cups === 'number') setCups(data.user.cups);
+              if (typeof data.user.streak === 'number') setStreak(data.user.streak);
+            }
+          }).catch(() => {})
+        );
       }
+
       await Promise.allSettled(tasks);
     } catch (err) {
       console.warn('PullToRefresh background error:', err);
+    } finally {
+      setIsLoadingRooms(false);
     }
-  }, [fetchSettings, fetchChallenges, fetchCompletionChallenges, fetchAvailableRooms, view]);
+  }, [fetchAvailableRooms, fetchSettings, fetchChallenges, fetchCompletionChallenges, uniquePlayerId, playerUsername, playerName]);
 
   const fetchAvailableSkillCounts = useCallback(async () => {
     const audioLocal = allChallenges.filter(c => {

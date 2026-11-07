@@ -10,14 +10,24 @@ interface PullToRefreshProps {
 export const PullToRefresh: React.FC<PullToRefreshProps> = ({ children, onRefresh }) => {
   const [pullDistance, setPullDistance] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
+
   const touchStartY = useRef<number | null>(null);
   const isPulling = useRef(false);
+  const pullDistanceRef = useRef(0);
+  const isRefreshingRef = useRef(false);
+  const onRefreshRef = useRef(onRefresh);
+
   const pullThreshold = 70;
+
+  useEffect(() => {
+    onRefreshRef.current = onRefresh;
+  }, [onRefresh]);
 
   useEffect(() => {
     const handleTouchStart = (e: TouchEvent) => {
       // Only allow pull to refresh when scrolled at the very top
-      if (window.scrollY <= 2) {
+      const scrollTop = window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
+      if (scrollTop <= 5 && !isRefreshingRef.current) {
         touchStartY.current = e.touches[0].clientY;
         isPulling.current = true;
       } else {
@@ -27,16 +37,19 @@ export const PullToRefresh: React.FC<PullToRefreshProps> = ({ children, onRefres
     };
 
     const handleTouchMove = (e: TouchEvent) => {
-      if (!isPulling.current || touchStartY.current === null || isRefreshing) return;
+      if (!isPulling.current || touchStartY.current === null || isRefreshingRef.current) return;
 
       const currentY = e.touches[0].clientY;
       const diff = currentY - touchStartY.current;
+      const scrollTop = window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
 
-      if (diff > 0 && window.scrollY <= 2) {
+      if (diff > 0 && scrollTop <= 5) {
         // Apply friction to pull distance
-        const distance = Math.min(diff * 0.4, 95);
+        const distance = Math.min(diff * 0.45, 95);
+        pullDistanceRef.current = distance;
         setPullDistance(distance);
       } else {
+        pullDistanceRef.current = 0;
         setPullDistance(0);
       }
     };
@@ -46,13 +59,16 @@ export const PullToRefresh: React.FC<PullToRefreshProps> = ({ children, onRefres
       isPulling.current = false;
       touchStartY.current = null;
 
-      if (pullDistance >= pullThreshold && !isRefreshing) {
+      const currentDistance = pullDistanceRef.current;
+      if (currentDistance >= pullThreshold && !isRefreshingRef.current) {
+        isRefreshingRef.current = true;
         setIsRefreshing(true);
+        pullDistanceRef.current = 55;
         setPullDistance(55); // Hold at indicator height while refreshing
 
         try {
-          if (onRefresh) {
-            await onRefresh();
+          if (onRefreshRef.current) {
+            await onRefreshRef.current();
           } else {
             // محاكاة تأخير خفيف للتحديث في الخلفية دون إعادة تحميل الصفحة نهائياً
             await new Promise(resolve => setTimeout(resolve, 600));
@@ -60,10 +76,13 @@ export const PullToRefresh: React.FC<PullToRefreshProps> = ({ children, onRefres
         } catch (err) {
           console.error('Background refresh error:', err);
         } finally {
+          isRefreshingRef.current = false;
           setIsRefreshing(false);
+          pullDistanceRef.current = 0;
           setPullDistance(0);
         }
       } else {
+        pullDistanceRef.current = 0;
         setPullDistance(0);
       }
     };
@@ -77,7 +96,7 @@ export const PullToRefresh: React.FC<PullToRefreshProps> = ({ children, onRefres
       window.removeEventListener('touchmove', handleTouchMove);
       window.removeEventListener('touchend', handleTouchEnd);
     };
-  }, [pullDistance, isRefreshing, onRefresh]);
+  }, []);
 
   const rotation = Math.min((pullDistance / pullThreshold) * 360, 360);
   const isReady = pullDistance >= pullThreshold;
