@@ -662,7 +662,8 @@ export const GlobalOverlays: React.FC = () => {
             initial={{ opacity: 0, y: -40, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -20, scale: 0.95 }}
-            className="fixed top-6 left-1/2 -translate-x-1/2 z-[1300] max-w-md w-[90%] pointer-events-none"
+            className="fixed top-6 left-1/2 -translate-x-1/2 z-[100010] max-w-md w-[90%] pointer-events-none"
+            style={{ zIndex: 100010 }}
           >
             <div className={`p-4 rounded-2xl shadow-2xl backdrop-blur-md flex items-center gap-3 border text-white pointer-events-auto ${
               app.toastMessage.type === 'success'

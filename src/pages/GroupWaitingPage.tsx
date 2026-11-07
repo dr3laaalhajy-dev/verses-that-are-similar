@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Users, Lock, Globe, Loader2, Trash2, ArrowRight, LogOut,
@@ -992,173 +993,187 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
         incomingReaction={room?.lastReaction || room?.playersProgress?.__lastReaction}
       />
 
-      {/* Room Details Modal (For All Players) */}
-      <AnimatePresence>
-        {isInfoModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs" dir="rtl">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              className="bg-white rounded-3xl p-5 sm:p-6 w-full max-w-md shadow-2xl border border-slate-100 text-right space-y-4 max-h-[90vh] overflow-y-auto"
+      {/* Room Details Modal (For All Players) - Mounted in Foremost Portal */}
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {isInfoModalOpen && (
+            <div
+              className="fixed inset-0 z-[99990] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs"
+              style={{ zIndex: 99990 }}
+              dir="rtl"
             >
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
-                    <Info className="w-5 h-5" />
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                className="bg-white rounded-3xl p-5 sm:p-6 w-full max-w-md shadow-2xl border border-slate-100 text-right space-y-4 max-h-[90vh] overflow-y-auto"
+              >
+                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                      <Info className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="font-black text-slate-800 text-base">تفاصيل الغرفة</h3>
+                      <p className="text-[11px] text-slate-400 font-bold">إعدادات وقواعد التحدي الحالي</p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="font-black text-slate-800 text-base">تفاصيل الغرفة</h3>
-                    <p className="text-[11px] text-slate-400 font-bold">إعدادات وقواعد التحدي الحالي</p>
+                  <button
+                    type="button"
+                    onClick={() => setIsInfoModalOpen(false)}
+                    className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-all cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="space-y-2.5 text-xs sm:text-sm">
+                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                    <span className="text-slate-500 font-bold">اسم الغرفة:</span>
+                    <span className="font-black text-slate-800">{room?.name || 'غرفة التحدي'}</span>
+                  </div>
+
+                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                    <span className="text-slate-500 font-bold">رمز الدخول (Code):</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-mono font-black text-amber-700 bg-amber-100 px-2 py-0.5 rounded text-sm">{room?.code}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (room?.code) navigator.clipboard.writeText(room.code);
+                          toast.success('تم نسخ رمز الغرفة');
+                        }}
+                        className="text-[11px] text-amber-600 font-bold underline cursor-pointer"
+                      >
+                        نسخ
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                    <span className="text-slate-500 font-bold">نوع التحدي:</span>
+                    <span className="font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                      {formatGameModeName(room?.gameMode)}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                    <span className="text-slate-500 font-bold">التصنيف / الفئة:</span>
+                    <span className="font-black text-slate-800">
+                      {room?.categoryFilter || room?.category || 'جميع التصنيفات العامة'}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                    <span className="text-slate-500 font-bold">عدد الأسئلة:</span>
+                    <span className="font-black text-slate-800">{room?.questionCount || 5} أسئلة</span>
+                  </div>
+
+                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                    <span className="text-slate-500 font-bold">الوقت لكل سؤال:</span>
+                    <span className="font-black text-slate-800">
+                      {room?.timePerQuestion && Number(room.timePerQuestion) > 0 ? `${room.timePerQuestion} ثانية` : 'بدون وقت محدد (مفتوح)'}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                    <span className="text-slate-500 font-bold">نمط الانتقال:</span>
+                    <span className="font-black text-slate-800">
+                      {room?.transitionMode === 'ASYNC' ? 'سباق فردي سريع (ASYNC)' : 'تزامن جماعي (SYNC)'}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                    <span className="text-slate-500 font-bold">نوع الغرفة:</span>
+                    <span className="font-black text-slate-800">
+                      {room?.isPrivate ? 'غرفة خاصة برمز سري 🔒' : 'غرفة عامة مفتوحة للجميع 🌐'}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                    <span className="text-slate-500 font-bold">منشئ الغرفة:</span>
+                    <span className="font-black text-slate-800">{room?.player1?.name || room?.hostName || 'المنشئ'}</span>
                   </div>
                 </div>
+
                 <button
                   type="button"
                   onClick={() => setIsInfoModalOpen(false)}
-                  className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-all cursor-pointer"
+                  className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs sm:text-sm transition-all cursor-pointer"
                 >
-                  <X className="w-4 h-4" />
+                  إغلاق
                 </button>
-              </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
 
-              <div className="space-y-2.5 text-xs sm:text-sm">
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-                  <span className="text-slate-500 font-bold">اسم الغرفة:</span>
-                  <span className="font-black text-slate-800">{room?.name || 'غرفة التحدي'}</span>
-                </div>
-
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-                  <span className="text-slate-500 font-bold">رمز الدخول (Code):</span>
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-mono font-black text-amber-700 bg-amber-100 px-2 py-0.5 rounded text-sm">{room?.code}</span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (room?.code) navigator.clipboard.writeText(room.code);
-                        toast.success('تم نسخ رمز الغرفة');
-                      }}
-                      className="text-[11px] text-amber-600 font-bold underline cursor-pointer"
-                    >
-                      نسخ
-                    </button>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-                  <span className="text-slate-500 font-bold">نوع التحدي:</span>
-                  <span className="font-black text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                    {formatGameModeName(room?.gameMode)}
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-                  <span className="text-slate-500 font-bold">التصنيف / الفئة:</span>
-                  <span className="font-black text-slate-800">
-                    {room?.categoryFilter || room?.category || 'جميع التصنيفات العامة'}
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-                  <span className="text-slate-500 font-bold">عدد الأسئلة:</span>
-                  <span className="font-black text-slate-800">{room?.questionCount || 5} أسئلة</span>
-                </div>
-
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-                  <span className="text-slate-500 font-bold">الوقت لكل سؤال:</span>
-                  <span className="font-black text-slate-800">
-                    {room?.timePerQuestion && Number(room.timePerQuestion) > 0 ? `${room.timePerQuestion} ثانية` : 'بدون وقت محدد (مفتوح)'}
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-                  <span className="text-slate-500 font-bold">نمط الانتقال:</span>
-                  <span className="font-black text-slate-800">
-                    {room?.transitionMode === 'ASYNC' ? 'سباق فردي سريع (ASYNC)' : 'تزامن جماعي (SYNC)'}
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-                  <span className="text-slate-500 font-bold">نوع الغرفة:</span>
-                  <span className="font-black text-slate-800">
-                    {room?.isPrivate ? 'غرفة خاصة برمز سري 🔒' : 'غرفة عامة مفتوحة للجميع 🌐'}
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-                  <span className="text-slate-500 font-bold">منشئ الغرفة:</span>
-                  <span className="font-black text-slate-800">{room?.player1?.name || room?.hostName || 'المنشئ'}</span>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setIsInfoModalOpen(false)}
-                className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs sm:text-sm transition-all cursor-pointer"
-              >
-                إغلاق
-              </button>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
-      {/* Edit Room Settings Modal (For Creator Only) */}
-      <AnimatePresence>
-        {isEditModalOpen && isCreator && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 bg-slate-900/60 backdrop-blur-xs" dir="rtl">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              className="bg-white rounded-3xl p-4 sm:p-6 md:p-8 w-full max-w-2xl shadow-2xl border border-slate-100 text-right max-h-[92vh] overflow-y-auto"
+      {/* Edit Room Settings Modal (For Creator Only) - Mounted in Topmost Portal above all layers */}
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {isEditModalOpen && isCreator && (
+            <div
+              className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-4 md:p-6 bg-slate-950/75 backdrop-blur-sm"
+              style={{ zIndex: 99999 }}
+              dir="rtl"
             >
-              <GroupCreatePage
-                mode="edit"
-                initialData={room}
-                onClose={() => setIsEditModalOpen(false)}
-                onSubmitEdit={handleSaveRoomSettings}
-                isSaving={isSavingSettings || app?.isSavingRoomSettings}
-                v1RoomName={app.v1RoomName}
-                setV1RoomName={app.setV1RoomName}
-                v1IsPrivate={app.v1IsPrivate}
-                setV1IsPrivate={app.setV1IsPrivate}
-                showPasswordText={app.showPasswordText}
-                setShowPasswordText={app.setShowPasswordText}
-                v1RoomPassword={app.v1RoomPassword}
-                setV1RoomPassword={app.setV1RoomPassword}
-                v1GameModes={app.v1GameModes}
-                setV1GameModes={app.setV1GameModes}
-                systemSettings={app.systemSettings}
-                availableSkillCounts={app.availableSkillCounts}
-                skillQuestionCounts={app.skillQuestionCounts}
-                setSkillQuestionCounts={app.setSkillQuestionCounts}
-                whoAmIQuestionCount={app.whoAmIQuestionCount}
-                selectedWhoAmICategories={app.selectedWhoAmICategories}
-                setSelectedWhoAmICategories={app.setSelectedWhoAmICategories}
-                whoAmIAvailableCategories={app.whoAmIAvailableCategories}
-                whoAmICategoryCounts={app.whoAmICategoryCounts}
-                setWhoAmICategoryCounts={app.setWhoAmICategoryCounts}
-                totalConfiguredQuestions={app.totalConfiguredQuestions}
-                islamicRoomCategories={app.islamicRoomCategories}
-                islamicRoomLevels={app.islamicRoomLevels}
-                islamicRoomTopics={app.islamicRoomTopics}
-                islamicTopicQuestionCounts={app.islamicTopicQuestionCounts}
-                setShowIslamicConfigModal={app.setShowIslamicConfigModal}
-                hasCountValidationErrors={app.hasCountValidationErrors}
-                v1Timer={app.v1Timer}
-                setV1Timer={app.setV1Timer}
-                v1TimePerQuestion={app.v1TimePerQuestion}
-                setV1TimePerQuestion={app.setV1TimePerQuestion}
-                v1TransitionMode={app.v1TransitionMode}
-                setV1TransitionMode={app.setV1TransitionMode}
-                handleCreateV1={handleSaveRoomSettings}
-                isCreatingRoom={isSavingSettings || app?.isSavingRoomSettings}
-                setView={setView}
-              />
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                className="bg-white rounded-3xl p-4 sm:p-6 md:p-8 w-full max-w-2xl shadow-2xl border border-slate-100 text-right max-h-[92vh] overflow-y-auto relative z-10"
+              >
+                <GroupCreatePage
+                  mode="edit"
+                  initialData={room}
+                  onClose={() => setIsEditModalOpen(false)}
+                  onSubmitEdit={handleSaveRoomSettings}
+                  isSaving={isSavingSettings || app?.isSavingRoomSettings}
+                  v1RoomName={app.v1RoomName}
+                  setV1RoomName={app.setV1RoomName}
+                  v1IsPrivate={app.v1IsPrivate}
+                  setV1IsPrivate={app.setV1IsPrivate}
+                  showPasswordText={app.showPasswordText}
+                  setShowPasswordText={app.setShowPasswordText}
+                  v1RoomPassword={app.v1RoomPassword}
+                  setV1RoomPassword={app.setV1RoomPassword}
+                  v1GameModes={app.v1GameModes}
+                  setV1GameModes={app.setV1GameModes}
+                  systemSettings={app.systemSettings}
+                  availableSkillCounts={app.availableSkillCounts}
+                  skillQuestionCounts={app.skillQuestionCounts}
+                  setSkillQuestionCounts={app.setSkillQuestionCounts}
+                  whoAmIQuestionCount={app.whoAmIQuestionCount}
+                  selectedWhoAmICategories={app.selectedWhoAmICategories}
+                  setSelectedWhoAmICategories={app.setSelectedWhoAmICategories}
+                  whoAmIAvailableCategories={app.whoAmIAvailableCategories}
+                  whoAmICategoryCounts={app.whoAmICategoryCounts}
+                  setWhoAmICategoryCounts={app.setWhoAmICategoryCounts}
+                  totalConfiguredQuestions={app.totalConfiguredQuestions}
+                  islamicRoomCategories={app.islamicRoomCategories}
+                  islamicRoomLevels={app.islamicRoomLevels}
+                  islamicRoomTopics={app.islamicRoomTopics}
+                  islamicTopicQuestionCounts={app.islamicTopicQuestionCounts}
+                  setShowIslamicConfigModal={app.setShowIslamicConfigModal}
+                  hasCountValidationErrors={app.hasCountValidationErrors}
+                  v1Timer={app.v1Timer}
+                  setV1Timer={app.setV1Timer}
+                  v1TimePerQuestion={app.v1TimePerQuestion}
+                  setV1TimePerQuestion={app.setV1TimePerQuestion}
+                  v1TransitionMode={app.v1TransitionMode}
+                  setV1TransitionMode={app.setV1TransitionMode}
+                  handleCreateV1={handleSaveRoomSettings}
+                  isCreatingRoom={isSavingSettings || app?.isSavingRoomSettings}
+                  setView={setView}
+                />
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
     </motion.div>
   );
 };

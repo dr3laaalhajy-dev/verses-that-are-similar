@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Sparkles, Check, Search, AlertCircle, Hash } from 'lucide-react';
 import { islamicCategoriesData, islamicCategoriesList } from '../data/islamicCategories';
@@ -171,9 +172,15 @@ const IslamicRoomConfigModal: React.FC<IslamicRoomConfigModalProps> = ({
     }
   }
 
-  return (
+  if (!isOpen) return null;
+
+  const modalContent = (
     <AnimatePresence>
-      <div className="fixed inset-0 z-[1000] flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs" dir="rtl">
+      <div
+        className="fixed inset-0 z-[100000] flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs"
+        style={{ zIndex: 100000 }}
+        dir="rtl"
+      >
         <motion.div
           initial={{ opacity: 0, scale: 0.95, y: 15 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -517,6 +524,8 @@ const IslamicRoomConfigModal: React.FC<IslamicRoomConfigModalProps> = ({
       </div>
     </AnimatePresence>
   );
+
+  return typeof document !== 'undefined' ? createPortal(modalContent, document.body) : modalContent;
 };
 
 export default IslamicRoomConfigModal;
