@@ -587,3 +587,158 @@ export const splitSurahAnswersByJuzRange = (
 ): SplitSurahAnswersResult => {
   return splitSurahAnswersByScope(rawSurahs, { scopeMode: 'juz', selectedJuzs: selectedJuzRange }, verses);
 };
+
+export const getChallengeSurahsList = (c: any): string[] => {
+  let surahs: string[] = [];
+  const text = c.correctText || '';
+  try {
+    if (text.startsWith('[')) surahs = JSON.parse(text);
+    else if (text) surahs = [text];
+  } catch {}
+  if (Array.isArray(c.verses)) {
+    c.verses.forEach((v: any) => {
+      if (v?.surah && !surahs.includes(v.surah)) surahs.push(v.surah);
+    });
+  }
+  return surahs.filter(Boolean);
+};
+
+export const getAvailableSurahChallenges = (
+  allChallenges: any[],
+  scope: {
+    scopeMode?: 'juz' | 'surah';
+    selectedJuzs?: number[] | null;
+    selectedSurahs?: string[] | null;
+  }
+): any[] => {
+  if (!allChallenges || allChallenges.length === 0) return [];
+
+  const candidates: any[] = [];
+  const existingKeywords = new Set<string>();
+
+  allChallenges.forEach(c => {
+    const t = (c.type || '').toUpperCase();
+    if (t === 'SURAH') {
+      candidates.push(c);
+      const kw = c.keyword || c.verseText;
+      if (kw) existingKeywords.add(kw);
+    } else if ((t === 'STANDARD' || t === '') && Array.isArray(c.verses) && c.verses.length > 0) {
+      const kw = c.keyword || c.verseText;
+      if (kw && !existingKeywords.has(kw)) {
+        const surahs = Array.from(new Set(c.verses.map((v: any) => v.surah).filter(Boolean)));
+        if (surahs.length > 0) {
+          candidates.push({
+            ...c,
+            id: c.id >= 10000 ? c.id : 50000 + c.id,
+            type: 'SURAH',
+            correctText: JSON.stringify(surahs),
+            verses: c.verses
+          });
+          existingKeywords.add(kw);
+        }
+      }
+    }
+  });
+
+  const scopeMode = scope?.scopeMode || (scope?.selectedSurahs?.length ? 'surah' : 'juz');
+  const selectedSurahs = scope?.selectedSurahs || [];
+  const selectedJuzs = scope?.selectedJuzs || [];
+
+  const isScopeActive =
+    (scopeMode === 'surah' && selectedSurahs.length > 0) ||
+    (scopeMode === 'juz' && selectedJuzs.length > 0 && selectedJuzs.length < 30);
+
+  if (!isScopeActive) {
+    return candidates;
+  }
+
+  return candidates.filter(c => {
+    const surahs = getChallengeSurahsList(c);
+    if (surahs.length === 0) return false;
+    const { inRangeAnswers } = splitSurahAnswersByScope(surahs, scope, c.verses);
+    return inRangeAnswers.length > 0;
+  });
+};
+
+export interface ScopeValidationResult {
+  isValid: boolean;
+  uniqueSurahsCount: number;
+  availableQuestionsCount: number;
+  isTooFewSurahs: boolean;
+  isZeroQuestions: boolean;
+  isNotEnoughQuestions: boolean;
+  errorMessage: string | null;
+}
+
+export const validateSurahChallengeScope = (
+  allChallenges: any[],
+  scope: {
+    scopeMode?: 'juz' | 'surah';
+    selectedJuzs?: number[] | null;
+    selectedSurahs?: string[] | null;
+  },
+  requestedCount: number = 5
+): ScopeValidationResult => {
+  const scopeMode = scope.scopeMode || (scope.selectedSurahs?.length ? 'surah' : 'juz');
+  const selectedJuzs = scope.selectedJuzs || [];
+  const selectedSurahs = scope.selectedSurahs || [];
+
+  const isScopeActive =
+    (scopeMode === 'surah' && selectedSurahs.length > 0) ||
+    (scopeMode === 'juz' && selectedJuzs.length > 0 && selectedJuzs.length < 30);
+
+  // 1. حساب عدد السور الفريدة في هذا النطاق
+  let uniqueSurahsCount = 114;
+  if (scopeMode === 'surah') {
+    uniqueSurahsCount = selectedSurahs.length;
+  } else if (selectedJuzs.length > 0 && selectedJuzs.length < 30) {
+    const surahsInScope = ALL_QURAN_SURAHS.filter(s => {
+      const juzs = getJuzsForSurah(s.id);
+      return juzs.some(j => selectedJuzs.includes(j));
+    });
+    uniqueSurahsCount = surahsInScope.length;
+  }
+
+  // 2. حساب إجمالي عدد الأسئلة المتوفرة (المفلترة) داخل النطاق المختار
+  const availableChallenges = getAvailableSurahChallenges(allChallenges, {
+    scopeMode,
+    selectedJuzs,
+    selectedSurahs
+  });
+  const availableQuestionsCount = availableChallenges.length;
+
+  const isTooFewSurahs = isScopeActive && uniqueSurahsCount < 3;
+  const isZeroQuestions = isScopeActive && availableQuestionsCount === 0;
+  const isNotEnoughQuestions =
+    isScopeActive && availableQuestionsCount > 0 && availableQuestionsCount < requestedCount;
+
+  let errorMessage: string | null = null;
+  if (isTooFewSurahs) {
+    errorMessage =
+      scopeMode === 'surah'
+        ? 'هذا النطاق يحتوي على أقل من 3 سور، مما يجعل التحدي سهلاً جداً. يرجى اختيار 3 سور على الأقل لزيادة الحماس!'
+        : 'هذا النطاق يحتوي على أقل من 3 سور، مما يجعل التحدي سهلاً جداً. يرجى اختيار أجزاء إضافية لزيادة الحماس!';
+  } else if (isZeroQuestions) {
+    errorMessage = 'لا توجد أي أسئلة في هذا النطاق. يرجى توسيع النطاق باختيار أجزاء أو سور أخرى.';
+  } else if (isNotEnoughQuestions) {
+    const questionsWord =
+      availableQuestionsCount === 1
+        ? 'سؤال واحد'
+        : availableQuestionsCount === 2
+        ? 'سؤالين'
+        : `${availableQuestionsCount} أسئلة`;
+    errorMessage = `لا يوجد سوى ${questionsWord} في هذا النطاق. يرجى تقليل عدد الأسئلة المطلوب أو توسيع النطاق.`;
+  }
+
+  const isValid = !isTooFewSurahs && !isZeroQuestions && !isNotEnoughQuestions;
+
+  return {
+    isValid,
+    uniqueSurahsCount,
+    availableQuestionsCount,
+    isTooFewSurahs,
+    isZeroQuestions,
+    isNotEnoughQuestions,
+    errorMessage
+  };
+};

@@ -1,13 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import {
   Globe, Lock, Eye, EyeOff, Mic, CheckCircle, BookOpen, Sparkles, HelpCircle,
-  Check, ArrowLeft, Settings, X, Loader2
+  Check, ArrowLeft, Settings, X, Loader2, AlertTriangle
 } from 'lucide-react';
 import { View } from '../types/challenges';
 import { WhoAmIInfoAlert } from '../components/WhoAmISettings';
 import { islamicCategoriesList } from '../data/islamicCategories';
 import { ScopeSelector } from '../components/challenge/ScopeSelector';
+import { useApp } from '../contexts/AppContext';
+import { validateSurahChallengeScope } from '../services/JuzRepository';
 
 export interface GroupCreatePageProps {
   mode?: 'create' | 'edit';
@@ -132,6 +134,30 @@ export const GroupCreatePage: React.FC<GroupCreatePageProps> = ({
   const activeSetSelectedSurahs = setRoomSelectedSurahs ?? setLocalSelectedSurahs;
   const activeSurahSearch = roomSurahSearch ?? localSurahSearch;
   const activeSetSurahSearch = setRoomSurahSearch ?? setLocalSurahSearch;
+
+  const { allChallenges } = useApp();
+
+  const isSurahSelected = v1GameModes.includes('surah');
+  const surahRoomValidation = useMemo(() => {
+    if (!isSurahSelected) return { isValid: true, errorMessage: null };
+    const requestedCount = Math.max(1, skillQuestionCounts.surah || 5);
+    return validateSurahChallengeScope(
+      allChallenges,
+      {
+        scopeMode: activeScopeMode,
+        selectedJuzs: activeSelectedJuzs,
+        selectedSurahs: activeSelectedSurahs
+      },
+      requestedCount
+    );
+  }, [isSurahSelected, allChallenges, activeScopeMode, activeSelectedJuzs, activeSelectedSurahs, skillQuestionCounts.surah]);
+
+  const isSubmitDisabled =
+    isSaving ||
+    isCreatingRoom ||
+    hasCountValidationErrors ||
+    totalConfiguredQuestions <= 0 ||
+    (isSurahSelected && !surahRoomValidation.isValid);
 
   return (
     <motion.div
@@ -492,6 +518,20 @@ export const GroupCreatePage: React.FC<GroupCreatePageProps> = ({
                   title="نطاق أسئلة القرآن (الأجزاء أو السور)"
                   description="حدد أجزاء أو سور معينة لحصر أسئلة التحدي داخلها، وتفعيل مكافأة الحُفّاظ للآيات المتشابهة"
                 />
+
+                {/* تنبيه تحذيري عند عدم استيفاء شروط تحدي اسم السورة في الغرفة */}
+                {isSurahSelected && !surahRoomValidation.isValid && surahRoomValidation.errorMessage && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="mt-3 p-3.5 sm:p-4 rounded-2xl bg-amber-500/10 border-2 border-amber-500/30 text-amber-900 dark:text-amber-200 flex items-start gap-2.5 text-right text-xs sm:text-sm font-bold shadow-xs"
+                  >
+                    <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                    <div className="flex-1 leading-relaxed">
+                      {surahRoomValidation.errorMessage}
+                    </div>
+                  </motion.div>
+                )}
               </motion.div>
             )}
           </div>
@@ -803,9 +843,9 @@ export const GroupCreatePage: React.FC<GroupCreatePageProps> = ({
                 <button
                   type="button"
                   onClick={onSubmitEdit || handleCreateV1}
-                  disabled={isSaving || isCreatingRoom || hasCountValidationErrors || totalConfiguredQuestions <= 0}
+                  disabled={isSubmitDisabled}
                   className={`w-full py-3.5 md:py-4 rounded-2xl font-black text-base md:text-lg shadow-xl transition-all flex items-center justify-center gap-3 group/btn ${
-                    isSaving || isCreatingRoom || hasCountValidationErrors || totalConfiguredQuestions <= 0
+                    isSubmitDisabled
                       ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none'
                       : 'bg-brand-emerald text-white shadow-brand-emerald/20 hover:bg-brand-emerald/90 hover:scale-[1.01] active:scale-95 cursor-pointer'
                   }`}
@@ -835,9 +875,9 @@ export const GroupCreatePage: React.FC<GroupCreatePageProps> = ({
               <>
                 <button
                   onClick={handleCreateV1}
-                  disabled={isCreatingRoom || hasCountValidationErrors || totalConfiguredQuestions <= 0}
+                  disabled={isSubmitDisabled}
                   className={`w-full py-3.5 md:py-4 rounded-2xl font-black text-base md:text-lg shadow-xl transition-all flex items-center justify-center gap-3 group/btn ${
-                    isCreatingRoom || hasCountValidationErrors || totalConfiguredQuestions <= 0
+                    isSubmitDisabled
                       ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none'
                       : 'bg-orange-500 text-white shadow-orange-500/20 hover:bg-orange-600 hover:scale-[1.01] active:scale-95 cursor-pointer'
                   }`}

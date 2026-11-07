@@ -1,8 +1,10 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, ArrowRight } from 'lucide-react';
+import { ArrowLeft, ArrowRight, AlertTriangle } from 'lucide-react';
 import { View } from '../types/challenges';
 import { ScopeSelector, JuzSurahSelector } from '../components/challenge/ScopeSelector';
+import { useApp } from '../contexts/AppContext';
+import { validateSurahChallengeScope } from '../services/JuzRepository';
 
 export interface SkillsCountSelectionPageProps {
   skillsType: any;
@@ -37,6 +39,21 @@ export const SkillsCountSelectionPage: React.FC<SkillsCountSelectionPageProps> =
   handleStartSkillsSession,
   setView
 }) => {
+  const { allChallenges } = useApp();
+
+  const surahValidation = useMemo(() => {
+    if (skillsType !== 'surah') return { isValid: true, errorMessage: null };
+    return validateSurahChallengeScope(
+      allChallenges,
+      {
+        scopeMode: skillsScopeMode,
+        selectedJuzs: selectedSkillJuzs,
+        selectedSurahs: selectedSkillSurahs
+      },
+      selectedSkillCount
+    );
+  }, [skillsType, allChallenges, skillsScopeMode, selectedSkillJuzs, selectedSkillSurahs, selectedSkillCount]);
+
   if (skillsType === 'complete' || skillsType === 'surah') {
     const isSurah = skillsType === 'surah';
     return (
@@ -101,18 +118,38 @@ export const SkillsCountSelectionPage: React.FC<SkillsCountSelectionPageProps> =
             description="اختر أجزاء أو سور معينة لحصر أسئلة التحدي داخلها"
           />
 
+          {/* تنبيه تحذيري عند عدم استيفاء شروط تحدي اسم السورة */}
+          {isSurah && !surahValidation.isValid && surahValidation.errorMessage && (
+            <motion.div
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="p-3.5 sm:p-4 rounded-2xl bg-amber-500/10 border-2 border-amber-500/30 text-amber-900 dark:text-amber-200 flex items-start gap-2.5 text-right text-xs sm:text-sm font-bold shadow-xs"
+            >
+              <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+              <div className="flex-1 leading-relaxed">
+                {surahValidation.errorMessage}
+              </div>
+            </motion.div>
+          )}
+
           {/* Actions */}
           <div className="pt-2 space-y-3">
             <button
               type="button"
+              disabled={isSurah && !surahValidation.isValid}
               onClick={() => {
+                if (isSurah && !surahValidation.isValid) return;
                 if (skillsScopeMode === 'juz') {
                   handleStartSkillsSession(selectedSkillCount, selectedSkillJuzs, undefined);
                 } else {
                   handleStartSkillsSession(selectedSkillCount, undefined, selectedSkillSurahs);
                 }
               }}
-              className="w-full py-4 bg-brand-gold hover:bg-amber-600 text-white rounded-2xl font-black text-base shadow-xl shadow-brand-gold/20 active:scale-98 transition-all flex items-center justify-center gap-2"
+              className={`w-full py-4 rounded-2xl font-black text-base shadow-xl transition-all flex items-center justify-center gap-2 ${
+                isSurah && !surahValidation.isValid
+                  ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-500 cursor-not-allowed shadow-none border border-slate-300 dark:border-slate-700'
+                  : 'bg-brand-gold hover:bg-amber-600 text-white shadow-brand-gold/20 active:scale-98 cursor-pointer'
+              }`}
             >
               <span>
                 ابدأ تحدي {isSurah ? 'اسم السورة' : 'إكمال الآية'} ({selectedSkillCount} أسئلة)
