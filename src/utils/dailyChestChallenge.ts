@@ -155,3 +155,4 @@ export function getQuestionsPoolForCategory(category: string): Question[] {
 
   return shuffled;
 }
+

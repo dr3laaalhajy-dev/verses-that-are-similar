@@ -32,6 +32,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return await sendHandler(req, res);
     }
 
+    // 2.5 Mark as Read Actions
+    if (action === 'mark-read') {
+      const id = (req.query.id as string) || req.body?.id;
+      if (!id) {
+        return res.status(400).json({ error: 'Missing notification id' });
+      }
+      try {
+        await supabaseAdmin.from('notifications').update({ is_read: true }).eq('id', id);
+        return res.status(200).json({ success: true, message: 'Notification marked as read' });
+      } catch (err: any) {
+        return res.status(500).json({ error: 'Failed to mark as read', details: err?.message });
+      }
+    }
+
+    if (action === 'mark-all-read') {
+      const { ids, userId, receiverId } = req.body || {};
+      const targetUserId = userId || receiverId || (req.query.userId as string);
+      try {
+        if (Array.isArray(ids) && ids.length > 0) {
+          await supabaseAdmin.from('notifications').update({ is_read: true }).in('id', ids);
+        }
+        if (targetUserId) {
+          await supabaseAdmin.from('notifications').update({ is_read: true }).eq('user_id', String(targetUserId)).eq('is_read', false);
+        }
+        return res.status(200).json({ success: true, message: 'All notifications marked as read' });
+      } catch (err: any) {
+        return res.status(500).json({ error: 'Failed to mark all as read', details: err?.message });
+      }
+    }
+
     // 3. Register FCM Device Token
     if (req.method === 'POST' && (action === 'register-token' || req.body?.fcmToken)) {
       const { userId, fcmToken, platform } = req.body || {};

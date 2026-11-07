@@ -442,3 +442,4 @@ export const DailyChestChallengePage: React.FC = () => {
 };
 
 export default DailyChestChallengePage;
+

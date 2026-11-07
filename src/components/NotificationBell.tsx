@@ -19,6 +19,9 @@ export interface NotificationItem {
   metadata?: any;
   created_at: string;
   updated_at?: string;
+  is_read?: boolean;
+  user_id?: string | null;
+  receiver_id?: string | null;
 }
 
 /**
@@ -194,11 +197,17 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
 
   /**
    * Check whether an item is unread:
-   * 1. If never marked as read in readMap -> unread.
-   * 2. If updated_at is newer than the saved read timestamp -> unread (re-broadcast upon update).
-   * 3. Otherwise -> read.
+   * 1. If marked as read in database record (Single Source of Truth) -> read.
+   * 2. If marked in local storage map (instant client-side cache) -> read (unless updated_at is newer).
+   * 3. Otherwise -> unread.
    */
   const isItemUnread = (item: NotificationItem, currentMap?: ReadTimestampsMap): boolean => {
+    // 1. Database persistence check (Requirement 3)
+    if (item.is_read === true) {
+      return false;
+    }
+
+    // 2. Local storage cache check
     const map = currentMap || readMapRef.current;
     const readTimestamp = map[item.id];
 
@@ -228,11 +237,17 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
         .from('notifications')
         .select('*')
         .order('created_at', { ascending: false })
-        .limit(30);
+        .limit(40);
 
       if (!error && data) {
-        setNotifications(data);
-        calculateUnread(data, stored);
+        // Requirement 3: State Sync - Honor is_read directly from DB while syncing with local storage
+        const synchronized: NotificationItem[] = data.map((item: any) => ({
+          ...item,
+          is_read: item.is_read === true || Boolean(stored[item.id])
+        }));
+
+        setNotifications(synchronized);
+        calculateUnread(synchronized, stored);
       }
     } catch (e) {
       console.warn('[NotificationBell] Supabase fetch error:', e);
@@ -241,25 +256,54 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
     }
   };
 
+  // 1. Individual Read: Persist is_read: true to Supabase DB and local state
+  const markAsRead = async (notificationId: string) => {
+    // Immediate local UI update
+    setNotifications(prev =>
+      prev.map(n => (n.id === notificationId ? { ...n, is_read: true } : n))
+    );
+
+    const nowIso = new Date().toISOString();
+    setReadMap(prev => {
+      const next = { ...prev, [notificationId]: nowIso };
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      } catch (e) {
+        console.warn('[NotificationBell] Failed to save read map to LocalStorage:', e);
+      }
+      return next;
+    });
+    setUnreadCount(prev => Math.max(0, prev - 1));
+
+    // Database update query (Requirement 1)
+    try {
+      await supabase
+        .from('notifications')
+        .update({ is_read: true })
+        .eq('id', notificationId);
+    } catch (err) {
+      console.warn('[NotificationBell] Supabase markAsRead error:', err);
+    }
+
+    // Backend fallback
+    try {
+      fetch('/api/notifications?action=mark-read', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: notificationId })
+      }).catch(() => {});
+    } catch (_) {}
+  };
+
   // 2. Individual Read & Deep Link: Click a notification to mark as read and navigate
   const closeModal = () => {
     setIsOpen(false);
   };
 
   const handleItemClick = (item: NotificationItem) => {
-    // 1. Mark as read immediately
+    // 1. Mark as read immediately in DB & State
     if (isItemUnread(item)) {
-      const nowIso = new Date().toISOString();
-      setReadMap(prev => {
-        const next = { ...prev, [item.id]: nowIso };
-        try {
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-        } catch (e) {
-          console.warn('[NotificationBell] Failed to save read map to LocalStorage:', e);
-        }
-        return next;
-      });
-      setUnreadCount(prev => Math.max(0, prev - 1));
+      markAsRead(item.id);
     }
 
     // 2. Extract or infer dynamic destination route
@@ -351,9 +395,15 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
     }
   };
 
-  // 3. Mark All As Read: Mark all notifications as read at once & remove red dot
-  const markAllAsRead = () => {
+  // 3. Mark All As Read: Mark all notifications as read at once, update Supabase DB & remove red dot
+  const markAllAsRead = async () => {
     if (notifications.length === 0 || unreadCount === 0) return;
+
+    const unreadIds = notifications.filter(n => isItemUnread(n)).map(n => n.id);
+
+    // 1. Immediately update UI state
+    setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+    setUnreadCount(0);
 
     const nowIso = new Date().toISOString();
     setReadMap(prev => {
@@ -369,9 +419,63 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
       return next;
     });
 
-    // Red dot / badge on the main bell icon disappears immediately
-    setUnreadCount(0);
+    // 2. Persist batch update in Supabase database (Requirement 2)
+    try {
+      if (unreadIds.length > 0) {
+        await supabase
+          .from('notifications')
+          .update({ is_read: true })
+          .in('id', unreadIds);
+      }
+
+      const currentPlayerId = userId || app?.playerId || app?.uniquePlayerId || app?.playerUsername || app?.playerName;
+      if (currentPlayerId) {
+        await supabase
+          .from('notifications')
+          .update({ is_read: true })
+          .match({ user_id: String(currentPlayerId), is_read: false });
+      }
+    } catch (err) {
+      console.warn('[NotificationBell] Supabase markAllAsRead error:', err);
+    }
+
+    // 3. Backend fallback
+    try {
+      fetch('/api/notifications?action=mark-all-read', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ids: unreadIds,
+          userId: userId || app?.playerId || app?.uniquePlayerId || app?.playerUsername || app?.playerName
+        })
+      }).catch(() => {});
+    } catch (_) {}
   };
+
+  // Requirement 2: Auto-sync unread notifications to DB when notifications window is opened
+  useEffect(() => {
+    if (isOpen && unreadCount > 0) {
+      const syncReadToDb = async () => {
+        try {
+          const unreadIds = notifications.filter(n => isItemUnread(n)).map(n => n.id);
+          if (unreadIds.length > 0) {
+            await supabase
+              .from('notifications')
+              .update({ is_read: true })
+              .in('id', unreadIds);
+          }
+          const currentPlayerId = userId || app?.playerId || app?.uniquePlayerId || app?.playerUsername || app?.playerName;
+          if (currentPlayerId) {
+            await supabase
+              .from('notifications')
+              .update({ is_read: true })
+              .match({ user_id: String(currentPlayerId), is_read: false });
+          }
+        } catch (_) {}
+      };
+      syncReadToDb();
+    }
+  }, [isOpen]);
 
   // Subscribe to Supabase Realtime updates (INSERT, UPDATE, DELETE & broadcast)
   useEffect(() => {
