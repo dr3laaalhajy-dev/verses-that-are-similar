@@ -59,41 +59,51 @@
       font-family: 'Amiri', 'Noto Naskh Arabic', serif;
     }
 
-    /* تأثيرات التمرير والخلفيات الفخمة */
     .gold-glow {
       box-shadow: 0 0 25px -5px rgba(212, 175, 55, 0.25);
     }
-    
-    .emerald-glow {
-      box-shadow: 0 0 25px -5px rgba(16, 185, 129, 0.25);
-    }
 
-    /* تخصيص شريط التمرير */
-    ::-webkit-scrollbar {
-      width: 8px;
-    }
-    ::-webkit-scrollbar-track {
-      background: #0B1319;
-    }
-    ::-webkit-scrollbar-thumb {
-      background: #1E293B;
-      border-radius: 4px;
-    }
-    ::-webkit-scrollbar-thumb:hover {
-      background: #334155;
+    /* ستايل الطباعة المنعزل */
+    @media print {
+      @page {
+        size: landscape;
+        margin: 0;
+      }
+      body {
+        background: white !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+      .no-print {
+        display: none !important;
+      }
+      #certificate-wrapper {
+        position: fixed !important;
+        left: 0 !important;
+        top: 0 !important;
+        width: 100vw !important;
+        height: 100vh !important;
+        max-width: 100vw !important;
+        max-height: 100vh !important;
+        margin: 0 !important;
+        padding: 28px !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
     }
   </style>
 </head>
 <body class="min-h-screen flex flex-col items-center justify-start p-3 sm:p-6 md:p-8 selection:bg-amber-500 selection:text-slate-950">
 
   <!-- ========================================================= -->
-  <!-- 1. لوحة الإنجازات الرئيسية (Achievements Dashboard) -->
+  <!-- 1. واجهة الإنجازات والعدادات (Achievements Dashboard) -->
   <!-- ========================================================= -->
   <div class="w-full max-w-6xl space-y-6">
 
     <!-- رأس الصفحة وبطاقة المستخدم الفاخرة (Hero Profile & Summary) -->
     <header class="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900/95 via-slate-900/80 to-slate-950/95 border border-amber-500/30 p-5 sm:p-8 shadow-2xl backdrop-blur-xl">
-      <!-- إضاءة خلفية زخرفية -->
       <div class="absolute -top-24 -right-24 w-72 h-72 bg-amber-500/10 rounded-full blur-3xl pointer-events-none"></div>
       <div class="absolute -bottom-24 -left-24 w-72 h-72 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
 
@@ -101,20 +111,17 @@
         
         <!-- معلومات اللاعب واللقب المعتمد -->
         <div class="flex items-center gap-4 sm:gap-5 w-full md:w-auto">
-          <!-- الصورة الرمزية الملكية -->
           <div class="relative">
             <div class="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-tr from-[#806716] via-[#D4AF37] to-[#FDF8ED] p-1 shadow-xl gold-glow flex items-center justify-center">
               <div class="w-full h-full rounded-xl bg-slate-950 flex items-center justify-center text-amber-300 font-quran text-2xl sm:text-3xl font-black">
                 ع
               </div>
             </div>
-            <!-- وسام التوثيق الرقمي المباشر -->
             <div class="absolute -bottom-1 -left-1 w-6 h-6 rounded-full bg-emerald-600 border-2 border-slate-900 flex items-center justify-center text-white text-[11px]" title="حساب معتمد وموثق">
               ✓
             </div>
           </div>
 
-          <!-- الاسم والبيانات الثابتة -->
           <div>
             <div class="flex items-center gap-2">
               <h1 class="text-xl sm:text-3xl font-black text-white font-quran">
@@ -179,10 +186,9 @@
         </button>
       </div>
 
-      <!-- نص توجيهي أنيق -->
       <div class="text-xs text-slate-400 font-medium hidden sm:flex items-center gap-1.5">
         <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-        <span>الشهادات تصدر رقمياً بدقة Ultra HD باسم اللاعب المعتمد تلقائياً</span>
+        <span>الشهادات مبنية هندسياً بالكامل بـ HTML/CSS وتصدر بدقة Ultra HD PNG</span>
       </div>
     </div>
 
@@ -203,75 +209,170 @@
       </div>
       <div class="flex-1">
         <h4 id="toastTitle" class="text-sm font-bold text-emerald-300">تم تنزيل الشهادة بنجاح!</h4>
-        <p id="toastMessage" class="text-xs text-slate-300 mt-0.5">تم حفظ الشهادة الرسمية بدقة فائقة على جهازك.</p>
+        <p id="toastMessage" class="text-xs text-slate-300 mt-0.5">تم صك الشهادة بالرسم الهندسي وتحميلها بدقة فائقة على جهازك.</p>
       </div>
     </div>
   </div>
 
   <!-- ========================================================= -->
-  <!-- 3. قالب الشهادة الفخم المخفي بصرياً خارج الشاشة للتصدير -->
+  <!-- 3. قالب الشهادة الفخم المبني بالكامل بـ HTML/CSS/Tailwind -->
   <!-- ========================================================= -->
-  <!-- تم وضعه خارج الشاشة بذكاء (fixed -left-[9999px]) بأبعاد ثابتة (511x1024) -->
-  <!-- ليتمكن html2canvas من قراءته وتصييره بنقاء 100% بدون تشويش على واجهة المستخدم -->
-  <div id="export-cert-container" class="fixed -left-[9999px] top-0 pointer-events-none" style="width: 511px; height: 1024px; overflow: hidden;" aria-hidden="true">
+  <!-- هذا القالب مخفي بصرياً خارج الشاشة، ويحتوي على الإطارات المزدوجة والزخارف الهندسية والختم المذهب -->
+  <div id="export-cert-container" class="fixed -left-[9999px] top-0 pointer-events-none" style="width: 1120px; height: 792px; overflow: hidden;" aria-hidden="true">
     
-    <div id="certificate-wrapper" class="relative w-[511px] h-[1024px] bg-[#FCFBF7] text-slate-800 overflow-hidden select-none">
+    <div id="certificate-wrapper" class="relative w-[1120px] h-[792px] bg-[#FCFBF7] text-slate-800 rounded-3xl p-10 shadow-2xl border-[4px] border-[#D4AF37] overflow-hidden select-none flex flex-col justify-between"
+         style="box-shadow: 0 30px 80px -20px rgba(6, 78, 59, 0.25), 0 0 0 1px rgba(212, 175, 55, 0.4); background-image: radial-gradient(#F5EEDB 0.75px, transparent 0.75px), radial-gradient(#F5EEDB 0.75px, #FCFBF7 0.75px); background-size: 30px 30px; background-position: 0 0, 15px 15px;">
 
       <!-- ============================== -->
-      <!-- خلفية الشهادة المصممة مسبقاً (Clean Image Background) -->
+      <!-- النمط الهندسي الإسلامي المدمج (SVG Pattern 6% Opacity) -->
       <!-- ============================== -->
-      <img src="/certificate_general_bg.png" class="absolute inset-0 w-full h-full object-cover z-0 pointer-events-none" alt="خلفية الشهادة" />
+      <div class="absolute inset-0 pointer-events-none opacity-[0.06] flex items-center justify-center overflow-hidden">
+        <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <pattern id="islamic-girih-pattern" width="80" height="80" patternUnits="userSpaceOnUse">
+              <path d="M40 0 L51.7 11.7 L68.3 11.7 L68.3 28.3 L80 40 L68.3 51.7 L68.3 68.3 L51.7 68.3 L40 80 L28.3 68.3 L11.7 68.3 L11.7 51.7 L0 40 L11.7 28.3 L11.7 11.7 L28.3 11.7 Z" fill="none" stroke="#064E3B" stroke-width="1.2"/>
+              <circle cx="40" cy="40" r="18" fill="none" stroke="#D4AF37" stroke-width="1" />
+              <path d="M40 10 L47 23 L61 23 L50 32 L54 46 L40 37 L26 46 L30 32 L19 23 L33 23 Z" fill="none" stroke="#064E3B" stroke-width="0.8"/>
+            </pattern>
+          </defs>
+          <rect width="100%" height="100%" fill="url(#islamic-girih-pattern)" />
+        </svg>
+      </div>
+
+      <!-- إطار هندسي داخلي مزدوج وأنيق (Solid & Dashed Gold Borders) -->
+      <div class="absolute inset-4 border border-[#D4AF37]/60 rounded-2xl pointer-events-none"></div>
+      <div class="absolute inset-5 border border-dashed border-[#D4AF37]/50 rounded-xl pointer-events-none"></div>
 
       <!-- ========================================================= -->
-      <!-- النصوص الديناميكية فوق الفراغات المخصصة فقط -->
+      <!-- 1. الترويسة العلوية (Basmala & Header) -->
       <!-- ========================================================= -->
-      <div class="relative z-10 w-full h-full pointer-events-none">
+      <div class="relative z-10 flex flex-col items-center text-center pt-2">
+        <!-- البسملة الشريفة -->
+        <div class="flex items-center gap-3 mb-1 opacity-90">
+          <span class="w-20 h-[1.5px] bg-gradient-to-r from-transparent to-[#D4AF37]"></span>
+          <span class="font-quran text-lg text-[#064E3B] font-bold tracking-wide">
+            بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ
+          </span>
+          <span class="w-20 h-[1.5px] bg-gradient-to-l from-transparent to-[#D4AF37]"></span>
+        </div>
 
-        <!-- 1. اسم اللاعب المتسابق (فوق الفراغ الأول - ثابت ومحمي من التزوير) -->
-        <div class="absolute top-[66%] inset-x-0 flex flex-col items-center justify-center px-6 text-center">
-          <h3 id="certPlayerName" class="font-quran text-3xl font-black text-[#0b234f] tracking-wide drop-shadow-xs">
+        <!-- الترويسة الرئيسية المذهبة -->
+        <div class="relative inline-block mt-1">
+          <div class="flex items-center justify-center gap-3">
+            <span class="text-[#D4AF37] text-xl">✦</span>
+            <h2 class="font-quran text-5xl font-black bg-gradient-to-r from-[#806716] via-[#D4AF37] to-[#806716] bg-clip-text text-transparent drop-shadow-sm">
+              شَهَادَةُ إِنجَازٍ وَتَفَوُّق
+            </h2>
+            <span class="text-[#D4AF37] text-xl">✦</span>
+          </div>
+          
+          <p class="text-sm font-tajawal font-bold text-[#064E3B] tracking-wider mt-3">
+            تَطْبِيقُ مَتِين لِعُلُومِ القُرْآنِ الكَرِيمِ وَالمُتَشَابِهَات
+          </p>
+        </div>
+      </div>
+
+      <!-- ========================================================= -->
+      <!-- 2. المتن النصي الرئيسي للشهادة (Certificate Core Body) -->
+      <!-- ========================================================= -->
+      <div class="relative z-10 flex flex-col items-center justify-center text-center my-auto px-12 space-y-3">
+        
+        <p class="text-base font-tajawal font-semibold text-slate-600">
+          تَشْهَدُ إِدَارَةُ تَطْبِيقِ <span class="font-bold text-[#064E3B]">مَتِين لِعُلُومِ القُرْآنِ الكَرِيمِ</span> بِأَنَّ البَطَلَ المُتَسَابِق /
+        </p>
+
+        <!-- اسم اللاعب المذهب الفخم المعتمد حصراً -->
+        <div class="relative inline-flex items-center justify-center px-12 py-2 my-1">
+          <div class="absolute inset-x-0 bottom-0 h-[2px] bg-gradient-to-r from-transparent via-[#D4AF37] to-transparent"></div>
+          <h3 id="certPlayerName" class="font-quran text-5xl font-black text-[#064E3B] tracking-wide drop-shadow-sm">
             علاء
           </h3>
         </div>
 
-        <!-- 2. اسم التحدي والنطاق (فوق الفراغ الثاني) -->
-        <div class="absolute top-[72%] inset-x-0 flex items-center justify-center px-6 text-center">
-          <div class="inline-flex items-center justify-center flex-wrap gap-1.5 px-4 py-1.5 rounded-full bg-slate-900/5 text-slate-800 text-xs font-bold">
-            <span class="text-slate-600">أتمّ بنجاح خوض:</span>
-            <span id="certChallengeName" class="font-black text-[#0b234f]">
+        <div class="space-y-2 max-w-3xl w-full">
+          <p class="text-lg font-tajawal text-slate-700 leading-relaxed">
+            قَدْ أَتَمَّ بِنَجَاحٍ وَإِتْقَانٍ خَوْضَ:{' '}
+            <span id="certChallengeName" class="font-black text-[#806716] px-3 py-1 rounded-lg bg-amber-50/80 border border-amber-200/70 inline-block my-1 leading-snug">
               إتمام 100 سؤال في تحدي إكمال الآية
             </span>
-            <span id="certSurahOrJuz" class="text-slate-500 font-semibold mr-1">
+            <span id="certSurahOrJuz" class="text-sm text-slate-500 font-bold mr-1">
               (كامل القرآن الكريم)
             </span>
-          </div>
-        </div>
+          </p>
 
-        <!-- 3. النتيجة والتقدير (فوق الفراغ الثالث) -->
-        <div class="absolute top-[78%] inset-x-0 flex items-center justify-center px-6 text-center">
-          <div class="inline-flex items-center gap-2 px-5 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-xs font-bold text-[#064E3B]">
-            <span>النتيجة المباركة:</span>
-            <span id="certScore" class="font-black font-mono text-emerald-800 text-sm">
+          <!-- بطاقة النتيجة والتقدير المبارك -->
+          <div class="inline-flex items-center gap-3 px-6 py-1.5 rounded-full bg-gradient-to-r from-emerald-50 via-amber-50 to-emerald-50 border border-amber-200 shadow-sm text-base font-bold text-[#064E3B]">
+            <span>بِالنَّتِيجَةِ المُبَارَكَة:</span>
+            <span id="certScore" class="font-black text-amber-700 font-mono text-lg">
               100%
             </span>
-            <span class="text-amber-500">✦</span>
-            <span>التقدير:</span>
-            <span id="certRank" class="font-black text-emerald-900">
+            <span class="text-amber-400">✦</span>
+            <span>التَّقْدِير:</span>
+            <span id="certRank" class="font-black text-emerald-800">
               متقن ومتميز
             </span>
           </div>
+
+          <!-- الدعاء الختامي المبارك -->
+          <p class="text-sm font-quran text-slate-500 italic pt-1">
+            سَائِلِينَ المَوْلَى عَزَّ وَجَلَّ لَهُ التَّوْفِيقَ وَالسَّدَادَ، وَأَنْ يَجْعَلَ القُرْآنَ العَظِيمَ رَبِيعَ قَلْبِهِ وَنُورَ صَدْرِهِ.
+          </p>
+        </div>
+      </div>
+
+      <!-- ========================================================= -->
+      <!-- 3. التذييل والأختام الرسمية المعتمدة (Footer & Seals) -->
+      <!-- ========================================================= -->
+      <div class="relative z-10 grid grid-cols-3 items-end pt-4 border-t border-[#D4AF37]/30 px-6">
+        
+        <!-- الجانب الأيمن: تاريخ المنح والاعتماد -->
+        <div class="flex flex-col items-start text-right bg-white/70 backdrop-blur-xs rounded-xl p-2.5 border border-[#D4AF37]/20 shadow-2xs">
+          <span class="text-xs font-bold text-slate-400">تَارِيخُ المَنْح</span>
+          <span id="certDate" class="text-sm font-black text-[#064E3B] mt-0.5">
+            15 ربيع الأول 1448 هـ
+          </span>
+          <span id="certSerial" class="text-[10px] font-mono text-slate-500 mt-0.5">
+            الاعتماد: MTN-894201
+          </span>
         </div>
 
-        <!-- 4. تاريخ المنح والرقم التسلسلي/الاعتماد (الجانب الأيسر فوق الزخرفة) -->
-        <div class="absolute bottom-[4.5%] left-[8%] flex flex-col items-start text-right text-[10px] font-bold text-slate-600 space-y-0.5">
-          <div class="flex items-center gap-1">
-            <span class="text-slate-500">تاريخ المنح:</span>
-            <span id="certDate" class="font-black text-slate-800">
-              15 ربيع الأول 1448 هـ
-            </span>
+        <!-- المنتصف: الختم الذهبي الملكي ثلاثي الأبعاد -->
+        <div class="flex flex-col items-center justify-center">
+          <div class="relative w-24 h-24">
+            
+            <!-- أشرطة الختم الساتانية المتدلية -->
+            <div class="absolute -bottom-3 left-1/2 -translate-x-1/2 w-10 h-6 flex justify-center gap-1 pointer-events-none">
+              <div class="w-3 h-6 bg-[#806716] transform -rotate-12 rounded-b-xs shadow-sm"></div>
+              <div class="w-3 h-6 bg-[#AA8B24] transform rotate-12 rounded-b-xs shadow-sm"></div>
+            </div>
+
+            <!-- الختم الدائري المذهب ثلاثي الأبعاد -->
+            <div class="relative w-full h-full rounded-full bg-gradient-to-tr from-[#806716] via-[#D4AF37] to-[#FDF8ED] p-1 shadow-xl shadow-amber-950/20 flex items-center justify-center">
+              <div class="w-full h-full rounded-full border border-dashed border-[#806716] bg-gradient-to-br from-[#AA8B24] to-[#806716] text-[#FDF8ED] flex flex-col items-center justify-center p-1 text-center">
+                <svg class="w-7 h-7 text-[#FDF8ED] drop-shadow-sm" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                </svg>
+                <span class="text-[9px] font-black uppercase tracking-tighter leading-none mt-0.5">
+                  مُعْتَمَدٌ
+                </span>
+                <span class="text-[7px] font-bold opacity-90 leading-tight">
+                  تطبيق متين
+                </span>
+              </div>
+            </div>
+
           </div>
-          <div class="text-[9px] font-mono text-slate-500">
-            الاعتماد: <span id="certSerial">MTN-894201</span>
+        </div>
+
+        <!-- الجانب الأيسر: اعتماد وتوثيق إدارة التطبيق -->
+        <div class="flex flex-col items-end text-left bg-white/70 backdrop-blur-xs rounded-xl p-2.5 border border-[#D4AF37]/20 shadow-2xs">
+          <span class="text-xs font-bold text-slate-400">إِدَارَةُ التَّطْبِيقِ</span>
+          <div class="font-quran text-lg font-black text-[#064E3B] my-0.5 italic">
+            متين لعلوم القرآن
+          </div>
+          <div class="flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-md border border-emerald-200/60 shadow-2xs">
+            <svg class="w-3.5 h-3.5 text-emerald-600" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+            <span>شهادة موثقة رقمياً</span>
           </div>
         </div>
 
@@ -281,18 +382,13 @@
   </div>
 
   <!-- ========================================================= -->
-  <!-- 4. سكريبت المنطق البرمجي وبيانات الإنجازات (JavaScript) -->
+  <!-- 4. سكريبت تعبئة البيانات والتصدير التلقائي (JavaScript) -->
   <!-- ========================================================= -->
   <script>
-    // ==========================================
-    // 1. سياسة الاسم الصارمة (Strict Name Policy)
-    // ==========================================
-    // اسم ثابت ومحمي يحاكي قاعدة البيانات الرسمية ولا يمكن للمستخدم تزويره
-    const DB_PLAYER_NAME = localStorage.getItem('quran_user_triple_name') || localStorage.getItem('quran_user_name') || "علاء";
+    // 1. جلب اسم اللاعب المسجل في قاعدة البيانات / الحساب الرسمي (بدون السماح بتعديله)
+    const DB_PLAYER_NAME = localStorage.getItem('quran_user_triple_name') || localStorage.getItem('quran_player_name') || localStorage.getItem('quran_user_name') || "علاء";
 
-    // ==========================================
-    // 2. مصفوفة الإنجازات الـ 11 الرسمية
-    // ==========================================
+    // 2. مصفوفة الإنجازات الـ 11 الرسمية مع أهدافها وعداداتها
     const ACHIEVEMENTS_DATA = [
       {
         id: "ayah_100",
@@ -303,7 +399,7 @@
         total: 100,
         completed: true,
         score: "100%",
-        rank: "حافظ متقن",
+        rank: "حافظ متقن ومتميز",
         scope: "(كامل القرآن الكريم)",
         serial: "MTN-AY-10024"
       },
@@ -316,7 +412,7 @@
         total: 100,
         completed: true,
         score: "100%",
-        rank: "فقيه متميز",
+        rank: "فقيه متقن",
         scope: "(العبادات والمعاملات)",
         serial: "MTN-FQ-88210"
       },
@@ -329,8 +425,8 @@
         total: 50,
         completed: false,
         score: "70%",
-        rank: "متابع مجتهد",
-        scope: "(أجزاء عم وتبارك)",
+        rank: "خبير المتشابهات",
+        scope: "(أجزاء عم وتبارك والمفصل)",
         serial: "MTN-SR-50122"
       },
       {
@@ -356,7 +452,7 @@
         completed: true,
         score: "100%",
         rank: "راسخ في العقيدة",
-        scope: "(أركان الإيمان والتوحيد)",
+        scope: "(أركان الإيمان والتوحيد الخالص)",
         serial: "MTN-AK-10045"
       },
       {
@@ -368,7 +464,7 @@
         total: 100,
         completed: false,
         score: "72%",
-        rank: "طالب علم الحديث",
+        rank: "محدث متقن",
         scope: "(رياض الصالحين والأربعين)",
         serial: "MTN-HD-10088"
       },
@@ -394,8 +490,8 @@
         total: 100,
         completed: false,
         score: "40%",
-        rank: "باحث تاريخي",
-        scope: "(الخلفاء الراشدون والفتوحات)",
+        rank: "خبير بالتاريخ الإسلامي",
+        scope: "(سير الخلفاء الراشدين والفتوحات)",
         serial: "MTN-HS-10067"
       },
       {
@@ -421,7 +517,7 @@
         completed: true,
         score: "سلسلة 30 يوماً",
         rank: "مواظب متفوق",
-        scope: "(تثبيت الحفظ والمراجعة)",
+        scope: "(الشهر القرآني المبارك)",
         serial: "MTN-ST-30001"
       },
       {
@@ -443,11 +539,11 @@
 
     // تهيئة الصفحة فور تحميلها
     window.addEventListener('DOMContentLoaded', () => {
-      // حقن اسم اللاعب المحمي في الترويسة والشهادة
+      // حقن اسم اللاعب المحمي في الترويسة والشهادة مباشرة
       document.getElementById('dashboardPlayerName').textContent = DB_PLAYER_NAME;
       document.getElementById('certPlayerName').textContent = DB_PLAYER_NAME;
 
-      // ضبط التاريخ الحالي
+      // ضبط تاريخ المنح الحالي
       const today = new Date().toLocaleDateString('ar-EG', {
         day: 'numeric',
         month: 'long',
@@ -455,14 +551,13 @@
       });
       document.getElementById('certDate').textContent = today;
 
-      // عرض البطاقات
+      // عرض البطاقات في الواجهة
       renderAchievements();
     });
 
-    // تصفية البطاقات (الكل / المكتملة / قيد الإنجاز)
+    // تصفية البطاقات
     function filterAchievements(filter) {
       currentFilter = filter;
-      
       const tabs = ['all', 'completed', 'pending'];
       tabs.forEach(tab => {
         const btn = document.getElementById(`tab-${tab}`);
@@ -472,7 +567,6 @@
           btn.className = "px-4 py-2 rounded-xl text-xs sm:text-sm font-bold text-slate-400 hover:text-white transition-all cursor-pointer";
         }
       });
-
       renderAchievements();
     }
 
@@ -492,11 +586,9 @@
         const percentage = Math.round((item.current / item.total) * 100);
 
         if (item.completed) {
-          // تصميم البطاقة المكتملة الذهبية والزمردية
           card.className = "relative rounded-3xl bg-slate-900/90 border border-amber-500/30 p-5 shadow-xl transition-all duration-300 hover:border-amber-400 hover:shadow-amber-500/10 flex flex-col justify-between";
           card.innerHTML = `
             <div>
-              <!-- رأس البطاقة -->
               <div class="flex items-center justify-between gap-2 mb-3">
                 <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-[11px] font-bold">
                   <span>✓</span>
@@ -507,7 +599,6 @@
                 </span>
               </div>
 
-              <!-- العنوان والأيقونة -->
               <div class="flex items-start gap-3 my-2">
                 <span class="text-2xl p-2 rounded-2xl bg-amber-500/10 border border-amber-500/20 shrink-0">
                   ${item.icon}
@@ -522,7 +613,6 @@
             </div>
 
             <div class="mt-4 pt-4 border-t border-slate-800">
-              <!-- عداد التقدم المكتمل -->
               <div class="flex items-center justify-between text-xs font-bold mb-1.5">
                 <span class="text-slate-400">حالة التقدم:</span>
                 <span class="text-emerald-400 font-mono">${item.current} / ${item.total} (100%)</span>
@@ -531,7 +621,6 @@
                 <div class="h-full bg-gradient-to-r from-emerald-500 to-amber-400 rounded-full w-full"></div>
               </div>
 
-              <!-- زر تحميل الشهادة المعتمدة -->
               <button
                 type="button"
                 id="btn-dl-${item.id}"
@@ -544,11 +633,9 @@
             </div>
           `;
         } else {
-          // تصميم البطاقة غير المكتملة بلون باهت (Muted / Locked)
           card.className = "relative rounded-3xl bg-slate-900/40 border border-slate-800/80 p-5 opacity-60 hover:opacity-80 transition-all flex flex-col justify-between";
           card.innerHTML = `
             <div>
-              <!-- رأس البطاقة -->
               <div class="flex items-center justify-between gap-2 mb-3">
                 <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-800 border border-slate-700 text-slate-400 text-[11px] font-bold">
                   <span>⏳</span>
@@ -559,7 +646,6 @@
                 </span>
               </div>
 
-              <!-- العنوان والأيقونة -->
               <div class="flex items-start gap-3 my-2">
                 <span class="text-2xl p-2 rounded-2xl bg-slate-800 border border-slate-700 shrink-0 opacity-70">
                   ${item.icon}
@@ -574,7 +660,6 @@
             </div>
 
             <div class="mt-4 pt-4 border-t border-slate-800/60">
-              <!-- عداد التقدم غير المكتمل -->
               <div class="flex items-center justify-between text-xs font-bold mb-1.5">
                 <span class="text-slate-500">حالة التقدم:</span>
                 <span class="text-amber-400/80 font-mono">${item.current} / ${item.total} (${percentage}%)</span>
@@ -583,7 +668,6 @@
                 <div class="h-full bg-slate-700 rounded-full transition-all" style="width: ${percentage}%"></div>
               </div>
 
-              <!-- زر معطل وغير قابل للتحميل -->
               <button
                 type="button"
                 disabled
@@ -600,7 +684,7 @@
     }
 
     // ==========================================
-    // 3. آلية تصدير وتحميل الشهادة (Export Mechanism)
+    // 3. آلية تعبئة البيانات والتحميل (Inject & Export)
     // ==========================================
     async function downloadAchievementCertificate(achievementId) {
       const achievement = ACHIEVEMENTS_DATA.find(a => a.id === achievementId);
@@ -614,16 +698,18 @@
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
           </svg>
-          <span>جاري التجهيز...</span>
+          <span>جاري صك الشهادة...</span>
         `;
         btn.disabled = true;
       }
 
-      showToast('جاري التجهيز...', `يتم الآن صك وتوثيق شهادة: "${achievement.title}" باسم [${DB_PLAYER_NAME}]...`);
+      showToast('جاري التجهيز...', `يتم الآن صك وتوثيق شهادة: "${achievement.title}" لـ [${DB_PLAYER_NAME}]...`);
 
       try {
-        // تحديث محتوى الشهادة المخفية برمجياً
+        // أ) جلب اسم اللاعب المسجل في قاعدة البيانات (بدون السماح له بتعديله) ووضعه في certPlayerName
         document.getElementById('certPlayerName').textContent = DB_PLAYER_NAME;
+
+        // ب) جلب اسم الإنجاز الذي تم الضغط عليه ووضعه في certChallengeName
         document.getElementById('certChallengeName').textContent = achievement.title;
         document.getElementById('certSurahOrJuz').textContent = achievement.scope;
         document.getElementById('certScore').textContent = achievement.score;
@@ -633,14 +719,15 @@
         const certEl = document.getElementById('certificate-wrapper');
         if (!certEl) throw new Error('Certificate wrapper not found');
 
-        // التقاط الحاوية المخفية بدقة Ultra HD 3X
+        // ج) استخدام مكتبة html2canvas لالتقاط حاوية الشهادة الـ HTML بالكامل وتحويل هذا التصميم البرمجي إلى صورة عالية الدقة (PNG)
         const canvas = await html2canvas(certEl, {
-          scale: 3, // Ultra-HD 3X
+          scale: 3, // دقة Retina فائقة Ultra-HD 3X
           useCORS: true,
           allowTaint: true,
-          backgroundColor: null // لضمان الشفافية والنقاء
+          backgroundColor: '#FCFBF7' // لون العاج الإسلامي الأصلي للقالب
         });
 
+        // د) تحميل الصورة مباشرة لجهاز المستخدم
         const dataUrl = canvas.toDataURL('image/png');
         const link = document.createElement('a');
         link.download = `شهادة_${DB_PLAYER_NAME}_${achievement.title.replace(/\s+/g, '_')}.png`;
@@ -649,7 +736,7 @@
         link.click();
         document.body.removeChild(link);
 
-        showToast('تم التحميل بنجاح! ✓', `تم حفظ شهادة [${achievement.title}] بدقة فائقة على جهازك.`);
+        showToast('تم التحميل بنجاح! ✓', `تم حفظ شهادة [${achievement.title}] بصيغة PNG عالية الدقة.`);
 
         if (btn) {
           btn.innerHTML = `<span>تم التحميل بنجاح ✓</span>`;
