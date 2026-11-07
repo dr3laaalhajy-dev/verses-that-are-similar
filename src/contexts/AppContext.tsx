@@ -3439,9 +3439,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, [room?.id, view, playerId, playerName, playerUsername, uniquePlayerId]);
 
-  // Check for active unfinished challenges on the Home screen
+  // Check for active unfinished challenges on Home and Challenges screens
   useEffect(() => {
-    if (view !== 'home' || !playerName) return;
+    if ((view !== 'home' && view !== 'challenges') || !playerName) return;
 
     const checkActive = async () => {
       try {
@@ -3871,12 +3871,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const handleResumeActiveRoom = (targetRoom: any) => {
     if (!targetRoom) return;
     setRoom(targetRoom);
+    localStorage.setItem('activeRoomId', targetRoom.id);
 
-    // If room is WAITING, it's host's pending room - return to waiting room
+    // If room is WAITING, return to waiting room
     if (targetRoom.status === 'WAITING') {
       setView('group_waiting');
       setActiveRunningRoom(null);
-      toast.success('تمت العودة لقاعة انتظار الغرفة كمضيف 👑');
+      toast.success('تمت العودة لقاعة انتظار الغرفة 👑');
+      return;
+    }
+
+    if (targetRoom.gameMode === 'WHO_AM_I' || targetRoom.challenge_type === 'who_am_i') {
+      setActiveRunningRoom(null);
+      setView('group_game');
       return;
     }
 
@@ -3908,6 +3915,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setCurrentChallengeIndex(Math.min(resumeIndex, Math.max(0, (mapped.length || 1) - 1)));
     } else {
       // In SYNC mode: sync directly to the room's current active question index
+      // Missed questions are not presented; score for missed questions remains 0
       setCurrentChallengeIndex(targetRoom.currentQuestionIndex || 0);
     }
 
@@ -3919,7 +3927,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const roomTime = (targetRoom.timePerQuestion && targetRoom.timePerQuestion > 0) ? targetRoom.timePerQuestion : 0;
     if (roomTime > 0) {
-      setSpeedTimeLeft(roomTime);
+      if (targetRoom.questionStartTime) {
+        const elapsed = Math.floor((Date.now() - Number(targetRoom.questionStartTime)) / 1000);
+        const remaining = Math.max(1, roomTime - elapsed);
+        setSpeedTimeLeft(remaining);
+      } else {
+        setSpeedTimeLeft(roomTime);
+      }
     }
 
     const curQ = mapped[targetRoom.currentQuestionIndex || 0];

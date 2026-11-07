@@ -406,6 +406,8 @@ export const AppRouter: React.FC = () => {
           systemSettings={app.systemSettings}
           dailyChallenge={app.currentChallenge || (app.challenges && app.challenges[app.dailyChallengeIndex])}
           userId={app.playerId || app.uniquePlayerId || app.playerUsername || app.playerName}
+          activeRunningRoom={app.activeRunningRoom}
+          handleResumeActiveRoom={app.handleResumeActiveRoom}
         />
       ) : app.view === "library" ? (
         <LibraryHubPage

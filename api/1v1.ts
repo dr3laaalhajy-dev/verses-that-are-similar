@@ -1318,56 +1318,98 @@ async function handleCheckActive(req: VercelRequest, res: VercelResponse) {
 
     const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString()
 
-    // 1. Check if user is the host of an active WAITING room (< 10 mins old)
-    const { data: hostWaitingRoom } = await supabaseAdmin
+    // 1. Check if user is host or participant of an active WAITING room (< 10 mins old)
+    const { data: waitingRooms } = await supabaseAdmin
       .from('rooms')
       .select('*')
-      .eq('player1Id', player.id)
       .eq('status', 'WAITING')
       .gte('createdAt', tenMinutesAgo)
       .order('createdAt', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .limit(10);
 
-    if (hostWaitingRoom) {
-      const fullRoom = await getFullRoom(hostWaitingRoom.id)
-      return res.status(200).json(fullRoom)
+    const pIdStr = String(player.id);
+    const activeWaitingRoom = (waitingRooms || []).find(r => {
+      if (r.player1Id === player.id) return true;
+      const participants = Array.isArray(r.participants) ? r.participants : [];
+      return participants.some((p: any) =>
+        String(p.id) === pIdStr ||
+        p.name === player.name ||
+        (p.username && player.username && p.username.toLowerCase() === player.username.toLowerCase())
+      );
+    });
+
+    if (activeWaitingRoom) {
+      const fullRoom = await getFullRoom(activeWaitingRoom.id);
+      return res.status(200).json(fullRoom);
     }
 
     // 2. Check if user is participant or host of an ongoing PLAYING room (< 2 hours old)
-    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
     const { data: rooms } = await supabaseAdmin
       .from('rooms')
       .select('*')
       .eq('status', 'PLAYING')
       .gte('createdAt', twoHoursAgo)
       .order('createdAt', { ascending: false })
-      .limit(20);
+      .limit(25);
 
-    const pIdStr = String(player.id)
     const activeRoom = (rooms || []).find(r => {
-      const progress = (r.playersProgress as any) || {}
-      const pData = progress[pIdStr]
+      const progress = (r.playersProgress as any) || {};
+      const pData = progress[pIdStr];
 
       // إذا كان اللاعب قد انسحب (hasLeft أو isResigned) أو أنهى التحدي في هذه الغرفة، يتم استبعادها فوراً
-      if (pData && (pData.hasLeft || pData.isResigned || pData.finishTime)) {
-        return false
+      if (pData && (pData.hasLeft || pData.isResigned || pData.isAbandoned || pData.status === 'abandoned' || pData.finishTime)) {
+        return false;
       }
 
       if (r.player1Id === player.id) {
-        return true
+        return true;
+      }
+
+      const participants = Array.isArray(r.participants) ? r.participants : [];
+      const inParticipants = participants.some((p: any) =>
+        String(p.id) === pIdStr ||
+        p.name === player.name ||
+        (p.username && player.username && p.username.toLowerCase() === player.username.toLowerCase())
+      );
+      if (inParticipants) {
+        return true;
       }
 
       if (pData) {
-        return !pData.finishTime && !pData.hasLeft && !pData.isResigned
+        return !pData.finishTime && !pData.hasLeft && !pData.isResigned;
       }
-      return false
-    })
+      return false;
+    });
 
-    if (!activeRoom) return res.status(200).json(null)
+    if (activeRoom) {
+      const fullRoom = await getFullRoom(activeRoom.id);
+      return res.status(200).json(fullRoom);
+    }
 
-    const fullRoom = await getFullRoom(activeRoom.id)
-    return res.status(200).json(fullRoom)
+    // 3. Fallback: check room_participants table for active rooms
+    const { data: participantRecords } = await supabaseAdmin
+      .from('room_participants')
+      .select('room_id')
+      .or(`user_id.eq.${player.id},name.eq.${player.name}`)
+      .limit(5);
+
+    if (participantRecords && participantRecords.length > 0) {
+      for (const rec of participantRecords) {
+        if (!rec.room_id) continue;
+        const { data: r } = await supabaseAdmin.from('rooms').select('*').eq('id', rec.room_id).maybeSingle();
+        if (r && (r.status === 'PLAYING' || r.status === 'WAITING')) {
+          const progress = (r.playersProgress as any) || {};
+          const pData = progress[pIdStr];
+          if (!pData || (!pData.hasLeft && !pData.isResigned && !pData.finishTime)) {
+            const fullRoom = await getFullRoom(r.id);
+            return res.status(200).json(fullRoom);
+          }
+        }
+      }
+    }
+
+    return res.status(200).json(null);
   } catch (err: any) {
     return res.status(500).json({ error: err.message })
   }

@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Zap, ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { Zap, ArrowLeft, CheckCircle2, Clock } from 'lucide-react';
 import { View } from '../types/challenges';
 import { supabase } from '../services/supabase';
+import { useApp } from '../contexts/AppContext';
 import {
   GroupChallengeEmblem,
   DailyChallengeEmblem,
@@ -26,6 +27,8 @@ export interface ChallengesHubPageProps {
   };
   dailyChallenge?: any;
   userId?: string | number | null;
+  activeRunningRoom?: any;
+  handleResumeActiveRoom?: (room: any) => void;
 }
 
 export const ChallengesHubPage: React.FC<ChallengesHubPageProps> = ({
@@ -39,8 +42,49 @@ export const ChallengesHubPage: React.FC<ChallengesHubPageProps> = ({
   setIsSpeedMode,
   systemSettings,
   dailyChallenge,
-  userId
+  userId,
+  activeRunningRoom,
+  handleResumeActiveRoom
 }) => {
+  const app = useApp();
+
+  // 1. حالة التحقق من الغرفة الجماعية النشطة (Active Room Rejoin)
+  const [queriedActiveRoom, setQueriedActiveRoom] = useState<any | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    const checkActiveRoom = async () => {
+      const activeUser = userId || app?.playerUsername || app?.playerName ||
+        localStorage.getItem('quran_player_username') ||
+        localStorage.getItem('quran_player_name');
+      if (!activeUser) return;
+
+      try {
+        const pIdParam = encodeURIComponent(String(activeUser));
+        const res = await fetch(`/api/1v1?action=check-active&playerId=${pIdParam}`);
+        const data = await res.json();
+        if (isMounted && res.ok && data && data.id && (data.status === 'PLAYING' || data.status === 'WAITING' || data.status === 'active')) {
+          const myId = String(userId || activeUser);
+          const pProgress = data.playersProgress ? (data.playersProgress[myId] || Object.values(data.playersProgress).find((p: any) => p.name === activeUser || p.username === activeUser)) : null;
+          if (pProgress && (pProgress.hasLeft || pProgress.isResigned || pProgress.isAbandoned || pProgress.status === 'abandoned' || pProgress.finishTime)) {
+            setQueriedActiveRoom(null);
+            return;
+          }
+          setQueriedActiveRoom(data);
+        } else if (isMounted) {
+          setQueriedActiveRoom(null);
+        }
+      } catch (err) {
+        console.warn('[ChallengesHubPage] Error checking active room:', err);
+      }
+    };
+
+    checkActiveRoom();
+    return () => { isMounted = false; };
+  }, [userId, app?.playerUsername, app?.playerName]);
+
+  const effectiveActiveRoom = activeRunningRoom || app?.activeRunningRoom || queriedActiveRoom;
+  const effectiveResumeRoom = handleResumeActiveRoom || app?.handleResumeActiveRoom;
   // 1. حالة التحقق من إتمام التحدي اليومي
   const [isDailyCompleted, setIsDailyCompleted] = useState<boolean>(() => {
     if (dailyCompleted) return true;
@@ -177,32 +221,44 @@ export const ChallengesHubPage: React.FC<ChallengesHubPageProps> = ({
         </div>
       </div>
 
-      {/* 2. لافتة إتمام التحدي اليومي بنجاح (Green Success Banner) */}
-      {isDailyCompleted && (
+      {/* 1. لافتة 'يوجد تحدي جماعي قيد التشغيل - العودة للتحدي' */}
+      {effectiveActiveRoom && (
         <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-emerald-50 border border-emerald-200/80 p-4 sm:p-5 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 text-right shadow-xs"
+          initial={{ opacity: 0, y: -10, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          className="bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white p-4 sm:p-5 rounded-2xl shadow-lg shadow-emerald-700/20 flex flex-col sm:flex-row items-center justify-between gap-4 border border-emerald-500/40"
         >
-          <div className="flex items-center gap-3 w-full sm:w-auto">
-            <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-              <CheckCircle2 className="w-5 h-5 text-white" />
+          <div className="flex items-center gap-3.5 w-full sm:w-auto">
+            <div className="w-11 h-11 rounded-xl bg-white/15 backdrop-blur-xs flex items-center justify-center shrink-0 border border-white/20">
+              <Zap className="w-6 h-6 text-amber-300 animate-pulse" />
             </div>
             <div>
-              <span className="font-black text-emerald-950 text-sm sm:text-base block">
-                لقد أتممت التحدي اليومي بنجاح! 🎉
-              </span>
-              <span className="text-xs font-bold text-emerald-700">
-                أحسنت! حافظت على سلسلة إنجازك، نراك غداً في تحدٍ جديد بإذن الله.
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-black px-2.5 py-0.5 rounded-full bg-amber-400 text-emerald-950">
+                  {effectiveActiveRoom.status === 'WAITING' ? 'قيد الانتظار ⏳' : 'تحدي جاري الآن ⚡'}
+                </span>
+                <span className="text-xs text-emerald-100 font-bold">
+                  {effectiveActiveRoom.name || 'غرفة التحدي الجماعي'}
+                </span>
+              </div>
+              <h3 className="font-black text-white text-sm sm:text-base mt-1">
+                يوجد تحدي جماعي قيد التشغيل - العودة للتحدي
+              </h3>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className="px-3.5 py-1.5 bg-emerald-100 text-emerald-800 rounded-xl text-xs font-black shrink-0">
-              مكتمل اليوم ✨
-            </span>
-          </div>
+          <button
+            type="button"
+            onClick={() => {
+              if (effectiveResumeRoom) {
+                effectiveResumeRoom(effectiveActiveRoom);
+              }
+            }}
+            className="w-full sm:w-auto px-6 py-3 bg-amber-400 hover:bg-amber-300 text-emerald-950 rounded-xl font-black text-xs sm:text-sm shadow-md active:scale-95 transition-all flex items-center justify-center gap-2 shrink-0 cursor-pointer"
+          >
+            <span>العودة للتحدي</span>
+            <ArrowLeft className="w-4 h-4" />
+          </button>
         </motion.div>
       )}
 
@@ -278,35 +334,47 @@ export const ChallengesHubPage: React.FC<ChallengesHubPageProps> = ({
           disabled={dailyCompleted || isDailyCompleted}
           className={`group relative p-5 md:p-6 rounded-2xl text-right overflow-hidden transition-all duration-200 flex flex-col justify-between border min-h-[160px] ${
             (dailyCompleted || isDailyCompleted)
-              ? 'bg-slate-50 border-slate-150 opacity-70 grayscale'
+              ? 'bg-slate-50/90 border-slate-200/80 shadow-xs'
               : 'bg-white border-slate-150 hover:border-emerald-400 shadow-xs hover:shadow-md'
           }`}
         >
-          <div className="flex items-start justify-between">
-            <DailyChallengeEmblem className="w-12 h-12 shrink-0 transition-transform duration-200 group-hover:scale-105" />
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200/40">
-                {(dailyCompleted || isDailyCompleted) ? 'تم إنجازه' : 'كل 24 ساعة'}
-              </span>
-              {!(dailyCompleted || isDailyCompleted) && (
-                <ArrowLeft className="w-5 h-5 text-slate-300 group-hover:text-brand-emerald group-hover:-translate-x-1 transition-all" />
-              )}
+          <div>
+            <div className="flex items-start justify-between">
+              <DailyChallengeEmblem className="w-12 h-12 shrink-0 transition-transform duration-200 group-hover:scale-105" />
+              <div className="flex items-center gap-2">
+                <span className={`text-[10px] font-black px-2.5 py-1 rounded-full border ${
+                  (dailyCompleted || isDailyCompleted)
+                    ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                    : 'bg-emerald-50 text-emerald-800 border-emerald-200/40'
+                }`}>
+                  {(dailyCompleted || isDailyCompleted) ? '✓ تم الإنجاز اليوم' : 'كل 24 ساعة'}
+                </span>
+                {!(dailyCompleted || isDailyCompleted) && (
+                  <ArrowLeft className="w-5 h-5 text-slate-300 group-hover:text-brand-emerald group-hover:-translate-x-1 transition-all" />
+                )}
+              </div>
+            </div>
+
+            <div className="mt-3.5">
+              <h3 className={`text-base md:text-lg font-black ${(dailyCompleted || isDailyCompleted) ? 'text-slate-700' : 'text-slate-800 group-hover:text-brand-emerald'} transition-colors`}>
+                التحدي اليومي
+              </h3>
+              <p className="text-slate-400 font-bold text-xs mt-1 leading-relaxed">
+                {(dailyCompleted || isDailyCompleted) ? 'أحسنت! حافظت على شعلتك وسلسلة إنجازك' : 'إكمال الآية اليومية لتثبيت حفظ الورد ومضاعفة نقاطك'}
+              </p>
             </div>
           </div>
 
-          <div className="mt-4">
-            <h3 className={`text-base md:text-lg font-black ${(dailyCompleted || isDailyCompleted) ? 'text-slate-500' : 'text-slate-800 group-hover:text-brand-emerald'} transition-colors`}>
-              التحدي اليومي
-            </h3>
-            <p className="text-slate-400 font-bold text-xs mt-1 leading-relaxed">
-              {(dailyCompleted || isDailyCompleted) ? 'أحسنت! نراك غداً لمتابعة سلسلة إنجازك' : 'إكمال الآية اليومية لتثبيت حفظ الورد ومضاعفة نقاطك'}
-            </p>
-          </div>
-
+          {/* عنصر الموعد القادم المنظم داخل البطاقة */}
           {(dailyCompleted || isDailyCompleted) && (
-            <div className="mt-3 pt-2.5 border-t border-slate-200/60 flex items-center justify-between">
-              <span className="text-[10px] font-bold text-slate-400">الموعد القادم:</span>
-              <span className="text-xs font-black text-brand-emerald tabular-nums">{timeLeft}</span>
+            <div className="mt-3.5 pt-2.5 border-t border-slate-200/60 flex items-center justify-between bg-emerald-50/70 rounded-xl px-3 py-2">
+              <div className="flex items-center gap-1.5 text-slate-500 font-bold text-xs">
+                <Clock className="w-3.5 h-3.5 text-brand-emerald" />
+                <span>الموعد القادم:</span>
+              </div>
+              <span className="text-xs font-black text-brand-emerald tabular-nums">
+                {timeLeft || 'غداً'}
+              </span>
             </div>
           )}
         </motion.button>
