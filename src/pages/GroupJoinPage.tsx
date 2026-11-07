@@ -271,19 +271,6 @@ export const GroupJoinPage: React.FC<GroupJoinPageProps> = ({
           </div>
         )}
       </div>
-
-      {/* Floating Action Button (FAB) on mobile anchored bottom right with safe area */}
-      <motion.button
-        initial={{ scale: 0 }}
-        animate={{ scale: 1 }}
-        whileTap={{ scale: 0.9 }}
-        onClick={() => setView('group_create')}
-        className="fixed bottom-20 right-4 sm:bottom-24 sm:right-6 z-40 sm:hidden px-4 py-3 bg-gradient-to-r from-orange-500 to-amber-500 text-white rounded-full shadow-2xl shadow-orange-500/50 flex items-center gap-2 font-black cursor-pointer border-2 border-white active:scale-95 transition-transform"
-        title="إنشاء غرفة جديدة"
-      >
-        <Plus className="w-5 h-5 stroke-[2.5]" />
-        <span className="text-xs">إنشاء غرفة</span>
-      </motion.button>
     </motion.div>
   );
 };
