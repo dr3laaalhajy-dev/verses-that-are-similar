@@ -265,10 +265,12 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
     setUnreadCount(count);
   };
 
-  // 2. استعلام جلب الإشعارات من Supabase حصراً مع فحص الأخطاء
-  const fetchNotifications = async () => {
-    // 1. التحقق من جاهزية مُعرّف المستخدم: لا تنفذ الاستعلام إلا إذا كان currentUser.id متوفراً
-    if (!currentUser?.id) {
+  // 2 & 3. استعلام جلب الإشعارات من Supabase حصراً مع فلتر المستلم وفحص الأخطاء
+  const fetchNotifications = async (targetUserId?: string) => {
+    const activeUserId = targetUserId || currentUser?.id;
+
+    // التحقق من جاهزية مُعرّف المستخدم: منع الاستعلام إذا لم يكن متوفراً
+    if (!activeUserId) {
       console.log('[NotificationBell] User ID not ready yet, waiting for currentUser.id...');
       setIsLoading(false);
       return;
@@ -278,13 +280,13 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
     setIsLoading(true);
 
     try {
-      console.log('[NotificationBell] Executing fetch query for receiver_id:', currentUser.id);
+      console.log('[NotificationBell] Executing fetch query for receiver_id:', activeUserId);
 
-      // الاستعلام الأساسي لجلب إشعارات المستخدم الحالي
+      // الاستعلام الأساسي لجلب إشعارات المستخدم الحالي بالفلتر الصارم
       const { data, error } = await supabase
         .from('notifications')
         .select('*')
-        .eq('receiver_id', currentUser.id)
+        .eq('receiver_id', activeUserId)
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -296,7 +298,7 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
           const { data: fallbackData, error: fbError } = await supabase
             .from('notifications')
             .select('*')
-            .or(`user_id.eq.${currentUser.id},user_id.is.null`)
+            .or(`user_id.eq.${activeUserId},user_id.is.null`)
             .order('created_at', { ascending: false });
 
           if (fbError) {
@@ -566,14 +568,12 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
     }
   }, [isOpen]);
 
-  // Subscribe to Supabase Realtime updates (INSERT, UPDATE, DELETE & broadcast)
+  // 2. التحقق من توقيت الاستعلام في مكون الجرس (Bell Component Timing)
   useEffect(() => {
-    // 1. التحقق من جاهزية مُعرّف المستخدم: لا تنفذ الاستعلام والاشتراك إلا عند توفر currentUser.id
-    if (!currentUser?.id) {
-      return;
-    }
+    if (!currentUser?.id) return; // ⚠️ منع الاستعلام إذا لم يكن المستخدم مسجلاً بعد
 
-    fetchNotifications();
+    // تنفيذ استعلام جلب الإشعارات هنا
+    fetchNotifications(currentUser.id);
 
     const channelName = `realtime_notifications_${currentUser.id}`;
     const channel = supabase
