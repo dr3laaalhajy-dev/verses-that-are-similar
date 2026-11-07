@@ -85,7 +85,10 @@ export const AppRouter: React.FC = () => {
   const isCertRoute = typeof window !== 'undefined' && (
     window.location.pathname === '/certificate' ||
     window.location.pathname.startsWith('/certificate/') ||
+    window.location.pathname === '/achievements' ||
+    window.location.pathname.startsWith('/achievements/') ||
     new URLSearchParams(window.location.search).get('view') === 'certificate' ||
+    new URLSearchParams(window.location.search).get('view') === 'achievements' ||
     new URLSearchParams(window.location.search).get('preview') === 'certificate'
   );
 

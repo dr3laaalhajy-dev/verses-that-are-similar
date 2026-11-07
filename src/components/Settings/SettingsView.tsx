@@ -34,6 +34,7 @@ import {
 import { usePushNotifications } from '../../hooks/usePushNotifications';
 import { router } from '../../services/router';
 import { supabase } from '../../services/supabase';
+import { AchievementsMilestoneTracker } from '../AchievementsMilestoneTracker';
 
 interface SettingsViewProps {
   playerName: string | null;
@@ -415,28 +416,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       setIsDeletingAccount(false);
     }
   };
-
-  // All 3 available certificates definitions
-  const allCertificatesMeta = [
-    {
-      id: 'seerah',
-      category: 'seerah' as const,
-      title: 'شهادة إتقان السيرة النبوية',
-      description: 'تُمنح لمن أتم جميع مجموعات تحدي السيرة النبوية العطرة بنجاح.',
-      icon: '🕌',
-      badgeColor: 'from-emerald-600 to-teal-700',
-      bgColor: 'bg-emerald-500/10 border-emerald-500/30'
-    },
-    {
-      id: 'general',
-      category: 'general' as const,
-      title: 'شهادة الثقافة والأسئلة العامة',
-      description: 'تُمنح لإتمام مراحل مسابقة المعارف والعلوم الإسلامية العامة.',
-      icon: '✨',
-      badgeColor: 'from-blue-600 via-sky-600 to-indigo-700',
-      bgColor: 'bg-blue-500/10 border-blue-500/30'
-    }
-  ];
 
   return (
     <motion.div
@@ -1102,210 +1081,15 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 className="overflow-hidden border-t border-slate-100"
               >
                 <div className="p-4 sm:p-6 bg-slate-50/30">
-                  {/* Quick Stats Ribbon */}
-                  <div className="flex items-center gap-2 sm:gap-3 bg-white border border-amber-200/60 px-3.5 py-2 rounded-2xl shadow-xs justify-around mb-6">
-                    <div className="flex items-center gap-1.5 text-xs font-black text-amber-700">
-                      <Trophy className="w-4 h-4 text-amber-500" />
-                      <span>{cups} كأس</span>
-                    </div>
-                    <span className="text-slate-200">|</span>
-                    <div className="flex items-center gap-1.5 text-xs font-black text-emerald-700">
-                      <Star className="w-4 h-4 text-emerald-500 fill-emerald-500" />
-                      <span>{totalPoints} نقطة</span>
-                    </div>
-                    <span className="text-slate-200">|</span>
-                    <div className="flex items-center gap-1.5 text-xs font-black text-slate-700">
-                      <Award className="w-4 h-4 text-amber-600" />
-                      <span>{userCertificates.length}/2 شهادات</span>
-                    </div>
-                  </div>
-
-
-          {/* VIP Owner Control Panel - Only visible for @alaa */}
-          {isOwner && (
-            <div className="mb-6 p-4 sm:p-6 rounded-3xl bg-gradient-to-r from-amber-500/15 via-yellow-400/20 to-amber-600/15 border-2 border-amber-400/80 shadow-lg shadow-amber-500/10 text-right relative overflow-hidden">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 mb-4 border-b border-amber-300/40">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-500 to-yellow-500 text-white flex items-center justify-center shadow-md shadow-amber-500/30 shrink-0">
-                    <Sparkles className="w-5 h-5 text-yellow-100" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm sm:text-base font-black text-amber-950 flex items-center gap-2">
-                      <span>لوحة تحكّم المطور والمالك (علاء)</span>
-                      <span className="text-[10px] bg-gradient-to-r from-amber-600 to-yellow-500 text-white font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider shadow-xs">
-                        خاص بحسابك
-                      </span>
-                    </h3>
-                    <p className="text-[11px] sm:text-xs text-amber-900/90 font-bold mt-0.5">
-                      تفعيل الإطار وعرض الشهادة الخاصة بكل قسم بضغطة زر واحدة لحسابك:
-                    </p>
-                  </div>
+                  <AchievementsMilestoneTracker
+                    playerName={playerName}
+                    playerUsername={playerUsername}
+                    totalPoints={totalPoints}
+                    cups={cups}
+                    userCertificates={userCertificates}
+                  />
                 </div>
-
-                {activeFrame && (
-                  <div className="text-[11px] font-bold text-amber-950 bg-white/90 border border-amber-300 px-3 py-1 rounded-xl shadow-xs self-start sm:self-auto">
-                    الإطار المفعّل حالياً: <span className="font-black text-emerald-800">{activeFrame === 'seerah' ? 'السيرة النبوية 🕌' : activeFrame === 'general' ? 'الأسئلة العامة ✨' : 'بدون إطار'}</span>
-                  </div>
-                )}
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {/* 1. السيرة النبوية */}
-                <button
-                  type="button"
-                  onClick={() => onActivateFrameAndCertificate('seerah')}
-                  className={`flex items-center justify-between p-3.5 rounded-2xl border font-bold text-xs transition-all shadow-sm active:scale-95 cursor-pointer ${
-                    activeFrame === 'seerah'
-                      ? 'bg-gradient-to-r from-amber-600 to-yellow-600 text-white border-amber-600 shadow-md shadow-amber-600/30 ring-2 ring-amber-300'
-                      : 'bg-white hover:bg-amber-50 text-slate-800 border-amber-300/80'
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-xl">🕌</span>
-                    <div className="text-right">
-                      <span className="block font-black text-xs">السيرة النبوية</span>
-                      <span className={`text-[10px] ${activeFrame === 'seerah' ? 'text-amber-100' : 'text-slate-400'}`}>الإطار الذهبي والشهادة</span>
-                    </div>
-                  </div>
-                  <span className={`text-[10px] font-black px-2 py-0.5 rounded-lg ${activeFrame === 'seerah' ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-800'}`}>
-                    تفعيل وعرض
-                  </span>
-                </button>
-
-                {/* 2. الأسئلة العامة */}
-                <button
-                  type="button"
-                  onClick={() => onActivateFrameAndCertificate('general')}
-                  className={`flex items-center justify-between p-3.5 rounded-2xl border font-bold text-xs transition-all shadow-sm active:scale-95 cursor-pointer ${
-                    activeFrame === 'general'
-                      ? 'bg-gradient-to-r from-blue-600 via-sky-600 to-indigo-700 text-white border-blue-500 shadow-md shadow-blue-600/30 ring-2 ring-sky-300'
-                      : 'bg-white hover:bg-blue-50 text-slate-800 border-blue-200'
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-xl">✨</span>
-                    <div className="text-right">
-                      <span className="block font-black text-xs">الأسئلة العامة</span>
-                      <span className={`text-[10px] ${activeFrame === 'general' ? 'text-blue-100' : 'text-slate-400'}`}>الإطار الأزرق والشهادة</span>
-                    </div>
-                  </div>
-                  <span className={`text-[10px] font-black px-2 py-0.5 rounded-lg ${activeFrame === 'general' ? 'bg-white/20 text-white' : 'bg-blue-100 text-blue-800'}`}>
-                    تفعيل وعرض
-                  </span>
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Certificates Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {allCertificatesMeta.map((certMeta) => {
-              // Requirement 2: Read from actual challenge completion state
-              const certificateFromStore = userCertificates.find((c) => c.category === certMeta.category);
-              const isChallengeActuallyCompleted = certMeta.category === 'seerah' ? isSeerahUnlocked : isGeneralUnlocked;
-              const claimed = certificateFromStore || (isChallengeActuallyCompleted ? { category: certMeta.category, date: 'مُعتمدة ومُنجزة', name: playerName } : null);
-
-              return (
-                <div
-                  key={certMeta.id}
-                  className={`rounded-2xl p-4 sm:p-5 border transition-all duration-300 flex flex-col justify-between ${
-                    claimed
-                      ? 'bg-white border-amber-300/80 shadow-md shadow-amber-500/10 hover:border-amber-400'
-                      : 'bg-slate-50/70 border-slate-200/70 opacity-90'
-                  }`}
-                >
-                  <div>
-                    {/* Top Status Badge */}
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="text-2xl">{certMeta.icon}</span>
-                      {claimed ? (
-                        <span className="flex items-center gap-1 text-[10px] sm:text-[11px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 px-2.5 py-0.5 rounded-full">
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                          <span>مُكتسبة ومُعتمدة</span>
-                        </span>
-                      ) : (
-                        <span className="flex items-center gap-1 text-[10px] sm:text-[11px] font-bold bg-slate-200/80 text-slate-600 px-2.5 py-0.5 rounded-full">
-                          <Lock className="w-3 h-3 text-slate-400" />
-                          <span>قيد القفل</span>
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Certificate Title & Info */}
-                    <h3 className="font-black text-slate-800 text-sm sm:text-base leading-snug mb-1">
-                      {certMeta.title}
-                    </h3>
-                    <p className="text-[11px] sm:text-xs text-slate-500 font-medium leading-relaxed mb-4">
-                      {certMeta.description}
-                    </p>
-                  </div>
-
-                  {/* Bottom Action Area */}
-                  <div className="pt-3 border-t border-slate-100 mt-2">
-                    {claimed ? (
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between text-[10px] sm:text-[11px] text-slate-400 font-bold">
-                          <span className="flex items-center gap-1">
-                            <Calendar className="w-3 h-3 text-slate-400" />
-                            <span>تاريخ الإنجاز:</span>
-                          </span>
-                          <span className="text-slate-600">{claimed.date}</span>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            try {
-                              if (typeof onOpenCertificate === 'function') {
-                                onOpenCertificate(certMeta.category);
-                              } else if (app?.setSelectedCategory && app?.setShowCertificate) {
-                                app.setSelectedCategory(certMeta.category);
-                                app.setShowCertificate(true);
-                              }
-                            } catch (err) {
-                              console.error('Error opening certificate:', err);
-                            }
-                          }}
-                          className="w-full flex items-center justify-center gap-1.5 py-2.5 px-3 bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-700 hover:to-yellow-700 active:scale-95 text-white rounded-xl font-bold text-xs shadow-sm shadow-amber-600/20 transition-all cursor-pointer"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                          <span>معاينة وتحميل الشهادة</span>
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (onStartQuizCategory) {
-                            onStartQuizCategory(certMeta.category);
-                          } else {
-                            onBackToHome();
-                          }
-                        }}
-                        className="w-full flex items-center justify-center gap-1.5 py-2.5 px-3 bg-slate-200 hover:bg-emerald-600 hover:text-white text-slate-700 rounded-xl font-bold text-xs transition-all cursor-pointer group"
-                      >
-                        <Trophy className="w-3.5 h-3.5 text-slate-400 group-hover:text-amber-300 transition-colors" />
-                        <span>ابدأ التحدي لفتح الشهادة</span>
-                      </button>
-                    )}
-
-                    {isOwner && (
-                      <button
-                        type="button"
-                        onClick={() => onActivateFrameAndCertificate(certMeta.category)}
-                        className="w-full flex items-center justify-center gap-1.5 py-2 px-3 mt-2 bg-gradient-to-r from-amber-50 to-yellow-50 hover:from-amber-100 hover:to-yellow-100 text-amber-900 border border-amber-300/80 rounded-xl font-black text-[11px] transition-all cursor-pointer shadow-xs active:scale-95"
-                      >
-                        <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-                        <span>تفعيل الإطار وعرض الشهادة (خاص بالمالك)</span>
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </motion.div>
+              </motion.div>
     )}
   </AnimatePresence>
 </div>
