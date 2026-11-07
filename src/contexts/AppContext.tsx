@@ -2070,6 +2070,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return;
       }
 
+      if (rootSegment === 'room') {
+        const targetRoomId = cleanPath.split('/')[1] || params.get('roomId') || params.get('room') || params.get('code');
+        if (targetRoomId) {
+          setIsMushafFullscreen(false);
+          setShowScores(false);
+          handleJoinV1(targetRoomId);
+        }
+        return;
+      }
+
       if (rootSegment === 'admin') {
         setIsMushafFullscreen(false);
         setShowScores(false);

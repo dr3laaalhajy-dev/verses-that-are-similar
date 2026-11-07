@@ -127,6 +127,10 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
   transcript
 }) => {
   const app = useApp();
+  const appRef = useRef(app);
+  useEffect(() => {
+    appRef.current = app;
+  });
   const [isEndingRoom, setIsEndingRoom] = useState(false);
 
   const currentUserId = playerUsername || playerName;
@@ -147,7 +151,10 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
   const participants = room?.participants || [];
 
   const isParticipantOnlineFn = (p: any): boolean => {
-    if (!presenceReady) return p.isOnline !== false;
+    const isMe = p.name === playerName || p.username === playerUsername || String(p.id) === String(currentUserId);
+    if (isMe) return true;
+    if (p.isOnline === false) return false;
+    if (!presenceReady) return true;
     return (
       (p.id != null && roomPresenceOnlineIds.has(String(p.id))) ||
       (p.name && roomPresenceOnlineIds.has(String(p.name).trim().toLowerCase())) ||
@@ -287,7 +294,7 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
   }, [room?.id, setView, app, currentQuestionIdx, setRoom]);
 
   // Auto-advance to next question when all active players have answered:
-  // Host advances after 1.5s; Fallback player advances after 3.5s (if host tab is throttled in background)
+  // Host advances after 1.0s; Fallback player advances after 2.5s (if host tab is throttled in background)
   useEffect(() => {
     if (!room?.id || room.status !== 'PLAYING' || isLastQuestion || !hasAllAnswered) {
       return;
@@ -297,7 +304,7 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
       return;
     }
 
-    const delay = isEffectiveHost ? 1500 : 3500;
+    const delay = isEffectiveHost ? 1000 : 2500;
     const timer = setTimeout(async () => {
       if (advancingQuestionRef.current === currentQuestionIdx) return;
       advancingQuestionRef.current = currentQuestionIdx;
@@ -316,7 +323,7 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
         const data = await res.json();
         if (data && data.currentQuestionIndex > currentQuestionIdx) {
           advancingQuestionRef.current = null;
-          app?.resetQuestionUIState?.(data.currentQuestionIndex, data);
+          appRef.current?.resetQuestionUIState?.(data.currentQuestionIndex, data);
           setRoom(data);
           try {
             supabase.channel(`room_sync_${room.id}`).send({
@@ -330,6 +337,8 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
               }
             }).catch(() => {});
           } catch (_) {}
+        } else {
+          advancingQuestionRef.current = null;
         }
       } catch (err) {
         console.error('[ChallengeGamePage] Error auto-advancing question:', err);
@@ -338,7 +347,7 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
     }, delay);
 
     return () => clearTimeout(timer);
-  }, [hasAllAnswered, room?.id, room?.status, isLastQuestion, isEffectiveHost, currentQuestionIdx, playerUsername, playerName, app, setRoom]);
+  }, [hasAllAnswered, room?.id, room?.status, isLastQuestion, isEffectiveHost, currentQuestionIdx, playerUsername, playerName, setRoom]);
 
   const handleEndRoom = async () => {
     if (isEndingRoom || !room?.id) return;
@@ -727,7 +736,7 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
               <span>إجابات اللاعبين {isLastQuestion ? '(السؤال الأخير 🏁)' : ''}</span>
             </span>
             <span className="text-[11px] font-bold text-slate-500">
-              {room.answeredCount ?? Object.keys(room.currentAnswers || {}).filter(k => k !== '_firstCorrectUserId' && k !== '__lastReaction').length} من {(room.participants || []).length || 1} أجابوا
+              {validAnswersCount} من {activeCount || 1} أجابوا
             </span>
           </div>
 
@@ -744,7 +753,9 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
                 <div
                   key={pId}
                   className={`flex items-center justify-between p-2.5 rounded-xl border text-xs transition-all ${
-                    !hasAns
+                    !isOnline
+                      ? 'bg-slate-100/60 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800 text-slate-400 opacity-70'
+                      : !hasAns
                       ? 'bg-slate-50/70 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 text-slate-400'
                       : isAnsCorrect
                       ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 font-bold'
@@ -752,14 +763,18 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
                   }`}
                 >
                   <span className="flex items-center gap-1.5 truncate">
-                    {presenceReady && !isOnline && (
-                      <span title="غير متصل" className="text-[9px] leading-none">🔴</span>
+                    {!isOnline && (
+                      <span className="text-[10px] font-bold text-rose-500 bg-rose-50 dark:bg-rose-950/50 px-1.5 py-0.5 rounded border border-rose-200 dark:border-rose-800 shrink-0">
+                        (خارج اللعبة)
+                      </span>
                     )}
                     <span className="truncate">{p.name || p.username || 'لاعب'}</span>
                     {isMe && <span className="text-[10px] opacity-75">(أنت)</span>}
                   </span>
                   <span className="shrink-0 flex items-center gap-1 text-[11px]">
-                    {!hasAns ? (
+                    {!isOnline ? (
+                      <span className="text-slate-400 font-semibold text-[11px]">خارج اللعبة</span>
+                    ) : !hasAns ? (
                       <span className="text-slate-400 font-normal">بانتظار الإجابة...</span>
                     ) : isAnsCorrect ? (
                       <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">

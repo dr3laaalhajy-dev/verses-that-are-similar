@@ -298,15 +298,21 @@ export default function WhoAmIGame({
 
   // ---------- الكشف التلقائي (القائد / القائد البديل) ----------
   useEffect(() => {
-    if (!isEffectiveLeader || !round || round.status !== 'active') return;
+    if (!round || round.status !== 'active') return;
     if ((allIn || timeUp) && revealingRef.current !== round.id) {
-      revealingRef.current = round.id;
-      supabase
-        .from('who_am_i_rounds')
-        .update({ status: 'revealed' })
-        .eq('id', round.id)
-        .eq('status', 'active')
-        .then(refresh);
+      // Leader reveals immediately (or 500ms); other active player acts as fallback after 2.5s
+      const delay = isEffectiveLeader ? 500 : 2500;
+      const timer = setTimeout(() => {
+        if (revealingRef.current === round.id) return;
+        revealingRef.current = round.id;
+        supabase
+          .from('who_am_i_rounds')
+          .update({ status: 'revealed' })
+          .eq('id', round.id)
+          .eq('status', 'active')
+          .then(refresh);
+      }, delay);
+      return () => clearTimeout(timer);
     }
   }, [isEffectiveLeader, round, allIn, timeUp, refresh]);
 
@@ -605,11 +611,17 @@ export default function WhoAmIGame({
                   <li key={p.id} className={`wai-player neutral ${sub ? 'done' : ''}`}>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
                       {onlinePlayerIds.size > 0 && !isOnline && (
-                        <span title="غير متصل" style={{ fontSize: '10px', lineHeight: 1 }}>🔴</span>
+                        <span title="خارج اللعبة" style={{ fontSize: '10px', fontWeight: 'bold', color: '#ef4444', background: '#fef2f2', padding: '1px 5px', borderRadius: '4px', border: '1px solid #fecaca' }}>
+                          (خارج اللعبة)
+                        </span>
                       )}
                       <span>{p.name}</span>
                     </span>
-                    {sub && <span className="tick">✓</span>}
+                    {!isOnline ? (
+                      <span className="wai-muted" style={{ fontSize: '11px', color: '#94a3b8' }}>خارج اللعبة</span>
+                    ) : sub ? (
+                      <span className="tick">✓</span>
+                    ) : null}
                   </li>
                 );
               }
@@ -619,11 +631,13 @@ export default function WhoAmIGame({
                   <li key={p.id} className="wai-player neutral">
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
                       {onlinePlayerIds.size > 0 && !isOnline && (
-                        <span title="غير متصل" style={{ fontSize: '10px', lineHeight: 1 }}>🔴</span>
+                        <span title="خارج اللعبة" style={{ fontSize: '10px', fontWeight: 'bold', color: '#ef4444', background: '#fef2f2', padding: '1px 5px', borderRadius: '4px', border: '1px solid #fecaca' }}>
+                          (خارج اللعبة)
+                        </span>
                       )}
                       <span>{p.name}</span>
                     </span>
-                    <span className="wai-muted">لم يجب</span>
+                    <span className="wai-muted">{!isOnline ? 'خارج اللعبة' : 'لم يجب'}</span>
                   </li>
                 );
               }
@@ -631,7 +645,9 @@ export default function WhoAmIGame({
                 <li key={p.id} className={`wai-player ${ans.is_correct ? 'correct' : 'wrong'}`}>
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
                     {onlinePlayerIds.size > 0 && !isOnline && (
-                      <span title="غير متصل" style={{ fontSize: '10px', lineHeight: 1 }}>🔴</span>
+                      <span title="خارج اللعبة" style={{ fontSize: '10px', fontWeight: 'bold', color: '#ef4444', background: '#fef2f2', padding: '1px 5px', borderRadius: '4px', border: '1px solid #fecaca' }}>
+                        (خارج اللعبة)
+                      </span>
                     )}
                     <span>{p.name}</span>
                   </span>

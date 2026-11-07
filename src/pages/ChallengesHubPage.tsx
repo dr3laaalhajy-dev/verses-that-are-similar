@@ -4,6 +4,7 @@ import { Zap, ArrowLeft, CheckCircle2, Clock } from 'lucide-react';
 import { View } from '../types/challenges';
 import { supabase } from '../services/supabase';
 import { useApp } from '../contexts/AppContext';
+import { router } from '../services/router';
 import {
   GroupChallengeEmblem,
   DailyChallengeEmblem,
@@ -250,9 +251,33 @@ export const ChallengesHubPage: React.FC<ChallengesHubPageProps> = ({
           <button
             type="button"
             onClick={() => {
+              const target = effectiveActiveRoom;
+              if (!target) return;
+              try {
+                localStorage.setItem('activeRoomId', String(target.id));
+              } catch (_) {}
+
               if (effectiveResumeRoom) {
-                effectiveResumeRoom(effectiveActiveRoom);
+                try { effectiveResumeRoom(target); } catch (_) {}
+              } else if (app?.handleResumeActiveRoom) {
+                try { app.handleResumeActiveRoom(target); } catch (_) {}
+              } else if (app?.handleJoinV1) {
+                try { app.handleJoinV1(target.id); } catch (_) {}
               }
+
+              // Direct view switch guarantee
+              if (target.status === 'WAITING') {
+                setView('group_waiting');
+              } else if (target.gameMode === 'WHO_AM_I' || target.challenge_type === 'who_am_i') {
+                setView('group_game');
+              } else {
+                setView('challenge');
+              }
+
+              // Route push
+              try {
+                router.push(`/room/${target.id}`);
+              } catch (_) {}
             }}
             className="w-full sm:w-auto px-6 py-3 bg-amber-400 hover:bg-amber-300 text-emerald-950 rounded-xl font-black text-xs sm:text-sm shadow-md active:scale-95 transition-all flex items-center justify-center gap-2 shrink-0 cursor-pointer"
           >
