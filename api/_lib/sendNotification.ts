@@ -65,7 +65,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // 3. Extract and validate notification payload
-    const { title, body, target_url, targetUrl, metadata } = req.body || {};
+    const { title, body, target_url, targetUrl, metadata, receiver_id, receiverId, type } = req.body || {};
     if (!title || !title.trim() || !body || !body.trim()) {
       return res.status(400).json({ error: 'بيانات ناقصة', details: 'يرجى إدخال عنوان الإشعار ونصه بالكامل' });
     }
@@ -73,6 +73,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const cleanTitle = title.trim();
     const cleanBody = body.trim();
     const cleanTargetUrl = (target_url || targetUrl || '').trim() || null;
+    const effectiveReceiverId = receiver_id !== undefined ? receiver_id : (receiverId !== undefined ? receiverId : null);
+    const cleanReceiverId = effectiveReceiverId !== null && effectiveReceiverId !== undefined && String(effectiveReceiverId).trim() !== ''
+      ? String(effectiveReceiverId).trim()
+      : null;
+
     // If target_url starts with '/' (relative path), resolve it to full URL using base URL
     const fullTargetUrl = resolveFullUrl(cleanTargetUrl);
     const senderRole = isFounder ? 'FOUNDER' : 'CO_FOUNDER';
@@ -81,22 +86,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // 4. Mandatory Supabase persistence using Service Role client (Single Source of Truth)
     let savedNotification: any = null;
     try {
-      const { data, error } = await supabaseAdmin.from('notifications').insert({
+      const insertData: any = {
         title: cleanTitle,
         body: cleanBody,
-        target_url: cleanTargetUrl || null,
-        sender_role: senderRole || 'ADMIN',
-        sender_name: senderName || 'الأدمن'
-      }).select();
+        receiver_id: cleanReceiverId
+      };
+      if (cleanTargetUrl) insertData.target_url = cleanTargetUrl;
+      if (senderRole) insertData.sender_role = senderRole;
+      if (senderName) insertData.sender_name = senderName;
+
+      const { data, error } = await supabaseAdmin.from('notifications').insert(insertData).select();
 
       if (error) {
         console.error('Failed to save notification to Supabase:', error);
         // Schema fallback in case target_url, sender_role, or sender_name columns are not yet in Supabase schema
         if (error.code === 'PGRST204' || error.code === '42703' || error.message?.includes('column')) {
-          console.warn('[sendNotification] Schema column mismatch on notifications table, retrying with core columns {title, body}...');
+          console.warn('[sendNotification] Schema column mismatch on notifications table, retrying with core columns {title, body, receiver_id}...');
           const retry = await supabaseAdmin.from('notifications').insert({
             title: cleanTitle,
-            body: cleanBody
+            body: cleanBody,
+            receiver_id: cleanReceiverId
           }).select();
           if (retry.error) {
             console.error('Failed to save notification to Supabase (core retry):', retry.error);
@@ -133,17 +142,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       senderRole,
       senderName,
       savedNotification,
+      receiverId: cleanReceiverId,
       metadata: {
         ...(metadata || {}),
         fullUrl: fullTargetUrl,
         sentByAdminId: currentAdmin.id || decoded.adminId,
+        receiverId: cleanReceiverId,
         sentAt: new Date().toISOString()
       }
     });
 
     return res.status(200).json({
       success: true,
-      message: 'تم إرسال التنبيه وحفظه بنجاح لجميع المشتركين',
+      message: cleanReceiverId
+        ? `تم إرسال التنبيه وحفظه بنجاح للمستخدم (المعرف: ${cleanReceiverId})`
+        : 'تم إرسال التنبيه وحفظه بنجاح لجميع المشتركين',
       notification: savedNotification || result.savedNotification,
       stats: result.stats
     });

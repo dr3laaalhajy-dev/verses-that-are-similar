@@ -22,6 +22,7 @@ export interface BroadcastNotificationParams {
   senderRole?: string;
   senderName?: string;
   savedNotification?: any;
+  receiverId?: string | null;
   metadata?: Record<string, any>;
 }
 
@@ -43,27 +44,32 @@ export async function broadcastNotification({
   senderRole = 'SYSTEM',
   senderName = 'تطبيق متين',
   savedNotification: initialSavedNotification = null,
+  receiverId = null,
   metadata = {}
 }: BroadcastNotificationParams): Promise<BroadcastNotificationResult> {
   const cleanTitle = title.trim();
   const cleanBody = body.trim();
   const cleanTargetUrl = targetUrl ? targetUrl.trim() : null;
   const resolvedFullUrl = fullUrl ? fullUrl.trim() : resolveFullUrl(cleanTargetUrl);
+  const cleanReceiverId = receiverId && String(receiverId).trim() ? String(receiverId).trim() : null;
   
   let savedNotification: any = initialSavedNotification || null;
 
   // 1. Mandatory Supabase persistence (Force save)
   if (!savedNotification) {
     try {
+      const insertData: any = {
+        title: cleanTitle,
+        body: cleanBody,
+        receiver_id: cleanReceiverId
+      };
+      if (cleanTargetUrl) insertData.target_url = cleanTargetUrl;
+      if (senderRole) insertData.sender_role = senderRole;
+      if (senderName) insertData.sender_name = senderName;
+
       const { data: sbData, error: sbErr } = await supabaseAdmin
         .from('notifications')
-        .insert({
-          title: cleanTitle,
-          body: cleanBody,
-          target_url: cleanTargetUrl,
-          sender_role: senderRole,
-          sender_name: senderName
-        })
+        .insert(insertData)
         .select();
 
       if (sbErr) {
@@ -71,7 +77,7 @@ export async function broadcastNotification({
         // Force simple insert if schema mismatch
         const retry = await supabaseAdmin
           .from('notifications')
-          .insert({ title: cleanTitle, body: cleanBody })
+          .insert({ title: cleanTitle, body: cleanBody, receiver_id: cleanReceiverId })
           .select();
         if (retry.data && retry.data.length > 0) savedNotification = retry.data[0];
       } else if (sbData && sbData.length > 0) {
@@ -100,10 +106,17 @@ export async function broadcastNotification({
   const staleTokenIds = new Set<string>();
 
   try {
-    const { data: sbTokens, error: tokenErr } = await supabaseAdmin
+    let tokenQuery = supabaseAdmin
       .from('device_tokens')
       .select('*')
       .order('created_at', { ascending: false });
+
+    // إذا كان الإشعار موجهاً لمستخدم محدد، نقوم بجلب التوكنز التابعة له فقط
+    if (cleanReceiverId) {
+      tokenQuery = tokenQuery.eq('user_id', cleanReceiverId);
+    }
+
+    const { data: sbTokens, error: tokenErr } = await tokenQuery;
 
     if (tokenErr) {
       console.warn('[Broadcast] Error fetching tokens from Supabase:', tokenErr.message);

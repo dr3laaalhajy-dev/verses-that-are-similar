@@ -3,10 +3,20 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Bell, Send, CheckCircle2, AlertCircle, Loader2, Users, Smartphone,
   Radio, Clock, ShieldCheck, RefreshCw, Sparkles, MessageSquare,
-  Pencil, Trash2, X, Save, Link2, ExternalLink, ChevronDown, Search
+  Pencil, Trash2, X, Save, Link2, ExternalLink, ChevronDown, Search,
+  UserCheck, User, Globe
 } from 'lucide-react';
 import { supabase } from '../../services/supabase';
 import { defaultChallenges } from '../../data/defaultChallenges';
+
+export interface RegisteredUser {
+  id: string | number;
+  name?: string | null;
+  username?: string | null;
+  points?: number | null;
+  cups?: number | null;
+  uniquePlayerId?: string | null;
+}
 
 export interface RouteOption {
   label: string;
@@ -224,6 +234,7 @@ interface NotificationHistoryItem {
   target_url?: string | null;
   sender_role?: string;
   sender_name?: string;
+  receiver_id?: string | null;
   created_at: string;
   updated_at?: string;
 }
@@ -276,6 +287,122 @@ export const NotificationAdmin: React.FC<NotificationAdminProps> = ({
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const [tokensCount, setTokensCount] = useState<number | null>(null);
   const [availableRoutes, setAvailableRoutes] = useState<RouteOption[]>(STATIC_APP_ROUTES);
+
+  // Recipient targeting state
+  const [sendTarget, setSendTarget] = useState<'all' | 'targeted'>('all');
+  const [selectedUserId, setSelectedUserId] = useState<string>('');
+  const [selectedUserName, setSelectedUserName] = useState<string>('');
+  const [registeredUsers, setRegisteredUsers] = useState<RegisteredUser[]>([]);
+  const [isLoadingUsers, setIsLoadingUsers] = useState<boolean>(false);
+  const [userSearchQuery, setUserSearchQuery] = useState<string>('');
+  const [isUserDropdownOpen, setIsUserDropdownOpen] = useState<boolean>(false);
+  const userDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown on click outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (userDropdownRef.current && !userDropdownRef.current.contains(e.target as Node)) {
+        setIsUserDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Fetch registered users (players table with fallbacks)
+  const fetchRegisteredUsers = async () => {
+    setIsLoadingUsers(true);
+    try {
+      // 1. Fetch directly from Supabase 'players'
+      const { data: playersData, error: playersErr } = await supabase
+        .from('players')
+        .select('id, name, username, points, cups, uniquePlayerId')
+        .order('name', { ascending: true })
+        .limit(300);
+
+      if (!playersErr && playersData && playersData.length > 0) {
+        setRegisteredUsers(playersData);
+        setIsLoadingUsers(false);
+        return;
+      }
+
+      // 2. Fallback via Admin API
+      if (token) {
+        try {
+          const res = await fetch('/api/admin?action=users', {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (res.ok) {
+            const apiUsers = await res.json();
+            if (Array.isArray(apiUsers) && apiUsers.length > 0) {
+              setRegisteredUsers(apiUsers);
+              setIsLoadingUsers(false);
+              return;
+            }
+          }
+        } catch (apiErr) {
+          console.warn('[NotificationAdmin] Users API fallback warning:', apiErr);
+        }
+      }
+
+      // 3. Fallback: try profiles or users table
+      try {
+        const { data: profData } = await supabase
+          .from('profiles')
+          .select('id, name, username')
+          .limit(100);
+        if (profData && profData.length > 0) {
+          setRegisteredUsers(profData);
+          setIsLoadingUsers(false);
+          return;
+        }
+      } catch {}
+
+      try {
+        const { data: uData } = await supabase
+          .from('users')
+          .select('id, name, username')
+          .limit(100);
+        if (uData && uData.length > 0) {
+          setRegisteredUsers(uData);
+          setIsLoadingUsers(false);
+          return;
+        }
+      } catch {}
+    } catch (err) {
+      console.warn('[NotificationAdmin] fetchRegisteredUsers warning:', err);
+    } finally {
+      setIsLoadingUsers(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchRegisteredUsers();
+  }, [token]);
+
+  const filteredUsers = useMemo(() => {
+    if (!userSearchQuery.trim()) return registeredUsers;
+    const q = userSearchQuery.trim().toLowerCase();
+    return registeredUsers.filter((u) => {
+      const name = (u.name || '').toLowerCase();
+      const username = (u.username || '').toLowerCase();
+      const idStr = String(u.id).toLowerCase();
+      const uniqueId = (u.uniquePlayerId || '').toLowerCase();
+      return name.includes(q) || username.includes(q) || idStr.includes(q) || uniqueId.includes(q);
+    });
+  }, [registeredUsers, userSearchQuery]);
+
+  const userMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    registeredUsers.forEach((u) => {
+      const display = u.name || u.username || String(u.id);
+      map[String(u.id)] = display;
+      if (u.uniquePlayerId) {
+        map[String(u.uniquePlayerId)] = display;
+      }
+    });
+    return map;
+  }, [registeredUsers]);
 
   // Load dynamic challenge routes from Supabase and API
   useEffect(() => {
@@ -548,6 +675,14 @@ export const NotificationAdmin: React.FC<NotificationAdminProps> = ({
       return;
     }
 
+    if (sendTarget === 'targeted' && !selectedUserId) {
+      setResultMessage({
+        type: 'error',
+        text: 'يرجى تحديد اللاعب المستلم من القائمة قبل الإرسال.'
+      });
+      return;
+    }
+
     if (!isFounder && !isCoFounder) {
       setResultMessage({
         type: 'error',
@@ -558,6 +693,12 @@ export const NotificationAdmin: React.FC<NotificationAdminProps> = ({
 
     setIsSending(true);
     setResultMessage(null);
+
+    const isSendToAll = sendTarget === 'all';
+    const targetReceiverId = isSendToAll ? null : String(selectedUserId).trim();
+    const successToastText = isSendToAll
+      ? 'تم إرسال الإشعار للجميع بنجاح 🚀'
+      : `تم إرسال الإشعار إلى (${selectedUserName || selectedUserId}) بنجاح 🎯`;
 
     try {
       // 1. Send via Vercel Serverless Function
@@ -571,6 +712,7 @@ export const NotificationAdmin: React.FC<NotificationAdminProps> = ({
           title: title.trim(),
           body: body.trim(),
           target_url: targetUrl.trim() || null,
+          receiver_id: targetReceiverId,
           metadata: {
             sentAt: new Date().toISOString()
           }
@@ -605,7 +747,7 @@ export const NotificationAdmin: React.FC<NotificationAdminProps> = ({
       if (res.ok && data?.success) {
         setResultMessage({
           type: 'success',
-          text: data.message || 'تم إرسال التنبيه بنجاح لجميع المستخدمين والهواتف المسجلة.',
+          text: successToastText,
           stats: data.stats
         });
         setTitle('');
@@ -616,18 +758,22 @@ export const NotificationAdmin: React.FC<NotificationAdminProps> = ({
       } else {
         // Fallback: If API had an issue, directly try inserting in Supabase for in-app realtime
         try {
-          let { error: sbErr } = await supabase.from('notifications').insert({
+          const insertPayload: any = {
             title: title.trim(),
             body: body.trim(),
             target_url: targetUrl.trim() || null,
             sender_role: isFounder ? 'FOUNDER' : 'CO_FOUNDER',
-            sender_name: isFounder ? 'المؤسس' : 'مساعد المؤسس'
-          });
+            sender_name: isFounder ? 'المؤسس' : 'مساعد المؤسس',
+            receiver_id: targetReceiverId
+          };
+
+          let { error: sbErr } = await supabase.from('notifications').insert(insertPayload);
 
           if (sbErr && (sbErr.code === 'PGRST204' || sbErr.message?.includes('column') || sbErr.code === '42703')) {
             const retryRes = await supabase.from('notifications').insert({
               title: title.trim(),
-              body: body.trim()
+              body: body.trim(),
+              receiver_id: targetReceiverId
             });
             sbErr = retryRes.error;
           }
@@ -635,7 +781,9 @@ export const NotificationAdmin: React.FC<NotificationAdminProps> = ({
           if (!sbErr) {
             setResultMessage({
               type: 'success',
-              text: 'تم نشر التنبيه لحظياً في جرس التطبيق الداخلي لجميع المستخدمين المتصلين.'
+              text: isSendToAll
+                ? 'تم نشر التنبيه لحظياً في جرس التطبيق الداخلي لجميع المستخدمين المتصلين.'
+                : `تم إرسال الإشعار لحظياً إلى (${selectedUserName || selectedUserId}) بنجاح 🎯`
             });
             setTitle('');
             setBody('');
@@ -774,6 +922,233 @@ export const NotificationAdmin: React.FC<NotificationAdminProps> = ({
               </select>
             </div>
 
+            {/* تحديد المستلم (للكل أو لمستخدم محدد) */}
+            <div className="bg-slate-50/70 dark:bg-slate-800/40 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 space-y-3">
+              <label className="block text-xs font-black text-slate-700 dark:text-slate-200 flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <Users className="w-3.5 h-3.5 text-amber-500" />
+                  <span>تحديد وجهة الإرسال (المستلم)</span>
+                </span>
+                <span className="text-[10px] text-slate-400 font-bold">
+                  عام أو موجه لشخص محدد
+                </span>
+              </label>
+
+              {/* أزرار الاختيار: للجميع أو لمستخدم محدد */}
+              <div className="grid grid-cols-2 gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSendTarget('all');
+                    setSelectedUserId('');
+                    setSelectedUserName('');
+                    setIsUserDropdownOpen(false);
+                  }}
+                  className={`p-3 rounded-2xl border flex items-center gap-2.5 transition-all cursor-pointer text-right ${
+                    sendTarget === 'all'
+                      ? 'bg-amber-500/10 border-amber-500 text-amber-900 dark:text-amber-200 ring-2 ring-amber-500/20 shadow-xs'
+                      : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-slate-300 text-slate-700 dark:text-slate-300'
+                  }`}
+                >
+                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                    sendTarget === 'all' ? 'bg-amber-500 text-white shadow-xs' : 'bg-slate-100 dark:bg-slate-700 text-slate-400'
+                  }`}>
+                    <Globe className="w-4 h-4" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black truncate">إرسال للجميع</span>
+                      {sendTarget === 'all' && (
+                        <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0 mr-1" />
+                      )}
+                    </div>
+                    <span className="text-[10px] text-slate-400 block truncate">كافة اللاعبين (Global)</span>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSendTarget('targeted');
+                    setIsUserDropdownOpen(true);
+                  }}
+                  className={`p-3 rounded-2xl border flex items-center gap-2.5 transition-all cursor-pointer text-right ${
+                    sendTarget === 'targeted'
+                      ? 'bg-amber-500/10 border-amber-500 text-amber-900 dark:text-amber-200 ring-2 ring-amber-500/20 shadow-xs'
+                      : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-slate-300 text-slate-700 dark:text-slate-300'
+                  }`}
+                >
+                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                    sendTarget === 'targeted' ? 'bg-amber-500 text-white shadow-xs' : 'bg-slate-100 dark:bg-slate-700 text-slate-400'
+                  }`}>
+                    <UserCheck className="w-4 h-4" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black truncate">مستخدم محدد</span>
+                      {sendTarget === 'targeted' && (
+                        <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0 mr-1" />
+                      )}
+                    </div>
+                    <span className="text-[10px] text-slate-400 block truncate">لاعب واحد (Targeted)</span>
+                  </div>
+                </button>
+              </div>
+
+              {/* في حال اختيار إرسال لمستخدم محدد */}
+              <AnimatePresence>
+                {sendTarget === 'targeted' && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="pt-2 border-t border-slate-200 dark:border-slate-700/80 space-y-2 relative"
+                    ref={userDropdownRef}
+                  >
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] font-black text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                        <User className="w-3.5 h-3.5 text-amber-500" />
+                        <span>اختر اللاعب المستلم <span className="text-red-500">*</span></span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={fetchRegisteredUsers}
+                        disabled={isLoadingUsers}
+                        className="text-[10px] text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 flex items-center gap-1 cursor-pointer font-bold transition-colors"
+                        title="تحديث قائمة اللاعبين"
+                      >
+                        <RefreshCw className={`w-3 h-3 ${isLoadingUsers ? 'animate-spin' : ''}`} />
+                        <span>تحديث القائمة</span>
+                      </button>
+                    </div>
+
+                    {/* إذا تم اختيار لاعب بالفعل */}
+                    {selectedUserId ? (
+                      <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-300 dark:border-amber-700/60 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-8 h-8 rounded-full bg-amber-500 text-white flex items-center justify-center shrink-0 font-bold text-xs">
+                            <UserCheck className="w-4 h-4" />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-black text-slate-800 dark:text-slate-100 truncate">
+                                {selectedUserName}
+                              </span>
+                              <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-amber-200/70 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200">
+                                ID: {selectedUserId}
+                              </span>
+                            </div>
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400 block truncate">
+                              سيصل التنبيه حصرياً لهذا اللاعب في جرسه وهاتفه
+                            </span>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedUserId('');
+                            setSelectedUserName('');
+                            setIsUserDropdownOpen(true);
+                          }}
+                          className="px-2.5 py-1 text-[11px] font-black text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-xl border border-red-200 dark:border-red-800/50 transition-colors shrink-0 cursor-pointer flex items-center gap-1"
+                          title="تغيير اللاعب"
+                        >
+                          <X className="w-3 h-3" />
+                          <span>تغيير</span>
+                        </button>
+                      </div>
+                    ) : (
+                      /* قائمة البحث والاختيار */
+                      <div className="relative">
+                        <div className="relative">
+                          <Search className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                          <input
+                            type="text"
+                            value={userSearchQuery}
+                            onChange={(e) => {
+                              setUserSearchQuery(e.target.value);
+                              setIsUserDropdownOpen(true);
+                            }}
+                            onFocus={() => setIsUserDropdownOpen(true)}
+                            placeholder="ابحث باسم اللاعب، اسم المستخدم، أو الـ ID..."
+                            className="w-full pr-10 pl-9 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 focus:outline-none focus:border-amber-500 font-bold text-xs text-slate-800 dark:text-slate-100 transition-all"
+                          />
+                          {userSearchQuery && (
+                            <button
+                              type="button"
+                              onClick={() => setUserSearchQuery('')}
+                              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Dropdown list */}
+                        {isUserDropdownOpen && (
+                          <div className="absolute top-full right-0 left-0 mt-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-xl max-h-56 overflow-y-auto z-50 p-1.5 space-y-1">
+                            {isLoadingUsers ? (
+                              <div className="py-6 text-center text-slate-400 text-xs font-bold flex items-center justify-center gap-2">
+                                <Loader2 className="w-4 h-4 animate-spin text-amber-500" />
+                                <span>جاري تحميل قائمة اللاعبين...</span>
+                              </div>
+                            ) : filteredUsers.length === 0 ? (
+                              <div className="py-4 text-center text-slate-400 text-xs font-bold">
+                                {userSearchQuery ? 'لا يوجد لاعب مطابق للبحث' : 'لم يتم العثور على لاعبين مسجلين'}
+                              </div>
+                            ) : (
+                              filteredUsers.map((u) => {
+                                const displayName = u.name || u.username || `لاعب #${u.id}`;
+                                return (
+                                  <button
+                                    key={u.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedUserId(String(u.id));
+                                      setSelectedUserName(displayName);
+                                      setIsUserDropdownOpen(false);
+                                      setUserSearchQuery('');
+                                    }}
+                                    className="w-full p-2 rounded-xl hover:bg-amber-500/10 dark:hover:bg-amber-500/20 text-right flex items-center justify-between gap-2 transition-colors cursor-pointer group"
+                                  >
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <div className="w-7 h-7 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 group-hover:bg-amber-500 group-hover:text-white flex items-center justify-center text-xs font-bold shrink-0 transition-colors">
+                                        <User className="w-3.5 h-3.5" />
+                                      </div>
+                                      <div className="min-w-0">
+                                        <span className="text-xs font-black text-slate-800 dark:text-slate-100 block truncate group-hover:text-amber-700 dark:group-hover:text-amber-300">
+                                          {displayName}
+                                        </span>
+                                        {u.username && u.username !== u.name && (
+                                          <span className="text-[10px] text-slate-400 block truncate" dir="ltr">
+                                            @{u.username}
+                                          </span>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 shrink-0">
+                                      {u.cups !== undefined && u.cups !== null && (
+                                        <span className="text-[9px] font-bold text-amber-600 bg-amber-50 dark:bg-amber-900/30 px-1.5 py-0.5 rounded-md">
+                                          🏆 {u.cups}
+                                        </span>
+                                      )}
+                                      <span className="text-[9px] font-mono font-bold text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded-md">
+                                        #{u.id}
+                                      </span>
+                                    </div>
+                                  </button>
+                                );
+                              })
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
             <div>
               <label className="block text-xs font-black text-slate-700 dark:text-slate-200 mb-1.5">
                 عنوان التنبيه <span className="text-red-500">*</span>
@@ -863,13 +1238,18 @@ export const NotificationAdmin: React.FC<NotificationAdminProps> = ({
             <div className="pt-4">
               <button
                 type="submit"
-                disabled={isSending || !title.trim() || !body.trim()}
+                disabled={isSending || !title.trim() || !body.trim() || (sendTarget === 'targeted' && !selectedUserId)}
                 className="w-full py-3.5 sm:py-4 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-600 hover:to-orange-700 text-white rounded-2xl font-black text-sm sm:text-base shadow-lg shadow-orange-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSending ? (
                   <>
                     <Loader2 className="w-5 h-5 animate-spin" />
                     <span>جاري إرسال وبث التنبيه...</span>
+                  </>
+                ) : sendTarget === 'targeted' ? (
+                  <>
+                    <Send className="w-5 h-5 rotate-180" />
+                    <span>إرسال التنبيه إلى {selectedUserName || 'اللاعب المحدد'} 🎯</span>
                   </>
                 ) : (
                   <>
@@ -942,9 +1322,22 @@ export const NotificationAdmin: React.FC<NotificationAdminProps> = ({
                     </div>
                   )}
                   <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-                    <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
-                      بواسطة: {item.sender_name || (item.sender_role === 'FOUNDER' ? 'المؤسس' : 'مساعد المؤسس')}
-                    </span>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                        بواسطة: {item.sender_name || (item.sender_role === 'FOUNDER' ? 'المؤسس' : 'مساعد المؤسس')}
+                      </span>
+                      {item.receiver_id ? (
+                        <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-indigo-50 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 flex items-center gap-1">
+                          <User className="w-2.5 h-2.5 text-indigo-500" />
+                          <span>موجه: {userMap[String(item.receiver_id)] || `ID ${item.receiver_id}`}</span>
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-emerald-50 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
+                          <Globe className="w-2.5 h-2.5 text-emerald-500" />
+                          <span>للجميع</span>
+                        </span>
+                      )}
+                    </div>
                     <div className="flex items-center gap-1.5">
                       {/* زر تعديل */}
                       <button
