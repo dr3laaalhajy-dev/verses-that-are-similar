@@ -564,6 +564,70 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         console.error('[Friends Profile] Error fetching wird stats:', e);
       }
 
+      // Calculate earned certificates for the target player
+      const completedIds = Array.isArray(target.completedChallengeIds) ? target.completedChallengeIds : [];
+      const earnedCertificates: any[] = [];
+
+      if (completedIds.length >= 100 || target.quranCompleted) {
+        earnedCertificates.push({
+          id: 'ayah_100',
+          title: 'إتمام 100 سؤال في تحدي إكمال الآية',
+          category: 'علوم القرآن',
+          scope: 'كامل القرآن الكريم',
+          score: '100%',
+          icon: '📖',
+          serial: `MTN-AY-${target.id}-100`
+        });
+      }
+
+      if (target.seerahCompleted) {
+        earnedCertificates.push({
+          id: 'seerah_60',
+          title: 'إتمام 60 سؤالاً في السيرة النبوية الشريفة',
+          category: 'السيرة النبوية',
+          scope: 'العهد المكي والمدني والغزوات',
+          score: '100%',
+          icon: '📜',
+          serial: `MTN-SRH-${target.id}-60`
+        });
+      }
+
+      if (target.generalCompleted) {
+        earnedCertificates.push({
+          id: 'figh_quiz',
+          title: 'ختم مسابقة الفقه والمعلومات الإسلامية',
+          category: 'الفقه الإسلامي',
+          scope: 'العبادات والمعاملات',
+          score: '100%',
+          icon: '⚖️',
+          serial: `MTN-FQ-${target.id}-100`
+        });
+      }
+
+      if ((target.streak || 0) >= 30) {
+        earnedCertificates.push({
+          id: 'daily_streak_30',
+          title: 'سلسلة 30 يوماً متتالية في التحدي اليومي',
+          category: 'المثابرة والهمة',
+          scope: 'الشهر القرآني المبارك',
+          score: 'سلسلة 30 يوماً',
+          icon: '🔥',
+          serial: `MTN-ST-${target.id}-30`
+        });
+      }
+
+      if ((target.points || 0) >= 1000) {
+        earnedCertificates.push({
+          id: 'speed_1000',
+          title: 'المركز الأول و1000 نقطة في تحدي السرعة',
+          category: 'تحديات الصدارة',
+          scope: 'سرعة البديهة في المتشابهات',
+          score: '1,000 نقطة',
+          icon: '⚡',
+          serial: `MTN-SP-${target.id}-1000`
+        });
+      }
+
       return res.status(200).json({
         player: {
           id: target.id,
@@ -578,9 +642,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           seerahCompleted: target.seerahCompleted || false,
           generalCompleted: target.generalCompleted || false,
           quranCompleted: target.quranCompleted || false,
+          completedChallengeIds: completedIds,
           createdAt: target.createdAt || target.created_at
         },
         wird: wirdStats,
+        earnedCertificates,
         friendshipStatus,
         friendshipId,
         isSelf: viewer?.id === target.id

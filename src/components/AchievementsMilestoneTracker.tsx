@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../services/supabase';
 import { ChallengeCertificate } from './ChallengeCertificate';
+import { CertificateModal } from './CertificateModal';
 import { fetchUserMilestones, UserMilestonesStats } from '../services/milestoneProgressService';
 
 export interface MilestoneItem {
@@ -421,37 +422,19 @@ export const AchievementsMilestoneTracker: React.FC<AchievementsMilestoneTracker
       </div>
 
       {/* ========================================================= */}
-      {/* نافذة معاينة وتحميل الشهادة المعتمدة (Modal Overlay) */}
+      {/* نافذة معاينة وتحميل الشهادة المعتمدة (CertificateModal) */}
       {/* ========================================================= */}
-      <AnimatePresence>
-        {activeCertMilestone && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 overflow-y-auto"
-          >
-            <motion.div
-              initial={{ scale: 0.92, y: 15 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.92, y: 15 }}
-              className="w-full max-w-4xl my-auto"
-            >
-              <ChallengeCertificate
-                playerName={verifiedPlayerName}
-                challengeName={activeCertMilestone.title}
-                score={`${activeCertMilestone.target} / ${activeCertMilestone.target} (100%)`}
-                surahOrJuz={activeCertMilestone.scope}
-                rank={activeCertMilestone.rank}
-                certificateId={`MTN-${activeCertMilestone.id.toUpperCase()}-${Math.floor(100000 + Math.random() * 900000)}`}
-                allowNameEdit={false} // حظر التعديل: لا يُسمح بتعديل الاسم لضمان الأمان
-                showControls={true}
-                onClose={() => setActiveCertMilestone(null)}
-              />
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {activeCertMilestone && (
+        <CertificateModal
+          isOpen={Boolean(activeCertMilestone)}
+          onClose={() => setActiveCertMilestone(null)}
+          playerName={verifiedPlayerName}
+          challengeName={activeCertMilestone.title}
+          score={`${activeCertMilestone.target} / ${activeCertMilestone.target} (100%)`}
+          surahOrJuz={activeCertMilestone.scope}
+          certificateId={`MTN-${activeCertMilestone.id.toUpperCase()}-${Math.floor(100000 + Math.random() * 900000)}`}
+        />
+      )}
     </div>
   );
 };

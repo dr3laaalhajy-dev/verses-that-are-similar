@@ -4,6 +4,8 @@ import {
   X, UserPlus, UserCheck, Award, BookOpen, Flame, Trophy,
   Star, Copy, Check, Shield, Sparkles, UserMinus, Loader2, CheckCircle2, Lock
 } from 'lucide-react';
+import { CertificateModal } from '../CertificateModal';
+import { fetchUserMilestones } from '../../services/milestoneProgressService';
 
 export interface PublicProfileModalProps {
   isOpen: boolean;
@@ -35,11 +37,15 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
   const [actionLoading, setActionLoading] = useState<boolean>(false);
   const [copiedId, setCopiedId] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [earnedCertificates, setEarnedCertificates] = useState<any[]>([]);
+  const [selectedCertificate, setSelectedCertificate] = useState<any>(null);
 
   const fetchProfile = async () => {
     if (!targetPlayer) return;
     setLoading(true);
     setError(null);
+    let certsList: any[] = [];
+
     try {
       const targetParam = targetPlayer.id || targetPlayer.uniquePlayerId || targetPlayer.username || targetPlayer.name;
       const viewerParam = currentViewer?.id || currentViewer?.uniquePlayerId || currentViewer?.username || currentViewer?.name || '';
@@ -52,6 +58,9 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
       if (res.ok) {
         const data = await res.json();
         setProfileData(data);
+        if (Array.isArray(data.earnedCertificates)) {
+          certsList = [...data.earnedCertificates];
+        }
       } else {
         console.warn('[PublicProfileModal] Profile API returned non-OK status, falling back to local data.');
         setProfileData({
@@ -75,6 +84,48 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
           isSelf: false
         });
       }
+
+      // حساب الإنجازات المكتسبة بناءً على القواعد الصارمة (is_correct = true)
+      try {
+        const stats = await fetchUserMilestones({
+          username: targetPlayer.username,
+          playerName: targetPlayer.name,
+          uniquePlayerId: targetPlayer.uniquePlayerId
+        });
+
+        const milestoneMap = [
+          { id: 'ayah_100', title: 'إتمام 100 سؤال في تحدي إكمال الآية', category: 'علوم القرآن', target: 100, icon: '📖', scope: 'كامل القرآن الكريم' },
+          { id: 'figh_quiz', title: 'ختم مسابقة الفقه والمعلومات الإسلامية', category: 'الفقه الإسلامي', target: 100, icon: '⚖️', scope: 'العبادات والمعاملات' },
+          { id: 'surah_50', title: 'إتمام 50 سؤالاً في تحدي تحديد اسم السورة', category: 'متشابهات السور', target: 50, icon: '🕌', scope: 'أجزاء عم وتبارك والمفصل' },
+          { id: 'seerah_60', title: 'إتمام 60 سؤالاً في السيرة النبوية الشريفة', category: 'السيرة النبوية', target: 60, icon: '📜', scope: 'العهد المكي والمدني والغزوات' },
+          { id: 'akida_bank', title: 'ختم بنك أسئلة العقيدة الإسلامية', category: 'أصول الدين', target: 100, icon: '🛡️', scope: 'أركان الإيمان والتوحيد الخالص' },
+          { id: 'hadith_100', title: 'إتمام 100 حديث شريف في السنة النبوية', category: 'الحديث الشريف', target: 100, icon: '✨', scope: 'متون الحديث والأربعين النووية' },
+          { id: 'tafseer_100', title: 'إتمام 100 سؤال في تفسير القرآن الكريم', category: 'تفسير وبيان', target: 100, icon: '💡', scope: 'معاني الآيات ومقاصد السور' },
+          { id: 'history_conquests', title: 'ختم مسابقة التاريخ والفتوحات الإسلامية', category: 'التاريخ الإسلامي', target: 100, icon: '🏛️', scope: 'سير الخلفاء الراشدين والفتوحات' },
+          { id: 'arabic_language', title: 'إتمام مسابقة علوم اللغة العربية والمعاجم', category: 'لغة الضاد', target: 100, icon: '🖋️', scope: 'فصيح الألفاظ والنحو والبلاغة' },
+          { id: 'daily_streak_30', title: 'سلسلة 30 يوماً متتالية في التحدي اليومي', category: 'المثابرة والهمة', target: 30, icon: '🔥', scope: 'الشهر القرآني المبارك' },
+          { id: 'speed_1000', title: 'المركز الأول و1000 نقطة في تحدي السرعة', category: 'تحديات الصدارة', target: 1000, icon: '⚡', scope: 'سرعة البديهة في المتشابهات' }
+        ];
+
+        milestoneMap.forEach(m => {
+          const val = (stats as any)[m.id] || 0;
+          if (val >= m.target && !certsList.some(c => c.id === m.id)) {
+            certsList.push({
+              id: m.id,
+              title: m.title,
+              category: m.category,
+              scope: m.scope,
+              icon: m.icon,
+              score: m.id === 'speed_1000' ? `${val} نقطة` : (m.id === 'daily_streak_30' ? `${val} يوماً` : '100%'),
+              serial: `MTN-${m.id.toUpperCase()}-${targetPlayer.id || 101}`
+            });
+          }
+        });
+      } catch (e) {
+        console.warn('[PublicProfileModal] Error syncing milestones stats:', e);
+      }
+
+      setEarnedCertificates(certsList);
     } catch (err: any) {
       console.warn('Error fetching public profile, utilizing targetPlayer fallback:', err);
       // Fallback gracefully to targetPlayer data so modal never breaks
@@ -98,6 +149,7 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
         friendshipStatus: (targetPlayer as any).status || 'ACCEPTED',
         isSelf: false
       });
+      setEarnedCertificates(certsList);
     } finally {
       setLoading(false);
     }
@@ -108,6 +160,8 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
       fetchProfile();
     } else {
       setProfileData(null);
+      setEarnedCertificates([]);
+      setSelectedCertificate(null);
     }
   }, [isOpen, targetPlayer]);
 
@@ -345,45 +399,61 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
                   </div>
                 </div>
 
-                {/* 4. Bottom Sections: Badges & Quran Wird as distinct white cards */}
-                {/* Islamic Badges & Certificates */}
-                <div className="bg-white dark:bg-slate-900/80 rounded-xl shadow-sm border border-gray-100 dark:border-slate-800 p-4 space-y-3">
-                  <div className="flex items-center gap-2 text-xs font-bold text-gray-800 dark:text-slate-200">
-                    <Award className="w-4 h-4 text-amber-500" />
-                    <span>الأوسمة والشهادات المكتسبة</span>
+                {/* 4. قسم شهادات وإنجازات اللاعب (Player's Certificates & Achievements) */}
+                <div className="bg-white dark:bg-slate-900/80 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-xs font-bold text-gray-800 dark:text-slate-200">
+                      <Award className="w-4 h-4 text-amber-500" />
+                      <span>شهادات وإنجازات اللاعب</span>
+                    </div>
+                    {earnedCertificates.length > 0 && (
+                      <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                        {earnedCertificates.length} معتمدة 🏆
+                      </span>
+                    )}
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    {/* Seerah Certificate */}
-                    <div className={`p-2.5 rounded-xl border flex items-center gap-2.5 transition-all ${
-                      hasSeerah
-                        ? 'bg-emerald-50/80 dark:bg-emerald-950/40 border-emerald-200/80 dark:border-emerald-700 text-emerald-800 dark:text-emerald-200 shadow-2xs'
-                        : 'bg-gray-50/80 dark:bg-slate-800/40 border-gray-200/60 dark:border-slate-700/60 text-gray-400 opacity-60'
-                    }`}>
-                      <span className="text-lg shrink-0">
-                        {hasSeerah ? '📜' : <Lock className="w-4 h-4 text-gray-400 inline-block" />}
-                      </span>
-                      <div className="text-right">
-                        <div className="font-bold text-[11px] leading-tight text-gray-800 dark:text-slate-200">شهادة السيرة</div>
-                        <div className="text-[9px] font-semibold text-gray-500 dark:text-gray-400">{hasSeerah ? 'مكتملة ومُجازة' : 'لم تُنجز بعد'}</div>
-                      </div>
+                  {earnedCertificates.length > 0 ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                      {earnedCertificates.map((cert) => (
+                        <button
+                          key={cert.id}
+                          type="button"
+                          onClick={() => setSelectedCertificate(cert)}
+                          className="p-2.5 rounded-xl border border-amber-300/80 dark:border-amber-700/60 bg-gradient-to-r from-amber-50/70 to-amber-100/40 dark:from-amber-950/30 dark:to-slate-900/40 hover:border-amber-400 text-slate-800 dark:text-slate-200 transition-all duration-200 text-right flex items-center justify-between gap-2 shadow-2xs hover:shadow-xs active:scale-[0.98] cursor-pointer group"
+                          title="اضغط لعرض الشهادة بالحجم الكامل والتحميل"
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <span className="text-xl p-1.5 rounded-xl bg-white dark:bg-slate-800 border border-amber-200 dark:border-amber-800/50 shadow-2xs shrink-0 group-hover:scale-105 transition-transform">
+                              {cert.icon || '📜'}
+                            </span>
+                            <div className="min-w-0">
+                              <div className="font-black text-[11px] leading-tight text-slate-900 dark:text-slate-100 truncate">
+                                {cert.title}
+                              </div>
+                              <div className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1 mt-0.5">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" />
+                                <span>مُجاز ومُعتمد رسمياً</span>
+                              </div>
+                            </div>
+                          </div>
+                          <span className="text-[10px] font-black font-mono text-amber-700 dark:text-amber-400 bg-amber-100/70 dark:bg-amber-900/40 px-2 py-0.5 rounded-lg shrink-0 border border-amber-300/60">
+                            {cert.score || '100%'}
+                          </span>
+                        </button>
+                      ))}
                     </div>
-
-                    {/* General Certificate */}
-                    <div className={`p-2.5 rounded-xl border flex items-center gap-2.5 transition-all ${
-                      hasGeneral
-                        ? 'bg-amber-50/80 dark:bg-amber-950/40 border-amber-200/80 dark:border-amber-700 text-amber-800 dark:text-amber-200 shadow-2xs'
-                        : 'bg-gray-50/80 dark:bg-slate-800/40 border-gray-200/60 dark:border-slate-700/60 text-gray-400 opacity-60'
-                    }`}>
-                      <span className="text-lg shrink-0">
-                        {hasGeneral ? '🏆' : <Lock className="w-4 h-4 text-gray-400 inline-block" />}
-                      </span>
-                      <div className="text-right">
-                        <div className="font-bold text-[11px] leading-tight text-gray-800 dark:text-slate-200">الثقافة العامة</div>
-                        <div className="text-[9px] font-semibold text-gray-500 dark:text-gray-400">{hasGeneral ? 'مكتملة ومُجازة' : 'لم تُنجز بعد'}</div>
-                      </div>
+                  ) : (
+                    <div className="p-3.5 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 text-center bg-slate-50/50 dark:bg-slate-900/30">
+                      <Lock className="w-5 h-5 text-slate-400 mx-auto mb-1.5" />
+                      <p className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                        لم يحصل اللاعب على شهادات معتمدة بعد
+                      </p>
+                      <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
+                        تُمنح تلقائياً فور إتمام أي من المسابقات القرآنية بنسبة 100%
+                      </p>
                     </div>
-                  </div>
+                  )}
                 </div>
 
                 {/* Quran Wird Progress Card */}
@@ -490,6 +560,19 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
             )}
           </div>
         </motion.div>
+
+        {/* النافذة المنبثقة المستقلة لعرض الشهادة بكامل فخامتها (CertificateModal) */}
+        {selectedCertificate && (
+          <CertificateModal
+            isOpen={Boolean(selectedCertificate)}
+            onClose={() => setSelectedCertificate(null)}
+            playerName={player?.name || targetPlayer?.name || 'فارس القرآن'}
+            challengeName={selectedCertificate.title}
+            score={selectedCertificate.score || '100%'}
+            surahOrJuz={selectedCertificate.scope}
+            certificateId={selectedCertificate.serial}
+          />
+        )}
       </div>
     </AnimatePresence>
   );

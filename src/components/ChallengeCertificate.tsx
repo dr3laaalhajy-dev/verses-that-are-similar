@@ -85,7 +85,7 @@ export const ChallengeCertificate: React.FC<ChallengeCertificateProps> = ({
         );
         setCopied(true);
         setTimeout(() => setCopied(false), 2500);
-      } catch (_) {}
+      } catch (_) { }
     }
   };
 
@@ -154,7 +154,7 @@ export const ChallengeCertificate: React.FC<ChallengeCertificateProps> = ({
       setPlayerName(tempName.trim());
       try {
         localStorage.setItem('quran_user_triple_name', tempName.trim());
-      } catch (_) {}
+      } catch (_) { }
     }
     setIsEditingName(false);
   };
@@ -349,7 +349,7 @@ export const ChallengeCertificate: React.FC<ChallengeCertificateProps> = ({
               </h1>
               <Sparkles className="w-3.5 h-3.5 sm:w-5 sm:h-5 text-[#D4AF37]" />
             </div>
-            
+
             {/* مسافة عمودية كافية لفك الضغط البصري mt-3 sm:mt-4 */}
             <p className="text-[10px] sm:text-xs md:text-sm font-tajawal font-bold text-[#064E3B] tracking-wider mt-3 sm:mt-4">
               تَطْبِيقُ مَتِين لِعُلُومِ القُرْآنِ الكَرِيمِ وَالمُتَشَابِهَات
@@ -363,7 +363,7 @@ export const ChallengeCertificate: React.FC<ChallengeCertificateProps> = ({
         <div className="relative z-10 flex flex-col items-center justify-center text-center my-auto px-4 sm:px-12 md:px-16 space-y-2 sm:space-y-4">
           {/* تمهيد الشهادة */}
           <p className="text-xs sm:text-sm md:text-base font-tajawal font-semibold text-slate-600">
-            تَشْهَدُ إِدَارَةُ تَطْبِيقِ <span className="font-bold text-[#064E3B]">مَتِين لِعُلُومِ القُرْآنِ الكَرِيمِ</span> بِأَنَّ البَطَلَ المُتَسَابِق /
+            تَشْهَدُ إِدَارَةُ تَطْبِيقِ <span className="font-bold text-[#064E3B]">مَتِين لِعُلُومِ القُرْآنِ الكَرِيمِ</span> بِأَنَّ الأَخ المُتَسَابِق /
           </p>
 
           {/* اسم اللاعب المميز والمزخرف */}
