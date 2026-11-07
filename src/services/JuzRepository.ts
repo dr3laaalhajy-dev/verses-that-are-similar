@@ -301,6 +301,43 @@ export const getJuzForVerse = (
   return null;
 };
 
+/**
+ * Resolves the true canonical Juz numbers for a Quranic position (Surah and optional verse number).
+ * If a rawJuz is provided (e.g. from DB), it is ONLY accepted if it is mathematically valid
+ * for the given Surah according to getJuzsForSurah.
+ */
+export const getTrueJuzForPosition = (
+  surahIdentifier: string | number,
+  verseNumber?: number | string | null,
+  rawJuz?: number | string | null
+): number[] => {
+  const validSurahJuzs = getJuzsForSurah(surahIdentifier);
+  if (!validSurahJuzs || validSurahJuzs.length === 0) {
+    if (rawJuz !== undefined && rawJuz !== null && !isNaN(Number(rawJuz))) {
+      const n = Number(rawJuz);
+      if (n >= 1 && n <= 30) return [n];
+    }
+    return [];
+  }
+
+  // If specific verse number is provided, try exact verse Juz
+  const exactVerseJuz = getJuzForVerse(surahIdentifier, verseNumber);
+  if (exactVerseJuz && validSurahJuzs.includes(exactVerseJuz)) {
+    return [exactVerseJuz];
+  }
+
+  // Check if rawJuz is valid for this Surah
+  if (rawJuz !== undefined && rawJuz !== null && !isNaN(Number(rawJuz))) {
+    const numJuz = Number(rawJuz);
+    if (validSurahJuzs.includes(numJuz)) {
+      return [numJuz];
+    }
+  }
+
+  // Default to the valid Quranic Juz range for this Surah
+  return validSurahJuzs;
+};
+
 export interface SurahAnswerWithDetails {
   surah: string;
   juzs: number[];
@@ -511,7 +548,9 @@ export const splitSurahAnswersByScope = (
     const cleanSurah = String(surahName).trim();
     const normSurah = normalize(cleanSurah);
 
-    let exactJuz: number | null = null;
+    let verseNumber: number | string | null = null;
+    let rawJuz: number | null = null;
+
     if (Array.isArray(verses) && verses.length > 0) {
       const matchedVerse = verses.find(v => {
         if (!v) return false;
@@ -519,18 +558,14 @@ export const splitSurahAnswersByScope = (
         return vSurah === normSurah || vSurah.includes(normSurah) || normSurah.includes(vSurah);
       });
       if (matchedVerse) {
-        if (matchedVerse.juz) {
-          exactJuz = Number(matchedVerse.juz);
-        } else {
-          exactJuz = getJuzForVerse(
-            matchedVerse.surah_number || matchedVerse.surah || cleanSurah,
-            matchedVerse.verse_number || matchedVerse.number
-          );
+        verseNumber = matchedVerse.verse_number || matchedVerse.number || null;
+        if (matchedVerse.juz !== undefined && matchedVerse.juz !== null) {
+          rawJuz = Number(matchedVerse.juz);
         }
       }
     }
 
-    const juzs = exactJuz ? [exactJuz] : getJuzsForSurah(cleanSurah);
+    const juzs = getTrueJuzForPosition(cleanSurah, verseNumber, rawJuz);
     const juzText = formatJuzsDescription(juzs);
 
     return {
@@ -621,15 +656,40 @@ export const splitSurahAnswersByJuzRange = (
 };
 
 export const getChallengeSurahsList = (c: any): string[] => {
-  let surahs: string[] = [];
+  if (!c) return [];
+  const normalize = (name: string) =>
+    String(name || '')
+      .replace(/^سورة\s+/, '')
+      .replace(/[أإآ]/g, 'ا')
+      .replace(/[\u064B-\u065F\u0670]/g, '')
+      .trim();
+
+  const surahs: string[] = [];
+  const addIfNew = (s: any) => {
+    if (!s || typeof s !== 'string') return;
+    const clean = s.trim();
+    if (!clean) return;
+    const norm = normalize(clean);
+    if (!surahs.some(existing => normalize(existing) === norm)) {
+      surahs.push(clean);
+    }
+  };
+
   const text = c.correctText || '';
   try {
-    if (text.startsWith('[')) surahs = JSON.parse(text);
-    else if (text) surahs = [text];
+    if (typeof text === 'string' && text.startsWith('[')) {
+      const parsed = JSON.parse(text);
+      if (Array.isArray(parsed)) parsed.forEach(addIfNew);
+    } else if (text) {
+      addIfNew(text);
+    }
   } catch {}
+
+  if (c.surah) addIfNew(c.surah);
+
   if (Array.isArray(c.verses)) {
     c.verses.forEach((v: any) => {
-      if (v?.surah && !surahs.includes(v.surah)) surahs.push(v.surah);
+      if (v?.surah) addIfNew(v.surah);
     });
   }
   return surahs.filter(Boolean);
@@ -680,16 +740,36 @@ export const getAvailableSurahChallenges = (
     (scopeMode === 'surah' && selectedSurahs.length > 0) ||
     (scopeMode === 'juz' && selectedJuzs.length > 0 && selectedJuzs.length < 30);
 
-  if (!isScopeActive) {
-    return candidates;
+  const results: any[] = [];
+
+  for (const c of candidates) {
+    const surahs = getChallengeSurahsList(c);
+    if (surahs.length === 0) continue;
+
+    const { inRangeAnswers, outOfRangeAnswers } = splitSurahAnswersByScope(surahs, scope, c.verses);
+
+    if (isScopeActive && inRangeAnswers.length === 0) {
+      // Discard questions that do not have any position inside the scope
+      continue;
+    }
+
+    const effectiveInRange = isScopeActive
+      ? inRangeAnswers
+      : (inRangeAnswers.length > 0 ? inRangeAnswers : outOfRangeAnswers);
+    const effectiveOutOfRange = isScopeActive ? outOfRangeAnswers : [];
+
+    // Re-anchor the challenge to inRangeAnswers
+    const primaryInRange = effectiveInRange[0];
+    results.push({
+      ...c,
+      inRangeAnswers: effectiveInRange,
+      outOfRangeAnswers: effectiveOutOfRange,
+      correctText: JSON.stringify(effectiveInRange.map(a => a.surah)),
+      surah: primaryInRange ? primaryInRange.surah : c.surah
+    });
   }
 
-  return candidates.filter(c => {
-    const surahs = getChallengeSurahsList(c);
-    if (surahs.length === 0) return false;
-    const { inRangeAnswers } = splitSurahAnswersByScope(surahs, scope, c.verses);
-    return inRangeAnswers.length > 0;
-  });
+  return results;
 };
 
 export interface ScopeValidationResult {

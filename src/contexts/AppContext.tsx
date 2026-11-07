@@ -20,6 +20,8 @@ import {
   splitSurahAnswersByJuzRange,
   SurahAnswerWithDetails,
   getAvailableSurahChallenges,
+  getChallengeSurahsList,
+  getTrueJuzForPosition,
   formatScopeSummary
 } from '../services/JuzRepository';
 
@@ -1436,12 +1438,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const juzsInChallenge: number[] = [];
       if (Array.isArray(c.verses)) {
         c.verses.forEach((v: any) => {
-          if (v?.juz) juzsInChallenge.push(Number(v.juz));
           if (v?.surah) {
-            const surahJuzs = getJuzsForSurah(v.surah);
-            juzsInChallenge.push(...surahJuzs);
+            const trueJuzs = getTrueJuzForPosition(v.surah, v.number || v.verse_number, v.juz);
+            juzsInChallenge.push(...trueJuzs);
+          } else if (v?.juz) {
+            juzsInChallenge.push(Number(v.juz));
           }
         });
+      }
+      if (c.surah) {
+        const trueJuzs = getTrueJuzForPosition(c.surah, c.verse_number || c.number, c.juz);
+        juzsInChallenge.push(...trueJuzs);
       }
       if (juzsInChallenge.some(j => (chosenJuzs || []).includes(j))) return true;
 
@@ -1457,37 +1464,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     // Strict Scope Filtering
-    if (isScopeActive && pool.length > 0) {
+    if (dbType === 'SURAH') {
+      const currentScope = {
+        scopeMode: (chosenSurahs && chosenSurahs.length > 0 ? 'surah' : 'juz') as 'surah' | 'juz',
+        selectedJuzs: chosenJuzs || [],
+        selectedSurahs: chosenSurahs || []
+      };
+      const candidates = pool.length > 0 ? pool : allChallenges;
+      pool = getAvailableSurahChallenges(candidates, currentScope);
+    } else if (isScopeActive && pool.length > 0) {
       const currentScope = {
         scopeMode: (chosenSurahs && chosenSurahs.length > 0 ? 'surah' : 'juz') as 'surah' | 'juz',
         selectedJuzs: chosenJuzs || [],
         selectedSurahs: chosenSurahs || []
       };
 
-      if (dbType === 'SURAH') {
-        // الخطوة 1: تصفية الأسئلة من الأساس (Strict Question Pool Filtering)
-        // يجب أن تحتوي الآية على موضع واحد على الأقل يقع ضمن الأجزاء المختارة
-        const strictlyFiltered = pool.filter(c => {
-          let surahs: string[] = [];
-          const text = c.correctText || '';
-          try {
-            if (text.startsWith('[')) surahs = JSON.parse(text);
-            else if (text) surahs = [text];
-          } catch {}
-          if (Array.isArray(c.verses)) {
-            c.verses.forEach((v: any) => {
-              if (v?.surah && !surahs.includes(v.surah)) surahs.push(v.surah);
-            });
-          }
-          surahs = surahs.filter(Boolean);
-          if (surahs.length === 0) return false;
-
-          const { inRangeAnswers } = splitSurahAnswersByScope(surahs, currentScope, c.verses);
-          return inRangeAnswers.length > 0;
-        });
-
-        pool = strictlyFiltered;
-      } else if (dbType === 'COMPLETION') {
+      if (dbType === 'COMPLETION') {
         if (currentScope.scopeMode === 'surah') {
           let surahFiltered = pool.filter(isSurahMatch);
           if (surahFiltered.length < count) {
@@ -4728,38 +4720,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const isSurahMode = skillsType === 'surah' || (view === 'group_game' && roomGameMode === 'surah');
     if (currentChallenge && isSurahMode) {
       setDiscoveredBonusSurahs([]);
-      const text = currentChallenge.correctText || "";
-      let surahs: string[] = [];
-      try {
-        if (text.startsWith("[")) {
-          surahs = JSON.parse(text);
-        } else if (text) {
-          surahs = [text];
-        } else {
-          // Fallback to first verse surah if any
-          const firstVerseSurah = currentChallenge.verses?.[0]?.surah;
-          if (firstVerseSurah) surahs = [firstVerseSurah];
-        }
-      } catch (e) {
-        if (text) surahs = [text];
-      }
-
-      if (Array.isArray(currentChallenge.verses)) {
-        currentChallenge.verses.forEach((v: any) => {
-          if (v?.surah && !surahs.includes(v.surah)) surahs.push(v.surah);
-        });
-      }
-
-      const validSurahs = surahs.filter(s => s.trim());
+      const allSurahs = getChallengeSurahsList(currentChallenge);
       const activeScope = getActiveScope(room, selectedSkillJuzs, selectedSkillSurahs, selectedJuz, currentChallenge?.type || 'SURAH');
       const { inRangeAnswers } = splitSurahAnswersByScope(
-        validSurahs,
+        allSurahs,
         activeScope,
         currentChallenge.verses
       );
 
       // Initialize with correct number of empty strings strictly for inRangeAnswers
-      setSurahInputs(new Array(Math.max(1, inRangeAnswers.length)).fill(''));
+      const inputCount = inRangeAnswers.length > 0 ? inRangeAnswers.length : 1;
+      setSurahInputs(new Array(inputCount).fill(''));
     }
   }, [currentChallenge, skillsType, room?.gameMode, view, selectedSkillJuzs, selectedSkillSurahs, selectedJuz, room]);
 
@@ -4771,16 +4742,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       if (val && val.trim() && currentChallenge) {
         const normVal = normalizeSurahName(val);
-        let allCorrect: string[] = [];
-        try {
-          const text = currentChallenge.correctText || "";
-          if (text.startsWith("[")) allCorrect = JSON.parse(text);
-          else if (text) allCorrect = [text];
-          else if (currentChallenge.verses?.[0]?.surah) allCorrect = [currentChallenge.verses[0].surah];
-        } catch (_) {
-          if (currentChallenge.correctText) allCorrect = [currentChallenge.correctText];
-        }
-
+        const allCorrect = getChallengeSurahsList(currentChallenge);
         const activeScope = getActiveScope(room, selectedSkillJuzs, selectedSkillSurahs, selectedJuz, currentChallenge?.type || 'SURAH');
         const { bonusAnswers } = splitSurahAnswersByScope(allCorrect, activeScope, currentChallenge.verses);
 
@@ -4811,16 +4773,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // الإنهاء التلقائي الفوري للسؤال عند اكتمال الإجابات المطلوبة ضمن النطاق
     if (val && val.trim() && currentChallenge && !skillsFeedback && !isComplete) {
-      let allCorrect: string[] = [];
-      try {
-        const text = currentChallenge.correctText || "";
-        if (text.startsWith("[")) allCorrect = JSON.parse(text);
-        else if (text) allCorrect = [text];
-        else if (currentChallenge.verses?.[0]?.surah) allCorrect = [currentChallenge.verses[0].surah];
-      } catch (_) {
-        if (currentChallenge.correctText) allCorrect = [currentChallenge.correctText];
-      }
-
+      const allCorrect = getChallengeSurahsList(currentChallenge);
       const activeScope = getActiveScope(room, selectedSkillJuzs, selectedSkillSurahs, selectedJuz, currentChallenge?.type || 'SURAH');
       const { inRangeAnswers } = splitSurahAnswersByScope(allCorrect, activeScope, currentChallenge.verses);
       const normalizedRequired = inRangeAnswers.map(a => normalizeSurahName(a.surah));
@@ -5278,22 +5231,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setSkillsFeedback(true);
 
-    // 1. Determine all correct surahs
-    const text = currentQuestion.correctText || "";
-    let correctSurahs: string[] = [];
-    try {
-      if (text.startsWith("[")) {
-        correctSurahs = JSON.parse(text);
-      } else if (text) {
-        correctSurahs = [text];
-      } else {
-        const firstVerseSurah = currentQuestion.verses?.[0]?.surah || (targetVerses && targetVerses[0]?.surah);
-        if (firstVerseSurah) correctSurahs = [firstVerseSurah];
-      }
-    } catch (e) {
-      if (text) correctSurahs = [text];
-    }
-    correctSurahs = correctSurahs.filter(s => s.trim());
+    // 1. Determine all correct surahs across all positions
+    const correctSurahs = getChallengeSurahsList(currentQuestion);
 
     // 2. Partition into inRange and outOfRange answers based on active scope
     const activeScope = getActiveScope(room, selectedSkillJuzs, selectedSkillSurahs, selectedJuz, currentQuestion?.type || 'SURAH');
