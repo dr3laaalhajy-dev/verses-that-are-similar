@@ -59,65 +59,35 @@ export default function WhoAmIGame({
   const round = rounds[rounds.length - 1] || null;
   const roundId = round?.id;
 
-  // Supabase Presence Tracking for "Who Am I" challenge with 5-second Grace Period
+  // Pure WebSocket Presence Tracking for "Who Am I" challenge driven directly by Supabase Realtime join, leave, and sync events
   useEffect(() => {
     if (!roomId) return;
     const channelName = `who_am_i_presence_${roomId}`;
     const presenceCh = supabase.channel(channelName);
-    const lastSeenPresence = new Map<string, number>();
-    let leaveTimer: any = null;
 
     const syncPresence = () => {
       try {
         const state = presenceCh.presenceState();
-        const now = Date.now();
-        const currentIds = new Set<string>();
-
+        const online = new Set<string>();
         Object.values(state).forEach((presences: any) => {
           if (Array.isArray(presences)) {
             presences.forEach((p: any) => {
-              if (p.id) currentIds.add(String(p.id).trim().toLowerCase());
-              if (p.userId) currentIds.add(String(p.userId).trim().toLowerCase());
-              if (p.name) currentIds.add(String(p.name).trim().toLowerCase());
+              if (p.id) online.add(String(p.id).trim().toLowerCase());
+              if (p.userId) online.add(String(p.userId).trim().toLowerCase());
+              if (p.name) online.add(String(p.name).trim().toLowerCase());
             });
           }
         });
-
-        currentIds.forEach((id) => lastSeenPresence.set(id, now));
-
-        const online = new Set<string>();
-        currentIds.forEach((id) => online.add(id));
-        lastSeenPresence.forEach((lastSeen, id) => {
-          if (now - lastSeen < 5000) {
-            online.add(id);
-          }
-        });
-
         setOnlinePlayerIds(online);
       } catch (e) {
         console.warn('[WhoAmIGame Presence sync error]:', e);
       }
     };
 
-    const handleLeave = () => {
-      if (leaveTimer) clearTimeout(leaveTimer);
-      leaveTimer = setTimeout(() => {
-        syncPresence();
-      }, 5000);
-    };
-
-    const handleJoin = () => {
-      if (leaveTimer) {
-        clearTimeout(leaveTimer);
-        leaveTimer = null;
-      }
-      syncPresence();
-    };
-
     presenceCh
-      .on('presence', { event: 'sync' }, syncPresence)
-      .on('presence', { event: 'join' }, handleJoin)
-      .on('presence', { event: 'leave' }, handleLeave)
+      .on('presence', { event: 'sync' },  syncPresence)
+      .on('presence', { event: 'join' },  syncPresence)
+      .on('presence', { event: 'leave' }, syncPresence)
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
           try {
@@ -132,7 +102,6 @@ export default function WhoAmIGame({
       });
 
     return () => {
-      if (leaveTimer) clearTimeout(leaveTimer);
       try {
         supabase.removeChannel(presenceCh);
       } catch (_) {}

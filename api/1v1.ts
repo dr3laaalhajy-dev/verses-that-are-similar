@@ -1126,34 +1126,19 @@ async function handleAdvanceQuestion(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json(fullRoom)
     }
 
-    // Host or Fallback Participant validation
+    // Validate caller is a participant of this room
     if (playerId) {
       const player = await findPlayer(playerId)
-      if (player && player.id !== room.player1Id) {
-        // Check if player is a participant in this room
+      if (player) {
         const participants = Array.isArray(room.participants) ? room.participants : []
-        const isParticipant = participants.some((p: any) =>
+        const isParticipant = (player.id === room.player1Id) || participants.some((p: any) =>
           String(p.id) === String(player.id) ||
           p.name === player.name ||
           (p.username && player.username && p.username.toLowerCase() === player.username.toLowerCase())
         )
 
-        const playersProgress = (room.playersProgress as any) || {}
-        const curAnswers = (room.currentAnswers as any) || {}
-        const curQ = room.currentQuestionIndex || 0
-
-        const activeParticipants = participants.filter((p: any) => {
-          const prog = playersProgress[String(p.id)]
-          return !prog || (!prog.hasLeft && !prog.isResigned && !prog.isAbandoned && prog.status !== 'abandoned')
-        })
-
-        const allAnswered = activeParticipants.length > 0 && activeParticipants.every((p: any) => {
-          const a = curAnswers[String(p.id)] || curAnswers[p.name] || (p.username && curAnswers[p.username])
-          return a && (a.questionIndex === undefined || a.questionIndex === curQ)
-        })
-
-        if (!isParticipant || !allAnswered) {
-          console.warn(`Non-host player ${playerId} attempted to advance question but criteria not met`)
+        if (!isParticipant) {
+          console.warn(`Non-participant player ${playerId} attempted to advance question`)
           const fullRoom = await getFullRoom(roomId as string)
           return res.status(200).json(fullRoom)
         }

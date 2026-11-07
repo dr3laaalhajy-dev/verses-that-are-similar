@@ -3385,7 +3385,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   //  3. Auto-advance: if all online players answered, advance without waiting
   //     for offline players who will never respond
   useEffect(() => {
-    if (!room?.id || view !== 'challenge') return;
+    if (!room?.id || (view !== 'challenge' && view !== 'group_game' && view !== 'group_waiting')) return;
 
     const myPresenceId = String(playerId || playerUsername || playerName || '');
     if (!myPresenceId) return;
@@ -3399,62 +3399,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       config: { presence: { key: myPresenceId } }
     });
 
-    const lastSeenPresence = new Map<string, number>();
-    let leaveDebounceTimer: any = null;
-
+    // Pure WebSocket Presence tracking driven directly by Supabase Realtime join, leave, and sync events
     const syncPresence = () => {
       const state = presenceChannel.presenceState();
-      const now = Date.now();
-      const currentIds = new Set<string>();
-
+      const onlineIds = new Set<string | number>();
       Object.entries(state).forEach(([key, presences]) => {
-        currentIds.add(key);
+        onlineIds.add(key);
         if (Array.isArray(presences)) {
           presences.forEach((p: any) => {
-            if (p.playerId != null)   currentIds.add(String(p.playerId));
-            if (p.playerName)         currentIds.add(String(p.playerName).trim().toLowerCase());
-            if (p.playerUsername)     currentIds.add(String(p.playerUsername).trim().toLowerCase().replace(/^@+/, ''));
+            if (p.playerId != null)   onlineIds.add(String(p.playerId));
+            if (p.playerName)         onlineIds.add(String(p.playerName).trim().toLowerCase());
+            if (p.playerUsername)     onlineIds.add(String(p.playerUsername).trim().toLowerCase().replace(/^@+/, ''));
+            if (p.uniquePlayerId)     onlineIds.add(String(p.uniquePlayerId).trim().toUpperCase());
           });
         }
       });
-
-      // Update last seen for all currently present
-      currentIds.forEach(id => {
-        lastSeenPresence.set(id, now);
-      });
-
-      // Include players seen within the last 5 seconds (grace period to avoid disconnects on tab switches)
-      const onlineIds = new Set<string | number>();
-      currentIds.forEach(id => onlineIds.add(id));
-      lastSeenPresence.forEach((lastSeen, id) => {
-        if (now - lastSeen < 5000) {
-          onlineIds.add(id);
-        }
-      });
-
       setRoomPresenceOnlineIds(onlineIds);
-    };
-
-    const handlePresenceLeave = () => {
-      // Grace period: Wait 5 seconds before dropping players from online state
-      if (leaveDebounceTimer) clearTimeout(leaveDebounceTimer);
-      leaveDebounceTimer = setTimeout(() => {
-        syncPresence();
-      }, 5000);
-    };
-
-    const handlePresenceJoin = () => {
-      if (leaveDebounceTimer) {
-        clearTimeout(leaveDebounceTimer);
-        leaveDebounceTimer = null;
-      }
-      syncPresence();
     };
 
     presenceChannel
       .on('presence', { event: 'sync' },  syncPresence)
-      .on('presence', { event: 'join' },  handlePresenceJoin)
-      .on('presence', { event: 'leave' }, handlePresenceLeave)
+      .on('presence', { event: 'join' },  syncPresence)
+      .on('presence', { event: 'leave' }, syncPresence)
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
           await presenceChannel.track({
@@ -3468,7 +3434,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
 
     return () => {
-      if (leaveDebounceTimer) clearTimeout(leaveDebounceTimer);
       try { supabase.removeChannel(presenceChannel); } catch (_) {}
       setRoomPresenceOnlineIds(new Set());
     };
