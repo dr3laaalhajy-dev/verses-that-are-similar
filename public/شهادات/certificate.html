@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>شهادة إنجاز وتفوق - تطبيق متين لعلوم القرآن الكريم</title>
+  
+  <!-- الخطوط العربية الفاخرة المعتمدة في التطبيق -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400;1,700&family=Noto+Naskh+Arabic:wght@400;600;700&family=Tajawal:wght@300;400;500;700;800;900&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+  
+  <!-- Tailwind CSS & html2canvas CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              emerald: '#064E3B',
+              gold: '#D4AF37',
+              sand: '#FDFBF7',
+            },
+            holyEmerald: {
+              600: '#059669',
+              700: '#047857',
+              800: '#065F46',
+              900: '#064E3B',
+            },
+            regalGold: {
+              400: '#E6C57B',
+              500: '#D4AF37',
+              600: '#AA8B24',
+              700: '#806716',
+            }
+          },
+          fontFamily: {
+            quran: ['"Amiri"', '"Noto Naskh Arabic"', 'serif'],
+            tajawal: ['"Tajawal"', 'sans-serif'],
+            mono: ['"Space Grotesk"', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    body {
+      font-family: 'Tajawal', sans-serif;
+      background-color: #0B1319;
+      color: #334155;
+    }
+
+    .font-quran {
+      font-family: 'Amiri', 'Noto Naskh Arabic', serif;
+    }
+
+    /* ستايل الطباعة المنعزل (Landscape A4 Print) */
+    @media print {
+      @page {
+        size: landscape;
+        margin: 0;
+      }
+      body {
+        background: white !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+      .no-print {
+        display: none !important;
+      }
+      #certificate-wrapper {
+        position: fixed !important;
+        left: 0 !important;
+        top: 0 !important;
+        width: 100vw !important;
+        height: 100vh !important;
+        max-width: 100vw !important;
+        max-height: 100vh !important;
+        margin: 0 !important;
+        padding: 28px !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-start p-3 sm:p-6 md:p-8 selection:bg-amber-200 selection:text-amber-900">
+
+  <!-- ========================================================= -->
+  <!-- شريط التحكم والأدوات العلوية (يُخفى عند الطباعة) -->
+  <!-- ========================================================= -->
+  <header class="no-print w-full max-w-5xl mb-6 bg-slate-900/90 backdrop-blur-xl border border-amber-500/30 rounded-3xl p-4 sm:p-5 shadow-2xl text-white">
+    <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+      
+      <!-- شعار وعنوان التطبيق -->
+      <div class="flex items-center gap-3 w-full md:w-auto">
+        <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-500 to-amber-700 flex items-center justify-center text-white shadow-lg shadow-amber-500/20 shrink-0">
+          <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 2L1 21h22L12 2zm0 3.84L19.5 19H4.5L12 5.84zM11 10h2v4h-2zm0 6h2v2h-2z"/>
+          </svg>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-base sm:text-lg font-black text-amber-400">تطبيق مَتِين لعلوم القرآن</h1>
+            <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">معتمد</span>
+          </div>
+          <p class="text-xs text-slate-400 font-medium">شهادة إنجاز التحديات القرآنية والإسلامية الفاخرة</p>
+        </div>
+      </div>
+
+      <!-- أزرار الإجراءات السريعة (طباعة، تحميل، مشاركة) -->
+      <div class="flex items-center flex-wrap gap-2 w-full md:w-auto justify-end">
+        
+        <!-- زر الطباعة -->
+        <button type="button" onclick="window.print()" class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs sm:text-sm font-bold transition-all active:scale-95 cursor-pointer">
+          <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4H7v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+          <span>طباعة 🖨️</span>
+        </button>
+
+        <!-- زر المشاركة -->
+        <button type="button" onclick="shareCertificate()" class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs sm:text-sm font-bold transition-all active:scale-95 cursor-pointer">
+          <svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>
+          <span id="shareBtnText">مشاركة 📤</span>
+        </button>
+
+        <!-- زر التحميل الفوري كصورة PNG -->
+        <button type="button" onclick="downloadCertificateImage()" id="downloadBtn" class="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 via-amber-600 to-amber-700 hover:from-amber-600 hover:to-amber-800 text-white text-xs sm:text-sm font-black shadow-lg shadow-amber-500/25 active:scale-95 transition-all cursor-pointer">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+          <span id="downloadBtnText">تحميل الشهادة 📥</span>
+        </button>
+
+      </div>
+    </div>
+
+    <!-- أشرطة التخصيص السريعة (اختيار التحدي والاسم) -->
+    <div class="mt-4 pt-4 border-t border-slate-800 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+      <div>
+        <label class="block text-slate-400 font-bold mb-1">اسم اللاعب / المتسابق:</label>
+        <input type="text" id="inputPlayerName" value="عبد الرحمن بن محمد الحجي" oninput="updateCertificate()" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-bold focus:outline-none focus:border-amber-500 transition-colors">
+      </div>
+
+      <div>
+        <label class="block text-slate-400 font-bold mb-1">اختر نوع التحدي:</label>
+        <select id="selectChallenge" onchange="changeChallengePreset()" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-bold focus:outline-none focus:border-amber-500 transition-colors cursor-pointer">
+          <option value="figh">تحدي الفقه والمعلومات الإسلامية</option>
+          <option value="complete" selected>تحدي إكمال الآية الكريمة</option>
+          <option value="surah">تحدي تحديد اسم السورة</option>
+          <option value="seerah">تحدي السيرة النبوية الشريفة</option>
+          <option value="akida">تحدي العقيدة الإسلامية</option>
+          <option value="hadith">تحدي الحديث الشريف وعلومه</option>
+          <option value="tafseer">تحدي تفسير القرآن الكريم</option>
+          <option value="history">تحدي التاريخ الإسلامي</option>
+          <option value="arabia">تحدي علوم اللغة العربية</option>
+          <option value="daily">التحدي القرآني اليومي</option>
+          <option value="speed">تحدي السرعة في المتشابهات</option>
+        </select>
+      </div>
+
+      <div>
+        <label class="block text-slate-400 font-bold mb-1">النتيجة والتقدير:</label>
+        <div class="flex gap-2">
+          <input type="text" id="inputScore" value="100%" oninput="updateCertificate()" class="w-1/2 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-bold focus:outline-none focus:border-amber-500">
+          <input type="text" id="inputRank" value="متقن ومتميز" oninput="updateCertificate()" class="w-1/2 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-white font-bold focus:outline-none focus:border-amber-500">
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ========================================================= -->
+  <!-- جسم الشهادة الرئيسي المبني على الخلفية المصممة مسبقاً -->
+  <!-- ========================================================= -->
+  <main class="w-full max-w-lg mx-auto flex items-center justify-center">
+    
+    <div id="certificate-wrapper" class="relative w-full aspect-[511/1024] bg-[#FCFBF7] text-slate-800 rounded-3xl shadow-2xl border-2 border-[#D4AF37]/50 overflow-hidden select-none">
+
+      <!-- ============================== -->
+      <!-- خلفية الشهادة المصممة مسبقاً (Clean Image Background) -->
+      <!-- ============================== -->
+      <img src="/certificate_general_bg.png" class="absolute inset-0 w-full h-full object-cover z-0 pointer-events-none" alt="خلفية الشهادة" />
+
+      <!-- ========================================================= -->
+      <!-- النصوص الديناميكية فوق الفراغات المخصصة فقط -->
+      <!-- ========================================================= -->
+      <div class="relative z-10 w-full h-full pointer-events-none">
+
+        <!-- 1. اسم اللاعب المتسابق (فوق الفراغ الأول) -->
+        <div class="absolute top-[66%] inset-x-0 flex flex-col items-center justify-center px-6 text-center">
+          <h3 id="certPlayerName" class="font-quran text-2xl sm:text-3xl md:text-4xl font-black text-[#0b234f] tracking-wide drop-shadow-xs">
+            عبد الرحمن بن محمد الحجي
+          </h3>
+        </div>
+
+        <!-- 2. اسم التحدي والنطاق (فوق الفراغ الثاني) -->
+        <div class="absolute top-[72%] inset-x-0 flex items-center justify-center px-6 text-center">
+          <div class="inline-flex items-center justify-center flex-wrap gap-1.5 px-4 py-1.5 rounded-full bg-slate-900/5 text-slate-800 text-xs sm:text-sm font-bold">
+            <span class="text-slate-600">أتمّ بنجاح خوض:</span>
+            <span id="certChallengeName" class="font-black text-[#0b234f]">
+              إتمام 100 سؤال في تحدي إكمال الآية الكريمة
+            </span>
+            <span id="certSurahOrJuz" class="text-slate-500 font-semibold mr-1">
+              (كامل القرآن الكريم)
+            </span>
+          </div>
+        </div>
+
+        <!-- 3. النتيجة والتقدير (فوق الفراغ الثالث) -->
+        <div class="absolute top-[78%] inset-x-0 flex items-center justify-center px-6 text-center">
+          <div class="inline-flex items-center gap-2 px-5 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-xs sm:text-sm font-bold text-[#064E3B]">
+            <span>النتيجة المباركة:</span>
+            <span id="certScore" class="font-black font-mono text-emerald-800 text-sm sm:text-base">
+              100%
+            </span>
+            <span class="text-amber-500">✦</span>
+            <span>التقدير:</span>
+            <span id="certRank" class="font-black text-emerald-900">
+              متقن ومتميز
+            </span>
+          </div>
+        </div>
+
+        <!-- 4. تاريخ المنح والرقم التسلسلي/الاعتماد (الجانب الأيسر فوق الزخرفة) -->
+        <div class="absolute bottom-[4.5%] left-[8%] flex flex-col items-start text-right text-[10px] sm:text-xs font-bold text-slate-600 space-y-0.5">
+          <div class="flex items-center gap-1">
+            <span class="text-slate-500">تاريخ المنح:</span>
+            <span id="certDate" class="font-black text-slate-800">
+              15 ربيع الأول 1448 هـ
+            </span>
+          </div>
+          <div class="text-[9px] sm:text-[10px] font-mono text-slate-500">
+            الاعتماد: <span id="certSerial">MTN-894201</span>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </main>
+
+  <!-- ========================================================= -->
+  <!-- سكريبت التشغيل الديناميكي والتصدير (Pure Vanilla JavaScript) -->
+  <!-- ========================================================= -->
+  <script>
+    // بيانات التحديات والإنجازات الكبرى الجاهزة
+    const challengesPresets = {
+      figh: {
+        name: 'ختم مسابقة الفقه والمعلومات الإسلامية',
+        score: '100%',
+        rank: 'فقيه متقن ومتميز',
+        scope: '(قسم العبادات والمعاملات)'
+      },
+      complete: {
+        name: 'إتمام 100 سؤال في تحدي إكمال الآية الكريمة',
+        score: '100%',
+        rank: 'حافظ متقن',
+        scope: '(كامل القرآن الكريم)'
+      },
+      surah: {
+        name: 'إتمام 50 سؤالاً في تحدي تحديد اسم السورة',
+        score: '50 / 50',
+        rank: 'خبير المتشابهات',
+        scope: '(جزء عمّ وتبارك)'
+      },
+      seerah: {
+        name: 'إتمام 60 سؤالاً في تحدي السيرة النبوية الشريفة',
+        score: '60 / 60 نقطة',
+        rank: 'عالم بالسيرة النبوية',
+        scope: '(العهد النبوي والغزوات)'
+      },
+      akida: {
+        name: 'ختم بنك أسئلة العقيدة الإسلامية بنجاح',
+        score: '100%',
+        rank: 'راسخ في العقيدة',
+        scope: '(أصول الإيمان والتوحيد الخالص)'
+      },
+      hadith: {
+        name: 'إتمام 100 حديث شريف في تحدي السنة النبوية',
+        score: '100%',
+        rank: 'محدث متقن',
+        scope: '(الأربعون النووية ومتون الحديث)'
+      },
+      tafseer: {
+        name: 'إتمام 100 سؤال في تفسير القرآن الكريم',
+        score: '100%',
+        rank: 'عالم بالتفسير',
+        scope: '(معاني الكلمات ومقاصد السور)'
+      },
+      history: {
+        name: 'ختم مسابقة التاريخ والفتوحات الإسلامية',
+        score: '100%',
+        rank: 'خبير بالتاريخ الإسلامي',
+        scope: '(سير الخلفاء الراشدين والفتوحات)'
+      },
+      arabia: {
+        name: 'إتمام مسابقة علوم اللغة العربية والمعاجم',
+        score: '100%',
+        rank: 'أديب فصيح',
+        scope: '(علوم لغة القرآن والنحو والبلاغة)'
+      },
+      daily: {
+        name: 'إتمام سلسلة 30 يوماً متتالية في التحدي اليومي',
+        score: 'سلسلة 30 يوماً',
+        rank: 'مواظب متميز',
+        scope: '(حفظ الورد وتثبيت الآيات)'
+      },
+      speed: {
+        name: 'إحراز 1000 نقطة والمركز الأول في تحدي السرعة',
+        score: '1,000 نقطة',
+        rank: 'فارس السرعة والبديهة',
+        scope: '(المرحلة المتقدمة)'
+      }
+    };
+
+    // تحديث التاريخ والرقم المسلسل تلقائياً
+    window.addEventListener('DOMContentLoaded', () => {
+      const today = new Date().toLocaleDateString('ar-EG', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric'
+      });
+      document.getElementById('certDate').textContent = today;
+      document.getElementById('certSerial').textContent = `الاعتماد: MTN-${Math.floor(100000 + Math.random() * 900000)}`;
+    });
+
+    // تبديل التحدي من القائمة
+    function changeChallengePreset() {
+      const selected = document.getElementById('selectChallenge').value;
+      const data = challengesPresets[selected] || challengesPresets.complete;
+      
+      document.getElementById('inputScore').value = data.score;
+      document.getElementById('inputRank').value = data.rank;
+      
+      document.getElementById('certChallengeName').textContent = data.name;
+      document.getElementById('certSurahOrJuz').textContent = data.scope;
+      document.getElementById('certScore').textContent = data.score;
+      document.getElementById('certRank').textContent = data.rank;
+    }
+
+    // تحديث النصوص لحظياً عند التعديل
+    function updateCertificate() {
+      const pName = document.getElementById('inputPlayerName').value.trim() || 'فارس القرآن';
+      const score = document.getElementById('inputScore').value.trim() || '100%';
+      const rank = document.getElementById('inputRank').value.trim() || 'متقن ومتميز';
+
+      document.getElementById('certPlayerName').textContent = pName;
+      document.getElementById('certScore').textContent = score;
+      document.getElementById('certRank').textContent = rank;
+    }
+
+    // مشاركة الشهادة
+    async function shareCertificate() {
+      const pName = document.getElementById('certPlayerName').textContent.trim();
+      const chName = document.getElementById('certChallengeName').textContent.trim();
+      const score = document.getElementById('certScore').textContent.trim();
+      const serial = document.getElementById('certSerial').textContent.trim();
+
+      const shareData = {
+        title: `شهادة إنجاز - تطبيق متين`,
+        text: `الحمد لله! أتممت بنجاح "${chName}" بنتيجة ${score} عبر تطبيق متين لعلوم القرآن الكريم.\n${serial}`,
+        url: window.location.href
+      };
+
+      if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {
+        try {
+          await navigator.share(shareData);
+        } catch (_) {}
+      } else {
+        try {
+          await navigator.clipboard.writeText(`🏆 حصلت على شهادة إنجاز في "${chName}" بنتيجة ${score} من تطبيق متين لعلوم القرآن الكريم!\n${serial}`);
+          const btn = document.getElementById('shareBtnText');
+          const original = btn.textContent;
+          btn.textContent = 'تم النسخ بنجاح! ✓';
+          setTimeout(() => { btn.textContent = original; }, 2500);
+        } catch (_) {
+          alert('تم نسخ تفاصيل الشهادة للحافظة.');
+        }
+      }
+    }
+
+    // تنزيل الشهادة كصورة PNG فائقة الجودة باستخدام html2canvas
+    async function downloadCertificateImage() {
+      const btn = document.getElementById('downloadBtn');
+      const btnText = document.getElementById('downloadBtnText');
+      btnText.textContent = 'جاري التجهيز...';
+      btn.disabled = true;
+
+      const pName = document.getElementById('certPlayerName').textContent.trim();
+      const chName = document.getElementById('certChallengeName').textContent.trim();
+
+      try {
+        const certEl = document.getElementById('certificate-wrapper');
+        if (!certEl) return;
+
+        // التقاط الحاوية بصورة الخلفية الجاهزة والنصوص الموضعية بدقة فائقة وبدون أي رسم يدوي
+        const canvas = await html2canvas(certEl, {
+          scale: 3, // Ultra-HD 3X
+          useCORS: true,
+          allowTaint: true,
+          backgroundColor: null // لضمان الشفافية والجودة
+        });
+
+        const dataUrl = canvas.toDataURL('image/png');
+        const link = document.createElement('a');
+        link.download = `شهادة_متين_${chName.replace(/\s+/g, '_')}_${pName.replace(/\s+/g, '_')}.png`;
+        link.href = dataUrl;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        btnText.textContent = 'تم التنزيل بنجاح! ✓';
+        setTimeout(() => {
+          btnText.textContent = 'تحميل الشهادة 📥';
+          btn.disabled = false;
+        }, 2000);
+      } catch (err) {
+        console.error('Download error:', err);
+        alert('حدث خطأ أثناء تنزيل الشهادة. يرجى المحاولة مرة أخرى.');
+        btnText.textContent = 'تحميل الشهادة 📥';
+        btn.disabled = false;
+      }
+    }
+  </script>
+</body>
+</html>
+

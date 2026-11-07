@@ -1,8 +1,9 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trophy, Sparkles, History, XCircle, CheckCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { Trophy, Sparkles, History, XCircle, CheckCircle, ChevronDown, ChevronUp, Award } from 'lucide-react';
 import { View } from '../types/challenges';
 import { normalizeArabicText, normalizeSurahName } from '../utils/arabic';
+import { ChallengeCertificate } from '../components/ChallengeCertificate';
 
 export interface SkillsResultsPageProps {
   sessionCorrect: number;
@@ -31,6 +32,7 @@ export const SkillsResultsPage: React.FC<SkillsResultsPageProps> = ({
 }) => {
   // 1. Resilient internal state for details toggle
   const [showDetails, setShowDetails] = React.useState<boolean>(Boolean(externalShowMistakes));
+  const [showCertificateModal, setShowCertificateModal] = React.useState<boolean>(false);
 
   // Sync with prop when external state changes
   React.useEffect(() => {
@@ -101,6 +103,13 @@ export const SkillsResultsPage: React.FC<SkillsResultsPageProps> = ({
 
   const displayTotalPoints = Math.max(liveTotalPoints, earnedPoints);
 
+  // شرط استحقاق الشهادة للإنجازات الكبرى فقط (Milestone Condition)
+  const totalQuestions = sessionCorrect + sessionWrong;
+  const isMajorMilestone = totalQuestions >= 100 || (totalQuestions >= 20 && sessionWrong === 0);
+  const milestoneChallengeName = totalQuestions >= 100
+    ? `إتمام 100 سؤال في ${skillsType === 'surah' ? 'تحدي تحديد اسم السورة' : 'تحدي إكمال الآية الكريمة'}`
+    : `ختم جولة متقنة بدرجة امتياز في ${skillsType === 'surah' ? 'تحدي تحديد اسم السورة' : 'تحدي إكمال الآية الكريمة'}`;
+
   return (
     <motion.div
       key="skills_results"
@@ -149,6 +158,20 @@ export const SkillsResultsPage: React.FC<SkillsResultsPageProps> = ({
         </div>
 
         <div className="flex flex-col gap-3 sm:gap-4 relative z-20">
+          {/* إظهار زر استلام الشهادة فقط عند تحقق شرط الإنجاز الكبير */}
+          {isMajorMilestone && (
+            <motion.button
+              type="button"
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              onClick={() => setShowCertificateModal(true)}
+              className="w-full py-4 sm:py-5 bg-gradient-to-r from-amber-500 via-amber-600 to-amber-700 text-white rounded-2xl sm:rounded-3xl font-black text-base sm:text-lg shadow-xl shadow-amber-500/25 hover:from-amber-600 hover:to-amber-800 active:scale-[0.99] transition-all flex items-center justify-center gap-3 cursor-pointer"
+            >
+              <Award className="w-5 h-5 sm:w-6 sm:h-6" />
+              <span>مبارك! استلم شهادة الإنجاز الرسمي 📜</span>
+            </motion.button>
+          )}
+
           {hasAnswers && (
             <button
               type="button"
@@ -367,6 +390,35 @@ export const SkillsResultsPage: React.FC<SkillsResultsPageProps> = ({
           )}
         </AnimatePresence>
       </div>
+
+      {/* نافذة شهادة الإنجاز المنبثقة */}
+      <AnimatePresence>
+        {showCertificateModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 overflow-y-auto"
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className="w-full max-w-5xl my-auto"
+            >
+              <ChallengeCertificate
+                playerName={localStorage.getItem('quran_user_triple_name') || localStorage.getItem('quran_player_name') || 'فارس القرآن'}
+                challengeName={milestoneChallengeName}
+                score={`${sessionCorrect} من ${sessionCorrect + sessionWrong}`}
+                surahOrJuz="ضبط المتشابهات القرآنية"
+                onClose={() => setShowCertificateModal(false)}
+                showControls={true}
+                allowNameEdit={true}
+              />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 };

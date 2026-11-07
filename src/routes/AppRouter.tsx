@@ -27,6 +27,7 @@ import BookReader from '../components/BookReader';
 import Encyclopedia from '../components/Encyclopedia';
 import { IslamicVideos } from '../components/IslamicVideos';
 import IslamicQuiz from '../components/IslamicQuiz';
+import { CertificatePreviewPage } from '../pages/CertificatePreviewPage';
 
 export const AppRouter: React.FC = () => {
   const app = useApp();
@@ -78,6 +79,26 @@ export const AppRouter: React.FC = () => {
           )}
         </div>
       </div>
+    );
+  }
+
+  const isCertRoute = typeof window !== 'undefined' && (
+    window.location.pathname === '/certificate' ||
+    window.location.pathname.startsWith('/certificate/') ||
+    new URLSearchParams(window.location.search).get('view') === 'certificate' ||
+    new URLSearchParams(window.location.search).get('preview') === 'certificate'
+  );
+
+  if (isCertRoute) {
+    return (
+      <CertificatePreviewPage
+        onBack={() => {
+          if (typeof window !== 'undefined') {
+            window.history.pushState({}, '', '/');
+            window.location.href = '/';
+          }
+        }}
+      />
     );
   }
 

@@ -3,6 +3,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Download, X, Award, CheckCircle2, User, Share2, Info, Sparkles, Calendar, Edit3, ShieldCheck } from 'lucide-react';
+import { ChallengeCertificate } from './ChallengeCertificate';
 
 interface CertificateGeneratorProps {
   onClose: () => void;
@@ -11,6 +12,17 @@ interface CertificateGeneratorProps {
   isClaimed?: boolean;
   claimedName?: string;
 }
+
+const categoryDetailsMap: Record<string, { title: string; subtitle: string; score: string; rank: string }> = {
+  seerah: { title: 'تحدي السيرة النبوية الشريفة', subtitle: '3 مجموعات متتالية - 60 سؤالاً', score: '60/60 نقطة', rank: 'عالم بالسيرة النبوية' },
+  general: { title: 'الثقافة الإسلامية والأسئلة العامة', subtitle: '5 مجموعات متتالية - 100 سؤالاً', score: '100 سؤال', rank: 'موسوعي متميز' },
+  figh: { title: 'تحدي الفقه الإسلامي', subtitle: 'أحكام العبادات والمعاملات', score: '100%', rank: 'فقيه متقن' },
+  akida: { title: 'تحدي العقيدة الإسلامية', subtitle: 'أصول الإيمان والتوحيد الخالص', score: '100%', rank: 'راسخ في العقيدة' },
+  hadith: { title: 'تحدي الحديث الشريف', subtitle: 'السنة النبوية والأحاديث المطهرة', score: '100%', rank: 'محدث متقن' },
+  tafseer: { title: 'تحدي تفسير القرآن الكريم', subtitle: 'معاني الآيات ومقاصد السور', score: '100%', rank: 'عالم بالتفسير' },
+  history: { title: 'تحدي التاريخ الإسلامي', subtitle: 'سير الخلفاء والعهود الإسلامية', score: '100%', rank: 'خبير بالتاريخ' },
+  arabia: { title: 'تحدي علوم اللغة العربية', subtitle: 'لغة القرآن الكريم والنحو والبلاغة', score: '100%', rank: 'أديب فصيح' },
+};
 
 const CertificateGenerator: React.FC<CertificateGeneratorProps> = ({ onClose, onSave, category, isClaimed, claimedName }) => {
   // Initialize with saved name if available, or claimed name if already exists
