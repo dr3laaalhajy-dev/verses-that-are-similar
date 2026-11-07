@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Zap, Loader2, Users, AlertCircle, Trophy, CheckCircle2, XCircle } from 'lucide-react';
 import { View } from '../types/challenges';
@@ -182,8 +182,33 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
   const currentQuestionIdx = room?.currentQuestionIndex ?? currentChallengeIndex;
   const isLastQuestion = currentQuestionIdx >= totalQuestions - 1;
 
-  // Supabase Realtime Listener for room completion:
-  // When host ends room or status becomes 'completed'/'FINISHED', instantly route all players
+  // Track advancing question state to avoid race conditions or double requests
+  const advancingQuestionRef = useRef<number | null>(null);
+
+  // Active online participants (excluding resigned/abandoned/left)
+  const activeOnlineParticipants = participants.filter((p: any) => {
+    const pProg = room?.playersProgress ? room.playersProgress[String(p.id)] : null;
+    const isWithdrawn = Boolean(
+      p.hasLeft || (pProg && pProg.hasLeft) ||
+      p.isResigned || (pProg && pProg.isResigned) ||
+      p.isAbandoned || (pProg && pProg.isAbandoned) ||
+      p.status === 'abandoned' || (pProg && pProg.status === 'abandoned')
+    );
+    return !isWithdrawn && isParticipantOnlineFn(p);
+  });
+
+  const activeCount = activeOnlineParticipants.length;
+  const currentAnswers = room?.currentAnswers || {};
+  const validAnswersCount = activeOnlineParticipants.filter((p: any) => {
+    const pId = String(p.id);
+    const ans = currentAnswers[pId] || currentAnswers[p.username] || currentAnswers[p.name];
+    return Boolean(ans && (ans.questionIndex === undefined || ans.questionIndex === currentQuestionIdx));
+  }).length;
+
+  const hasAllAnswered = activeCount > 0 && validAnswersCount >= activeCount;
+
+  // Supabase Realtime Listener for room events:
+  // Listens to status completion, question advancements, and player answers
   useEffect(() => {
     if (!room?.id) return;
 
@@ -191,6 +216,19 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
       app?.recordDailyGiftRoomMatch?.();
       router.push('/challenge/results');
       setView('group_game');
+    };
+
+    const handleRoomUpdate = (updated: any) => {
+      if (!updated) return;
+      if (updated.status === 'completed' || updated.status === 'FINISHED') {
+        handleRoomFinish();
+        return;
+      }
+      setRoom((prev: any) => prev ? ({ ...prev, ...updated }) : updated);
+      if (updated.currentQuestionIndex !== undefined && updated.currentQuestionIndex > currentQuestionIdx) {
+        advancingQuestionRef.current = null;
+        app?.resetQuestionUIState?.(updated.currentQuestionIndex, updated);
+      }
     };
 
     const channelName = `room_sync_${room.id}`;
@@ -204,16 +242,37 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
     const channel = supabase.channel(channelName);
     channel
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${room.id}` }, (payload: any) => {
-        if (payload?.new?.status === 'completed' || payload?.new?.status === 'FINISHED') {
-          handleRoomFinish();
-        }
+        handleRoomUpdate(payload?.new);
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'Room', filter: `id=eq.${room.id}` }, (payload: any) => {
-        if (payload?.new?.status === 'completed' || payload?.new?.status === 'FINISHED') {
-          handleRoomFinish();
-        }
+        handleRoomUpdate(payload?.new);
       })
       .on('broadcast', { event: 'room_completed' }, handleRoomFinish)
+      .on('broadcast', { event: 'question_advanced' }, (payload: any) => {
+        const advData = payload?.payload || payload;
+        if (advData?.isFinished || advData?.room?.status === 'FINISHED' || advData?.room?.status === 'completed') {
+          handleRoomFinish();
+          return;
+        }
+        const nextQ = advData?.currentQuestionIndex;
+        if (nextQ !== undefined && nextQ > currentQuestionIdx) {
+          advancingQuestionRef.current = null;
+          app?.resetQuestionUIState?.(nextQ, advData?.room);
+          if (advData?.room) {
+            setRoom(advData.room);
+          }
+        }
+      })
+      .on('broadcast', { event: 'player_answered' }, (payload: any) => {
+        const ansData = payload?.payload || payload;
+        if (ansData?.currentAnswers) {
+          setRoom((prev: any) => prev ? ({
+            ...prev,
+            currentAnswers: ansData.currentAnswers,
+            playersProgress: ansData.playersProgress || prev.playersProgress
+          }) : prev);
+        }
+      })
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
           console.log(`[ChallengeGamePage] تم الاشتراك في قناة الغرفة بنجاح: ${channelName}`);
@@ -225,7 +284,61 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
         supabase.removeChannel(channel);
       } catch (_) {}
     };
-  }, [room?.id, setView, app]);
+  }, [room?.id, setView, app, currentQuestionIdx, setRoom]);
+
+  // Auto-advance to next question when all active players have answered:
+  // Host advances after 1.5s; Fallback player advances after 3.5s (if host tab is throttled in background)
+  useEffect(() => {
+    if (!room?.id || room.status !== 'PLAYING' || isLastQuestion || !hasAllAnswered) {
+      return;
+    }
+
+    if (advancingQuestionRef.current === currentQuestionIdx) {
+      return;
+    }
+
+    const delay = isEffectiveHost ? 1500 : 3500;
+    const timer = setTimeout(async () => {
+      if (advancingQuestionRef.current === currentQuestionIdx) return;
+      advancingQuestionRef.current = currentQuestionIdx;
+
+      try {
+        const res = await fetch('/api/1v1', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'advance-question',
+            roomId: room.id,
+            playerId: playerUsername || playerName,
+            questionIndex: currentQuestionIdx
+          })
+        });
+        const data = await res.json();
+        if (data && data.currentQuestionIndex > currentQuestionIdx) {
+          advancingQuestionRef.current = null;
+          app?.resetQuestionUIState?.(data.currentQuestionIndex, data);
+          setRoom(data);
+          try {
+            supabase.channel(`room_sync_${room.id}`).send({
+              type: 'broadcast',
+              event: 'question_advanced',
+              payload: {
+                roomId: room.id,
+                currentQuestionIndex: data.currentQuestionIndex,
+                isFinished: data.status === 'FINISHED',
+                room: data
+              }
+            }).catch(() => {});
+          } catch (_) {}
+        }
+      } catch (err) {
+        console.error('[ChallengeGamePage] Error auto-advancing question:', err);
+        advancingQuestionRef.current = null;
+      }
+    }, delay);
+
+    return () => clearTimeout(timer);
+  }, [hasAllAnswered, room?.id, room?.status, isLastQuestion, isEffectiveHost, currentQuestionIdx, playerUsername, playerName, app, setRoom]);
 
   const handleEndRoom = async () => {
     if (isEndingRoom || !room?.id) return;

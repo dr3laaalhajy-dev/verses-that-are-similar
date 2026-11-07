@@ -3365,23 +3365,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Mark online on entering
     sendPresence(true);
 
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') {
-        sendPresence(false);
-      } else if (document.visibilityState === 'visible') {
-        sendPresence(true);
-      }
-    };
-
+    // Disconnect ONLY on genuine page unload / window close (never on background tab switch)
     const handleBeforeUnload = () => {
       sendPresence(false);
     };
 
-    document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('beforeunload', handleBeforeUnload);
 
     return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
   }, [room?.id, view, playerName, playerUsername]);
@@ -3408,26 +3399,62 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       config: { presence: { key: myPresenceId } }
     });
 
+    const lastSeenPresence = new Map<string, number>();
+    let leaveDebounceTimer: any = null;
+
     const syncPresence = () => {
       const state = presenceChannel.presenceState();
-      const onlineIds = new Set<string | number>();
+      const now = Date.now();
+      const currentIds = new Set<string>();
+
       Object.entries(state).forEach(([key, presences]) => {
-        onlineIds.add(key);
+        currentIds.add(key);
         if (Array.isArray(presences)) {
           presences.forEach((p: any) => {
-            if (p.playerId != null)   onlineIds.add(String(p.playerId));
-            if (p.playerName)         onlineIds.add(String(p.playerName).trim().toLowerCase());
-            if (p.playerUsername)     onlineIds.add(String(p.playerUsername).trim().toLowerCase().replace(/^@+/, ''));
+            if (p.playerId != null)   currentIds.add(String(p.playerId));
+            if (p.playerName)         currentIds.add(String(p.playerName).trim().toLowerCase());
+            if (p.playerUsername)     currentIds.add(String(p.playerUsername).trim().toLowerCase().replace(/^@+/, ''));
           });
         }
       });
+
+      // Update last seen for all currently present
+      currentIds.forEach(id => {
+        lastSeenPresence.set(id, now);
+      });
+
+      // Include players seen within the last 5 seconds (grace period to avoid disconnects on tab switches)
+      const onlineIds = new Set<string | number>();
+      currentIds.forEach(id => onlineIds.add(id));
+      lastSeenPresence.forEach((lastSeen, id) => {
+        if (now - lastSeen < 5000) {
+          onlineIds.add(id);
+        }
+      });
+
       setRoomPresenceOnlineIds(onlineIds);
+    };
+
+    const handlePresenceLeave = () => {
+      // Grace period: Wait 5 seconds before dropping players from online state
+      if (leaveDebounceTimer) clearTimeout(leaveDebounceTimer);
+      leaveDebounceTimer = setTimeout(() => {
+        syncPresence();
+      }, 5000);
+    };
+
+    const handlePresenceJoin = () => {
+      if (leaveDebounceTimer) {
+        clearTimeout(leaveDebounceTimer);
+        leaveDebounceTimer = null;
+      }
+      syncPresence();
     };
 
     presenceChannel
       .on('presence', { event: 'sync' },  syncPresence)
-      .on('presence', { event: 'join' },  syncPresence)
-      .on('presence', { event: 'leave' }, syncPresence)
+      .on('presence', { event: 'join' },  handlePresenceJoin)
+      .on('presence', { event: 'leave' }, handlePresenceLeave)
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
           await presenceChannel.track({
@@ -3441,6 +3468,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
 
     return () => {
+      if (leaveDebounceTimer) clearTimeout(leaveDebounceTimer);
       try { supabase.removeChannel(presenceChannel); } catch (_) {}
       setRoomPresenceOnlineIds(new Set());
     };
@@ -3617,6 +3645,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           recordDailyGiftRoomMatch?.();
           router.push('/challenge/results');
           setView('group_game');
+        } else if (payload?.new?.currentQuestionIndex !== undefined && payload.new.currentQuestionIndex > currentChallengeIndex) {
+          resetQuestionUIState(payload.new.currentQuestionIndex, payload.new);
+          setRoom(payload.new);
         }
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'Room', filter: `id=eq.${room.id}` }, (payload: any) => {
@@ -3624,12 +3655,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           recordDailyGiftRoomMatch?.();
           router.push('/challenge/results');
           setView('group_game');
+        } else if (payload?.new?.currentQuestionIndex !== undefined && payload.new.currentQuestionIndex > currentChallengeIndex) {
+          resetQuestionUIState(payload.new.currentQuestionIndex, payload.new);
+          setRoom(payload.new);
         }
       })
       .on('broadcast', { event: 'room_completed' }, (_payload: any) => {
         recordDailyGiftRoomMatch?.();
         router.push('/challenge/results');
         setView('group_game');
+      })
+      .on('broadcast', { event: 'question_advanced' }, ({ payload }: any) => {
+        if (!payload) return;
+        if (payload.isFinished || payload.status === 'FINISHED' || payload.room?.status === 'FINISHED') {
+          recordDailyGiftRoomMatch?.();
+          router.push('/challenge/results');
+          setView('group_game');
+          return;
+        }
+        if (payload.currentQuestionIndex !== undefined && payload.currentQuestionIndex > currentChallengeIndex) {
+          resetQuestionUIState(payload.currentQuestionIndex, payload.room);
+          if (payload.room) setRoom(payload.room);
+        }
       })
       .on('broadcast', { event: 'player_kicked' }, ({ payload }: any) => {
         if (!payload) return;

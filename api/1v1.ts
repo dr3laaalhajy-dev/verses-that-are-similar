@@ -862,6 +862,22 @@ async function advanceRoomToNextQuestionTx(_tx: any, room: any, currentAnswers: 
     winnerId
   }).eq('id', room.id).select().single()
 
+  // Broadcast question_advanced to all players in the room immediately
+  try {
+    supabaseAdmin.channel(`room_sync_${room.id}`).send({
+      type: 'broadcast',
+      event: 'question_advanced',
+      payload: {
+        roomId: room.id,
+        currentQuestionIndex: nextIndex,
+        isFinished,
+        winnerId,
+        questionStartTime: Date.now(),
+        room: updatedRoom || room
+      }
+    }).catch(e => console.warn('[AdvanceQuestion] Broadcast error:', e))
+  } catch (_) {}
+
   return updatedRoom || room
 }
 
@@ -1070,6 +1086,23 @@ async function handleSubmitAnswer(req: VercelRequest, res: VercelResponse) {
         currentAnswers,
         playersProgress
       }).eq('id', room.id)
+
+      // Broadcast player_answered so all players in the room update answers immediately
+      try {
+        supabaseAdmin.channel(`room_sync_${room.id}`).send({
+          type: 'broadcast',
+          event: 'player_answered',
+          payload: {
+            roomId: room.id,
+            playerId: player.id,
+            pIdStr,
+            questionIndex: Number(questionIndex),
+            isCorrect: Boolean(isCorrect),
+            currentAnswers,
+            playersProgress
+          }
+        }).catch(e => console.warn('[SubmitAnswer] Broadcast error:', e))
+      } catch (_) {}
     }
 
     const fullRoom = await getFullRoom(roomId as string)
@@ -1093,13 +1126,37 @@ async function handleAdvanceQuestion(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json(fullRoom)
     }
 
-    // Host validation
+    // Host or Fallback Participant validation
     if (playerId) {
       const player = await findPlayer(playerId)
       if (player && player.id !== room.player1Id) {
-        console.warn(`Non-host player ${playerId} attempted to advance question`)
-        const fullRoom = await getFullRoom(roomId as string)
-        return res.status(200).json(fullRoom)
+        // Check if player is a participant in this room
+        const participants = Array.isArray(room.participants) ? room.participants : []
+        const isParticipant = participants.some((p: any) =>
+          String(p.id) === String(player.id) ||
+          p.name === player.name ||
+          (p.username && player.username && p.username.toLowerCase() === player.username.toLowerCase())
+        )
+
+        const playersProgress = (room.playersProgress as any) || {}
+        const curAnswers = (room.currentAnswers as any) || {}
+        const curQ = room.currentQuestionIndex || 0
+
+        const activeParticipants = participants.filter((p: any) => {
+          const prog = playersProgress[String(p.id)]
+          return !prog || (!prog.hasLeft && !prog.isResigned && !prog.isAbandoned && prog.status !== 'abandoned')
+        })
+
+        const allAnswered = activeParticipants.length > 0 && activeParticipants.every((p: any) => {
+          const a = curAnswers[String(p.id)] || curAnswers[p.name] || (p.username && curAnswers[p.username])
+          return a && (a.questionIndex === undefined || a.questionIndex === curQ)
+        })
+
+        if (!isParticipant || !allAnswered) {
+          console.warn(`Non-host player ${playerId} attempted to advance question but criteria not met`)
+          const fullRoom = await getFullRoom(roomId as string)
+          return res.status(200).json(fullRoom)
+        }
       }
     }
 
