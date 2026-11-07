@@ -19,6 +19,7 @@ import { MushafPage } from '../pages/MushafPage';
 import { AdhkarPage } from '../pages/AdhkarPage';
 import { HadithPage } from '../pages/HadithPage';
 import { ChallengeGamePage } from '../pages/ChallengeGamePage';
+import { DailyChestChallengePage } from '../pages/DailyChestChallengePage';
 
 import SettingsView from '../components/Settings/SettingsView';
 import SkillsMenu from '../components/SkillsMenu';
@@ -563,6 +564,16 @@ export const AppRouter: React.FC = () => {
               app.setShowCertificate(true);
             }}
           />
+        </motion.div>
+      ) : app.view === 'daily_chest_challenge' ? (
+        <motion.div
+          key="daily_chest_challenge"
+          initial={{ opacity: 0, scale: 0.98 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.98 }}
+          className="w-full"
+        >
+          <DailyChestChallengePage />
         </motion.div>
       ) : (
         <ChallengeGamePage

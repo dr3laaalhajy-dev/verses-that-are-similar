@@ -38,6 +38,7 @@ import { useWindowSize } from "../hooks/useWindowSize";
 import { View, VALID_VIEWS, Difficulty, Verse, VerseCardProps } from "../types/challenges";
 import { getBestSubsequenceMatch, superNormalizeArabic, getSpeedQuestionDuration } from "../utils/challengeHelpers";
 import { achievementStyles } from "../constants/appConstants";
+import { getDailyChallengeConfigForDate } from "../utils/dailyChestChallenge";
 
 export interface ToastNotification {
   id: string;
@@ -49,14 +50,18 @@ export interface DailyMysteryGift {
   id: string;
   date: string;
   isRevealed: boolean;
-  type: 'reading_time' | 'room_challenge';
+  type: 'daily_chest_challenge' | 'reading_time' | 'room_challenge';
+  category?: string;
+  categoryTitle?: string;
   title: string;
+  actionButtonText?: string;
   description: string;
   target: number;
   currentProgress: number;
   isCompleted: boolean;
   isClaimed: boolean;
   rewardPoints: number;
+  maxLives?: number;
 }
 
 type ToastListener = (t: ToastNotification) => void;
@@ -449,36 +454,47 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [dailyGift, setDailyGift] = useState<DailyMysteryGift>(() => {
     const todayKey = getTodayDateKey();
+    const config = getDailyChallengeConfigForDate(todayKey);
+
     try {
       const saved = localStorage.getItem('quran_daily_mystery_gift');
       if (saved) {
         const parsed: DailyMysteryGift = JSON.parse(saved);
         if (parsed && parsed.date === todayKey) {
-          return parsed;
+          return {
+            ...parsed,
+            type: 'daily_chest_challenge',
+            category: parsed.category || config.category,
+            categoryTitle: parsed.categoryTitle || config.categoryTitle,
+            title: parsed.title || config.title,
+            actionButtonText: parsed.actionButtonText || config.actionButtonText,
+            description: parsed.description || config.description,
+            target: parsed.target || config.target,
+            maxLives: parsed.maxLives || config.maxLives,
+            rewardPoints: parsed.rewardPoints || config.rewardPoints
+          };
         }
       }
     } catch (e) {
       console.error('Error reading quran_daily_mystery_gift from localStorage:', e);
     }
 
-    const dayNum = new Date().getDate();
-    // Alternating challenge: even days reading_time (300s = 5m), odd days room_challenge (1 match)
-    const isReadingTime = dayNum % 2 === 0;
-
     return {
       id: `mystery_${todayKey}`,
       date: todayKey,
       isRevealed: false,
-      type: isReadingTime ? 'reading_time' : 'room_challenge',
-      title: isReadingTime ? 'اقرأ القرآن الكريم لمدة 5 دقائق' : 'أكمل تحدياً في غرف التنافس',
-      description: isReadingTime
-        ? 'عطّر وقتك بآيات الذكر الحكيم عبر تصفح وتدبر المصحف الشريف'
-        : 'شارك في مسابقة جماعية داخل غرف التنافس وأكمل المباراة للنهاية',
-      target: isReadingTime ? 300 : 1,
+      type: 'daily_chest_challenge',
+      category: config.category,
+      categoryTitle: config.categoryTitle,
+      title: config.title,
+      actionButtonText: config.actionButtonText,
+      description: config.description,
+      target: config.target,
       currentProgress: 0,
       isCompleted: false,
       isClaimed: false,
-      rewardPoints: isReadingTime ? 100 : 150,
+      rewardPoints: config.rewardPoints,
+      maxLives: config.maxLives
     };
   });
 
@@ -506,6 +522,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setDailyGift(prev => {
       if (prev.isRevealed) return prev;
       const updated = { ...prev, isRevealed: true };
+      try {
+        localStorage.setItem('quran_daily_mystery_gift', JSON.stringify(updated));
+      } catch (e) { }
+      return updated;
+    });
+  }, []);
+
+  const completeDailyChestChallenge = useCallback(() => {
+    setDailyGift(prev => {
+      const updated: DailyMysteryGift = {
+        ...prev,
+        currentProgress: prev.target,
+        isCompleted: true
+      };
       try {
         localStorage.setItem('quran_daily_mystery_gift', JSON.stringify(updated));
       } catch (e) { }
@@ -2067,6 +2097,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setIsMushafFullscreen(false);
         setShowScores(false);
         setView('settings', false);
+        return;
+      }
+
+      if (rootSegment === 'daily-chest-challenge' || rootSegment === 'chest-challenge') {
+        setIsMushafFullscreen(false);
+        setShowScores(false);
+        setView('daily_chest_challenge', false);
         return;
       }
 
@@ -6333,6 +6370,7 @@ ${versesList}
     // Daily Mystery Gift
     dailyGift,
     revealDailyGift,
+    completeDailyChestChallenge,
     incrementDailyGiftReadingTime,
     recordDailyGiftRoomMatch,
     claimDailyGiftReward,

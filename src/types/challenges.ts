@@ -32,7 +32,8 @@ export type View =
   | 'settings'
   | 'library'
   | 'challenges'
-  | 'islamic_videos';
+  | 'islamic_videos'
+  | 'daily_chest_challenge';
 
 export const VALID_VIEWS: View[] = [
   'home',
@@ -59,7 +60,8 @@ export const VALID_VIEWS: View[] = [
   'settings',
   'library',
   'challenges',
-  'islamic_videos'
+  'islamic_videos',
+  'daily_chest_challenge'
 ];
 
 export type Difficulty = 'easy' | 'medium' | 'hard';

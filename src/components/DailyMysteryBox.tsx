@@ -64,11 +64,11 @@ export const DailyMysteryBox: React.FC<DailyMysteryBoxProps> = ({ className = ''
   const isRevealed = dailyGift?.isRevealed ?? false;
   const isCompleted = dailyGift?.isCompleted ?? false;
   const isClaimed = dailyGift?.isClaimed ?? false;
-  const type = dailyGift?.type ?? 'reading_time';
+  const type = dailyGift?.type ?? 'daily_chest_challenge';
   const title = dailyGift?.title ?? 'تحدي اليوم';
-  const target = dailyGift?.target ?? 300;
+  const target = dailyGift?.target ?? 5;
   const currentProgress = dailyGift?.currentProgress ?? 0;
-  const rewardPoints = dailyGift?.rewardPoints ?? 100;
+  const rewardPoints = dailyGift?.rewardPoints ?? 150;
   const progressPercent = Math.min(100, Math.round((currentProgress / target) * 100));
 
   // Refs for Lottie instances
@@ -173,10 +173,12 @@ export const DailyMysteryBox: React.FC<DailyMysteryBoxProps> = ({ className = ''
 
   const handleGoToChallenge = () => {
     setIsModalOpen(false);
-    if (type === 'reading_time') {
+    if (type === 'daily_chest_challenge' || !type || type === 'room_challenge') {
+      if (app?.setView) app.setView('daily_chest_challenge');
+    } else if (type === 'reading_time') {
       if (app?.setView) app.setView('mushaf');
     } else {
-      if (app?.setView) app.setView('group_join');
+      if (app?.setView) app.setView('daily_chest_challenge');
     }
   };
 
@@ -238,7 +240,7 @@ export const DailyMysteryBox: React.FC<DailyMysteryBoxProps> = ({ className = ''
               ? 'استلم هديتك الآن'
               : !isRevealed
               ? 'كشف التحدي'
-              : 'متابعة التحدي'}
+              : (dailyGift?.actionButtonText || 'متابعة التحدي')}
           </span>
           <ChevronLeft className="w-3 h-3 text-amber-600 dark:text-regalGold-400" />
         </div>
@@ -432,10 +434,10 @@ export const DailyMysteryBox: React.FC<DailyMysteryBoxProps> = ({ className = ''
                   <button
                     type="button"
                     onClick={handleGoToChallenge}
-                    className="w-full py-2 px-3.5 rounded-xl bg-brand-emerald hover:bg-[#033628] text-white font-black text-xs flex items-center justify-center gap-1 shadow-sm active:scale-95 transition-all cursor-pointer"
+                    className="w-full py-2.5 px-3.5 rounded-xl bg-gradient-to-r from-brand-emerald to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-black text-xs sm:text-sm flex items-center justify-center gap-1.5 shadow-md active:scale-95 transition-all cursor-pointer"
                   >
-                    <span>{type === 'reading_time' ? 'متابعة القراءة في المصحف' : 'دخول التحدي الجماعي'}</span>
-                    <ChevronLeft className="w-3.5 h-3.5" />
+                    <span>{dailyGift?.actionButtonText || (type === 'reading_time' ? 'متابعة القراءة في المصحف' : 'ابدأ التحدي اليومي')}</span>
+                    <ChevronLeft className="w-4 h-4" />
                   </button>
                 </div>
               )}
