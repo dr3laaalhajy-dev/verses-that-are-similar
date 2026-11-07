@@ -875,7 +875,7 @@ async function advanceRoomToNextQuestionTx(_tx: any, room: any, currentAnswers: 
     questionStartTime: Date.now(),
     currentAnswers: {}, // Clear answers for new question
     playersProgress: finalProgress,
-    status: isFinished ? 'FINISHED' : 'PLAYING',
+    status: isFinished ? 'completed' : 'PLAYING',
     winnerId
   }).eq('id', room.id).select().single()
 
@@ -894,6 +894,16 @@ async function advanceRoomToNextQuestionTx(_tx: any, room: any, currentAnswers: 
       }
     }).catch(e => console.warn('[AdvanceQuestion] Broadcast error:', e))
   } catch (_) {}
+
+  if (isFinished) {
+    try {
+      supabaseAdmin.channel(`room_sync_${room.id}`).send({
+        type: 'broadcast',
+        event: 'room_completed',
+        payload: { roomId: room.id, status: 'completed' }
+      }).catch(() => {});
+    } catch (_) {}
+  }
 
   return updatedRoom || room
 }
@@ -1196,12 +1206,23 @@ async function handleEndRoom(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json(fullRoom)
     }
 
-    // Host validation
+    // Host / Participant validation
     if (playerId) {
       const player = await findPlayer(playerId)
       if (player && player.id !== room.player1Id) {
-        console.warn(`Non-host player ${playerId} attempted to end room`)
-        return res.status(403).json({ message: 'Only host can end the room' })
+        const totalQ = room.questionCount || 5
+        const isAtLastQuestion = (room.currentQuestionIndex || 0) >= totalQ - 1
+        const participants = Array.isArray(room.participants) ? room.participants : []
+        const isParticipant = participants.some((p: any) =>
+          String(p.id) === String(player.id) ||
+          p.name === player.name ||
+          (p.username && player.username && p.username.toLowerCase() === player.username.toLowerCase())
+        )
+
+        if (!isAtLastQuestion && !isParticipant) {
+          console.warn(`Non-participant player ${playerId} attempted to end room prematurely`)
+          return res.status(403).json({ message: 'Only host can end the room' })
+        }
       }
     }
 
@@ -1246,6 +1267,15 @@ async function handleEndRoom(req: VercelRequest, res: VercelResponse) {
       status: 'completed',
       winnerId
     }).eq('id', room.id)
+
+    // Broadcast room_completed so all players navigate to results
+    try {
+      supabaseAdmin.channel(`room_sync_${room.id}`).send({
+        type: 'broadcast',
+        event: 'room_completed',
+        payload: { roomId: room.id, status: 'completed' }
+      }).catch(() => {});
+    } catch (_) {}
 
     const fullRoom = await getFullRoom(room.id)
     return res.status(200).json(fullRoom)

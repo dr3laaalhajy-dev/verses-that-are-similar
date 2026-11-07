@@ -220,7 +220,10 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
   const validAnswersCount = activeOnlineParticipants.filter((p: any) => {
     const pId = String(p.id);
     const ans = currentAnswers[pId] || currentAnswers[p.username] || currentAnswers[p.name];
-    return Boolean(ans && (ans.questionIndex === undefined || ans.questionIndex === currentQuestionIdx));
+    const hasCurrentAnswer = Boolean(ans && (ans.questionIndex === undefined || ans.questionIndex === currentQuestionIdx));
+    const pProg = room?.playersProgress ? (room.playersProgress[pId] || room.playersProgress[p.username] || room.playersProgress[p.name]) : null;
+    const hasProgressAnswer = Boolean(pProg && ((pProg.playerCurrentQuestionIndex !== undefined && pProg.playerCurrentQuestionIndex > currentQuestionIdx) || (isLastQuestion && pProg.progress === 100)));
+    return hasCurrentAnswer || hasProgressAnswer;
   }).length;
 
   const hasAllAnswered = activeCount > 0 && validAnswersCount >= activeCount;
@@ -304,62 +307,6 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
     };
   }, [room?.id, setView, app, currentQuestionIdx, setRoom]);
 
-  // Auto-advance to next question when all active players have answered:
-  // Host advances after 1.0s; Fallback player advances after 2.5s (if host tab is throttled in background)
-  useEffect(() => {
-    if (!room?.id || room.status !== 'PLAYING' || isLastQuestion || !hasAllAnswered) {
-      return;
-    }
-
-    if (advancingQuestionRef.current === currentQuestionIdx) {
-      return;
-    }
-
-    const delay = isEffectiveHost ? 1000 : 2500;
-    const timer = setTimeout(async () => {
-      if (advancingQuestionRef.current === currentQuestionIdx) return;
-      advancingQuestionRef.current = currentQuestionIdx;
-
-      try {
-        const res = await fetch('/api/1v1', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'advance-question',
-            roomId: room.id,
-            playerId: playerUsername || playerName,
-            questionIndex: currentQuestionIdx
-          })
-        });
-        const data = await res.json();
-        if (data && data.currentQuestionIndex > currentQuestionIdx) {
-          advancingQuestionRef.current = null;
-          appRef.current?.resetQuestionUIState?.(data.currentQuestionIndex, data);
-          setRoom(data);
-          try {
-            supabase.channel(`room_sync_${room.id}`).send({
-              type: 'broadcast',
-              event: 'question_advanced',
-              payload: {
-                roomId: room.id,
-                currentQuestionIndex: data.currentQuestionIndex,
-                isFinished: data.status === 'FINISHED',
-                room: data
-              }
-            }).catch(() => {});
-          } catch (_) {}
-        } else {
-          advancingQuestionRef.current = null;
-        }
-      } catch (err) {
-        console.error('[ChallengeGamePage] Error auto-advancing question:', err);
-        advancingQuestionRef.current = null;
-      }
-    }, delay);
-
-    return () => clearTimeout(timer);
-  }, [hasAllAnswered, room?.id, room?.status, isLastQuestion, isEffectiveHost, currentQuestionIdx, playerUsername, playerName, setRoom]);
-
   const handleEndRoom = async () => {
     if (isEndingRoom || !room?.id) return;
     setIsEndingRoom(true);
@@ -424,32 +371,86 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
     setView('group_game');
   };
 
-  // 2. الإنهاء التلقائي للتحديات المغلقة (Auto-Finish on Last Question)
-  // يراقب اكتمال الإجابات في السؤال الأخير، وعند تحقق الشرط في التحديات غير 'من أنا'،
-  // يتم استدعاء دالة الإنهاء تلقائياً بعد ثانيتين (2000ms) لإتاحة رؤية النتيجة.
-  const autoEndingRef = useRef(false);
+  // ── Unified Question Transition & Finalization Logic ──
+  // Triggers when all active participants have completed their answer for the current question
+  const isTransitioningRef = useRef<boolean>(false);
 
   useEffect(() => {
-    autoEndingRef.current = false;
+    isTransitioningRef.current = false;
   }, [room?.id, currentQuestionIdx]);
 
   useEffect(() => {
-    if (!room?.id || room.status !== 'PLAYING' || !isLastQuestion || !hasAllAnswered || isWhoAmI) {
+    if (!room?.id || room.status !== 'PLAYING' || !hasAllAnswered || isWhoAmI) {
       return;
     }
 
-    if (autoEndingRef.current) return;
+    if (isTransitioningRef.current) return;
 
-    // مهلة 2000ms تتيح للاعبين رؤية تغذية راجعة للإجابة (صح/خطأ) قبل التوجيه للنتائج
-    const delay = isEffectiveHost ? 2000 : 3500;
-    const timer = setTimeout(() => {
-      if (autoEndingRef.current) return;
-      autoEndingRef.current = true;
-      handleEndRoom();
-    }, delay);
+    if (isLastQuestion) {
+      // ⚠️ هذا هو السؤال الأخير: يجب إنهاء التحدي وتوجيه الجميع لشاشة النتيجة
+      const delay = isEffectiveHost ? 1500 : 2500;
+      const timer = setTimeout(() => {
+        if (isTransitioningRef.current) return;
+        isTransitioningRef.current = true;
+        handleEndRoom();
+      }, delay);
+      return () => clearTimeout(timer);
+    } else {
+      // الانتقال للسؤال التالي بشكل طبيعي
+      if (advancingQuestionRef.current === currentQuestionIdx) return;
+      const delay = isEffectiveHost ? 1000 : 2500;
+      const timer = setTimeout(async () => {
+        if (advancingQuestionRef.current === currentQuestionIdx || isTransitioningRef.current) return;
+        advancingQuestionRef.current = currentQuestionIdx;
+        isTransitioningRef.current = true;
 
-    return () => clearTimeout(timer);
-  }, [isLastQuestion, hasAllAnswered, isWhoAmI, isEffectiveHost, room?.id, room?.status]);
+        try {
+          const res = await fetch('/api/1v1', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'advance-question',
+              roomId: room.id,
+              playerId: playerUsername || playerName,
+              questionIndex: currentQuestionIdx
+            })
+          });
+          const data = await res.json();
+          if (data) {
+            if (data.status === 'completed' || data.status === 'FINISHED' || data.currentQuestionIndex >= totalQuestions) {
+              handleEndRoom();
+            } else if (data.currentQuestionIndex > currentQuestionIdx) {
+              advancingQuestionRef.current = null;
+              isTransitioningRef.current = false;
+              appRef.current?.resetQuestionUIState?.(data.currentQuestionIndex, data);
+              setRoom(data);
+              try {
+                supabase.channel(`room_sync_${room.id}`).send({
+                  type: 'broadcast',
+                  event: 'question_advanced',
+                  payload: {
+                    roomId: room.id,
+                    currentQuestionIndex: data.currentQuestionIndex,
+                    isFinished: false,
+                    room: data
+                  }
+                }).catch(() => {});
+              } catch (_) {}
+            } else {
+              advancingQuestionRef.current = null;
+              isTransitioningRef.current = false;
+            }
+          }
+        } catch (err) {
+          console.error('[ChallengeGamePage] Error auto-advancing question:', err);
+          advancingQuestionRef.current = null;
+          isTransitioningRef.current = false;
+        }
+      }, delay);
+
+      return () => clearTimeout(timer);
+    }
+  }, [hasAllAnswered, room?.id, room?.status, isLastQuestion, isEffectiveHost, currentQuestionIdx, isWhoAmI, playerUsername, playerName, totalQuestions, setRoom]);
   if (!currentChallenge) {
     return (
       <div className="flex flex-col items-center justify-center py-40">
@@ -723,6 +724,9 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
           isLastQuestion={isLastQuestion}
           onEndRoom={handleEndRoom}
           isEndingRoom={isEndingRoom}
+          hasBonusField={app?.hasBonusField}
+          bonusInput={app?.surahBonusInput}
+          onBonusInputChange={app?.handleSurahBonusInputChange}
         />
       ) : ((skillsType === 'complete' && !systemSettings.hideCompletionChallenge) || challengeMode === 'daily') ? (
         <CompleteChallengeUI

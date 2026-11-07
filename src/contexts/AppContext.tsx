@@ -934,6 +934,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [speedTotalTimeSpent, setSpeedTotalTimeSpent] = useState(0);
   const [isSpeedGameOver, setIsSpeedGameOver] = useState(false);
   const [surahInputs, setSurahInputs] = useState<string[]>([]);
+  const [surahBonusInput, setSurahBonusInput] = useState<string>('');
   const [roomScopeMode, setRoomScopeMode] = useState<'juz' | 'surah'>('juz');
   const [roomSelectedJuzs, setRoomSelectedJuzs] = useState<number[]>([]);
   const [roomSelectedSurahs, setRoomSelectedSurahs] = useState<string[]>([]);
@@ -3373,6 +3374,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setMatchedIds(new Set());
     setSurahFeedbackData(null);
     setDiscoveredBonusSurahs([]);
+    setSurahBonusInput('');
 
     const roomTime = (currentRoomData?.timePerQuestion && currentRoomData.timePerQuestion > 0)
       ? currentRoomData.timePerQuestion
@@ -3691,30 +3693,65 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 const totalQ = data.questionCount || (challenges && challenges.length) || 5;
                 const isLastQuestion = data.currentQuestionIndex !== undefined && data.currentQuestionIndex >= totalQ - 1;
 
-                if (!isLastQuestion && allActiveAnswered) {
-                  isAdvancingRef.current = true;
-                  fetch('/api/1v1', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      action: 'advance-question',
-                      roomId: room.id,
-                      playerId: playerUsername || playerName,
-                      questionIndex: data.currentQuestionIndex
+                if (allActiveAnswered) {
+                  if (isLastQuestion) {
+                    if (!isAdvancingRef.current) {
+                      isAdvancingRef.current = true;
+                      fetch('/api/1v1', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          action: 'end-room',
+                          roomId: room.id,
+                          playerId: playerUsername || playerName
+                        })
+                      })
+                        .then(res => res.json())
+                        .then(endedData => {
+                          isAdvancingRef.current = false;
+                          if (endedData) {
+                            setRoom(endedData);
+                            recordDailyGiftRoomMatch?.();
+                            router.push('/challenge/results');
+                            setView('group_game');
+                          }
+                        })
+                        .catch(err => {
+                          isAdvancingRef.current = false;
+                          console.error('Host end room error on last question:', err);
+                        });
+                    }
+                  } else if (!isAdvancingRef.current) {
+                    isAdvancingRef.current = true;
+                    fetch('/api/1v1', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        action: 'advance-question',
+                        roomId: room.id,
+                        playerId: playerUsername || playerName,
+                        questionIndex: data.currentQuestionIndex
+                      })
                     })
-                  })
-                    .then(res => res.json())
-                    .then(advData => {
-                      isAdvancingRef.current = false;
-                      if (advData && advData.currentQuestionIndex > currentChallengeIndex) {
-                        resetQuestionUIState(advData.currentQuestionIndex, advData);
-                        setRoom(advData);
-                      }
-                    })
-                    .catch(err => {
-                      isAdvancingRef.current = false;
-                      console.error('Host advance question error:', err);
-                    });
+                      .then(res => res.json())
+                      .then(advData => {
+                        isAdvancingRef.current = false;
+                        if (advData) {
+                          if (advData.status === 'completed' || advData.status === 'FINISHED' || advData.currentQuestionIndex >= totalQ) {
+                            recordDailyGiftRoomMatch?.();
+                            router.push('/challenge/results');
+                            setView('group_game');
+                          } else if (advData.currentQuestionIndex > currentChallengeIndex) {
+                            resetQuestionUIState(advData.currentQuestionIndex, advData);
+                            setRoom(advData);
+                          }
+                        }
+                      })
+                      .catch(err => {
+                        isAdvancingRef.current = false;
+                        console.error('Host advance question error:', err);
+                      });
+                  }
                 }
               }
 
@@ -4325,6 +4362,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setMatchedIds(new Set());
     setSurahFeedbackData(null);
     setDiscoveredBonusSurahs([]);
+    setSurahBonusInput('');
 
     const roomTime = (targetRoom.timePerQuestion && targetRoom.timePerQuestion > 0) ? targetRoom.timePerQuestion : 0;
     if (roomTime > 0) {
@@ -4715,11 +4753,42 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [matchedIds.size, view, isSpeedGameOver, isComplete, currentChallenge]);
 
+  const hasBonusField = useMemo(() => {
+    const isMultiplayer = Boolean(room?.id || view === 'group_game');
+    if (!isMultiplayer || !currentChallenge) return false;
+    const allSurahs = getChallengeSurahsList(currentChallenge);
+    const activeScope = getActiveScope(room, selectedSkillJuzs, selectedSkillSurahs, selectedJuz, currentChallenge?.type || 'SURAH');
+    const { bonusAnswers, outOfRangeAnswers } = splitSurahAnswersByScope(allSurahs, activeScope, currentChallenge.verses);
+    return (bonusAnswers && bonusAnswers.length > 0) || (outOfRangeAnswers && outOfRangeAnswers.length > 0);
+  }, [room?.id, view, currentChallenge, selectedSkillJuzs, selectedSkillSurahs, selectedJuz]);
+
+  const handleSurahBonusInputChange = (val: string) => {
+    setSurahBonusInput(val);
+
+    if (val && val.trim() && currentChallenge) {
+      const normVal = normalizeSurahName(val);
+      const allCorrect = getChallengeSurahsList(currentChallenge);
+      const activeScope = getActiveScope(room, selectedSkillJuzs, selectedSkillSurahs, selectedJuz, currentChallenge?.type || 'SURAH');
+      const { bonusAnswers } = splitSurahAnswersByScope(allCorrect, activeScope, currentChallenge.verses);
+
+      const matchedBonus = bonusAnswers.find(b => normalizeSurahName(b.surah) === normVal);
+      if (matchedBonus && !discoveredBonusSurahs.includes(matchedBonus.surah)) {
+        setDiscoveredBonusSurahs(prev => [...prev, matchedBonus.surah]);
+        addPoint({ challengeId: currentChallenge?.id, roomId: room?.id, points: 2 });
+        toast.success(
+          `🎁 مكافأة الحُفّاظ! إجابة إضافية خارج النطاق (+2 بونص): سورة ${matchedBonus.surah}`,
+          { duration: 4000 }
+        );
+      }
+    }
+  };
+
   // Effect to handle Surah Name Challenge inputs initialization
   useEffect(() => {
     const isSurahMode = skillsType === 'surah' || (view === 'group_game' && roomGameMode === 'surah');
     if (currentChallenge && isSurahMode) {
       setDiscoveredBonusSurahs([]);
+      setSurahBonusInput('');
       const allSurahs = getChallengeSurahsList(currentChallenge);
       const activeScope = getActiveScope(room, selectedSkillJuzs, selectedSkillSurahs, selectedJuz, currentChallenge?.type || 'SURAH');
       const { inRangeAnswers } = splitSurahAnswersByScope(
@@ -4739,28 +4808,47 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setSurahInputs(prev => {
       const newInputs = [...prev];
       newInputs[idx] = val;
-
-      if (val && val.trim() && currentChallenge) {
-        const normVal = normalizeSurahName(val);
-        const allCorrect = getChallengeSurahsList(currentChallenge);
-        const activeScope = getActiveScope(room, selectedSkillJuzs, selectedSkillSurahs, selectedJuz, currentChallenge?.type || 'SURAH');
-        const { bonusAnswers } = splitSurahAnswersByScope(allCorrect, activeScope, currentChallenge.verses);
-
-        const matchedBonus = bonusAnswers.find(b => normalizeSurahName(b.surah) === normVal);
-        if (matchedBonus && !discoveredBonusSurahs.includes(matchedBonus.surah)) {
-          setDiscoveredBonusSurahs(prevBonus => [...prevBonus, matchedBonus.surah]);
-          addPoint({ challengeId: currentChallenge?.id, roomId: room?.id, points: 2 });
-          toast.success(
-            `🎁 مكافأة الحُفّاظ! إجابة إضافية خارج النطاق (+2 بونص): سورة ${matchedBonus.surah}`,
-            { duration: 4000 }
-          );
-          // زيادة حقول الإدخال المعروضة بمقدار (+1) برمجياً ليتسع للإجابات الإجبارية المتبقية
-          newInputs.push('');
-        }
-      }
-
       return newInputs;
     });
+
+    if (val && val.trim() && currentChallenge) {
+      const normVal = normalizeSurahName(val);
+      const allCorrect = getChallengeSurahsList(currentChallenge);
+      const activeScope = getActiveScope(room, selectedSkillJuzs, selectedSkillSurahs, selectedJuz, currentChallenge?.type || 'SURAH');
+      const { bonusAnswers, inRangeAnswers } = splitSurahAnswersByScope(allCorrect, activeScope, currentChallenge.verses);
+
+      const matchedBonus = bonusAnswers.find(b => normalizeSurahName(b.surah) === normVal);
+      if (matchedBonus && !discoveredBonusSurahs.includes(matchedBonus.surah)) {
+        setDiscoveredBonusSurahs(prevBonus => [...prevBonus, matchedBonus.surah]);
+        addPoint({ challengeId: currentChallenge?.id, roomId: room?.id, points: 2 });
+        toast.success(
+          `🎁 مكافأة الحُفّاظ! إجابة إضافية خارج النطاق (+2 بونص): سورة ${matchedBonus.surah}`,
+          { duration: 4000 }
+        );
+      }
+
+      // Check auto-completion for required answers (decoupled from bonus)
+      if (!hasBonusField && !skillsFeedback && !isComplete) {
+        const normalizedRequired = inRangeAnswers.map(a => normalizeSurahName(a.surah));
+        const candidateInputs = [...surahInputs];
+        candidateInputs[idx] = val;
+        const normalizedCurrent = candidateInputs.map(s => normalizeSurahName(s)).filter(Boolean);
+
+        const matchedRequiredIndices = new Set<number>();
+        normalizedCurrent.forEach(inp => {
+          const matchIdx = normalizedRequired.findIndex((req, rIdx) => req === inp && !matchedRequiredIndices.has(rIdx));
+          if (matchIdx !== -1) {
+            matchedRequiredIndices.add(matchIdx);
+          }
+        });
+
+        if (matchedRequiredIndices.size === normalizedRequired.length && normalizedRequired.length > 0) {
+          setTimeout(() => {
+            handleSubmitSurah();
+          }, 350);
+        }
+      }
+    }
   };
 
   // دالة التجاهل للعب الفردي (تحدي المهارات) - إلغاء البونص تماماً والتنبيه البعدي فقط
@@ -5005,6 +5093,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setSelectedOption(null);
     setSurahFeedbackData(null);
     setDiscoveredBonusSurahs([]);
+    setSurahBonusInput('');
 
     const challengesLength = challenges.length || room?.challenges?.length || 0;
 
@@ -5254,6 +5343,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let currentDiscoveredBonus: string[] = [];
     if (isMultiplayer) {
       currentDiscoveredBonus = [...discoveredBonusSurahs];
+      // Check required input boxes
       normalizedInputs.forEach(input => {
         const matchedBonus = outOfRangeAnswers.find(b => normalizeSurahName(b.surah) === input);
         if (matchedBonus && !currentDiscoveredBonus.includes(matchedBonus.surah)) {
@@ -5261,6 +5351,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           addPoint({ challengeId: currentQuestion?.id, roomId: room?.id, points: 2 });
         }
       });
+      // Check explicit optional bonus box
+      if (surahBonusInput && surahBonusInput.trim()) {
+        const normBonus = normalizeSurahName(surahBonusInput);
+        const matchedBonus = outOfRangeAnswers.find(b => normalizeSurahName(b.surah) === normBonus);
+        if (matchedBonus && !currentDiscoveredBonus.includes(matchedBonus.surah)) {
+          currentDiscoveredBonus.push(matchedBonus.surah);
+          addPoint({ challengeId: currentQuestion?.id, roomId: room?.id, points: 2 });
+        }
+      }
       setDiscoveredBonusSurahs(currentDiscoveredBonus);
     } else {
       // تعطيل البونص تماماً في اللعب الفردي
@@ -5279,8 +5378,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     });
 
-    // Completion condition: all required answers answered
-    const isFullyCorrect = matchedRequiredCount === normalizedRequired.length;
+    // Completion condition: all required answers answered (Bonus is strictly decoupled & optional)
+    const isFullyCorrect = normalizedRequired.length > 0 && matchedRequiredCount === normalizedRequired.length;
 
     if (isFullyCorrect) {
       setSessionCorrect(prev => prev + 1);
@@ -6566,6 +6665,9 @@ ${versesList}
     skillsFeedback, setSkillsFeedback,
     hasAnsweredCurrentQuestion, setHasAnsweredCurrentQuestion,
     surahInputs, setSurahInputs,
+    surahBonusInput, setSurahBonusInput,
+    hasBonusField,
+    handleSurahBonusInputChange,
     handleSurahInputChange,
     handleSurahInputChangeBonus,
     handleSurahInputChangeSingle,

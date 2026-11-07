@@ -42,6 +42,9 @@ export interface SurahChallengeUIProps {
   isLastQuestion?: boolean;
   onEndRoom?: () => void;
   isEndingRoom?: boolean;
+  hasBonusField?: boolean;
+  bonusInput?: string;
+  onBonusInputChange?: (value: string) => void;
 }
 
 export const SurahChallengeUI: React.FC<SurahChallengeUIProps> = ({
@@ -67,7 +70,10 @@ export const SurahChallengeUI: React.FC<SurahChallengeUIProps> = ({
   isHost,
   isLastQuestion,
   onEndRoom,
-  isEndingRoom
+  isEndingRoom,
+  hasBonusField,
+  bonusInput,
+  onBonusInputChange
 }) => {
   const isMultiplayerMode = Boolean(isMultiplayer ?? isRoom);
   const deduplicatedOutOfRange = React.useMemo(() => {
@@ -132,6 +138,59 @@ export const SurahChallengeUI: React.FC<SurahChallengeUIProps> = ({
             </motion.div>
           );
         })}
+
+        {/* حقل البونص الإضافي الاختياري في اللعب الجماعي */}
+        {isMultiplayerMode && hasBonusField && (
+          <motion.div
+            initial={{ opacity: 0, y: 5 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="relative mt-1 text-right"
+          >
+            <div className="flex items-center justify-between px-1.5 mb-1.5">
+              <span className="text-xs font-black text-amber-700 dark:text-amber-300 flex items-center gap-1.5">
+                <span className="text-sm">🎁</span>
+                <span>تحدي إضافي للحُفّاظ (+2 بونص)</span>
+              </span>
+              <span className="text-[10px] font-bold text-amber-800 dark:text-amber-200 bg-amber-100 dark:bg-amber-900/60 px-2.5 py-0.5 rounded-full border border-amber-300 dark:border-amber-700/60 shadow-xs">
+                اختياري
+              </span>
+            </div>
+            <div className="relative">
+              {(() => {
+                let bonusStyle = "bg-amber-50/60 dark:bg-amber-950/20 border-amber-400/80 dark:border-amber-600/80 text-amber-950 dark:text-amber-100 focus:border-amber-500 focus:ring-2 focus:ring-amber-300/40";
+                let isBonusMatch = false;
+                if (feedback && surahFeedbackData) {
+                  const normBonus = normalizeSurahName(bonusInput || '');
+                  isBonusMatch = Boolean(
+                    normBonus &&
+                    (surahFeedbackData.discoveredBonusSurahs || []).some((b: string) => normalizeSurahName(b) === normBonus)
+                  );
+                  bonusStyle = isBonusMatch
+                    ? "bg-amber-100/90 dark:bg-amber-900/50 border-amber-500 text-amber-950 dark:text-amber-100 ring-2 ring-amber-400"
+                    : "bg-slate-50/80 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 text-slate-500";
+                }
+                return (
+                  <>
+                    <input
+                      type="text"
+                      list="surah-names-list"
+                      value={bonusInput || ''}
+                      disabled={feedback}
+                      onChange={(e) => onBonusInputChange?.(e.target.value)}
+                      placeholder="🎁 تحدي إضافي: سورة أخرى (اختياري)"
+                      className={`w-full p-3.5 md:p-4 rounded-xl md:rounded-2xl border-2 ${bonusStyle} outline-none text-base sm:text-lg md:text-lg font-bold text-center quran-text shadow-xs transition-all placeholder:text-amber-700/60 dark:placeholder:text-amber-400/60`}
+                    />
+                    {feedback && isBonusMatch && (
+                      <div className="absolute left-3 top-1/2 -translate-y-1/2">
+                        <span className="text-base animate-bounce" title="مكافأة الحُفّاظ!">🎁</span>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+          </motion.div>
+        )}
         <datalist id="surah-names-list">
           {quranData.map((s: any) => (
             <option key={s.id} value={`سورة ${s.name}`} />
