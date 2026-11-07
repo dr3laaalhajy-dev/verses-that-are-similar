@@ -27,9 +27,13 @@ CREATE TABLE IF NOT EXISTS public.notifications (
   sender_role TEXT DEFAULT 'FOUNDER',
   sender_name TEXT,
   metadata JSONB DEFAULT '{}'::jsonb,
+  is_read BOOLEAN DEFAULT false,
+  user_id TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT false;
+ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS user_id TEXT;
 CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON public.notifications(created_at DESC);
 
 -- 4. جدول اللاعبين والمستخدمين (players)

@@ -25,6 +25,14 @@ export interface NotificationItem {
 }
 
 /**
+ * Validates whether a value is a valid UUID string
+ */
+export const isValidUuid = (val: any): boolean => {
+  if (!val || typeof val !== 'string') return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val.trim());
+};
+
+/**
  * Helper to dynamically extract or infer the destination route from notification fields or content.
  * Handles specific Adhkar destinations (Morning / Evening / etc.) even if the notification only had generic '/adhkar' or no route.
  */
@@ -258,6 +266,8 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
 
   // 1. Individual Read: Persist is_read: true to Supabase DB and local state
   const markAsRead = async (notificationId: string) => {
+    if (!notificationId || notificationId === 'undefined' || notificationId === 'null') return;
+
     // Immediate local UI update
     setNotifications(prev =>
       prev.map(n => (n.id === notificationId ? { ...n, is_read: true } : n))
@@ -277,10 +287,12 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
 
     // Database update query (Requirement 1)
     try {
-      await supabase
-        .from('notifications')
-        .update({ is_read: true })
-        .eq('id', notificationId);
+      if (notificationId && notificationId !== 'undefined') {
+        await supabase
+          .from('notifications')
+          .update({ is_read: true })
+          .eq('id', notificationId);
+      }
     } catch (err) {
       console.warn('[NotificationBell] Supabase markAsRead error:', err);
     }
@@ -399,7 +411,10 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
   const markAllAsRead = async () => {
     if (notifications.length === 0 || unreadCount === 0) return;
 
-    const unreadIds = notifications.filter(n => isItemUnread(n)).map(n => n.id);
+    const unreadIds = notifications
+      .filter(n => isItemUnread(n))
+      .map(n => n.id)
+      .filter(id => Boolean(id) && id !== 'undefined' && id !== 'null');
 
     // 1. Immediately update UI state
     setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
@@ -428,12 +443,14 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
           .in('id', unreadIds);
       }
 
+      // Safe user_id query validation: ensure defined, not null, and valid UUID syntax
       const currentPlayerId = userId || app?.playerId || app?.uniquePlayerId || app?.playerUsername || app?.playerName;
-      if (currentPlayerId) {
+      if (isValidUuid(currentPlayerId)) {
         await supabase
           .from('notifications')
           .update({ is_read: true })
-          .match({ user_id: String(currentPlayerId), is_read: false });
+          .eq('user_id', String(currentPlayerId))
+          .eq('is_read', false);
       }
     } catch (err) {
       console.warn('[NotificationBell] Supabase markAllAsRead error:', err);
@@ -457,19 +474,25 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
     if (isOpen && unreadCount > 0) {
       const syncReadToDb = async () => {
         try {
-          const unreadIds = notifications.filter(n => isItemUnread(n)).map(n => n.id);
+          const unreadIds = notifications
+            .filter(n => isItemUnread(n))
+            .map(n => n.id)
+            .filter(id => Boolean(id) && id !== 'undefined' && id !== 'null');
+
           if (unreadIds.length > 0) {
             await supabase
               .from('notifications')
               .update({ is_read: true })
               .in('id', unreadIds);
           }
+
           const currentPlayerId = userId || app?.playerId || app?.uniquePlayerId || app?.playerUsername || app?.playerName;
-          if (currentPlayerId) {
+          if (isValidUuid(currentPlayerId)) {
             await supabase
               .from('notifications')
               .update({ is_read: true })
-              .match({ user_id: String(currentPlayerId), is_read: false });
+              .eq('user_id', String(currentPlayerId))
+              .eq('is_read', false);
           }
         } catch (_) {}
       };

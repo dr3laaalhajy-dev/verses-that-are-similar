@@ -245,12 +245,14 @@ model WhoAmISubmission {
 
 model Notification {
   id          String   @id @default(uuid())
+  user_id     String?
   title       String
   body        String
   target_url  String?
   sender_role String?  @default("FOUNDER")
   sender_name String?
   metadata    Json?    @default("{}")
+  is_read     Boolean? @default(false)
   created_at  DateTime @default(now())
   updated_at  DateTime @default(now()) @updatedAt
 

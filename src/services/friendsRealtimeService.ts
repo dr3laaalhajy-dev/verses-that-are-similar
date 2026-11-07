@@ -335,13 +335,13 @@ class FriendsRealtimeService {
 
     // Fallback: Also insert notification row so DB change listener catches it
     if (payload.invitedUserId) {
+      const isUuid = typeof payload.invitedUserId === 'string' &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(payload.invitedUserId);
       Promise.resolve(
         supabase.from('notifications').insert({
-          user_id: payload.invitedUserId,
-          type: 'room_invite',
+          user_id: isUuid ? payload.invitedUserId : null,
           title: `دعوة تحدي من ${payload.hostName || 'صديق'}`,
           body: `أرسل لك دعوة للانضمام إلى: ${payload.roomName || 'غرفة التحدي'}`,
-          data: JSON.stringify(payload),
           is_read: false
         })
       ).catch(() => {});

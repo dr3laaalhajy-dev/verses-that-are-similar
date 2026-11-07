@@ -7,6 +7,11 @@ import cronAdhkarHandler from './_lib/cronAdhkar.js';
 import { supabaseAdmin } from './_lib/supabaseAdmin.js';
 const supabase = supabaseAdmin;
 
+const isValidUuid = (val: any): boolean => {
+  if (!val || typeof val !== 'string') return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val.trim());
+};
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
 
@@ -35,7 +40,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // 2.5 Mark as Read Actions
     if (action === 'mark-read') {
       const id = (req.query.id as string) || req.body?.id;
-      if (!id) {
+      if (!id || id === 'undefined' || id === 'null') {
         return res.status(400).json({ error: 'Missing notification id' });
       }
       try {
@@ -50,10 +55,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const { ids, userId, receiverId } = req.body || {};
       const targetUserId = userId || receiverId || (req.query.userId as string);
       try {
-        if (Array.isArray(ids) && ids.length > 0) {
-          await supabaseAdmin.from('notifications').update({ is_read: true }).in('id', ids);
+        const cleanIds = Array.isArray(ids) ? ids.filter(i => Boolean(i) && i !== 'undefined' && i !== 'null') : [];
+        if (cleanIds.length > 0) {
+          await supabaseAdmin.from('notifications').update({ is_read: true }).in('id', cleanIds);
         }
-        if (targetUserId) {
+        if (targetUserId && isValidUuid(String(targetUserId))) {
           await supabaseAdmin.from('notifications').update({ is_read: true }).eq('user_id', String(targetUserId)).eq('is_read', false);
         }
         return res.status(200).json({ success: true, message: 'All notifications marked as read' });
