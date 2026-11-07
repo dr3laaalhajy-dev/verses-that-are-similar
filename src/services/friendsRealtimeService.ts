@@ -45,6 +45,9 @@ class FriendsRealtimeService {
   private isTracking = false;
   // Callback registered by the current subscriber — replaced on every subscribeToInvites() call
   private inviteCallback: ((invite: RoomInvitePayload) => void) | null = null;
+  private currentIdentifiers: Set<string> = new Set();
+  private reconnectTimers: Map<string, any> = new Map();
+  private watchdogTimer: any = null;
 
   /**
    * Initializes Presence tracking for the current player.
@@ -184,12 +187,8 @@ class FriendsRealtimeService {
   /**
    * Listen for incoming room invites for current user.
    *
-   * Channels are persistent singletons keyed by identifier — they are created
-   * once and reused across re-renders / re-subscriptions so that a kick or
-   * view transition never silently drops the invite listener.
-   *
-   * Calling subscribeToInvites() again (e.g. after a dependency change) simply
-   * replaces the callback — existing channels stay alive.
+   * Channels are persistent singletons keyed by identifier with auto-reconnect
+   * watchdog, ensuring invites are NEVER dropped on room unmounts or kicks.
    */
   public subscribeToInvites(
     identifiers: string[],
@@ -201,43 +200,92 @@ class FriendsRealtimeService {
     identifiers.forEach(raw => {
       const clean = String(raw || '').trim().replace(/^@+/, '').toLowerCase();
       if (!clean) return;
-
-      // Skip if this channel is already open
-      if (this.inviteChannels.has(clean)) return;
-
-      const channelName = `player-invites:${clean}`;
-      const channel = supabase.channel(channelName);
-
-      channel
-        .on('broadcast', { event: 'room-invite' }, ({ payload }) => {
-          if (payload && payload.roomId && this.inviteCallback) {
-            this.inviteCallback(payload as RoomInvitePayload);
-          }
-        })
-        .subscribe((status) => {
-          if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-            // Channel died — remove from map so it gets recreated on next subscribe call
-            this.inviteChannels.delete(clean);
-            console.warn(`[FriendsRealtime] Invite channel for "${clean}" closed, will reconnect on next subscription`);
-          }
-        });
-
-      this.inviteChannels.set(clean, channel);
+      this.currentIdentifiers.add(clean);
+      this.ensureInviteChannel(clean);
     });
 
-    // Return a "unsubscribe" function that only replaces the callback — channels remain open
+    // Start auto-reconnect watchdog if not active
+    if (!this.watchdogTimer && typeof window !== 'undefined') {
+      this.watchdogTimer = setInterval(() => {
+        this.currentIdentifiers.forEach(clean => {
+          const ch = this.inviteChannels.get(clean);
+          if (!ch || ch.state === 'closed' || ch.state === 'errored') {
+            console.log(`[FriendsRealtime Watchdog] Auto-reconnecting invite channel for "${clean}"`);
+            this.ensureInviteChannel(clean);
+          }
+        });
+      }, 5000);
+    }
+
+    // Return a "unsubscribe" function that only clears the callback when no other subscriber exists
     return () => {
-      // Only clear the callback; DO NOT remove channels (they must survive view transitions)
       if (this.inviteCallback === onInviteReceived) {
-        this.inviteCallback = null;
+        // Keep channels alive for global root listener
       }
     };
+  }
+
+  /**
+   * Ensures an active, healthy invite channel exists for an identifier.
+   */
+  private ensureInviteChannel(clean: string) {
+    if (!clean) return;
+
+    if (this.reconnectTimers.has(clean)) {
+      clearTimeout(this.reconnectTimers.get(clean));
+      this.reconnectTimers.delete(clean);
+    }
+
+    const channelName = `player-invites:${clean}`;
+    let channel = this.inviteChannels.get(clean);
+
+    if (channel && channel.state === 'joined') {
+      return;
+    }
+
+    if (channel) {
+      try { supabase.removeChannel(channel); } catch (_) {}
+      this.inviteChannels.delete(clean);
+    }
+
+    channel = supabase.channel(channelName);
+
+    channel
+      .on('broadcast', { event: 'room-invite' }, ({ payload }) => {
+        if (payload && payload.roomId && this.inviteCallback) {
+          this.inviteCallback(payload as RoomInvitePayload);
+        }
+      })
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          this.inviteChannels.set(clean, channel!);
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          this.inviteChannels.delete(clean);
+          console.warn(`[FriendsRealtime] Invite channel for "${clean}" entered ${status}, auto-reconnecting in 1.5s...`);
+          if (this.currentIdentifiers.has(clean)) {
+            const timer = setTimeout(() => {
+              this.ensureInviteChannel(clean);
+            }, 1500);
+            this.reconnectTimers.set(clean, timer);
+          }
+        }
+      });
+
+    this.inviteChannels.set(clean, channel);
   }
 
   /**
    * Tear down ALL invite channels (call only on full app logout/unmount).
    */
   public removeAllInviteChannels() {
+    if (this.watchdogTimer) {
+      clearInterval(this.watchdogTimer);
+      this.watchdogTimer = null;
+    }
+    this.reconnectTimers.forEach(t => clearTimeout(t));
+    this.reconnectTimers.clear();
+    this.currentIdentifiers.clear();
+
     this.inviteChannels.forEach(ch => {
       try { supabase.removeChannel(ch); } catch (_) {}
     });
@@ -258,6 +306,20 @@ class FriendsRealtimeService {
     const channelName = `player-invites:${clean}`;
     const channel = supabase.channel(channelName);
 
+    // Fallback: Also insert notification row so DB change listener catches it
+    if (payload.invitedUserId) {
+      Promise.resolve(
+        supabase.from('notifications').insert({
+          user_id: payload.invitedUserId,
+          type: 'room_invite',
+          title: `دعوة تحدي من ${payload.hostName || 'صديق'}`,
+          body: `أرسل لك دعوة للانضمام إلى: ${payload.roomName || 'غرفة التحدي'}`,
+          data: JSON.stringify(payload),
+          is_read: false
+        })
+      ).catch(() => {});
+    }
+
     return new Promise<boolean>((resolve) => {
       channel.subscribe((status) => {
         if (status === 'SUBSCRIBED') {
@@ -267,19 +329,29 @@ class FriendsRealtimeService {
             payload
           }).then(() => {
             setTimeout(() => {
-              try {
-                supabase.removeChannel(channel);
-              } catch (e) { }
+              // Crucial fix: NEVER remove channel if this client is also listening to it!
+              if (!this.inviteChannels.has(clean)) {
+                try {
+                  supabase.removeChannel(channel);
+                } catch (e) { }
+              }
               resolve(true);
             }, 300);
           }).catch(err => {
             console.error('Failed to send broadcast room invite:', err);
-            try {
-              supabase.removeChannel(channel);
-            } catch (e) { }
+            if (!this.inviteChannels.has(clean)) {
+              try {
+                supabase.removeChannel(channel);
+              } catch (e) { }
+            }
             resolve(false);
           });
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          if (!this.inviteChannels.has(clean)) {
+            try {
+              supabase.removeChannel(channel);
+            } catch (e) { }
+          }
           resolve(false);
         }
       });

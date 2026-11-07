@@ -13,6 +13,7 @@ import { NotificationBell } from '../NotificationBell';
 import { Link } from '../common/Link';
 import { router } from '../../services/router';
 import { supabase } from '../../services/supabase';
+import { friendsRealtimeService } from '../../services/friendsRealtimeService';
 
 export interface MainLayoutProps {
   children: React.ReactNode;
@@ -127,6 +128,79 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
       }
     };
   }, [app.playerName, fetchPendingFriendRequests]);
+
+  // Root Global Invitations & Realtime Notifications Listener (Never unmounts across room views)
+  useEffect(() => {
+    if (!app.playerName && !app.playerUsername) return;
+
+    const identifiers = [
+      app.uniquePlayerId,
+      app.playerUsername,
+      app.playerName,
+      app.playerId ? String(app.playerId) : null,
+      app.playerId ? `user_${app.playerId}` : null
+    ].filter(Boolean) as string[];
+
+    const handleIncomingInvite = (invite: any) => {
+      if (!invite?.roomId) return;
+      const myName = (app.playerName || '').trim().toLowerCase();
+      const myUser = (app.playerUsername || '').trim().toLowerCase().replace(/^@+/, '');
+      const hostN = (invite.hostName || '').trim().toLowerCase();
+      const hostU = (invite.hostUsername || '').trim().toLowerCase().replace(/^@+/, '');
+      if ((hostN && hostN === myName) || (hostU && hostU === myUser)) return;
+
+      app.setIncomingRoomInvite(invite);
+    };
+
+    // 1. Subscribe via self-healing friendsRealtimeService singleton with auto-reconnect
+    const unsubscribeInvites = friendsRealtimeService.subscribeToInvites(
+      identifiers,
+      handleIncomingInvite
+    );
+
+    // 2. Direct Supabase 'notifications' table INSERT listener for room_invite events
+    let notifChannel: any = null;
+    const currentUid = app.playerId || app.playerUsername || app.playerName;
+    if (currentUid) {
+      notifChannel = supabase
+        .channel(`root_global_invites_${currentUid}`)
+        .on(
+          'postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'notifications' },
+          (payload: any) => {
+            const row = payload?.new;
+            if (row && (row.type === 'room_invite' || (row.data && typeof row.data === 'string' && row.data.includes('"roomId"')))) {
+              const myIds = [
+                String(app.playerId || ''),
+                String(app.playerUsername || '').toLowerCase().replace(/^@+/, ''),
+                String(app.playerName || '').trim().toLowerCase(),
+                String(app.uniquePlayerId || '').toUpperCase()
+              ].filter(Boolean);
+
+              const targetUser = String(row.user_id || row.userId || '').toLowerCase().replace(/^@+/, '');
+              if (myIds.includes(targetUser) && row.data) {
+                try {
+                  const parsed = typeof row.data === 'string' ? JSON.parse(row.data) : row.data;
+                  if (parsed && parsed.roomId) {
+                    handleIncomingInvite(parsed);
+                  }
+                } catch (e) {
+                  console.warn('[MainLayout] Parse invite notification error:', e);
+                }
+              }
+            }
+          }
+        )
+        .subscribe();
+    }
+
+    return () => {
+      unsubscribeInvites();
+      if (notifChannel) {
+        try { supabase.removeChannel(notifChannel); } catch (_) {}
+      }
+    };
+  }, [app.playerName, app.playerUsername, app.uniquePlayerId, app.playerId, app.setIncomingRoomInvite]);
 
   return (
     <>

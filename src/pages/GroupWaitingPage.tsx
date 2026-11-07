@@ -245,11 +245,6 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
 
     // B) Direct Supabase channel listener for `room_sync_${room.id}`
     const channelName = `room_sync_${room.id}`;
-    const existingChannel = supabase.getChannels().find(ch => ch.topic === `realtime:${channelName}`);
-    if (existingChannel) {
-      try { supabase.removeChannel(existingChannel); } catch (_) {}
-    }
-
     const roomChannel = supabase.channel(channelName);
 
     // Helper: given a new rooms row, rebuild the participants array by merging
@@ -479,7 +474,9 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
 
     return () => {
       try {
-        supabase.removeChannel(roomChannel);
+        if (roomChannel) {
+          supabase.removeChannel(roomChannel);
+        }
       } catch (e) { }
     };
   }, [room?.id, (room as any)?.lastReaction, (room as any)?.playersProgress?.__lastReaction, friendsList]);
