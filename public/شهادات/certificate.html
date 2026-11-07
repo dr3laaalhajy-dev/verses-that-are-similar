@@ -13,9 +13,10 @@
     href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400;1,700&family=Noto+Naskh+Arabic:wght@400;600;700&family=Tajawal:wght@300;400;500;700;800;900&family=Space+Grotesk:wght@500;700&display=swap"
     rel="stylesheet">
 
-  <!-- Tailwind CSS & html2canvas CDN -->
+  <!-- Tailwind CSS, Supabase & html2canvas CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
     tailwind.config = {
       theme: {
@@ -158,20 +159,20 @@
         <div class="flex items-center gap-3 sm:gap-4 w-full md:w-auto justify-between md:justify-end">
           <div class="bg-slate-800/80 border border-slate-700/80 rounded-2xl px-4 py-3 text-center min-w-[95px]">
             <span class="block text-xs text-slate-400 font-medium">المكتملة</span>
-            <span id="statCompletedCount" class="text-xl sm:text-2xl font-black text-emerald-400 font-mono">8</span>
+            <span id="statCompletedCount" class="text-xl sm:text-2xl font-black text-emerald-400 font-mono">0</span>
             <span class="text-[10px] text-slate-400">من 11</span>
           </div>
 
           <div class="bg-slate-800/80 border border-slate-700/80 rounded-2xl px-4 py-3 text-center min-w-[95px]">
             <span class="block text-xs text-slate-400 font-medium">قيد الإنجاز</span>
-            <span id="statPendingCount" class="text-xl sm:text-2xl font-black text-amber-400 font-mono">3</span>
+            <span id="statPendingCount" class="text-xl sm:text-2xl font-black text-amber-400 font-mono">11</span>
             <span class="text-[10px] text-slate-400">تحديات</span>
           </div>
 
           <div class="bg-slate-800/80 border border-slate-700/80 rounded-2xl px-4 py-3 text-center min-w-[95px]">
             <span class="block text-xs text-slate-400 font-medium">نسبة الختم</span>
-            <span id="statCompletionRate" class="text-xl sm:text-2xl font-black text-amber-300 font-mono">73%</span>
-            <span class="text-[10px] text-emerald-400">مستوى متقدم</span>
+            <span id="statCompletionRate" class="text-xl sm:text-2xl font-black text-amber-300 font-mono">0%</span>
+            <span class="text-[10px] text-emerald-400">تحديث لحظي</span>
           </div>
         </div>
 
@@ -181,12 +182,13 @@
       <div class="mt-6 pt-5 border-t border-slate-800/80">
         <div class="flex items-center justify-between text-xs font-bold text-slate-400 mb-2">
           <span>التقدم التراكمي نحو الختم الأكبر لجميع المسابقات:</span>
-          <span class="text-amber-400 font-mono">73% (8 / 11)</span>
+          <span id="statProgressSummary" class="text-amber-400 font-mono">0% (0 / 11)</span>
         </div>
         <div class="w-full h-3 bg-slate-950 rounded-full overflow-hidden p-0.5 border border-slate-800">
           <div
+            id="statProgressBar"
             class="h-full bg-gradient-to-r from-emerald-500 via-amber-500 to-amber-400 rounded-full transition-all duration-700"
-            style="width: 73%"></div>
+            style="width: 0%"></div>
         </div>
       </div>
     </header>
@@ -432,17 +434,17 @@
     // 1. جلب اسم اللاعب المسجل في قاعدة البيانات / الحساب الرسمي (بدون السماح بتعديله)
     const DB_PLAYER_NAME = localStorage.getItem('quran_user_triple_name') || localStorage.getItem('quran_player_name') || localStorage.getItem('quran_user_name') || "علاء";
 
-    // 2. مصفوفة الإنجازات الـ 11 الرسمية مع أهدافها وعداداتها
+    // 2. مصفوفة الإنجازات الـ 11 الرسمية مع أهدافها (تهيئة نظيفة بدون أرقام وهمية)
     const ACHIEVEMENTS_DATA = [
       {
         id: "ayah_100",
         title: "إتمام 100 سؤال في تحدي إكمال الآية",
         category: "علوم القرآن",
         icon: "📖",
-        current: 100,
+        current: 0,
         total: 100,
-        completed: true,
-        score: "100%",
+        completed: false,
+        score: "0%",
         rank: "حافظ متقن ومتميز",
         scope: "(كامل القرآن الكريم)",
         serial: "MTN-AY-10024"
@@ -452,10 +454,10 @@
         title: "ختم مسابقة الفقه والمعلومات الإسلامية",
         category: "الفقه الإسلامي",
         icon: "⚖️",
-        current: 100,
+        current: 0,
         total: 100,
-        completed: true,
-        score: "100%",
+        completed: false,
+        score: "0%",
         rank: "فقيه متقن",
         scope: "(العبادات والمعاملات)",
         serial: "MTN-FQ-88210"
@@ -465,10 +467,10 @@
         title: "إتمام 50 سؤالاً في تحدي تحديد اسم السورة",
         category: "متشابهات السور",
         icon: "🕌",
-        current: 35,
+        current: 0,
         total: 50,
         completed: false,
-        score: "70%",
+        score: "0%",
         rank: "خبير المتشابهات",
         scope: "(أجزاء عم وتبارك والمفصل)",
         serial: "MTN-SR-50122"
@@ -478,10 +480,10 @@
         title: "إتمام 60 سؤالاً في السيرة النبوية الشريفة",
         category: "السيرة العطرة",
         icon: "📜",
-        current: 60,
+        current: 0,
         total: 60,
-        completed: true,
-        score: "60 / 60",
+        completed: false,
+        score: "0%",
         rank: "عالم بالسيرة النبوية",
         scope: "(العهد المكي والمدني)",
         serial: "MTN-SRH-60311"
@@ -491,10 +493,10 @@
         title: "ختم بنك أسئلة العقيدة الإسلامية",
         category: "أصول الدين",
         icon: "🛡️",
-        current: 100,
+        current: 0,
         total: 100,
-        completed: true,
-        score: "100%",
+        completed: false,
+        score: "0%",
         rank: "راسخ في العقيدة",
         scope: "(أركان الإيمان والتوحيد الخالص)",
         serial: "MTN-AK-10045"
@@ -504,10 +506,10 @@
         title: "إتمام 100 حديث شريف في السنة النبوية",
         category: "الحديث الشريف",
         icon: "✨",
-        current: 72,
+        current: 0,
         total: 100,
         completed: false,
-        score: "72%",
+        score: "0%",
         rank: "محدث متقن",
         scope: "(رياض الصالحين والأربعين)",
         serial: "MTN-HD-10088"
@@ -517,10 +519,10 @@
         title: "إتمام 100 سؤال في تفسير القرآن الكريم",
         category: "تفسير وبيان",
         icon: "💡",
-        current: 100,
+        current: 0,
         total: 100,
-        completed: true,
-        score: "100%",
+        completed: false,
+        score: "0%",
         rank: "عالم بالتفسير",
         scope: "(معاني الآيات وغريب القرآن)",
         serial: "MTN-TF-10029"
@@ -530,10 +532,10 @@
         title: "ختم مسابقة التاريخ والفتوحات الإسلامية",
         category: "التاريخ الإسلامي",
         icon: "🏛️",
-        current: 40,
+        current: 0,
         total: 100,
         completed: false,
-        score: "40%",
+        score: "0%",
         rank: "خبير بالتاريخ الإسلامي",
         scope: "(سير الخلفاء الراشدين والفتوحات)",
         serial: "MTN-HS-10067"
@@ -543,10 +545,10 @@
         title: "إتمام مسابقة علوم اللغة العربية والمعاجم",
         category: "لغة الضاد",
         icon: "🖋️",
-        current: 100,
+        current: 0,
         total: 100,
-        completed: true,
-        score: "100%",
+        completed: false,
+        score: "0%",
         rank: "أديب فصيح",
         scope: "(لغة القرآن والنحو والبلاغة)",
         serial: "MTN-AR-10014"
@@ -556,10 +558,10 @@
         title: "سلسلة 30 يوماً متتالية في التحدي اليومي",
         category: "المثابرة والهمة",
         icon: "🔥",
-        current: 30,
+        current: 0,
         total: 30,
-        completed: true,
-        score: "سلسلة 30 يوماً",
+        completed: false,
+        score: "0 يوم",
         rank: "مواظب متفوق",
         scope: "(الشهر القرآني المبارك)",
         serial: "MTN-ST-30001"
@@ -569,10 +571,10 @@
         title: "المركز الأول و1000 نقطة في تحدي السرعة",
         category: "تحديات الصدارة",
         icon: "⚡",
-        current: 1000,
+        current: 0,
         total: 1000,
-        completed: true,
-        score: "1,000 نقطة",
+        completed: false,
+        score: "0 نقطة",
         rank: "فارس السرعة الأول",
         scope: "(المرحلة المتقدمة)",
         serial: "MTN-SP-10099"
@@ -580,6 +582,191 @@
     ];
 
     let currentFilter = 'all';
+
+    // 3. دالة جلب الإحصائيات الدقيقة مع الالتزام بشرط صحة الإجابة (is_correct = true) والعزل التام للأقسام
+    async function loadRealtimeMilestones() {
+      const activeUser = localStorage.getItem('quran_player_username') || localStorage.getItem('quran_player_name') || localStorage.getItem('quran_player_id') || DB_PLAYER_NAME;
+
+      function getLocalCount(category) {
+        try {
+          const raw = localStorage.getItem(`quran_correct_answers_${category}`);
+          if (raw) {
+            const arr = JSON.parse(raw);
+            if (Array.isArray(arr)) return arr.length;
+          }
+          const c = Number(localStorage.getItem(`quran_correct_count_${category}`) || 0);
+          return isNaN(c) ? 0 : c;
+        } catch {
+          return 0;
+        }
+      }
+
+      // الإحصائيات المعزولة لكل قسم حصراً بناءً على الإجابات الصحيحة فقط
+      const realStats = {
+        ayah_100: getLocalCount('ayah'),
+        figh_quiz: getLocalCount('figh'),
+        surah_50: getLocalCount('surah'),
+        seerah_60: getLocalCount('seerah'),
+        akida_bank: getLocalCount('akida'),
+        hadith_100: getLocalCount('hadith'),
+        tafseer_100: getLocalCount('tafseer'),
+        history_conquests: getLocalCount('history'),
+        arabic_language: getLocalCount('arabic') || getLocalCount('arabia'),
+        daily_streak_30: Number(localStorage.getItem('quran_streak') || 0),
+        speed_1000: Number(localStorage.getItem('quran_total_points') || 0)
+      };
+
+      // احتساب الإجابات الصحيحة من المواضيع المجتازة في المسابقات الإسلامية (12 سؤالاً صحيحاً لكل موضوع)
+      const customCats = ['figh', 'akida', 'hadith', 'tafseer', 'history', 'arabia'];
+      customCats.forEach(catKey => {
+        try {
+          const rawTopics = localStorage.getItem(`quran_quiz_topics_${catKey}`);
+          if (rawTopics) {
+            const parsed = JSON.parse(rawTopics);
+            let passedTopicsCount = 0;
+            [1, 2, 3].forEach(lvl => {
+              if (Array.isArray(parsed[lvl])) {
+                passedTopicsCount += parsed[lvl].length;
+              }
+            });
+            const verified = passedTopicsCount * 12;
+            if (catKey === 'figh') realStats.figh_quiz = Math.max(realStats.figh_quiz, verified);
+            if (catKey === 'akida') realStats.akida_bank = Math.max(realStats.akida_bank, verified);
+            if (catKey === 'hadith') realStats.hadith_100 = Math.max(realStats.hadith_100, verified);
+            if (catKey === 'tafseer') realStats.tafseer_100 = Math.max(realStats.tafseer_100, verified);
+            if (catKey === 'history') realStats.history_conquests = Math.max(realStats.history_conquests, verified);
+            if (catKey === 'arabia') realStats.arabic_language = Math.max(realStats.arabic_language, verified);
+          }
+        } catch (_) {}
+      });
+
+      // استخراج الإجابات الصحيحة فقط للسيرة النبوية (score فقط وتجاهل الإجابات الخاطئة)
+      try {
+        const seerahRaw = localStorage.getItem('quran_quiz_progress_seerah');
+        if (seerahRaw) {
+          const sObj = JSON.parse(seerahRaw);
+          const sScore = Number(sObj.score || (sObj.easy ? sObj.easy * 15 : 0));
+          realStats.seerah_60 = Math.max(realStats.seerah_60, sScore);
+        }
+      } catch (_) {}
+
+      // استعلام قاعدة بيانات Supabase المباشر إن توفر الاتصال
+      try {
+        if (window.supabase && typeof window.supabase.createClient === 'function') {
+          const client = window.supabase.createClient(
+            'https://hexxbopfvbuliakufejj.supabase.co',
+            'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhleHhib3BmdmJ1bGlha3VmZWpqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMyMzA1MjYsImV4cCI6MjEwODgwNjUyNn0.-JG3tJo4PJrxtaHI9MC9fXQKR1AZ60GY5b-OJOFNSZo'
+          );
+
+          // 1. استعلام بيانات اللاعب الرسمية: التحديات المكتملة والنقاط والسلسلة
+          const { data: dbPlayer } = await client
+            .from('players')
+            .select('completedChallengeIds, streak, points')
+            .or(`uniquePlayerId.eq.${activeUser},username.eq.${activeUser},name.eq.${activeUser}`)
+            .limit(1)
+            .maybeSingle();
+
+          if (dbPlayer) {
+            if (typeof dbPlayer.streak === 'number') realStats.daily_streak_30 = Math.max(realStats.daily_streak_30, dbPlayer.streak);
+            if (typeof dbPlayer.points === 'number') realStats.speed_1000 = Math.max(realStats.speed_1000, dbPlayer.points);
+
+            if (Array.isArray(dbPlayer.completedChallengeIds) && dbPlayer.completedChallengeIds.length > 0) {
+              const { data: chRows } = await client
+                .from('challenges')
+                .select('id, type')
+                .in('id', dbPlayer.completedChallengeIds);
+
+              if (chRows && chRows.length > 0) {
+                let ayahC = 0;
+                let surahC = 0;
+                chRows.forEach(ch => {
+                  const t = String(ch.type || '').toUpperCase();
+                  if (t === 'SURAH' || t === 'SURAH_NAME') surahC++;
+                  else if (t === 'STANDARD' || t === 'COMPLETION') ayahC++;
+                });
+                realStats.ayah_100 = Math.max(realStats.ayah_100, ayahC);
+                realStats.surah_50 = Math.max(realStats.surah_50, surahC);
+              } else {
+                realStats.ayah_100 = Math.max(realStats.ayah_100, dbPlayer.completedChallengeIds.length);
+              }
+            }
+          }
+
+          // 2. استعلام الإجابات الصحيحة حصراً (is_correct = true) وعزلها بالأقسام
+          const { data: correctRows } = await client
+            .from('user_answers')
+            .select('category, question_id, is_correct')
+            .eq('user_id', activeUser)
+            .eq('is_correct', true);
+
+          if (correctRows && Array.isArray(correctRows)) {
+            const catMap = {};
+            correctRows.forEach(r => {
+              if (r.is_correct === true && r.category) {
+                const norm = String(r.category).toLowerCase().trim();
+                if (!catMap[norm]) catMap[norm] = new Set();
+                catMap[norm].add(String(r.question_id || ''));
+              }
+            });
+            if (catMap['figh']) realStats.figh_quiz = Math.max(realStats.figh_quiz, catMap['figh'].size);
+            if (catMap['seerah']) realStats.seerah_60 = Math.max(realStats.seerah_60, catMap['seerah'].size);
+            if (catMap['akida']) realStats.akida_bank = Math.max(realStats.akida_bank, catMap['akida'].size);
+            if (catMap['hadith']) realStats.hadith_100 = Math.max(realStats.hadith_100, catMap['hadith'].size);
+            if (catMap['tafseer']) realStats.tafseer_100 = Math.max(realStats.tafseer_100, catMap['tafseer'].size);
+            if (catMap['history']) realStats.history_conquests = Math.max(realStats.history_conquests, catMap['history'].size);
+            if (catMap['arabic'] || catMap['arabia']) realStats.arabic_language = Math.max(realStats.arabic_language, (catMap['arabic']?.size || 0) + (catMap['arabia']?.size || 0));
+            if (catMap['ayah']) realStats.ayah_100 = Math.max(realStats.ayah_100, catMap['ayah'].size);
+            if (catMap['surah']) realStats.surah_50 = Math.max(realStats.surah_50, catMap['surah'].size);
+          }
+        }
+      } catch (err) {
+        console.warn('[MilestoneTracker] Supabase stats query notice:', err);
+      }
+
+      // فحص الشهادات المعتمدة المحفوظة
+      let claimedCerts = [];
+      try {
+        claimedCerts = JSON.parse(localStorage.getItem('quran_user_certificates') || '[]');
+      } catch (_) {}
+
+      // تحديث مصفوفة الإنجازات بالبيانات المفروزة والدقيقة
+      let completedCount = 0;
+      ACHIEVEMENTS_DATA.forEach(item => {
+        const hasClaimed = claimedCerts.some(c => c.category === item.id || c.category === item.category);
+        const val = realStats[item.id] || 0;
+        item.current = hasClaimed ? item.total : Math.min(val, item.total);
+        item.completed = (item.current >= item.total);
+        item.score = item.completed ? '100%' : `${Math.round((item.current / item.total) * 100)}%`;
+        if (item.completed) completedCount++;
+      });
+
+      // تحديث شريط الإحصائيات التراكمية في الترويسة
+      const pendingCount = ACHIEVEMENTS_DATA.length - completedCount;
+      const rate = Math.round((completedCount / ACHIEVEMENTS_DATA.length) * 100);
+
+      const elComp = document.getElementById('statCompletedCount');
+      if (elComp) elComp.textContent = completedCount;
+      const elPend = document.getElementById('statPendingCount');
+      if (elPend) elPend.textContent = pendingCount;
+      const elRate = document.getElementById('statCompletionRate');
+      if (elRate) elRate.textContent = rate + '%';
+
+      const summaryEl = document.getElementById('statProgressSummary');
+      if (summaryEl) summaryEl.textContent = `${rate}% (${completedCount} / 11)`;
+
+      const barEl = document.getElementById('statProgressBar');
+      if (barEl) barEl.style.width = `${rate}%`;
+
+      const tabAll = document.getElementById('tab-all');
+      if (tabAll) tabAll.textContent = `الكل (${ACHIEVEMENTS_DATA.length})`;
+      const tabComp = document.getElementById('tab-completed');
+      if (tabComp) tabComp.textContent = `المكتملة والجاهزة (${completedCount}) ✓`;
+      const tabPend = document.getElementById('tab-pending');
+      if (tabPend) tabPend.textContent = `قيد الإنجاز (${pendingCount}) ⏳`;
+
+      // تصيير البطاقات بالبيانات الحقيقية والمفلترة
+      renderAchievements();
+    }
 
     // تهيئة الصفحة فور تحميلها
     window.addEventListener('DOMContentLoaded', () => {
@@ -595,8 +782,9 @@
       });
       document.getElementById('certDate').textContent = today;
 
-      // عرض البطاقات في الواجهة
+      // عرض البطاقات الأولية ثم جلب وتحديث الإحصائيات الدقيقة
       renderAchievements();
+      loadRealtimeMilestones();
     });
 
     // تصفية البطاقات
