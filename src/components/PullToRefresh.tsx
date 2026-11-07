@@ -133,14 +133,23 @@ export const PullToRefresh: React.FC<PullToRefreshProps> = ({ children, onRefres
         )}
       </AnimatePresence>
 
-      {/* Children: Keep UI visible at all times to prevent blank screens or white flashes */}
+      {/* Children: Conditional rendering during refresh to clear main content while keeping Header and Nav */}
       <div 
         className="transition-transform duration-200 ease-out"
         style={{
           transform: isRefreshing ? 'translateY(6px)' : pullDistance > 0 ? `translateY(${pullDistance * 0.2}px)` : 'none'
         }}
       >
-        {children}
+        {isRefreshing ? (
+          /* عرض مساحة فارغة تحافظ على لون/نقشة الخلفية لتعطي إيحاء التفريغ */
+          <div className="flex-1 flex items-center justify-center min-h-[50vh] transition-opacity duration-300 pointer-events-none select-none">
+          </div>
+        ) : (
+          /* عرض المحتوى الفعلي (الغرف، البطاقات، الأزرار) مع سلاسة الظهور */
+          <div className="content-container animate-fade-in transition-opacity duration-300">
+            {children}
+          </div>
+        )}
       </div>
     </div>
   );

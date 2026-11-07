@@ -850,6 +850,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [v1RoomPassword, setV1RoomPassword] = useState<string>('');
   const [availableRooms, setAvailableRooms] = useState<any[]>([]);
   const [isLoadingRooms, setIsLoadingRooms] = useState<boolean>(false);
+  const [isPullRefreshing, setIsPullRefreshing] = useState<boolean>(false);
   const [showPasswordText, setShowPasswordText] = useState<boolean>(false);
   const [privateRoomModal, setPrivateRoomModal] = useState<{ isOpen: boolean; room: any | null; password: string; error?: string }>({
     isOpen: false,
@@ -2258,6 +2259,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // تحديث البيانات الحقيقي عند السحب للتحديث (Pull to Refresh Handler)
   const handlePullToRefresh = useCallback(async () => {
+    setIsPullRefreshing(true);
     setIsLoadingRooms(true);
     try {
       const tasks: Promise<any>[] = [
@@ -2296,6 +2298,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch (err) {
       console.warn('PullToRefresh background error:', err);
     } finally {
+      setIsPullRefreshing(false);
       setIsLoadingRooms(false);
     }
   }, [fetchAvailableRooms, fetchSettings, fetchChallenges, fetchCompletionChallenges, uniquePlayerId, playerUsername, playerName]);
@@ -6272,6 +6275,7 @@ ${versesList}
     rooms: availableRooms, setRooms: setAvailableRooms,
     updateRoomInList,
     isLoadingRooms, setIsLoadingRooms,
+    isPullRefreshing, setIsPullRefreshing,
     fetchAvailableRooms,
     handleJoinV1,
     privateRoomModal, setPrivateRoomModal,

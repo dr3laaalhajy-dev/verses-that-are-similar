@@ -9,6 +9,7 @@ export interface GroupJoinPageProps {
   setView: (view: View) => void;
   fetchAvailableRooms: (force?: boolean) => void;
   isLoadingRooms: boolean;
+  isRefreshing?: boolean;
   availableRooms: any[];
   setRooms?: React.Dispatch<React.SetStateAction<any[]>>;
   playerUsername: string | null;
@@ -22,6 +23,7 @@ export const GroupJoinPage: React.FC<GroupJoinPageProps> = ({
   setView,
   fetchAvailableRooms,
   isLoadingRooms,
+  isRefreshing,
   availableRooms,
   setRooms,
   playerUsername,
@@ -70,7 +72,15 @@ export const GroupJoinPage: React.FC<GroupJoinPageProps> = ({
         </button>
       </div>
 
-      {/* Prominent Create Room Action Banner */}
+      {isRefreshing ? (
+        /* عرض مساحة فارغة تحافظ على لون/نقشة الخلفية لتعطي إيحاء التفريغ */
+        <div className="flex-1 flex items-center justify-center min-h-[50vh] pointer-events-none select-none">
+          {/* مساحة فارغة تحافظ على الخلفية */}
+        </div>
+      ) : (
+        /* عرض المحتوى الفعلي (الغرف، البطاقات، الأزرار) مع سلاسة الظهور */
+        <div className="content-container animate-fade-in space-y-4 sm:space-y-6">
+          {/* Prominent Create Room Action Banner */}
       <motion.button
         whileHover={{ scale: 1.01 }}
         whileTap={{ scale: 0.98 }}
@@ -271,6 +281,8 @@ export const GroupJoinPage: React.FC<GroupJoinPageProps> = ({
           </div>
         )}
       </div>
+        </div>
+      )}
     </motion.div>
   );
 };
