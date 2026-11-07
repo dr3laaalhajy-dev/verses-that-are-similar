@@ -280,25 +280,32 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
     setIsLoading(true);
 
     try {
-      console.log('[NotificationBell] Executing fetch query for receiver_id:', activeUserId);
+      console.log("1. Current User ID before fetch:", currentUser?.id);
 
-      // الاستعلام الأساسي لجلب إشعارات المستخدم الحالي بالفلتر الصارم
+      // الاستعلام الأساسي لجلب إشعارات المستخدم الحالي مع وضع المراقبة الشاملة
       const { data, error } = await supabase
         .from('notifications')
         .select('*')
-        .eq('receiver_id', activeUserId)
+        .eq('receiver_id', currentUser?.id)
         .order('created_at', { ascending: false });
 
+      console.log("2. Supabase Response Data:", data);
+      console.log("3. Supabase Error (if any):", error);
+
       if (error) {
-        console.log('[NotificationBell Initial Fetch Error]:', error);
+        // تشخيص دقيق للخطأ
+        if (error.code === '42703' || error.message?.includes('receiver_id')) {
+          console.warn('[NotificationBell Diagnostic] العمود receiver_id غير موجود في جدول notifications بقاعدة البيانات! يرجى تنفيذ سكريبت SQL المرفق.');
+        } else if (error.code === '22P02') {
+          console.warn('[NotificationBell Diagnostic] تعارض في نوع البيانات (UUID Mismatch)! معرف اللاعب ليس UUID بل نص/رقم، ويجب تغيير نوع receiver_id إلى TEXT.');
+        }
 
         // خطة حماية طارئة في حال لم يكن العمود receiver_id مضافاً بعد في قاعدة بيانات Supabase (خطأ 42703):
         if (error.code === '42703' || error.message?.includes('receiver_id')) {
-          console.warn('[NotificationBell] العمود receiver_id غير موجود حالياً في جدول notifications. يرجى تشغيل أوامر SQL المرفقة.');
           const { data: fallbackData, error: fbError } = await supabase
             .from('notifications')
             .select('*')
-            .or(`user_id.eq.${activeUserId},user_id.is.null`)
+            .is('user_id', null)
             .order('created_at', { ascending: false });
 
           if (fbError) {
