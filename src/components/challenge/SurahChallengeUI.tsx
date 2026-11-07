@@ -1,13 +1,20 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CheckCircle, XCircle, Trophy, BookOpen } from 'lucide-react';
+import { CheckCircle, XCircle, Trophy, BookOpen, Lightbulb } from 'lucide-react';
 import { renderQuranText } from '../../utils/quranUtils';
 import { normalizeArabicText, normalizeSurahName } from '../../utils/arabic';
 import { quranData } from '../../services/QuranRepository';
 
+export interface OutOfRangeSurah {
+  surah: string;
+  juzs: number[];
+  juzText: string;
+}
+
 export interface SurahFeedbackData {
   isFullyCorrect: boolean;
   correctSurahs: string[];
+  outOfRangeAnswers?: OutOfRangeSurah[];
 }
 
 export interface SurahChallengeUIProps {
@@ -134,6 +141,38 @@ export const SurahChallengeUI: React.FC<SurahChallengeUIProps> = ({
                   <span className="font-black text-emerald-800 bg-emerald-100/80 px-2 py-0.5 rounded-md inline-block mt-0.5">
                     {surahFeedbackData.correctSurahs.join('، ')}
                   </span>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {/* تنبيه بعدي أنيق للسور المتشابهة خارج النطاق المحدد */}
+        {feedback && surahFeedbackData?.outOfRangeAnswers && surahFeedbackData.outOfRangeAnswers.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 5 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="w-full p-3.5 sm:p-4 rounded-xl md:rounded-2xl bg-amber-50/95 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/60 shadow-xs text-right"
+          >
+            <div className="flex items-start gap-2.5">
+              <div className="p-1.5 rounded-lg bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 shrink-0 mt-0.5">
+                <Lightbulb className="w-4 h-4 md:w-5 md:h-5" />
+              </div>
+              <div className="flex-1">
+                <span className="font-bold text-xs sm:text-sm text-amber-900 dark:text-amber-200 block">
+                  💡 هل تعلم؟ هذه الآية الكريمة وردت أيضاً في:
+                </span>
+                <div className="flex flex-wrap gap-1.5 sm:gap-2 mt-2">
+                  {surahFeedbackData.outOfRangeAnswers.map((item, idx) => (
+                    <span
+                      key={idx}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-100/80 dark:bg-amber-900/50 text-amber-900 dark:text-amber-100 border border-amber-300/60 dark:border-amber-800/60"
+                    >
+                      <span>{item.surah.startsWith('سورة') ? item.surah : `سورة ${item.surah}`}</span>
+                      <span className="text-amber-700 dark:text-amber-300 font-semibold text-[11px]">({item.juzText})</span>
+                    </span>
+                  ))}
                 </div>
               </div>
             </div>

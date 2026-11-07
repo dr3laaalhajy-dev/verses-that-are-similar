@@ -9,7 +9,15 @@ import {
 } from 'lucide-react';
 import { quranData } from '../services/QuranRepository';
 import { HADITHS, Hadith } from '../services/HadithRepository';
-import { juzBoundaries, JUZ_NAMES_AR, ALL_QURAN_SURAHS, getJuzsForSurah } from '../services/JuzRepository';
+import {
+  juzBoundaries,
+  JUZ_NAMES_AR,
+  ALL_QURAN_SURAHS,
+  getJuzsForSurah,
+  getSelectedJuzRange,
+  splitSurahAnswersByJuzRange,
+  SurahAnswerWithDetails
+} from '../services/JuzRepository';
 import { getPageNumber, juzStartPages, surahStartPages } from '../services/PageRepository';
 import { adhkarData, Dhikr, resolveAdhkarCategoryId } from '../services/AdhkarRepository';
 import { router } from '../services/router';
@@ -875,7 +883,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [speedTotalTimeSpent, setSpeedTotalTimeSpent] = useState(0);
   const [isSpeedGameOver, setIsSpeedGameOver] = useState(false);
   const [surahInputs, setSurahInputs] = useState<string[]>([]);
-  const [surahFeedbackData, setSurahFeedbackData] = useState<{ isFullyCorrect: boolean; correctSurahs: string[] } | null>(null);
+  const [surahFeedbackData, setSurahFeedbackData] = useState<{
+    isFullyCorrect: boolean;
+    correctSurahs: string[];
+    outOfRangeAnswers?: SurahAnswerWithDetails[];
+  } | null>(null);
   const [speedStartTime, setSpeedStartTime] = useState<number | null>(null);
 
   // Quiz Session State
@@ -4455,10 +4467,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       const validSurahs = surahs.filter(s => s.trim());
-      // Initialize with correct number of empty strings
-      setSurahInputs(new Array(Math.max(1, validSurahs.length)).fill(''));
+      const currentRange = getSelectedJuzRange(room, selectedSkillJuzs, selectedJuz);
+      const { inRangeAnswers } = splitSurahAnswersByJuzRange(
+        validSurahs,
+        currentRange,
+        currentChallenge.verses
+      );
+
+      // Initialize with correct number of empty strings strictly for inRangeAnswers
+      setSurahInputs(new Array(Math.max(1, inRangeAnswers.length)).fill(''));
     }
-  }, [currentChallenge, skillsType, room?.gameMode, view]);
+  }, [currentChallenge, skillsType, room?.gameMode, view, selectedSkillJuzs, selectedJuz, room]);
 
   // Handle Speed Challenge progression
   useEffect(() => {
@@ -4899,8 +4918,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     correctSurahs = correctSurahs.filter(s => s.trim());
 
-    // 2. Normalize and check matches using normalizeSurahName (strips "سورة " and normalizes)
-    const normalizedCorrect = correctSurahs.map(s => normalizeSurahName(s));
+    // 2. Partition into in-range and out-of-range based on current player/room Juz range
+    const currentRange = getSelectedJuzRange(room, selectedSkillJuzs, selectedJuz);
+    const { inRangeAnswers, outOfRangeAnswers } = splitSurahAnswersByJuzRange(
+      correctSurahs,
+      currentRange,
+      currentQuestion.verses
+    );
+
+    const inRangeSurahNames = inRangeAnswers.map(a => a.surah);
+
+    // 3. Normalize and check matches using normalizeSurahName against inRangeSurahNames ONLY
+    const normalizedCorrect = inRangeSurahNames.map(s => normalizeSurahName(s));
     const normalizedInputs = surahInputs.map(s => normalizeSurahName(s));
 
     let correctCount = 0;
@@ -4936,7 +4965,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setSurahFeedbackData({
       isFullyCorrect,
-      correctSurahs
+      correctSurahs: inRangeSurahNames,
+      outOfRangeAnswers
     });
 
     setSessionMistakes(prev => [...prev, {
@@ -4945,7 +4975,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       keyword: currentQuestion.keyword || "",
       type: 'SURAH',
       userInputs: [...surahInputs],
-      correctSurahsList: correctSurahs,
+      correctSurahsList: inRangeSurahNames,
       pointsEarned: isFullyCorrect ? 1 : 0,
       totalPossible: 1,
       isFullyCorrect
@@ -4989,7 +5019,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }).catch(err => console.error('Error submitting room surah answer:', err));
 
         if (!isLastQ) {
-          const advanceDelay = isFullyCorrect ? 900 : 1800;
+          const hasOutOfRange = outOfRangeAnswers && outOfRangeAnswers.length > 0;
+          const advanceDelay = hasOutOfRange ? (isFullyCorrect ? 2500 : 2800) : (isFullyCorrect ? 900 : 1800);
           setTimeout(() => {
             moveToNextQuestion();
           }, advanceDelay);
@@ -5020,7 +5051,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
 
-    const advanceDelay = isFullyCorrect ? 1000 : 2500;
+    const hasOutOfRange = outOfRangeAnswers && outOfRangeAnswers.length > 0;
+    const advanceDelay = hasOutOfRange ? (isFullyCorrect ? 3000 : 3500) : (isFullyCorrect ? 1000 : 2500);
     setTimeout(() => {
       moveToNextQuestion();
     }, advanceDelay);

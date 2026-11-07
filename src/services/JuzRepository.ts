@@ -251,3 +251,198 @@ export const formatJuzsDescription = (juzNumbers: number[]): string => {
   const last = ordinals.pop();
   return `الأجزاء ${ordinals.join(' و')} و${last}`;
 };
+
+/**
+ * Returns the exact Juz number for a specific verse of a Surah based on standard Quran Juz boundaries.
+ */
+export const getJuzForVerse = (
+  surahIdentifier: string | number,
+  verseNumber?: number | string | null
+): number | null => {
+  if (!surahIdentifier) return null;
+  let surahId: number | null = null;
+
+  if (typeof surahIdentifier === 'number') {
+    surahId = surahIdentifier;
+  } else {
+    const raw = String(surahIdentifier).trim();
+    const num = parseInt(raw, 10);
+    if (!isNaN(num) && num >= 1 && num <= 114) {
+      surahId = num;
+    } else {
+      const cleanName = raw.replace(/^سورة\s+/, '').trim();
+      const cleanNorm = cleanName.replace(/[أإآ]/g, 'ا');
+      const found = ALL_QURAN_SURAHS.find(s => {
+        const sClean = s.name.replace(/^سورة\s+/, '').trim();
+        return sClean === cleanName || sClean.replace(/[أإآ]/g, 'ا') === cleanNorm;
+      });
+      if (found) {
+        surahId = found.id;
+      }
+    }
+  }
+
+  if (!surahId || surahId < 1 || surahId > 114) return null;
+
+  const verseNum = verseNumber !== undefined && verseNumber !== null ? parseInt(String(verseNumber), 10) : NaN;
+  if (isNaN(verseNum) || verseNum < 1) {
+    const juzs = getJuzsForSurah(surahId);
+    return juzs.length === 1 ? juzs[0] : (juzs[0] || null);
+  }
+
+  for (const b of juzBoundaries) {
+    const afterStart = (surahId > b.startSurah) || (surahId === b.startSurah && verseNum >= b.startVerse);
+    const beforeEnd = (surahId < b.endSurah) || (surahId === b.endSurah && verseNum <= b.endVerse);
+    if (afterStart && beforeEnd) {
+      return b.juz;
+    }
+  }
+
+  return null;
+};
+
+export interface SurahAnswerWithDetails {
+  surah: string;
+  juzs: number[];
+  juzText: string;
+}
+
+export interface SplitSurahAnswersResult {
+  inRangeAnswers: SurahAnswerWithDetails[];
+  outOfRangeAnswers: SurahAnswerWithDetails[];
+}
+
+/**
+ * Extracts currently active selected Juz range from room configuration,
+ * solo skills selection, or single juz selection.
+ * Returns an array of Juz numbers (1-30). Empty array means all 30 juzs are included.
+ */
+export const getSelectedJuzRange = (
+  room?: any,
+  selectedSkillJuzs?: number[] | null,
+  selectedJuz?: number | null
+): number[] => {
+  // 1. Room configuration
+  if (room) {
+    if (Array.isArray(room.selectedJuzRange) && room.selectedJuzRange.length > 0 && room.selectedJuzRange.length < 30) {
+      return room.selectedJuzRange;
+    }
+    if (Array.isArray(room.selectedJuzs) && room.selectedJuzs.length > 0 && room.selectedJuzs.length < 30) {
+      return room.selectedJuzs;
+    }
+    if (Array.isArray(room.juzs) && room.juzs.length > 0 && room.juzs.length < 30) {
+      return room.juzs;
+    }
+    const catStr = String(room.categoryFilter || room.category || '');
+    if (catStr) {
+      const parsedJuzs: number[] = [];
+      for (const [juzStr, name] of Object.entries(JUZ_NAMES_AR)) {
+        const jNum = Number(juzStr);
+        if (catStr.includes(name) || catStr.includes(`الجزء ${jNum}`) || catStr.includes(`جزء ${jNum}`)) {
+          if (!parsedJuzs.includes(jNum)) parsedJuzs.push(jNum);
+        }
+      }
+      if (parsedJuzs.length > 0 && parsedJuzs.length < 30) {
+        return parsedJuzs.sort((a, b) => a - b);
+      }
+    }
+  }
+
+  // 2. Solo skills selection
+  if (Array.isArray(selectedSkillJuzs) && selectedSkillJuzs.length > 0 && selectedSkillJuzs.length < 30) {
+    return selectedSkillJuzs;
+  }
+
+  // 3. Single selected Juz
+  if (typeof selectedJuz === 'number' && selectedJuz >= 1 && selectedJuz <= 30) {
+    return [selectedJuz];
+  }
+
+  return [];
+};
+
+/**
+ * Splits correct surah answers into in-range and out-of-range based on the active Juz range.
+ * Includes a fallback safety guarantee: if all answers fall out of range, at least one is kept in range.
+ */
+export const splitSurahAnswersByJuzRange = (
+  rawSurahs: string[],
+  selectedJuzRange?: number[] | null,
+  verses?: any[]
+): SplitSurahAnswersResult => {
+  if (!rawSurahs || rawSurahs.length === 0) {
+    return { inRangeAnswers: [], outOfRangeAnswers: [] };
+  }
+
+  const normalize = (name: string) =>
+    String(name || '')
+      .replace(/^سورة\s+/, '')
+      .replace(/[أإآ]/g, 'ا')
+      .replace(/[\u064B-\u065F\u0670]/g, '')
+      .trim();
+
+  const allAnswers: SurahAnswerWithDetails[] = rawSurahs.map(surahName => {
+    const cleanSurah = String(surahName).trim();
+    const normSurah = normalize(cleanSurah);
+
+    let exactJuz: number | null = null;
+    if (Array.isArray(verses) && verses.length > 0) {
+      const matchedVerse = verses.find(v => {
+        if (!v) return false;
+        const vSurah = normalize(v.surah || '');
+        return vSurah === normSurah || vSurah.includes(normSurah) || normSurah.includes(vSurah);
+      });
+      if (matchedVerse) {
+        if (matchedVerse.juz) {
+          exactJuz = Number(matchedVerse.juz);
+        } else {
+          exactJuz = getJuzForVerse(
+            matchedVerse.surah_number || matchedVerse.surah || cleanSurah,
+            matchedVerse.verse_number || matchedVerse.number
+          );
+        }
+      }
+    }
+
+    const juzs = exactJuz ? [exactJuz] : getJuzsForSurah(cleanSurah);
+    const juzText = formatJuzsDescription(juzs);
+
+    return {
+      surah: cleanSurah,
+      juzs,
+      juzText
+    };
+  });
+
+  const hasRangeFilter = Array.isArray(selectedJuzRange) && selectedJuzRange.length > 0 && selectedJuzRange.length < 30;
+  if (!hasRangeFilter) {
+    return {
+      inRangeAnswers: allAnswers,
+      outOfRangeAnswers: []
+    };
+  }
+
+  const rangeSet = new Set(selectedJuzRange);
+  const inRangeAnswers: SurahAnswerWithDetails[] = [];
+  let outOfRangeAnswers: SurahAnswerWithDetails[] = [];
+
+  allAnswers.forEach(ans => {
+    const isInRange = ans.juzs.some(j => rangeSet.has(j));
+    if (isInRange) {
+      inRangeAnswers.push(ans);
+    } else {
+      outOfRangeAnswers.push(ans);
+    }
+  });
+
+  // Fallback: If all surahs fell outside range, pick the first answer as inRange
+  if (inRangeAnswers.length === 0 && allAnswers.length > 0) {
+    inRangeAnswers.push(allAnswers[0]);
+    outOfRangeAnswers = allAnswers.slice(1);
+  }
+
+  return {
+    inRangeAnswers,
+    outOfRangeAnswers
+  };
+};
