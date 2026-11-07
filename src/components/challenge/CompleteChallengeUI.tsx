@@ -234,22 +234,10 @@ export const CompleteChallengeUI: React.FC<CompleteChallengeUIProps> = ({
                   <span>إنهاء التحدي اليومي</span>
                 </button>
               ) : isRoom && isLastQuestion ? (
-                isHost ? (
-                  <button
-                    type="button"
-                    onClick={onEndRoom}
-                    disabled={isEndingRoom}
-                    className="px-6 py-3 bg-gradient-to-r from-brand-emerald to-teal-600 text-white rounded-xl font-black text-sm md:text-base hover:opacity-90 transition-all shadow-lg flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <Trophy className="w-5 h-5 text-amber-300" />
-                    <span>{isEndingRoom ? 'جاري الإنهاء...' : 'إنهاء الغرفة'}</span>
-                  </button>
-                ) : (
-                  <div className="px-5 py-2.5 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl font-bold text-xs md:text-sm flex items-center justify-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
-                    <span>في انتظار القائد لإنهاء التحدي</span>
-                  </div>
-                )
+                <div className="px-5 py-2.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 rounded-xl font-black text-xs md:text-sm flex items-center justify-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                  <span>اكتملت جميع الأسئلة! جاري إظهار النتائج تلقائياً... 🏁</span>
+                </div>
               ) : (
                 <button
                   onClick={() => {

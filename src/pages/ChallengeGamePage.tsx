@@ -185,6 +185,14 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
   // isEffectiveHost = original host OR (host offline AND I am first online non-host)
   const isEffectiveHost = isHost || (hostIsOffline && amIFirstOnline);
 
+  const isWhoAmI = Boolean(
+    room?.gameMode === 'WHO_AM_I' ||
+    room?.challenge_type === 'who_am_i' ||
+    room?.challengeType === 'who_am_i' ||
+    skillsType === 'who_am_i' ||
+    (Array.isArray(v1GameModes) && v1GameModes.includes('who_am_i'))
+  );
+
   const totalQuestions = room?.questionCount || challenges.length || room?.challenges?.length || 5;
   const currentQuestionIdx = room?.currentQuestionIndex ?? currentChallengeIndex;
   const isLastQuestion = currentQuestionIdx >= totalQuestions - 1;
@@ -408,10 +416,37 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
       console.warn('[ChallengeGamePage] Broadcast warning:', bErr);
     }
 
-    app?.recordDailyGiftRoomMatch?.();
+    appRef.current?.recordDailyGiftRoomMatch?.();
     router.push('/challenge/results');
     setView('group_game');
   };
+
+  // 2. الإنهاء التلقائي للتحديات المغلقة (Auto-Finish on Last Question)
+  // يراقب اكتمال الإجابات في السؤال الأخير، وعند تحقق الشرط في التحديات غير 'من أنا'،
+  // يتم استدعاء دالة الإنهاء تلقائياً بعد ثانيتين (2000ms) لإتاحة رؤية النتيجة.
+  const autoEndingRef = useRef(false);
+
+  useEffect(() => {
+    autoEndingRef.current = false;
+  }, [room?.id, currentQuestionIdx]);
+
+  useEffect(() => {
+    if (!room?.id || room.status !== 'PLAYING' || !isLastQuestion || !hasAllAnswered || isWhoAmI) {
+      return;
+    }
+
+    if (autoEndingRef.current) return;
+
+    // مهلة 2000ms تتيح للاعبين رؤية تغذية راجعة للإجابة (صح/خطأ) قبل التوجيه للنتائج
+    const delay = isEffectiveHost ? 2000 : 3500;
+    const timer = setTimeout(() => {
+      if (autoEndingRef.current) return;
+      autoEndingRef.current = true;
+      handleEndRoom();
+    }, delay);
+
+    return () => clearTimeout(timer);
+  }, [isLastQuestion, hasAllAnswered, isWhoAmI, isEffectiveHost, room?.id, room?.status]);
   if (!currentChallenge) {
     return (
       <div className="flex flex-col items-center justify-center py-40">
@@ -795,54 +830,73 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
         </motion.div>
       )}
 
-      {/* End Room Action for Host / Waiting state for players on the final question */}
-      {room && isLastQuestion && (hasAnsweredCurrentQuestion || skillsFeedback || (room.transitionMode !== 'ASYNC' && speedTimeLeft <= 0)) && (
-        <motion.div
-          initial={{ opacity: 0, scale: 0.98, y: 10 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-amber-500/10 via-brand-emerald/10 to-teal-500/10 border-2 border-brand-emerald/30 shadow-md text-center space-y-3 mt-4"
-        >
-          <div className="flex items-center justify-center gap-2">
-            <Trophy className="w-5 h-5 text-amber-500" />
-            <h4 className="text-sm sm:text-base font-black text-slate-800 dark:text-slate-100">
-              اكتملت جميع أسئلة التحدي! 🏁
-            </h4>
-          </div>
+      {/* End Room Action: Manual for 'who_am_i' / Auto-Finish indicator for other challenges */}
+      {room && isLastQuestion && (
+        isWhoAmI ? (
+          (hasAnsweredCurrentQuestion || skillsFeedback || (room.transitionMode !== 'ASYNC' && speedTimeLeft <= 0)) && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.98, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-amber-500/10 via-brand-emerald/10 to-teal-500/10 border-2 border-brand-emerald/30 shadow-md text-center space-y-3 mt-4"
+            >
+              <div className="flex items-center justify-center gap-2">
+                <Trophy className="w-5 h-5 text-amber-500" />
+                <h4 className="text-sm sm:text-base font-black text-slate-800 dark:text-slate-100">
+                  اكتملت جميع أسئلة التحدي! 🏁
+                </h4>
+              </div>
 
-          {isEffectiveHost ? (
-            <div className="space-y-2">
-              {!isHost && hostIsOffline && (
-                <div className="inline-flex items-center gap-1.5 py-1 px-3 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 text-xs font-black">
-                  <span>👑</span>
-                  <span>أنت تدير الغرفة حالياً لأن المنشئ غير متصل</span>
+              {isEffectiveHost ? (
+                <div className="space-y-2">
+                  {!isHost && hostIsOffline && (
+                    <div className="inline-flex items-center gap-1.5 py-1 px-3 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 text-xs font-black">
+                      <span>👑</span>
+                      <span>أنت تدير الغرفة حالياً لأن المنشئ غير متصل</span>
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleEndRoom}
+                    disabled={isEndingRoom}
+                    className="w-full py-3.5 px-6 rounded-2xl bg-gradient-to-r from-brand-emerald to-teal-600 hover:from-brand-emerald/90 hover:to-teal-700 text-white font-black text-sm sm:text-base shadow-lg shadow-brand-emerald/30 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    {isEndingRoom ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                        <span>جاري إنهاء التحدي والانتقال للنتائج...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Trophy className="w-5 h-5 text-amber-300" />
+                        <span>إنهاء الغرفة وإظهار النتائج</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center justify-center gap-2.5 py-2.5 px-4 rounded-xl bg-white/80 dark:bg-slate-800/80 border border-amber-200 dark:border-amber-700/40 text-amber-800 dark:text-amber-200 text-xs sm:text-sm font-black">
+                  <Loader2 className="w-4 h-4 animate-spin text-amber-600" />
+                  <span>في انتظار القائد لإنهاء التحدي</span>
                 </div>
               )}
-              <button
-                type="button"
-                onClick={handleEndRoom}
-                disabled={isEndingRoom}
-                className="w-full py-3.5 px-6 rounded-2xl bg-gradient-to-r from-brand-emerald to-teal-600 hover:from-brand-emerald/90 hover:to-teal-700 text-white font-black text-sm sm:text-base shadow-lg shadow-brand-emerald/30 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer"
-              >
-                {isEndingRoom ? (
-                  <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    <span>جاري إنهاء التحدي والانتقال للنتائج...</span>
-                  </>
-                ) : (
-                  <>
-                    <Trophy className="w-5 h-5 text-amber-300" />
-                    <span>إنهاء الغرفة وإظهار النتائج</span>
-                  </>
-                )}
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center justify-center gap-2.5 py-2.5 px-4 rounded-xl bg-white/80 dark:bg-slate-800/80 border border-amber-200 dark:border-amber-700/40 text-amber-800 dark:text-amber-200 text-xs sm:text-sm font-black">
-              <Loader2 className="w-4 h-4 animate-spin text-amber-600" />
-              <span>في انتظار القائد لإنهاء التحدي</span>
-            </div>
-          )}
-        </motion.div>
+            </motion.div>
+          )
+        ) : (
+          hasAllAnswered && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.98, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-brand-emerald/10 border-2 border-brand-emerald/30 shadow-md text-center space-y-2 mt-4"
+            >
+              <div className="flex items-center justify-center gap-2 text-brand-emerald dark:text-emerald-300">
+                <Loader2 className="w-5 h-5 animate-spin text-brand-emerald" />
+                <h4 className="text-sm sm:text-base font-black">
+                  اكتملت جميع الإجابات! جاري إظهار النتائج النهائية تلقائياً... 🏁
+                </h4>
+              </div>
+            </motion.div>
+          )
+        )
       )}
 
       {/* Live Reactions in Challenge / Room Game */}
