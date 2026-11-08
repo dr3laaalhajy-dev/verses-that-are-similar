@@ -51,9 +51,61 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
     };
   }, [isOpen]);
 
-  // معالجة الطباعة
+  // معالجة الطباعة المعزولة عبر iframe لمنع تكرار النسخ وضمان طباعة صفحة واحدة
   const handlePrint = () => {
-    window.print();
+    const certElement = document.getElementById('certificate-wrapper') || certificateRef.current;
+    if (!certElement) return;
+
+    // إنشاء iframe مخفي
+    const printFrame = document.createElement('iframe');
+    printFrame.style.position = 'fixed';
+    printFrame.style.right = '0';
+    printFrame.style.bottom = '0';
+    printFrame.style.width = '0';
+    printFrame.style.height = '0';
+    printFrame.style.border = 'none';
+    document.body.appendChild(printFrame);
+
+    const frameDoc = printFrame.contentWindow?.document;
+    if (!frameDoc) return;
+
+    // جلب ملفات الـ CSS الخاصة بالمشروع (Tailwind) لضمان نفس التنسيق
+    const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
+      .map(s => s.outerHTML)
+      .join('');
+
+    // كتابة محتوى الشهادة داخل الـ iframe
+    frameDoc.write(`
+      <!DOCTYPE html>
+      <html dir="rtl">
+        <head>
+          <title>طباعة الشهادة</title>
+          ${styles}
+          <style>
+            /* إجبار الطباعة بالعرض (Landscape) وإزالة الهوامش */
+            @page { size: A4 landscape; margin: 0; }
+            body { margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; background: white !important; }
+            #certificate-wrapper { transform: scale(0.9); transform-origin: center; width: 100% !important; max-width: 1000px !important; }
+          </style>
+        </head>
+        <body>
+          ${certElement.outerHTML}
+        </body>
+      </html>
+    `);
+    frameDoc.close();
+
+    // انتظار تحميل الصور والخطوط ثم الطباعة
+    printFrame.contentWindow?.focus();
+    setTimeout(() => {
+      printFrame.contentWindow?.print();
+      // إزالة الـ iframe بعد الطباعة لمنع التكرار
+      setTimeout(() => {
+        if (document.body.contains(printFrame)) {
+          document.body.removeChild(printFrame);
+        }
+      }, 500);
+    }, 500);
   };
 
   // معالجة المشاركة عبر navigator.share أو النسخ للحافظة
@@ -205,7 +257,7 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
           {/* ========================================================= */}
           <div
             ref={certificateRef}
-            id="certificate-print-area"
+            id="certificate-wrapper"
             className="certificate-container relative w-full aspect-[1.414/1] bg-[#FCFBF7] text-slate-800 rounded-3xl p-5 sm:p-8 md:p-10 shadow-2xl border-[3px] border-[#D4AF37] overflow-hidden select-none flex flex-col justify-between"
             style={{
               boxShadow: '0 25px 60px -15px rgba(6, 78, 59, 0.25), 0 0 0 1px rgba(212, 175, 55, 0.4)',
@@ -354,42 +406,6 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
             </div>
           </div>
         </motion.div>
-
-        {/* ستايل مخصص للطباعة يضمن إظهار الشهادة فقط */}
-        <style>{`
-          @media print {
-            @page {
-              size: landscape;
-              margin: 0;
-            }
-            body {
-              background: white !important;
-              margin: 0 !important;
-              padding: 0 !important;
-            }
-            body * {
-              visibility: hidden !important;
-            }
-            #certificate-print-area, #certificate-print-area * {
-              visibility: visible !important;
-            }
-            #certificate-print-area {
-              position: fixed !important;
-              left: 0 !important;
-              top: 0 !important;
-              width: 100vw !important;
-              height: 100vh !important;
-              max-width: 100vw !important;
-              max-height: 100vh !important;
-              margin: 0 !important;
-              padding: 24px !important;
-              border-radius: 0 !important;
-              box-shadow: none !important;
-              -webkit-print-color-adjust: exact !important;
-              print-color-adjust: exact !important;
-            }
-          }
-        `}</style>
       </div>
     </AnimatePresence>,
     document.body

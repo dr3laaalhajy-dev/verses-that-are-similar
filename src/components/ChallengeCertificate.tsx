@@ -71,9 +71,61 @@ export const ChallengeCertificate: React.FC<ChallengeCertificateProps> = ({
     year: 'numeric'
   });
 
-  // معالجة الطباعة الرسمية
+  // معالجة الطباعة المعزولة عبر iframe لمنع تكرار النسخ وضمان طباعة صفحة واحدة
   const handlePrint = () => {
-    window.print();
+    const certElement = document.getElementById('certificate-wrapper') || certificateRef.current;
+    if (!certElement) return;
+
+    // إنشاء iframe مخفي
+    const printFrame = document.createElement('iframe');
+    printFrame.style.position = 'fixed';
+    printFrame.style.right = '0';
+    printFrame.style.bottom = '0';
+    printFrame.style.width = '0';
+    printFrame.style.height = '0';
+    printFrame.style.border = 'none';
+    document.body.appendChild(printFrame);
+
+    const frameDoc = printFrame.contentWindow?.document;
+    if (!frameDoc) return;
+
+    // جلب ملفات الـ CSS الخاصة بالمشروع (Tailwind) لضمان نفس التنسيق
+    const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
+      .map(s => s.outerHTML)
+      .join('');
+
+    // كتابة محتوى الشهادة داخل الـ iframe
+    frameDoc.write(`
+      <!DOCTYPE html>
+      <html dir="rtl">
+        <head>
+          <title>طباعة الشهادة</title>
+          ${styles}
+          <style>
+            /* إجبار الطباعة بالعرض (Landscape) وإزالة الهوامش */
+            @page { size: A4 landscape; margin: 0; }
+            body { margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; background: white !important; }
+            #certificate-wrapper { transform: scale(0.9); transform-origin: center; width: 100% !important; max-width: 1000px !important; }
+          </style>
+        </head>
+        <body>
+          ${certElement.outerHTML}
+        </body>
+      </html>
+    `);
+    frameDoc.close();
+
+    // انتظار تحميل الصور والخطوط ثم الطباعة
+    printFrame.contentWindow?.focus();
+    setTimeout(() => {
+      printFrame.contentWindow?.print();
+      // إزالة الـ iframe بعد الطباعة لمنع التكرار
+      setTimeout(() => {
+        if (document.body.contains(printFrame)) {
+          document.body.removeChild(printFrame);
+        }
+      }, 500);
+    }, 500);
   };
 
   // معالجة المشاركة عبر واجهة المتصفح Native Web Share API
@@ -178,7 +230,7 @@ export const ChallengeCertificate: React.FC<ChallengeCertificateProps> = ({
       {/* أزرار التحكم والخيارات العلوية (يتم إخفاؤها تلقائياً عند الطباعة) */}
       {/* ========================================================= */}
       {showControls && (
-        <div className="w-full max-w-4xl flex flex-wrap items-center justify-between gap-3 mb-4 bg-white/80 backdrop-blur-md p-3 sm:p-4 rounded-2xl border border-amber-200/60 shadow-xs print:hidden">
+        <div className="w-full max-w-4xl flex flex-wrap items-center justify-between gap-3 mb-4 bg-white/80 backdrop-blur-md p-3 sm:p-4 rounded-2xl border border-amber-200/60 shadow-xs">
           <div className="flex items-center gap-2">
             <div className="w-9 h-9 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-600">
               <Award className="w-5 h-5" />
@@ -258,7 +310,7 @@ export const ChallengeCertificate: React.FC<ChallengeCertificateProps> = ({
       {/* نافذة منبثقة بسيطة لتعديل الاسم */}
       {isEditingName && typeof document !== 'undefined' && createPortal(
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto print:hidden"
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto"
           onClick={() => setIsEditingName(false)}
         >
           <form
@@ -305,7 +357,7 @@ export const ChallengeCertificate: React.FC<ChallengeCertificateProps> = ({
       {/* ========================================================= */}
       <div
         ref={certificateRef}
-        id="certificate-print-area"
+        id="certificate-wrapper"
         className="certificate-container relative w-full max-w-4xl aspect-[1.414/1] bg-[#FCFBF7] text-slate-800 rounded-3xl p-5 sm:p-8 md:p-10 shadow-2xl border-[3px] border-[#D4AF37] overflow-hidden select-none flex flex-col justify-between"
         style={{
           boxShadow: '0 25px 60px -15px rgba(6, 78, 59, 0.18), 0 0 0 1px rgba(212, 175, 55, 0.3)',
@@ -474,44 +526,6 @@ export const ChallengeCertificate: React.FC<ChallengeCertificateProps> = ({
           </div>
         </div>
       </div>
-
-      {/* ========================================================= */}
-      {/* ستايل مخصص للطباعة يضمن طباعة الشهادة فقط وبشكل Landscape */}
-      {/* ========================================================= */}
-      <style>{`
-        @media print {
-          @page {
-            size: landscape;
-            margin: 0;
-          }
-          body {
-            background: white !important;
-            margin: 0 !important;
-            padding: 0 !important;
-          }
-          body * {
-            visibility: hidden !important;
-          }
-          #certificate-print-area, #certificate-print-area * {
-            visibility: visible !important;
-          }
-          #certificate-print-area {
-            position: fixed !important;
-            left: 0 !important;
-            top: 0 !important;
-            width: 100vw !important;
-            height: 100vh !important;
-            max-width: 100vw !important;
-            max-height: 100vh !important;
-            margin: 0 !important;
-            padding: 24px !important;
-            border-radius: 0 !important;
-            box-shadow: none !important;
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-          }
-        }
-      `}</style>
     </div>
   );
 };
