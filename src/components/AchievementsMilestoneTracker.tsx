@@ -263,50 +263,52 @@ export const AchievementsMilestoneTracker: React.FC<AchievementsMilestoneTracker
       {/* ========================================================= */}
       {/* شريط إحصائيات الإنجازات والأوسمة الرسمي */}
       {/* ========================================================= */}
-      <div className="bg-gradient-to-r from-amber-500/10 via-emerald-500/10 to-amber-500/10 border border-amber-300/40 rounded-3xl p-5 sm:p-6 shadow-xs">
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-3.5 w-full sm:w-auto">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-500 to-amber-700 text-white flex items-center justify-center shadow-md shadow-amber-500/20 shrink-0">
-              <Award className="w-6 h-6 text-amber-100" />
+      <div className="w-full max-w-sm md:max-w-md mx-auto p-4 md:p-6 bg-gradient-to-r from-amber-500/10 via-emerald-500/10 to-amber-500/10 border border-amber-300/40 rounded-3xl shadow-xs">
+        {/* 1. الترويسة والعنوان (Header Layout) */}
+        <div className="flex flex-wrap items-start justify-between gap-2 md:gap-4">
+          <div className="flex items-center gap-3 w-full">
+            <div className="w-10 h-10 md:w-12 md:h-12 rounded-2xl bg-gradient-to-tr from-amber-500 to-amber-700 text-white flex items-center justify-center shadow-md shadow-amber-500/20 shrink-0">
+              <Award className="w-5 h-5 md:w-6 md:h-6 text-amber-100" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-base sm:text-lg font-black text-slate-800">
+            <div className="flex-1 min-w-0">
+              <div className="flex flex-wrap items-center gap-1.5 md:gap-2">
+                <h3 className="text-lg md:text-xl leading-tight font-black text-slate-800">
                   لوحة شهاداتي وإنجازاتي المعتمدة
                 </h3>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 shrink-0">
                   توثيق رسمي
                 </span>
               </div>
-              <p className="text-xs text-slate-500 font-medium mt-0.5">
+              <p className="text-xs md:text-sm text-slate-500 font-medium mt-1">
                 تتبع مسيرتك في ضبط المتشابهات ومسابقات علوم القرآن والسنة النبوية
               </p>
             </div>
           </div>
+        </div>
 
-          <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
-            <div className="bg-white border border-slate-200 rounded-2xl px-3.5 py-2 text-center min-w-[85px] shadow-2xs">
-              <span className="block text-[10px] font-bold text-slate-400">المكتملة</span>
-              <span className="text-base sm:text-lg font-black text-emerald-700 font-mono">
-                {completedCount} / {totalCount}
-              </span>
-            </div>
-            <div className="bg-white border border-slate-200 rounded-2xl px-3.5 py-2 text-center min-w-[85px] shadow-2xs">
-              <span className="block text-[10px] font-bold text-slate-400">نسبة الختم</span>
-              <span className="text-base sm:text-lg font-black text-amber-600 font-mono">
-                {completionPercent}%
-              </span>
-            </div>
+        {/* 2. صناديق الإحصائيات (Stats Boxes) */}
+        <div className="flex w-full gap-3 md:gap-4 my-4">
+          <div className="flex-1 py-2 px-3 md:py-3 bg-white border border-slate-200 rounded-2xl text-center shadow-2xs">
+            <span className="block text-[10px] md:text-xs font-bold text-slate-400">المكتملة</span>
+            <span className="text-lg md:text-2xl font-black text-emerald-700 font-mono">
+              {completedCount} / {totalCount}
+            </span>
+          </div>
+          <div className="flex-1 py-2 px-3 md:py-3 bg-white border border-slate-200 rounded-2xl text-center shadow-2xs">
+            <span className="block text-[10px] md:text-xs font-bold text-slate-400">نسبة الختم</span>
+            <span className="text-lg md:text-2xl font-black text-amber-600 font-mono">
+              {completionPercent}%
+            </span>
           </div>
         </div>
 
-        {/* شريط التقدم الكلي */}
-        <div className="mt-4 pt-3 border-t border-amber-200/40">
-          <div className="flex items-center justify-between text-xs font-bold text-slate-600 mb-1.5">
+        {/* 3. شريط التقدم السفلي (Progress Bar) */}
+        <div className="pt-3 border-t border-amber-200/40">
+          <div className="flex items-center justify-between text-xs md:text-sm font-medium text-slate-600 mb-1.5">
             <span>التقدم نحو إتمام جميع المسابقات:</span>
-            <span className="text-amber-700 font-mono">{completionPercent}%</span>
+            <span className="text-amber-700 font-mono font-bold">{completionPercent}%</span>
           </div>
-          <div className="w-full h-2.5 bg-slate-200/80 rounded-full overflow-hidden p-0.5">
+          <div className="w-full h-2 md:h-3 bg-slate-200/80 rounded-full overflow-hidden p-0.5">
             <div
               className="h-full bg-gradient-to-r from-emerald-500 to-amber-500 rounded-full transition-all duration-700"
               style={{ width: `${completionPercent}%` }}
