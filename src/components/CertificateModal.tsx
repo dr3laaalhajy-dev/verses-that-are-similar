@@ -2,6 +2,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Share2, Printer, Download, Check, Award, Sparkles, CheckCircle2 } from 'lucide-react';
+import html2canvas from 'html2canvas';
 
 export interface CertificateModalProps {
   isOpen: boolean;
@@ -128,42 +129,28 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
     }
   };
 
-  // معالجة التحميل عالي الدقة عبر html2canvas
+  // معالجة التحميل عالي الدقة عبر html2canvas بإعدادات تدعم الهواتف وتمنع التشويه
   const handleDownload = async () => {
-    if (!certificateRef.current) return;
-    setIsDownloading(true);
-    try {
-      const certEl = certificateRef.current;
-      let html2canvasFn = (window as any).html2canvas;
-      if (!html2canvasFn) {
-        await new Promise<void>((resolve, reject) => {
-          const script = document.createElement('script');
-          script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
-          script.onload = () => resolve();
-          script.onerror = reject;
-          document.head.appendChild(script);
-        });
-        html2canvasFn = (window as any).html2canvas;
-      }
+    const certElement = document.getElementById('certificate-wrapper') || certificateRef.current;
+    if (!certElement) return;
 
-      if (html2canvasFn && certEl) {
-        const canvas = await html2canvasFn(certEl, {
-          scale: 3,
-          useCORS: true,
-          allowTaint: true,
-          backgroundColor: '#FCFBF7',
-          logging: false
-        });
-        const dataUrl = canvas.toDataURL('image/png');
-        const link = document.createElement('a');
-        link.download = `شهادة_متين_${challengeName.replace(/\s+/g, '_')}_${playerName.replace(/\s+/g, '_')}.png`;
-        link.href = dataUrl;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      }
-    } catch (err) {
-      console.error('Download certificate error:', err);
+    try {
+      setIsDownloading(true);
+      const canvas = await html2canvas(certElement, {
+        scale: 2, // لزيادة دقة الصورة
+        useCORS: true,
+        scrollX: 0,
+        scrollY: 0,
+        windowWidth: document.documentElement.offsetWidth,
+      });
+
+      const image = canvas.toDataURL('image/png', 1.0);
+      const link = document.createElement('a');
+      link.download = `certificate_${playerName}.png`;
+      link.href = image;
+      link.click();
+    } catch (error) {
+      console.error('Error generating certificate:', error);
     } finally {
       setIsDownloading(false);
     }
@@ -190,61 +177,61 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
           {/* ========================================================= */}
           {/* شريط الأدوات العلوي (Top Controls) */}
           {/* ========================================================= */}
-          <div className="w-full flex items-center justify-between gap-3 mb-3 sm:mb-4 bg-slate-900/90 backdrop-blur-md px-4 py-3 rounded-2xl border border-amber-500/30 shadow-2xl text-white">
-            <div className="flex items-center gap-2">
-              <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold">
+          <div className="flex flex-col-reverse md:flex-row justify-between items-center gap-4 w-full p-4 mb-3 sm:mb-4 bg-slate-900/90 backdrop-blur-md rounded-2xl border border-amber-500/30 shadow-2xl text-white">
+            <div className="flex items-center justify-center md:justify-start gap-2.5 text-center md:text-right w-full md:w-auto">
+              <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold shrink-0">
                 <Award className="w-5 h-5" />
               </div>
-              <div className="text-right">
+              <div className="text-center md:text-right w-full md:w-auto">
                 <h3 className="text-xs sm:text-sm font-black text-amber-300">
                   شهادة إنجاز معتمدة
                 </h3>
-                <span className="text-[10px] text-slate-300">
+                <span className="text-[10px] text-slate-300 block">
                   الوثيقة الرسمية لإتمام التحدي القرآني
                 </span>
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              {/* زر مشاركة */}
+            <div className="flex flex-wrap justify-center md:justify-start items-center gap-2 w-full md:w-auto">
+              {/* زر تنزيل عالي الدقة */}
               <button
                 type="button"
-                onClick={handleShare}
-                className="flex items-center gap-1.5 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-xs font-bold bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-200 border border-indigo-400/30 transition-all cursor-pointer active:scale-95"
-                title="مشاركة رابط وتفاصيل الشهادة"
+                onClick={handleDownload}
+                disabled={isDownloading}
+                className="flex items-center gap-1.5 text-xs sm:text-sm px-2.5 py-1.5 md:px-4 md:py-2 rounded-xl font-black bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 transition-all cursor-pointer active:scale-95 disabled:opacity-50"
+                title="تنزيل الشهادة كصورة فائقة الدقة"
               >
-                {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Share2 className="w-3.5 h-3.5 text-indigo-300" />}
-                <span className="hidden sm:inline">{copied ? 'تم النسخ!' : 'مشاركة 🔗'}</span>
+                <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+                <span>{isDownloading ? 'جاري التحميل...' : 'تحميل الشهادة 📥'}</span>
               </button>
 
               {/* زر طباعة */}
               <button
                 type="button"
                 onClick={handlePrint}
-                className="flex items-center gap-1.5 px-3 py-1.5 sm:px-3.5 sm:py-2 rounded-xl text-xs font-bold bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-200 border border-emerald-400/30 transition-all cursor-pointer active:scale-95"
+                className="flex items-center gap-1.5 text-xs sm:text-sm px-2.5 py-1.5 md:px-4 md:py-2 rounded-xl font-bold bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-200 border border-emerald-400/30 transition-all cursor-pointer active:scale-95"
                 title="طباعة الشهادة بتنسيق ورقي احترافي"
               >
-                <Printer className="w-3.5 h-3.5 text-emerald-300" />
-                <span className="hidden sm:inline">طباعة 🖨️</span>
+                <Printer className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 text-emerald-300" />
+                <span>طباعة 🖨️</span>
               </button>
 
-              {/* زر تنزيل عالي الدقة */}
+              {/* زر مشاركة */}
               <button
                 type="button"
-                onClick={handleDownload}
-                disabled={isDownloading}
-                className="flex items-center gap-1.5 px-3 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs font-black bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 transition-all cursor-pointer active:scale-95 disabled:opacity-50"
-                title="تنزيل الشهادة كصورة فائقة الدقة"
+                onClick={handleShare}
+                className="flex items-center gap-1.5 text-xs sm:text-sm px-2.5 py-1.5 md:px-4 md:py-2 rounded-xl font-bold bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-200 border border-indigo-400/30 transition-all cursor-pointer active:scale-95"
+                title="مشاركة رابط وتفاصيل الشهادة"
               >
-                <Download className="w-3.5 h-3.5" />
-                <span>{isDownloading ? 'جاري التحميل...' : 'تحميل الشهادة 📥'}</span>
+                {copied ? <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 text-emerald-400" /> : <Share2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 text-indigo-300" />}
+                <span>{copied ? 'تم النسخ!' : 'مشاركة 🔗'}</span>
               </button>
 
               {/* زر إغلاق بارز */}
               <button
                 type="button"
                 onClick={onClose}
-                className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-slate-800 hover:bg-rose-500/20 hover:text-rose-400 text-slate-300 border border-slate-700 flex items-center justify-center transition-all cursor-pointer active:scale-95 ml-1"
+                className="w-8 h-8 md:w-9 md:h-9 rounded-xl bg-slate-800 hover:bg-rose-500/20 hover:text-rose-400 text-slate-300 border border-slate-700 flex items-center justify-center transition-all cursor-pointer active:scale-95"
                 title="إغلاق النافذة (✖️)"
               >
                 <X className="w-5 h-5 font-black" />
@@ -255,10 +242,11 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
           {/* ========================================================= */}
           {/* قالب الشهادة البرمجي الكامل (HTML / CSS / Tailwind / SVG) */}
           {/* ========================================================= */}
-          <div
-            ref={certificateRef}
-            id="certificate-wrapper"
-            className="certificate-container relative w-full aspect-[1.414/1] bg-[#FCFBF7] text-slate-800 rounded-3xl p-5 sm:p-8 md:p-10 shadow-2xl border-[3px] border-[#D4AF37] overflow-hidden select-none flex flex-col justify-between"
+          <div className="w-full overflow-x-auto pb-4 flex justify-center md:justify-start">
+            <div
+              ref={certificateRef}
+              id="certificate-wrapper"
+              className="certificate-container relative min-w-[800px] w-full aspect-[1.414/1] bg-[#FCFBF7] text-slate-800 rounded-3xl p-5 sm:p-8 md:p-10 shadow-2xl border-[3px] border-[#D4AF37] overflow-hidden select-none flex flex-col justify-between"
             style={{
               boxShadow: '0 25px 60px -15px rgba(6, 78, 59, 0.25), 0 0 0 1px rgba(212, 175, 55, 0.4)',
               backgroundImage: 'radial-gradient(#F5EEDB 0.75px, transparent 0.75px), radial-gradient(#F5EEDB 0.75px, #FCFBF7 0.75px)',
@@ -405,7 +393,8 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
               </div>
             </div>
           </div>
-        </motion.div>
+        </div>
+      </motion.div>
       </div>
     </AnimatePresence>,
     document.body

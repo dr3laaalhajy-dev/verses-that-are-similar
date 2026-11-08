@@ -1,6 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Download, Share2, Printer, CheckCircle2, Award, Sparkles, Copy, Check, Edit3, X } from 'lucide-react';
+import html2canvas from 'html2canvas';
 
 export interface ChallengeCertificateProps {
   playerName: string;
@@ -154,60 +155,28 @@ export const ChallengeCertificate: React.FC<ChallengeCertificateProps> = ({
     }
   };
 
-  // معالجة حفظ وتنزيل الشهادة بجودة فائقة عبر تصوير HTML/CSS بدقة عالية
+  // معالجة حفظ وتنزيل الشهادة بجودة فائقة عبر تصوير HTML/CSS بدقة عالية تدعم الهواتف
   const handleDownloadImage = async () => {
-    if (!certificateRef.current) return;
-    setIsDownloading(true);
+    const certElement = document.getElementById('certificate-wrapper') || certificateRef.current;
+    if (!certElement) return;
 
     try {
-      let dataUrl = '';
-      const certEl = certificateRef.current;
+      setIsDownloading(true);
+      const canvas = await html2canvas(certElement, {
+        scale: 2, // لزيادة دقة الصورة
+        useCORS: true,
+        scrollX: 0,
+        scrollY: 0,
+        windowWidth: document.documentElement.offsetWidth,
+      });
 
-      // التأكد من توفر مكتبة html2canvas ديناميكياً لتصوير عنصر HTML بالكامل
-      let html2canvasFn = (window as any).html2canvas;
-      if (!html2canvasFn) {
-        try {
-          await new Promise<void>((resolve, reject) => {
-            const script = document.createElement('script');
-            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
-            script.onload = () => resolve();
-            script.onerror = reject;
-            document.head.appendChild(script);
-          });
-          html2canvasFn = (window as any).html2canvas;
-        } catch (e) {
-          console.warn('Could not load html2canvas CDN:', e);
-        }
-      }
-
-      if (html2canvasFn && certEl) {
-        const canvas = await html2canvasFn(certEl, {
-          scale: 3,
-          useCORS: true,
-          allowTaint: true,
-          backgroundColor: '#FCFBF7',
-          logging: false
-        });
-        dataUrl = canvas.toDataURL('image/png');
-      } else if ((window as any).htmlToImage && typeof (window as any).htmlToImage.toPng === 'function') {
-        dataUrl = await (window as any).htmlToImage.toPng(certEl, {
-          quality: 0.98,
-          pixelRatio: 3
-        });
-      }
-
-      if (dataUrl) {
-        const link = document.createElement('a');
-        link.download = `شهادة_متين_${challengeName.replace(/\s+/g, '_')}_${playerName.replace(/\s+/g, '_')}.png`;
-        link.href = dataUrl;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      }
-    } catch (err) {
-      console.error('Download certificate error:', err);
-      // في حال حدوث أي مانع نفتح واجهة الطباعة مباشرة لحفظها كـ PDF
-      window.print();
+      const image = canvas.toDataURL('image/png', 1.0);
+      const link = document.createElement('a');
+      link.download = `certificate_${playerName}.png`;
+      link.href = image;
+      link.click();
+    } catch (error) {
+      console.error('Error generating certificate:', error);
     } finally {
       setIsDownloading(false);
     }
@@ -230,12 +199,12 @@ export const ChallengeCertificate: React.FC<ChallengeCertificateProps> = ({
       {/* أزرار التحكم والخيارات العلوية (يتم إخفاؤها تلقائياً عند الطباعة) */}
       {/* ========================================================= */}
       {showControls && (
-        <div className="w-full max-w-4xl flex flex-wrap items-center justify-between gap-3 mb-4 bg-white/80 backdrop-blur-md p-3 sm:p-4 rounded-2xl border border-amber-200/60 shadow-xs">
-          <div className="flex items-center gap-2">
-            <div className="w-9 h-9 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-600">
+        <div className="w-full max-w-4xl flex flex-col-reverse md:flex-row justify-between items-center gap-4 mb-4 bg-white/80 backdrop-blur-md p-3 sm:p-4 rounded-2xl border border-amber-200/60 shadow-xs">
+          <div className="flex items-center justify-center md:justify-start gap-2 text-center md:text-right w-full md:w-auto">
+            <div className="w-9 h-9 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-600 shrink-0">
               <Award className="w-5 h-5" />
             </div>
-            <div>
+            <div className="text-center md:text-right w-full md:w-auto">
               <h4 className="text-sm sm:text-base font-black text-slate-800">
                 شهادة الإنجاز الرسمية
               </h4>
@@ -245,13 +214,13 @@ export const ChallengeCertificate: React.FC<ChallengeCertificateProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center flex-wrap gap-2">
+          <div className="flex flex-wrap justify-center md:justify-start items-center gap-2 w-full md:w-auto">
             {/* زر تعديل الاسم */}
             {allowNameEdit && (
               <button
                 type="button"
                 onClick={() => setIsEditingName(true)}
-                className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all active:scale-95 cursor-pointer"
+                className="flex items-center gap-1.5 px-3 py-1.5 md:px-4 md:py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 cursor-pointer"
                 title="تعديل اسم المستلم على الشهادة"
               >
                 <Edit3 className="w-3.5 h-3.5 text-amber-600" />
@@ -263,7 +232,7 @@ export const ChallengeCertificate: React.FC<ChallengeCertificateProps> = ({
             <button
               type="button"
               onClick={handlePrint}
-              className="flex items-center gap-1.5 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200/60 rounded-xl text-xs font-bold transition-all active:scale-95 cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 md:px-4 md:py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200/60 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 cursor-pointer"
               title="طباعة الشهادة بتنسيق ورقي احترافي"
             >
               <Printer className="w-3.5 h-3.5 text-emerald-600" />
@@ -274,7 +243,7 @@ export const ChallengeCertificate: React.FC<ChallengeCertificateProps> = ({
             <button
               type="button"
               onClick={handleShare}
-              className="flex items-center gap-1.5 px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/60 rounded-xl text-xs font-bold transition-all active:scale-95 cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 md:px-4 md:py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200/60 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 cursor-pointer"
               title="مشاركة الإنجاز مع الأصدقاء"
             >
               {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Share2 className="w-3.5 h-3.5 text-indigo-600" />}
@@ -286,7 +255,7 @@ export const ChallengeCertificate: React.FC<ChallengeCertificateProps> = ({
               type="button"
               onClick={handleDownloadImage}
               disabled={isDownloading}
-              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 via-amber-600 to-amber-700 hover:from-amber-600 hover:to-amber-800 text-white rounded-xl text-xs sm:text-sm font-black shadow-md shadow-amber-500/20 active:scale-95 transition-all cursor-pointer disabled:opacity-50"
+              className="flex items-center gap-2 px-3.5 py-1.5 md:px-4 md:py-2 bg-gradient-to-r from-amber-500 via-amber-600 to-amber-700 hover:from-amber-600 hover:to-amber-800 text-white rounded-xl text-xs sm:text-sm font-black shadow-md shadow-amber-500/20 active:scale-95 transition-all cursor-pointer disabled:opacity-50"
             >
               <Download className="w-4 h-4" />
               <span>{isDownloading ? 'جاري التجهيز...' : 'تحميل الشهادة 📥'}</span>
@@ -297,7 +266,7 @@ export const ChallengeCertificate: React.FC<ChallengeCertificateProps> = ({
               <button
                 type="button"
                 onClick={onClose}
-                className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-all cursor-pointer"
+                className="w-8 h-8 md:w-9 md:h-9 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-all cursor-pointer active:scale-95"
                 title="إغلاق"
               >
                 <X className="w-4 h-4" />
@@ -355,10 +324,11 @@ export const ChallengeCertificate: React.FC<ChallengeCertificateProps> = ({
       {/* ========================================================= */}
       {/* جسم الشهادة الرئيسي (Landscape Certificate) */}
       {/* ========================================================= */}
-      <div
-        ref={certificateRef}
-        id="certificate-wrapper"
-        className="certificate-container relative w-full max-w-4xl aspect-[1.414/1] bg-[#FCFBF7] text-slate-800 rounded-3xl p-5 sm:p-8 md:p-10 shadow-2xl border-[3px] border-[#D4AF37] overflow-hidden select-none flex flex-col justify-between"
+      <div className="w-full overflow-x-auto pb-4 flex justify-center md:justify-start">
+        <div
+          ref={certificateRef}
+          id="certificate-wrapper"
+          className="certificate-container relative min-w-[800px] w-full max-w-4xl aspect-[1.414/1] bg-[#FCFBF7] text-slate-800 rounded-3xl p-5 sm:p-8 md:p-10 shadow-2xl border-[3px] border-[#D4AF37] overflow-hidden select-none flex flex-col justify-between"
         style={{
           boxShadow: '0 25px 60px -15px rgba(6, 78, 59, 0.18), 0 0 0 1px rgba(212, 175, 55, 0.3)',
           backgroundImage: 'radial-gradient(#F5EEDB 0.75px, transparent 0.75px), radial-gradient(#F5EEDB 0.75px, #FCFBF7 0.75px)',
@@ -526,6 +496,7 @@ export const ChallengeCertificate: React.FC<ChallengeCertificateProps> = ({
           </div>
         </div>
       </div>
+    </div>
     </div>
   );
 };
