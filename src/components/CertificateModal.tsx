@@ -154,6 +154,12 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
         scrollX: 0,
         scrollY: 0,
         windowWidth: document.documentElement.offsetWidth,
+        onclone: (clonedDoc) => {
+          const el = clonedDoc.getElementById('certificate-wrapper');
+          if (el) {
+            el.style.transform = 'none';
+          }
+        }
       });
 
       const image = canvas.toDataURL('image/png', 1.0);
@@ -254,11 +260,11 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
           {/* ========================================================= */}
           {/* قالب الشهادة البرمجي الكامل (HTML / CSS / Tailwind / SVG) */}
           {/* ========================================================= */}
-          <div className="w-full overflow-x-auto pb-4 flex justify-center md:justify-start">
+          <div className="w-full flex justify-center items-start overflow-hidden py-2 sm:py-4 h-[280px] sm:h-[420px] md:h-auto">
             <div
               ref={certificateRef}
               id="certificate-wrapper"
-              className="certificate-container relative min-w-[800px] w-full aspect-[1.414/1] bg-[#FCFBF7] text-slate-800 rounded-3xl p-5 sm:p-8 md:p-10 shadow-2xl border-[3px] border-[#D4AF37] overflow-hidden select-none flex flex-col justify-between"
+              className="certificate-container relative origin-top scale-[0.42] min-[390px]:scale-[0.46] sm:scale-[0.68] md:scale-100 w-[800px] shrink-0 aspect-[1.414/1] bg-[#FCFBF7] text-slate-800 rounded-3xl p-5 sm:p-8 md:p-10 shadow-2xl border-[3px] border-[#D4AF37] overflow-hidden select-none flex flex-col justify-between transition-transform"
             style={{
               boxShadow: '0 25px 60px -15px rgba(6, 78, 59, 0.25), 0 0 0 1px rgba(212, 175, 55, 0.4)',
               backgroundImage: 'radial-gradient(#F5EEDB 0.75px, transparent 0.75px), radial-gradient(#F5EEDB 0.75px, #FCFBF7 0.75px)',
