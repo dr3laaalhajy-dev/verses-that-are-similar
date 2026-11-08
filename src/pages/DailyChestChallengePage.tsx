@@ -158,96 +158,97 @@ export const DailyChestChallengePage: React.FC = () => {
 
   return (
     <div
-      className="min-h-screen bg-radial from-slate-50 via-amber-50/30 to-emerald-50/20 dark:from-slate-950 dark:via-obsidian-950 dark:to-zinc-950 text-slate-800 dark:text-slate-100 flex flex-col justify-between py-3 px-3 sm:px-6 relative overflow-hidden select-none"
+      className="min-h-screen bg-radial from-slate-50 via-amber-50/30 to-emerald-50/20 dark:from-slate-950 dark:via-obsidian-950 dark:to-zinc-950 text-slate-800 dark:text-slate-100 flex flex-col items-center justify-center min-h-[calc(100vh-100px)] w-full gap-4 md:gap-8 px-4 py-6 relative overflow-hidden select-none"
       dir="rtl"
     >
       {/* Background Islamic Geometric Watermark */}
       <div className="absolute inset-0 pointer-events-none opacity-[0.03] dark:opacity-[0.04] bg-[radial-gradient(#10b981_1px,transparent_1px)] [background-size:16px_16px]" />
 
       {/* ───────────────────────────────────────────────────────────── */}
-      {/* 1. TOP HEADER: Navigation, Title & Lives                     */}
+      {/* 1. PROGRESS HEADER (شريط التقدم والقلوب والهدف المطلوب)       */}
       {/* ───────────────────────────────────────────────────────────── */}
-      <header className="w-full max-w-2xl mx-auto flex items-center justify-between gap-3 pt-1 pb-3 relative z-10">
-        <button
-          type="button"
-          onClick={handleReturnHome}
-          className="p-2 sm:p-2.5 rounded-2xl bg-white/90 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:text-brand-emerald dark:hover:text-emerald-400 hover:border-brand-emerald/40 transition-all shadow-xs flex items-center gap-1.5 text-xs font-black cursor-pointer"
-          title="العودة للرئيسية"
-        >
-          <ArrowRight className="w-4 h-4" />
-          <span className="hidden sm:inline">الرئيسية</span>
-        </button>
+      <div className="w-full max-w-2xl flex flex-col gap-4 mb-4 relative z-10">
+        {/* Navigation, Challenge Badge & Lives Hearts */}
+        <header className="w-full flex items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={handleReturnHome}
+            className="p-2 sm:p-2.5 rounded-2xl bg-white/90 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:text-brand-emerald dark:hover:text-emerald-400 hover:border-brand-emerald/40 transition-all shadow-xs flex items-center gap-1.5 text-xs font-black cursor-pointer"
+            title="العودة للرئيسية"
+          >
+            <ArrowRight className="w-4 h-4" />
+            <span className="hidden sm:inline">الرئيسية</span>
+          </button>
 
-        {/* Center: Challenge Badge */}
-        <div className="flex flex-col items-center">
-          <span className="text-[10px] sm:text-xs font-black px-2.5 py-0.5 rounded-full bg-amber-100/90 dark:bg-amber-950/60 border border-amber-300/60 dark:border-amber-700/50 text-amber-900 dark:text-amber-200 flex items-center gap-1">
-            <Sparkles className="w-3 h-3 text-amber-600 dark:text-amber-400" />
-            <span>تحدي الصندوق اليومي</span>
-          </span>
-          <h2 className="text-xs sm:text-sm font-black text-slate-800 dark:text-slate-100 mt-0.5">
-            {categoryTitle}
-          </h2>
-        </div>
-
-        {/* Right: Lives Hearts Counter */}
-        <div className="flex items-center gap-1.5 p-1.5 sm:p-2 rounded-2xl bg-white/90 dark:bg-slate-900/90 border border-rose-200/80 dark:border-rose-900/40 shadow-xs">
-          {Array.from({ length: maxLives }).map((_, idx) => {
-            const isAlive = idx < lives;
-            const isJustLost = idx === heartLostIndex;
-
-            return (
-              <motion.div
-                key={idx}
-                animate={
-                  isJustLost
-                    ? { scale: [1, 1.4, 0.8, 1], rotate: [0, -15, 15, 0] }
-                    : { scale: 1, rotate: 0 }
-                }
-                transition={{ duration: 0.4 }}
-              >
-                <Heart
-                  className={`w-4 h-4 sm:w-5 sm:h-5 transition-all ${
-                    isAlive
-                      ? 'fill-rose-500 text-rose-500 drop-shadow-[0_1px_3px_rgba(244,63,94,0.4)]'
-                      : 'text-slate-300 dark:text-zinc-700 fill-slate-200/40 dark:fill-zinc-800/40 opacity-50'
-                  }`}
-                />
-              </motion.div>
-            );
-          })}
-        </div>
-      </header>
-
-      {/* ───────────────────────────────────────────────────────────── */}
-      {/* 2. PROGRESS BAR & TARGET                                      */}
-      {/* ───────────────────────────────────────────────────────────── */}
-      <div className="w-full max-w-2xl mx-auto mb-3 space-y-1 relative z-10">
-        <div className="flex items-center justify-between text-xs font-black">
-          <span className="text-slate-500 dark:text-slate-400 flex items-center gap-1">
-            <span>الهدف المطلوب:</span>
-            <span className="text-brand-emerald dark:text-emerald-400 font-black">
-              {toArabicIndic(correctAnswers)} من {toArabicIndic(target)} إجابات صحيحة
+          {/* Center: Challenge Badge */}
+          <div className="flex flex-col items-center">
+            <span className="text-[10px] sm:text-xs font-black px-2.5 py-0.5 rounded-full bg-amber-100/90 dark:bg-amber-950/60 border border-amber-300/60 dark:border-amber-700/50 text-amber-900 dark:text-amber-200 flex items-center gap-1">
+              <Sparkles className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+              <span>تحدي الصندوق اليومي</span>
             </span>
-          </span>
-          <span className="text-amber-600 dark:text-amber-400 font-mono font-bold">
-            {toArabicIndic(progressPercentage)}٪
-          </span>
-        </div>
+            <h2 className="text-xs sm:text-sm font-black text-slate-800 dark:text-slate-100 mt-0.5">
+              {categoryTitle}
+            </h2>
+          </div>
 
-        <div className="w-full h-2 rounded-full bg-slate-200/80 dark:bg-slate-800 overflow-hidden shadow-inner">
-          <motion.div
-            className="h-full rounded-full bg-gradient-to-r from-amber-400 via-emerald-500 to-teal-500 shadow-sm"
-            initial={{ width: 0 }}
-            animate={{ width: `${progressPercentage}%` }}
-            transition={{ duration: 0.35, ease: 'easeOut' }}
-          />
+          {/* Right: Lives Hearts Counter */}
+          <div className="flex items-center gap-1.5 p-1.5 sm:p-2 rounded-2xl bg-white/90 dark:bg-slate-900/90 border border-rose-200/80 dark:border-rose-900/40 shadow-xs">
+            {Array.from({ length: maxLives }).map((_, idx) => {
+              const isAlive = idx < lives;
+              const isJustLost = idx === heartLostIndex;
+
+              return (
+                <motion.div
+                  key={idx}
+                  animate={
+                    isJustLost
+                      ? { scale: [1, 1.4, 0.8, 1], rotate: [0, -15, 15, 0] }
+                      : { scale: 1, rotate: 0 }
+                  }
+                  transition={{ duration: 0.4 }}
+                >
+                  <Heart
+                    className={`w-4 h-4 sm:w-5 sm:h-5 transition-all ${
+                      isAlive
+                        ? 'fill-rose-500 text-rose-500 drop-shadow-[0_1px_3px_rgba(244,63,94,0.4)]'
+                        : 'text-slate-300 dark:text-zinc-700 fill-slate-200/40 dark:fill-zinc-800/40 opacity-50'
+                    }`}
+                  />
+                </motion.div>
+              );
+            })}
+          </div>
+        </header>
+
+        {/* Target & Progress Bar */}
+        <div className="w-full space-y-1">
+          <div className="flex items-center justify-between text-xs font-black">
+            <span className="text-slate-500 dark:text-slate-400 flex items-center gap-1">
+              <span>الهدف المطلوب:</span>
+              <span className="text-brand-emerald dark:text-emerald-400 font-black">
+                {toArabicIndic(correctAnswers)} من {toArabicIndic(target)} إجابات صحيحة
+              </span>
+            </span>
+            <span className="text-amber-600 dark:text-amber-400 font-mono font-bold">
+              {toArabicIndic(progressPercentage)}٪
+            </span>
+          </div>
+
+          <div className="w-full h-2 rounded-full bg-slate-200/80 dark:bg-slate-800 overflow-hidden shadow-inner">
+            <motion.div
+              className="h-full rounded-full bg-gradient-to-r from-amber-400 via-emerald-500 to-teal-500 shadow-sm"
+              initial={{ width: 0 }}
+              animate={{ width: `${progressPercentage}%` }}
+              transition={{ duration: 0.35, ease: 'easeOut' }}
+            />
+          </div>
         </div>
       </div>
 
       {/* ───────────────────────────────────────────────────────────── */}
-      {/* 3. MAIN GAMEPLAY AREA                                        */}
+      {/* 2. MAIN GAMEPLAY AREA                                        */}
       {/* ───────────────────────────────────────────────────────────── */}
-      <main className="w-full max-w-2xl mx-auto flex-1 flex flex-col justify-center relative z-10 my-auto">
+      <main className="w-full max-w-2xl relative z-10">
         <AnimatePresence mode="wait">
           {gameStatus === 'playing' && currentQuestion && (
             <motion.div
@@ -270,7 +271,7 @@ export const DailyChestChallengePage: React.FC = () => {
                   </span>
                 </div>
 
-                <h3 className="text-base sm:text-xl font-black text-slate-800 dark:text-slate-100 leading-relaxed font-tajawal">
+                <h3 className="text-lg md:text-xl font-black text-slate-800 dark:text-slate-100 leading-relaxed font-tajawal">
                   {currentQuestion.question}
                 </h3>
               </div>
@@ -307,7 +308,7 @@ export const DailyChestChallengePage: React.FC = () => {
                       whileTap={{ scale: isAnswerChecked ? 1 : 0.98 }}
                       onClick={() => handleSelectOption(option)}
                       disabled={isAnswerChecked}
-                      className={`p-3.5 sm:p-4 rounded-2xl border-2 font-bold text-xs sm:text-sm text-right transition-all flex items-center justify-between gap-3 shadow-xs cursor-pointer ${btnStyle}`}
+                      className={`py-2 md:py-3 px-3.5 sm:px-4 rounded-2xl border-2 font-bold text-xs sm:text-sm text-right transition-all flex items-center justify-between gap-3 shadow-xs cursor-pointer ${btnStyle}`}
                     >
                       <div className="flex items-center gap-2.5">
                         <span
@@ -328,6 +329,11 @@ export const DailyChestChallengePage: React.FC = () => {
                   );
                 })}
               </div>
+
+              {/* Bottom Helper Text (مباشرة تحت صندوق الخيارات داخل تدفق الـ Flex الرئيسي) */}
+              <p className="text-sm text-gray-500 dark:text-slate-400 text-center mt-4">
+                {challengeTitle}
+              </p>
             </motion.div>
           )}
 
@@ -430,13 +436,6 @@ export const DailyChestChallengePage: React.FC = () => {
           )}
         </AnimatePresence>
       </main>
-
-      {/* ───────────────────────────────────────────────────────────── */}
-      {/* 6. BOTTOM FOOTER                                              */}
-      {/* ───────────────────────────────────────────────────────────── */}
-      <footer className="w-full max-w-2xl mx-auto pt-3 pb-1 text-center text-[11px] font-bold text-slate-400 dark:text-slate-500 relative z-10">
-        <span>{challengeTitle}</span>
-      </footer>
     </div>
   );
 };
