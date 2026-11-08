@@ -9,6 +9,7 @@ import { ScopeSelector, JuzSurahSelector } from '../components/challenge/ScopeSe
 import { useApp, ModularRoomSettings } from '../contexts/AppContext';
 import { validateSurahChallengeScope, formatScopeSummary } from '../services/JuzRepository';
 import { islamicCategoriesList } from '../data/islamicCategories';
+import { IslamicInfoSettingsForm } from '../components/challenge/IslamicInfoSettingsForm';
 
 export interface GroupCreatePageProps {
   mode?: 'create' | 'edit';
@@ -709,15 +710,28 @@ export const GroupCreatePage: React.FC<GroupCreatePageProps> = ({
                   </div>
 
                   {roomSettings.islamicQuestions.isSelected ? (
-                    <div className="p-2.5 rounded-2xl bg-amber-100/60 border border-amber-200/70 text-xs font-bold text-amber-900 flex items-center justify-between">
-                      <span className="flex items-center gap-1.5">
-                        <Check className="w-3.5 h-3.5 text-amber-600" />
-                        <span>
-                          {roomSettings.islamicQuestions.topics.includes('all')
-                            ? `${roomSettings.islamicQuestions.topicCounts['all'] || 5} أسئلة • جميع المواضيع`
-                            : `${roomSettings.islamicQuestions.topics.reduce((sum, t) => sum + (roomSettings.islamicQuestions.topicCounts[t] || 0), 0)} أسئلة • ${roomSettings.islamicQuestions.topics.length} مواضيع`}
+                    <div className="p-2.5 rounded-2xl bg-amber-100/60 border border-amber-200/70 text-xs font-bold text-amber-900 flex flex-col gap-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="flex items-center gap-1.5">
+                          <Check className="w-3.5 h-3.5 text-amber-600" />
+                          <span>
+                            {roomSettings.islamicQuestions.topics.includes('all')
+                              ? `${roomSettings.islamicQuestions.topicCounts['all'] || roomSettings.islamicQuestions.questionsCount || 5} أسئلة • جميع المواضيع`
+                              : `${roomSettings.islamicQuestions.topics.reduce((sum, t) => sum + (roomSettings.islamicQuestions.topicCounts[t] || 0), 0)} أسئلة • ${roomSettings.islamicQuestions.topics.length} مواضيع`}
+                          </span>
                         </span>
-                      </span>
+                        <span className="text-[10px] bg-amber-200/70 text-amber-950 px-2 py-0.5 rounded-full font-black">
+                          {roomSettings.islamicQuestions.categories?.length || 1} مجالات
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-amber-800 flex items-center gap-1">
+                        <span>المستويات:</span>
+                        <span className="font-black">
+                          {roomSettings.islamicQuestions.levels?.length === 3
+                            ? 'كافة المستويات (١، ٢، ٣)'
+                            : (roomSettings.islamicQuestions.levels || [1]).map(l => `المستوى ${l}`).join('، ')}
+                        </span>
+                      </div>
                     </div>
                   ) : (
                     <div className="text-[11px] text-slate-400 font-bold py-1">
@@ -1286,7 +1300,7 @@ export const GroupCreatePage: React.FC<GroupCreatePageProps> = ({
                 </>
               )}
 
-              {/* ---------------- 3. نافذة معلومات إسلامية ---------------- */}
+              {/* ---------------- 3. نافذة معلومات إسلامية (المكون المستقل المتطابق) ---------------- */}
               {activeModal === 'islamic' && (
                 <>
                   <div className="flex items-center justify-between border-b border-slate-100 pb-3">
@@ -1296,7 +1310,7 @@ export const GroupCreatePage: React.FC<GroupCreatePageProps> = ({
                       </div>
                       <div>
                         <h3 className="text-base sm:text-lg font-black text-slate-800">إعدادات المعلومات الإسلامية</h3>
-                        <p className="text-xs text-slate-400 font-bold">حدد المواضيع وعدد الأسئلة</p>
+                        <p className="text-xs text-slate-400 font-bold">حدد المجالات الإسلامية ومستويات الصعوبة والمواضيع المطلوبة</p>
                       </div>
                     </div>
                     <button
@@ -1308,92 +1322,44 @@ export const GroupCreatePage: React.FC<GroupCreatePageProps> = ({
                     </button>
                   </div>
 
-                  {/* فئات إسلامية */}
-                  <div className="space-y-2">
-                    <label className="text-xs font-black text-slate-700">اختر الفئات المطلوبة:</label>
-                    <div className="flex flex-wrap gap-2">
-                      {['العقيدة', 'الفقه', 'السيرة النبوية', 'الحديث الشريف', 'التفسير', 'القرآن وعلومه'].map(cat => {
-                        const isCatSelected = draftIslamicCategories.includes(cat);
-                        return (
-                          <button
-                            key={cat}
-                            type="button"
-                            onClick={() => {
-                              if (isCatSelected) {
-                                if (draftIslamicCategories.length > 1) {
-                                  setDraftIslamicCategories(draftIslamicCategories.filter(c => c !== cat));
-                                }
-                              } else {
-                                setDraftIslamicCategories([...draftIslamicCategories, cat]);
-                              }
-                            }}
-                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                              isCatSelected
-                                ? 'bg-amber-500 text-white shadow-xs'
-                                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                            }`}
-                          >
-                            {cat}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
+                  <IslamicInfoSettingsForm
+                    settings={{
+                      categories: draftIslamicCategories,
+                      levels: draftIslamicLevels,
+                      topics: draftIslamicTopics,
+                      topicCounts: draftIslamicTopicCounts,
+                      questionsCount: draftIslamicTopics.includes('all')
+                        ? (draftIslamicTopicCounts['all'] || 5)
+                        : draftIslamicTopics.reduce((sum, t) => sum + (draftIslamicTopicCounts[t] || 0), 0)
+                    }}
+                    onChange={(updated) => {
+                      setDraftIslamicCategories(updated.categories);
+                      setDraftIslamicLevels(updated.levels);
+                      setDraftIslamicTopics(updated.topics);
+                      setDraftIslamicTopicCounts(updated.topicCounts);
+                    }}
+                    onSave={() => {
+                      const totalQ = draftIslamicTopics.includes('all')
+                        ? (draftIslamicTopicCounts['all'] || 5)
+                        : draftIslamicTopics.reduce((sum, t) => sum + (draftIslamicTopicCounts[t] || 0), 0);
 
-                  {/* عدد الأسئلة الإجمالي */}
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-xs font-black text-slate-700">
-                      <span>عدد الأسئلة الإجمالي:</span>
-                      <span className="text-amber-600">{draftIslamicTopicCounts['all'] || 5} أسئلة</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {[3, 5, 10, 15, 20].map(cnt => (
-                        <button
-                          key={cnt}
-                          type="button"
-                          onClick={() => setDraftIslamicTopicCounts({ all: cnt })}
-                          className={`flex-1 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
-                            (draftIslamicTopicCounts['all'] || 5) === cnt
-                              ? 'bg-amber-500 text-white shadow-xs'
-                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                          }`}
-                        >
-                          {cnt}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="pt-2 flex items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        updateModularSettings({
-                          ...roomSettings,
-                          islamicQuestions: {
-                            isSelected: true,
-                            questionsCount: draftIslamicTopicCounts['all'] || 5,
-                            categories: draftIslamicCategories,
-                            topics: ['all'],
-                            topicCounts: draftIslamicTopicCounts,
-                            levels: draftIslamicLevels
-                          }
-                        });
-                        setActiveModal(null);
-                      }}
-                      className="flex-1 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-2xl font-black text-sm shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
-                    >
-                      <Check className="w-4 h-4" />
-                      <span>حفظ الإعدادات وتفعيل المهارة</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setActiveModal(null)}
-                      className="py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-2xl font-bold text-sm cursor-pointer"
-                    >
-                      إلغاء
-                    </button>
-                  </div>
+                      updateModularSettings({
+                        ...roomSettings,
+                        islamicQuestions: {
+                          isSelected: true,
+                          questionsCount: Math.max(1, totalQ),
+                          categories: draftIslamicCategories,
+                          topics: draftIslamicTopics,
+                          topicCounts: draftIslamicTopicCounts,
+                          levels: draftIslamicLevels
+                        }
+                      });
+                      setActiveModal(null);
+                    }}
+                    onCancel={() => setActiveModal(null)}
+                    saveButtonText="حفظ الإعدادات وتفعيل المهارة"
+                    showActionButtons={true}
+                  />
                 </>
               )}
 

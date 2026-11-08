@@ -2838,16 +2838,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       // 4. Targeted Islamic questions
+      const effectiveIslamicCategories = (roomSettings.islamicQuestions?.isSelected && roomSettings.islamicQuestions.categories?.length)
+        ? roomSettings.islamicQuestions.categories
+        : islamicRoomCategories;
+
+      const effectiveIslamicLevels = (roomSettings.islamicQuestions?.isSelected && roomSettings.islamicQuestions.levels?.length)
+        ? roomSettings.islamicQuestions.levels
+        : islamicRoomLevels;
+
+      const effectiveIslamicTopics = (roomSettings.islamicQuestions?.isSelected && roomSettings.islamicQuestions.topics?.length)
+        ? roomSettings.islamicQuestions.topics
+        : islamicRoomTopics;
+
+      const effectiveIslamicTopicCounts = (roomSettings.islamicQuestions?.isSelected && roomSettings.islamicQuestions.topicCounts && Object.keys(roomSettings.islamicQuestions.topicCounts).length)
+        ? roomSettings.islamicQuestions.topicCounts
+        : islamicTopicQuestionCounts;
+
       if (isIslamicIncluded) {
         const allocations: Record<string, number> = {};
-        if (islamicRoomTopics.includes('all')) {
-          allocations['all'] = Math.max(0, Number(islamicTopicQuestionCounts['all']) || 0);
+        if (effectiveIslamicTopics.includes('all')) {
+          allocations['all'] = Math.max(0, Number(effectiveIslamicTopicCounts['all'] ?? roomSettings.islamicQuestions?.questionsCount) || 5);
         } else {
-          islamicRoomTopics.forEach(t => {
-            allocations[t] = Math.max(0, Number(islamicTopicQuestionCounts[t]) || 0);
+          effectiveIslamicTopics.forEach(t => {
+            allocations[t] = Math.max(0, Number(effectiveIslamicTopicCounts[t]) || 0);
           });
         }
-        const islamicQs = getTargetedIslamicQuestions(allocations, islamicRoomLevels, islamicRoomCategories);
+        const islamicQs = getTargetedIslamicQuestions(allocations, effectiveIslamicLevels, effectiveIslamicCategories);
         customChallenges.push(...islamicQs);
       }
 
@@ -2865,10 +2881,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           ? (effectiveGameModes[0] === 'islamic' ? 'ISLAMIC' : effectiveGameModes[0] === 'audio' ? 'STANDARD' : effectiveGameModes[0] === 'complete' ? 'COMPLETION' : 'SURAH')
           : 'MIXED',
         gameModes: effectiveGameModes.map(m => m === 'islamic' ? 'ISLAMIC' : m === 'audio' ? 'STANDARD' : m === 'complete' ? 'COMPLETION' : 'SURAH'),
-        categories: isIslamicIncluded ? islamicRoomCategories : (v1Category ? [v1Category] : []),
-        category: isIslamicIncluded ? islamicRoomCategories[0] : v1Category,
-        levels: isIslamicIncluded ? islamicRoomLevels : undefined,
-        topics: isIslamicIncluded ? islamicRoomTopics : undefined,
+        categories: isIslamicIncluded ? effectiveIslamicCategories : (v1Category ? [v1Category] : []),
+        category: isIslamicIncluded ? effectiveIslamicCategories[0] : v1Category,
+        levels: isIslamicIncluded ? effectiveIslamicLevels : undefined,
+        topics: isIslamicIncluded ? effectiveIslamicTopics : undefined,
         questionCount: count,
         timePerQuestion: v1Timer ? v1TimePerQuestion : 0,
         transitionMode: v1TransitionMode,
@@ -3192,16 +3208,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
 
         // 4. Targeted Islamic
+        const effectiveIslamicCategories = (roomSettings.islamicQuestions?.isSelected && roomSettings.islamicQuestions.categories?.length)
+          ? roomSettings.islamicQuestions.categories
+          : islamicRoomCategories;
+
+        const effectiveIslamicLevels = (roomSettings.islamicQuestions?.isSelected && roomSettings.islamicQuestions.levels?.length)
+          ? roomSettings.islamicQuestions.levels
+          : islamicRoomLevels;
+
+        const effectiveIslamicTopics = (roomSettings.islamicQuestions?.isSelected && roomSettings.islamicQuestions.topics?.length)
+          ? roomSettings.islamicQuestions.topics
+          : islamicRoomTopics;
+
+        const effectiveIslamicTopicCounts = (roomSettings.islamicQuestions?.isSelected && roomSettings.islamicQuestions.topicCounts && Object.keys(roomSettings.islamicQuestions.topicCounts).length)
+          ? roomSettings.islamicQuestions.topicCounts
+          : islamicTopicQuestionCounts;
+
         if (isIslamicIncluded) {
           const allocations: Record<string, number> = {};
-          if (islamicRoomTopics.includes('all')) {
-            allocations['all'] = Math.max(0, Number(islamicTopicQuestionCounts['all']) || 0);
+          if (effectiveIslamicTopics.includes('all')) {
+            allocations['all'] = Math.max(0, Number(effectiveIslamicTopicCounts['all'] ?? roomSettings.islamicQuestions?.questionsCount) || 5);
           } else {
-            islamicRoomTopics.forEach(t => {
-              allocations[t] = Math.max(0, Number(islamicTopicQuestionCounts[t]) || 0);
+            effectiveIslamicTopics.forEach(t => {
+              allocations[t] = Math.max(0, Number(effectiveIslamicTopicCounts[t]) || 0);
             });
           }
-          const islamicQs = getTargetedIslamicQuestions(allocations, islamicRoomLevels, islamicRoomCategories);
+          const islamicQs = getTargetedIslamicQuestions(allocations, effectiveIslamicLevels, effectiveIslamicCategories);
           customChallenges.push(...islamicQs);
         }
 
@@ -3226,7 +3258,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             selected_juz: (roomSettings.surahName.isSelected ? roomSettings.surahName.selectedJuzRange : roomSettings.ayahCompletion.selectedJuzRange) || (roomScopeMode === 'juz' ? roomSelectedJuzs : []),
             selected_surahs: (roomSettings.surahName.isSelected ? roomSettings.surahName.selectedSurahs : roomSettings.ayahCompletion.selectedSurahs) || (roomScopeMode === 'surah' ? roomSelectedSurahs : [])
           },
-          categoryFilter: isIslamicIncluded ? (islamicRoomCategories[0] || 'إسلامي') : (v1Category || ''),
+          categoryFilter: isIslamicIncluded ? (effectiveIslamicCategories[0] || 'إسلامي') : (v1Category || ''),
           questionCount: finalCustomChallenges.length,
           timePerQuestion: v1Timer ? v1TimePerQuestion : 0,
           transitionMode: v1TransitionMode,

@@ -1,6 +1,33 @@
 import { islamicCategoriesData, islamicCategoriesList } from '../data/islamicCategories';
 import { quizQuestions } from '../data/quizQuestionsData';
 
+export const CATEGORY_NAME_TO_ID: Record<string, string> = {
+  'العقيدة': 'akida',
+  'العقيدة الإسلامية': 'akida',
+  'الفقه': 'figh',
+  'الفقه الإسلامي': 'figh',
+  'الحديث': 'hadith',
+  'الحديث الشريف': 'hadith',
+  'التفسير': 'tafseer',
+  'تفسير القرآن': 'tafseer',
+  'التاريخ': 'history',
+  'التاريخ الإسلامي': 'history',
+  'اللغة العربية': 'arabia',
+  'علوم اللغة العربية': 'arabia',
+  'السيرة': 'seerah',
+  'السيرة النبوية': 'seerah',
+  'السيرة النبوية الشريفة': 'seerah',
+  'عامة': 'general',
+  'أسئلة عامة': 'general',
+  'القرآن وعلومه': 'tafseer'
+};
+
+export const normalizeCategoryId = (cat: string): string => {
+  if (!cat) return 'akida';
+  const trimmed = cat.trim();
+  return CATEGORY_NAME_TO_ID[trimmed] || trimmed;
+};
+
 export interface RoomCustomChallenge {
   id: number;
   keyword: string;
@@ -17,9 +44,10 @@ export function getRandomIslamicRoomQuestions(
   topicsInput: string[] | string,
   count: number
 ): RoomCustomChallenge[] {
-  const categories = Array.isArray(categoriesInput)
+  const rawCategories = Array.isArray(categoriesInput)
     ? (categoriesInput.length > 0 ? categoriesInput : ['akida'])
     : [categoriesInput || 'akida'];
+  const categories = rawCategories.map(normalizeCategoryId);
 
   const levelsRaw = Array.isArray(levelsInput)
     ? (levelsInput.length > 0 ? levelsInput : [1, 2, 3])
@@ -125,10 +153,11 @@ export function getIslamicTopicAvailableCount(
 }
 
 export function getTotalIslamicAvailableCount(
-  categories: string[],
+  categoriesInput: string[],
   levels: (1 | 2 | 3)[] = [1, 2, 3],
   topics: string[] = ['all']
 ): number {
+  const categories = (categoriesInput || []).map(normalizeCategoryId);
   if (topics.includes('all')) {
     let total = 0;
     categories.forEach(catId => {
@@ -157,13 +186,14 @@ export function getTotalIslamicAvailableCount(
 export function getTargetedIslamicQuestions(
   topicAllocations: Record<string, number | { count: number; categoryId?: string }>,
   levels: (1 | 2 | 3)[] = [1, 2, 3],
-  categories: string[] = ['akida']
+  categoriesInput: string[] = ['akida']
 ): RoomCustomChallenge[] {
+  const categories = (categoriesInput || []).map(normalizeCategoryId);
   const result: RoomCustomChallenge[] = [];
 
   for (const [topicName, val] of Object.entries(topicAllocations)) {
     const reqCount = typeof val === 'number' ? val : val?.count || 0;
-    const catId = typeof val === 'number' ? undefined : val?.categoryId;
+    const catId = typeof val === 'number' ? undefined : (val?.categoryId ? normalizeCategoryId(val.categoryId) : undefined);
     if (reqCount <= 0) continue;
 
     if (topicName === 'all') {
