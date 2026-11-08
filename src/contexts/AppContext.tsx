@@ -4906,37 +4906,77 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [currentChallengeIndex, currentChallenge?.id]);
 
   const handleExecuteFreezeTime = () => {
+    const COST = 30;
     if (isPowerUpUsedThisQuestion) {
       toast.error('يمكنك استخدام مساعدة واحدة فقط في هذا السؤال');
       return;
     }
-    if (freezeTimeCount <= 0) {
-      toast.error('رصيدك من تجميد الوقت نفد!');
+    if (isFreezeActive) {
       return;
     }
-    setFreezeTimeCount(prev => {
-      const next = Math.max(0, prev - 1);
-      localStorage.setItem('quran_freeze_count', next.toString());
-      return next;
-    });
+
+    if (freezeTimeCount > 0) {
+      setFreezeTimeCount(prev => {
+        const next = Math.max(0, prev - 1);
+        localStorage.setItem('quran_freeze_count', next.toString());
+        return next;
+      });
+      setIsFreezeActive(true);
+      setFreezeSecondsLeft(10);
+      setIsPowerUpUsedThisQuestion(true);
+      toast.success('تم تجميد الوقت لمدة 10 ثوانٍ! 🧊 (مجاناً)');
+      return;
+    }
+
+    if (totalPoints < COST) {
+      toast.error(`نقاطك لا تكفي! تكلفة تجميد الوقت ${COST} نقطة (رصيدك الحالي: ${totalPoints})`);
+      return;
+    }
+
+    const nextPoints = totalPoints - COST;
+    setTotalPoints(nextPoints);
+    localStorage.setItem('quran_total_points', nextPoints.toString());
+
+    // Sync points deduction to DB
+    const cleanU = (playerUsername || '').trim();
+    const cleanN = (playerName || '').trim();
+    if (cleanU || cleanN) {
+      fetch('/api/player-score', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: cleanU,
+          name: cleanN,
+          totalPoints: nextPoints,
+          score: nextPoints,
+          roomId: room?.id
+        })
+      }).catch(err => console.warn('[PowerUps] DB points sync error:', err));
+    }
+
     setIsFreezeActive(true);
     setFreezeSecondsLeft(10);
     setIsPowerUpUsedThisQuestion(true);
-    toast.success('تم تجميد الوقت لمدة 10 ثوانٍ! 🧊');
+    toast.success(`تم شراء وتفعيل تجميد الوقت بنجاح! 🧊 (-${COST} نقطة)`);
   };
 
   const handleExecuteDeleteTwo = () => {
+    const COST = 50;
     if (isPowerUpUsedThisQuestion) {
       toast.error('يمكنك استخدام مساعدة واحدة فقط في هذا السؤال');
       return;
     }
-    if (deleteTwoCount <= 0) {
-      toast.error('رصيدك من حذف الإجابات نفد!');
+    if (eliminatedOptionIndices.length > 0) {
       return;
     }
     const currentOpts = skillsOptions || currentChallenge?.options || [];
     if (!Array.isArray(currentOpts) || currentOpts.length <= 2) {
       toast.error('لا يمكن حذف إجابات لهذا السؤال');
+      return;
+    }
+
+    if (deleteTwoCount <= 0 && totalPoints < COST) {
+      toast.error(`نقاطك لا تكفي! تكلفة حذف إجابتين ${COST} نقطة (رصيدك الحالي: ${totalPoints})`);
       return;
     }
 
@@ -4956,14 +4996,42 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     wrongIndices.sort(() => Math.random() - 0.5);
     const toEliminate = wrongIndices.slice(0, 2);
 
+    if (deleteTwoCount > 0) {
+      setDeleteTwoCount(prev => {
+        const next = Math.max(0, prev - 1);
+        localStorage.setItem('quran_delete_two_count', next.toString());
+        return next;
+      });
+      setEliminatedOptionIndices(toEliminate);
+      setIsPowerUpUsedThisQuestion(true);
+      toast.success('تم حذف إجابتين خاطئتين! ✂️ (مجاناً)');
+      return;
+    }
+
+    const nextPoints = totalPoints - COST;
+    setTotalPoints(nextPoints);
+    localStorage.setItem('quran_total_points', nextPoints.toString());
+
+    // Sync points deduction to DB
+    const cleanU = (playerUsername || '').trim();
+    const cleanN = (playerName || '').trim();
+    if (cleanU || cleanN) {
+      fetch('/api/player-score', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: cleanU,
+          name: cleanN,
+          totalPoints: nextPoints,
+          score: nextPoints,
+          roomId: room?.id
+        })
+      }).catch(err => console.warn('[PowerUps] DB points sync error:', err));
+    }
+
     setEliminatedOptionIndices(toEliminate);
-    setDeleteTwoCount(prev => {
-      const next = Math.max(0, prev - 1);
-      localStorage.setItem('quran_delete_two_count', next.toString());
-      return next;
-    });
     setIsPowerUpUsedThisQuestion(true);
-    toast.success('تم حذف إجابتين خاطئتين! ✂️');
+    toast.success(`تم شراء حذف إجابتين بنجاح! ✂️ (-${COST} نقطة)`);
   };
 
   // Reset Speed timer on each match

@@ -471,6 +471,30 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
     );
   }
 
+  const hasActiveTimer = Boolean(
+    isSpeedMode ||
+    (room && Number(room.timePerQuestion || 0) > 0) ||
+    Boolean((room as any)?.hasTimer)
+  );
+
+  const isManualInputOrAudio = Boolean(
+    skillsType === 'surah' ||
+    skillsType === 'who_am_i' ||
+    skillsType === 'audio' ||
+    room?.gameMode === 'surah' ||
+    room?.gameMode === 'who_am_i' ||
+    (currentChallenge as any)?.type === 'SURAH'
+  );
+
+  const hasMultipleChoiceOptions = !isManualInputOrAudio && Boolean(
+    skillsType === 'complete' ||
+    challengeMode === 'daily' ||
+    (Array.isArray(skillsOptions) && skillsOptions.length > 2) ||
+    (Array.isArray(currentChallenge?.options) && currentChallenge.options.length > 2)
+  );
+
+  const showPowerUpsStore = hasActiveTimer || hasMultipleChoiceOptions;
+
   return (
     <div key="game" className="space-y-2 md:space-y-4 max-w-xl md:max-w-3xl lg:max-w-4xl mx-auto w-full px-2 md:px-4 pt-1 md:pt-4">
       {/* Floating Timer UI for Speed Mode or Multiplayer Room with Timer */}
@@ -578,48 +602,105 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
         </motion.div>
       )}
 
-      {/* Tactical Power-ups HUD (🧊 Freeze Time & ✂️ Delete Two) */}
-      <div className="flex items-center justify-center gap-2.5 sm:gap-4 my-2 sm:my-3">
-        <button
-          type="button"
-          onClick={handleExecuteFreezeTime}
-          disabled={freezeTimeCount <= 0 || isPowerUpUsedThisQuestion || isFreezeActive || hasAnsweredCurrentQuestion}
-          title="تجميد الوقت لمدة 10 ثوانٍ"
-          className={`flex items-center gap-2 px-3 py-1.5 sm:px-4 sm:py-2 rounded-2xl border text-xs sm:text-sm font-black shadow-xs transition-all active:scale-95 cursor-pointer ${
-            isFreezeActive
-              ? 'bg-cyan-100 text-cyan-800 border-cyan-400 ring-2 ring-cyan-300 animate-pulse'
-              : freezeTimeCount > 0 && !isPowerUpUsedThisQuestion && !hasAnsweredCurrentQuestion
-              ? 'bg-white hover:bg-cyan-50 text-cyan-700 border-cyan-200 hover:border-cyan-400'
-              : 'bg-slate-100 text-slate-400 border-slate-200 opacity-60 cursor-not-allowed'
-          }`}
-        >
-          <span className="text-base leading-none">🧊</span>
-          <span>تجميد الوقت</span>
-          <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${freezeTimeCount > 0 ? 'bg-cyan-500 text-white' : 'bg-slate-300 text-slate-600'}`}>
-            {freezeTimeCount}
-          </span>
-        </button>
+      {/* In-game Power-ups Store (متجر وسائل المساعدة) */}
+      {showPowerUpsStore && (
+        <div className="w-full max-w-lg mx-auto my-2 px-1">
+          <div className="bg-gradient-to-r from-amber-500/10 via-emerald-500/10 to-amber-500/10 dark:from-slate-800/80 dark:to-slate-800/80 p-2 sm:p-2.5 rounded-2xl border border-amber-500/30 dark:border-amber-500/20 backdrop-blur-md shadow-xs flex flex-col sm:flex-row items-center justify-between gap-2">
+            {/* Store Title & Player Current Points */}
+            <div className="flex items-center justify-between w-full sm:w-auto gap-2 px-1">
+              <div className="flex items-center gap-1.5 text-xs font-black text-amber-600 dark:text-amber-400">
+                <span className="text-sm">🛒</span>
+                <span>متجر المساعدات</span>
+              </div>
+              <div className="flex items-center gap-1 bg-amber-500/15 dark:bg-amber-500/20 border border-amber-500/30 px-2.5 py-0.5 rounded-full text-[11px] font-black text-amber-700 dark:text-amber-300">
+                <span>🪙</span>
+                <span>{totalPoints} نقطة</span>
+              </div>
+            </div>
 
-        <button
-          type="button"
-          onClick={handleExecuteDeleteTwo}
-          disabled={deleteTwoCount <= 0 || isPowerUpUsedThisQuestion || hasAnsweredCurrentQuestion || eliminatedOptionIndices.length > 0}
-          title="حذف إجابتين خاطئتين"
-          className={`flex items-center gap-2 px-3 py-1.5 sm:px-4 sm:py-2 rounded-2xl border text-xs sm:text-sm font-black shadow-xs transition-all active:scale-95 cursor-pointer ${
-            eliminatedOptionIndices.length > 0
-              ? 'bg-amber-100 text-amber-800 border-amber-300'
-              : deleteTwoCount > 0 && !isPowerUpUsedThisQuestion && !hasAnsweredCurrentQuestion
-              ? 'bg-white hover:bg-amber-50 text-amber-700 border-amber-200 hover:border-amber-400'
-              : 'bg-slate-100 text-slate-400 border-slate-200 opacity-60 cursor-not-allowed'
-          }`}
-        >
-          <span className="text-base leading-none">✂️</span>
-          <span>حذف إجابتين (50/50)</span>
-          <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${deleteTwoCount > 0 ? 'bg-amber-500 text-white' : 'bg-slate-300 text-slate-600'}`}>
-            {deleteTwoCount}
-          </span>
-        </button>
-      </div>
+            {/* Store Items (Action Buttons) */}
+            <div className="flex items-center justify-center gap-2 w-full sm:w-auto">
+              {/* 1. Freeze Time Button (Only when room/challenge has active timer) */}
+              {hasActiveTimer && (
+                <button
+                  type="button"
+                  onClick={handleExecuteFreezeTime}
+                  disabled={isPowerUpUsedThisQuestion || isFreezeActive || hasAnsweredCurrentQuestion}
+                  title={
+                    freezeTimeCount <= 0 && totalPoints < 30
+                      ? 'نقاطك لا تكفي (تحتاج 30 نقطة)'
+                      : 'تجميد الوقت لمدة 10 ثوانٍ'
+                  }
+                  className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-black transition-all shadow-xs cursor-pointer ${
+                    isFreezeActive
+                      ? 'bg-cyan-100 dark:bg-cyan-950/60 text-cyan-800 dark:text-cyan-300 border-cyan-400 ring-2 ring-cyan-300 animate-pulse'
+                      : isPowerUpUsedThisQuestion || hasAnsweredCurrentQuestion
+                      ? 'bg-slate-100 dark:bg-slate-800/50 text-slate-400 border-slate-200 dark:border-slate-700 opacity-50 cursor-not-allowed'
+                      : freezeTimeCount <= 0 && totalPoints < 30
+                      ? 'bg-slate-100 dark:bg-slate-800/50 text-slate-400 border-slate-200 dark:border-slate-700 opacity-50 hover:opacity-60'
+                      : 'bg-white dark:bg-slate-800 text-cyan-700 dark:text-cyan-300 border-cyan-300 dark:border-cyan-700/60 hover:bg-cyan-50 dark:hover:bg-cyan-950/40 hover:border-cyan-400 active:scale-95'
+                  }`}
+                >
+                  <span className="text-sm">🧊</span>
+                  <span>تجميد الوقت</span>
+                  <span
+                    className={`px-1.5 py-0.2 rounded-md text-[10px] font-black ${
+                      freezeTimeCount > 0
+                        ? 'bg-cyan-500 text-white'
+                        : totalPoints >= 30
+                        ? 'bg-cyan-100 dark:bg-cyan-900/60 text-cyan-700 dark:text-cyan-300 border border-cyan-300 dark:border-cyan-700'
+                        : 'bg-slate-200 dark:bg-slate-700 text-slate-500'
+                    }`}
+                  >
+                    {freezeTimeCount > 0 ? `مجاني (${freezeTimeCount})` : '-30 نقطة'}
+                  </span>
+                </button>
+              )}
+
+              {/* 2. Eliminate 2 Choices Button (Only for multiple choice questions) */}
+              {hasMultipleChoiceOptions && (
+                <button
+                  type="button"
+                  onClick={handleExecuteDeleteTwo}
+                  disabled={
+                    isPowerUpUsedThisQuestion ||
+                    hasAnsweredCurrentQuestion ||
+                    eliminatedOptionIndices.length > 0
+                  }
+                  title={
+                    deleteTwoCount <= 0 && totalPoints < 50
+                      ? 'نقاطك لا تكفي (تحتاج 50 نقطة)'
+                      : 'حذف إجابتين خاطئتين'
+                  }
+                  className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-black transition-all shadow-xs cursor-pointer ${
+                    eliminatedOptionIndices.length > 0
+                      ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border-amber-400 ring-2 ring-amber-300'
+                      : isPowerUpUsedThisQuestion || hasAnsweredCurrentQuestion
+                      ? 'bg-slate-100 dark:bg-slate-800/50 text-slate-400 border-slate-200 dark:border-slate-700 opacity-50 cursor-not-allowed'
+                      : deleteTwoCount <= 0 && totalPoints < 50
+                      ? 'bg-slate-100 dark:bg-slate-800/50 text-slate-400 border-slate-200 dark:border-slate-700 opacity-50 hover:opacity-60'
+                      : 'bg-white dark:bg-slate-800 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-700/60 hover:bg-amber-50 dark:hover:bg-amber-950/40 hover:border-amber-400 active:scale-95'
+                  }`}
+                >
+                  <span className="text-sm">✂️</span>
+                  <span>حذف إجابتين</span>
+                  <span
+                    className={`px-1.5 py-0.2 rounded-md text-[10px] font-black ${
+                      deleteTwoCount > 0
+                        ? 'bg-amber-500 text-white'
+                        : totalPoints >= 50
+                        ? 'bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-700'
+                        : 'bg-slate-200 dark:bg-slate-700 text-slate-500'
+                    }`}
+                  >
+                    {deleteTwoCount > 0 ? `مجاني (${deleteTwoCount})` : '-50 نقطة'}
+                  </span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <SkillsChallengeHeader
         index={challengeMode === 'daily' ? 0 : (currentChallengeIndex)}
