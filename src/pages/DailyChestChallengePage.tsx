@@ -17,7 +17,8 @@ import dollarCoinsChestAnimation from '../assets/lottie/dollar-coins-chest.json'
 import { useApp } from '../contexts/AppContext';
 import {
   getDailyChallengeConfigForDate,
-  getQuestionsPoolForCategory
+  getQuestionsPoolForCategory,
+  calculateDecayingPoints
 } from '../utils/dailyChestChallenge';
 import { Question } from '../data/quizQuestionsData';
 
@@ -56,7 +57,8 @@ export const DailyChestChallengePage: React.FC = () => {
   const categoryTitle = dailyGift?.categoryTitle || config.categoryTitle;
   const challengeTitle = dailyGift?.title || config.title;
   const target = dailyGift?.target || config.target;
-  const rewardPoints = dailyGift?.rewardPoints || config.rewardPoints;
+  const attemptsCount = dailyGift?.attemptsCount || 1;
+  const rewardPoints = calculateDecayingPoints(attemptsCount);
   const maxLives = dailyGift?.maxLives || config.maxLives || 3;
 
   // Question pool (shuffled)
@@ -85,6 +87,7 @@ export const DailyChestChallengePage: React.FC = () => {
 
   // Restart challenge
   const handleRestart = useCallback(() => {
+    app?.recordDailyChestRetry?.();
     const freshPool = getQuestionsPoolForCategory(category);
     setPool(freshPool);
     setCorrectAnswers(0);
@@ -94,7 +97,7 @@ export const DailyChestChallengePage: React.FC = () => {
     setIsAnswerChecked(false);
     setGameStatus('playing');
     setHeartLostIndex(null);
-  }, [category, maxLives]);
+  }, [category, maxLives, app]);
 
   // Option select handler
   const handleSelectOption = (option: string) => {
@@ -372,9 +375,10 @@ export const DailyChestChallengePage: React.FC = () => {
                 </h3>
                 <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 font-bold mt-1">
                   أجبت على {toArabicIndic(target)} أسئلة بنجاح في {categoryTitle}
+                  {attemptsCount > 1 ? ` (المحاولة ${toArabicIndic(attemptsCount)})` : ' (من المحاولة الأولى 🌟)'}
                 </p>
                 <div className="mt-3 inline-block px-4 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 text-amber-900 dark:text-amber-200 font-black text-sm">
-                  مكافأتك: +{toArabicIndic(rewardPoints)} نقطة 🌟
+                  مكافأتك المستحقة: +{toArabicIndic(rewardPoints)} نقطة 🌟
                 </div>
               </div>
 
@@ -413,6 +417,9 @@ export const DailyChestChallengePage: React.FC = () => {
                 <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 font-bold mt-1">
                   حققت {toArabicIndic(correctAnswers)} من {toArabicIndic(target)} إجابات صحيحة قبل نفاد القلوب.
                 </p>
+                <div className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs font-bold">
+                  <span>المحاولة القادمة ({toArabicIndic(attemptsCount + 1)}): جائزتها {toArabicIndic(calculateDecayingPoints(attemptsCount + 1))} نقطة</span>
+                </div>
                 <p className="text-xs text-rose-600 dark:text-rose-400 font-bold mt-1">
                   لا تقلق، يمكنك إعادة المحاولة فوراً وفتح الصندوق!
                 </p>

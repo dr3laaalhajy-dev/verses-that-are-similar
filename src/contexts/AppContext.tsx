@@ -98,7 +98,13 @@ import { useWindowSize } from "../hooks/useWindowSize";
 import { View, VALID_VIEWS, Difficulty, Verse, VerseCardProps } from "../types/challenges";
 import { getBestSubsequenceMatch, superNormalizeArabic, getSpeedQuestionDuration } from "../utils/challengeHelpers";
 import { achievementStyles } from "../constants/appConstants";
-import { getDailyChallengeConfigForDate } from "../utils/dailyChestChallenge";
+import {
+  getDailyChallengeConfigForDate,
+  calculateDecayingPoints,
+  MAX_POINTS,
+  MIN_POINTS,
+  PENALTY_PER_RETRY
+} from "../utils/dailyChestChallenge";
 
 export interface ToastNotification {
   id: string;
@@ -122,6 +128,7 @@ export interface DailyMysteryGift {
   isClaimed: boolean;
   rewardPoints: number;
   maxLives?: number;
+  attemptsCount?: number;
 }
 
 type ToastListener = (t: ToastNotification) => void;
@@ -521,6 +528,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (saved) {
         const parsed: DailyMysteryGift = JSON.parse(saved);
         if (parsed && parsed.date === todayKey) {
+          const attempts = parsed.attemptsCount ? Math.max(1, parsed.attemptsCount) : 1;
+          const currentReward = parsed.isClaimed
+            ? (parsed.rewardPoints || calculateDecayingPoints(attempts))
+            : calculateDecayingPoints(attempts);
           return {
             ...parsed,
             type: 'daily_chest_challenge',
@@ -531,7 +542,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             description: parsed.description || config.description,
             target: parsed.target || config.target,
             maxLives: parsed.maxLives || config.maxLives,
-            rewardPoints: parsed.rewardPoints || config.rewardPoints
+            rewardPoints: currentReward,
+            attemptsCount: attempts
           };
         }
       }
@@ -553,8 +565,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       currentProgress: 0,
       isCompleted: false,
       isClaimed: false,
-      rewardPoints: config.rewardPoints,
-      maxLives: config.maxLives
+      rewardPoints: 50,
+      maxLives: config.maxLives,
+      attemptsCount: 1
     };
   });
 
@@ -582,6 +595,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setDailyGift(prev => {
       if (prev.isRevealed) return prev;
       const updated = { ...prev, isRevealed: true };
+      dailyGiftRef.current = updated;
+      try {
+        localStorage.setItem('quran_daily_mystery_gift', JSON.stringify(updated));
+      } catch (e) { }
+      return updated;
+    });
+  }, []);
+
+  const recordDailyChestRetry = useCallback(() => {
+    setDailyGift(prev => {
+      const nextAttempts = (prev.attemptsCount || 1) + 1;
+      const nextRewardPoints = calculateDecayingPoints(nextAttempts);
+      const updated: DailyMysteryGift = {
+        ...prev,
+        attemptsCount: nextAttempts,
+        rewardPoints: nextRewardPoints
+      };
+      dailyGiftRef.current = updated;
       try {
         localStorage.setItem('quran_daily_mystery_gift', JSON.stringify(updated));
       } catch (e) { }
@@ -591,11 +622,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const completeDailyChestChallenge = useCallback(() => {
     setDailyGift(prev => {
+      const attempts = prev.attemptsCount || 1;
+      const finalPoints = calculateDecayingPoints(attempts);
       const updated: DailyMysteryGift = {
         ...prev,
         currentProgress: prev.target,
-        isCompleted: true
+        isCompleted: true,
+        rewardPoints: finalPoints
       };
+      dailyGiftRef.current = updated;
       try {
         localStorage.setItem('quran_daily_mystery_gift', JSON.stringify(updated));
       } catch (e) { }
@@ -614,6 +649,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         isCompleted
       };
       if (isCompleted) {
+        dailyGiftRef.current = updated;
         try {
           localStorage.setItem('quran_daily_mystery_gift', JSON.stringify(updated));
         } catch (e) { }
@@ -632,6 +668,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         currentProgress: nextProgress,
         isCompleted
       };
+      dailyGiftRef.current = updated;
       try {
         localStorage.setItem('quran_daily_mystery_gift', JSON.stringify(updated));
       } catch (e) { }
@@ -642,7 +679,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const claimDailyGiftReward = useCallback(async () => {
     const gift = dailyGiftRef.current;
     if (!gift || !gift.isCompleted || gift.isClaimed) return;
-    const points = gift.rewardPoints || 150;
+    const attempts = gift.attemptsCount || 1;
+    const points = calculateDecayingPoints(attempts);
 
     let nextLocalPoints = 0;
     setTotalPoints(current => {
@@ -7140,6 +7178,7 @@ ${versesList}
     dailyGift,
     revealDailyGift,
     completeDailyChestChallenge,
+    recordDailyChestRetry,
     incrementDailyGiftReadingTime,
     recordDailyGiftRoomMatch,
     claimDailyGiftReward,

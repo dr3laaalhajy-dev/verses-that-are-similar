@@ -13,6 +13,23 @@ export interface DailyChestChallengeConfig {
   maxLives: number;
 }
 
+export const MAX_POINTS = 50;
+export const MIN_POINTS = 20;
+export const PENALTY_PER_RETRY = 10;
+
+/**
+ * خوارزمية النقاط المتناقصة لتحدي الصندوق اليومي بناءً على عدد المحاولات:
+ * المحاولة 1: 50 نقطة (الحد الأقصى)
+ * المحاولة 2: 40 نقطة
+ * المحاولة 3: 30 نقطة
+ * المحاولة 4 فما فوق: 20 نقطة (الحد الأدنى الثابت)
+ */
+export function calculateDecayingPoints(attempts: number = 1): number {
+  const attemptsCount = Math.max(1, attempts || 1);
+  const calculatedPoints = MAX_POINTS - ((attemptsCount - 1) * PENALTY_PER_RETRY);
+  return Math.max(calculatedPoints, MIN_POINTS);
+}
+
 export const DAILY_CHEST_PRESETS: DailyChestChallengeConfig[] = [
   {
     id: 'akida_5',
@@ -22,7 +39,7 @@ export const DAILY_CHEST_PRESETS: DailyChestChallengeConfig[] = [
     actionButtonText: 'ابدأ تحدي العقيدة',
     description: 'أجب على 5 أسئلة صحيحة في التوحيد وأركان الإيمان مع الحفاظ على أرواحك',
     target: 5,
-    rewardPoints: 150,
+    rewardPoints: 50,
     maxLives: 3,
   },
   {
@@ -33,7 +50,7 @@ export const DAILY_CHEST_PRESETS: DailyChestChallengeConfig[] = [
     actionButtonText: 'ابدأ تحدي السيرة النبوية',
     description: 'اختبر معلوماتك في سيرة الحبيب المصطفى ﷺ وحقق 10 إجابات صحيحة',
     target: 10,
-    rewardPoints: 200,
+    rewardPoints: 50,
     maxLives: 3,
   },
   {
@@ -44,7 +61,7 @@ export const DAILY_CHEST_PRESETS: DailyChestChallengeConfig[] = [
     actionButtonText: 'ابدأ تحدي التاريخ الإسلامي',
     description: '7 إجابات صحيحة في محطات التاريخ الإسلامي وعصر الخلفاء الراشدين',
     target: 7,
-    rewardPoints: 175,
+    rewardPoints: 50,
     maxLives: 3,
   },
   {
@@ -55,7 +72,7 @@ export const DAILY_CHEST_PRESETS: DailyChestChallengeConfig[] = [
     actionButtonText: 'ابدأ تحدي الفقه الإسلامي',
     description: 'أجب على 5 أسئلة في العبادات والمعاملات وأحكام الشريعة المطهرة',
     target: 5,
-    rewardPoints: 150,
+    rewardPoints: 50,
     maxLives: 3,
   },
   {
@@ -66,7 +83,7 @@ export const DAILY_CHEST_PRESETS: DailyChestChallengeConfig[] = [
     actionButtonText: 'ابدأ تحدي الحديث الشريف',
     description: 'اختبر فهمك لهدي وسنة رسول الله ﷺ وحقق 5 إجابات صائبة',
     target: 5,
-    rewardPoints: 150,
+    rewardPoints: 50,
     maxLives: 3,
   },
   {
@@ -77,7 +94,7 @@ export const DAILY_CHEST_PRESETS: DailyChestChallengeConfig[] = [
     actionButtonText: 'ابدأ تحدي تفسير القرآن',
     description: 'تدبر آيات الذكر الحكيم ومعانيها وأجب على 7 أسئلة صحيحة',
     target: 7,
-    rewardPoints: 175,
+    rewardPoints: 50,
     maxLives: 3,
   },
   {
@@ -88,7 +105,7 @@ export const DAILY_CHEST_PRESETS: DailyChestChallengeConfig[] = [
     actionButtonText: 'ابدأ التحدي الإسلامي',
     description: 'بنك أسئلة منوعة في مختلف جوانب المعرفة الإسلامية، حقق 10 إجابات صحيحة',
     target: 10,
-    rewardPoints: 200,
+    rewardPoints: 50,
     maxLives: 3,
   },
 ];

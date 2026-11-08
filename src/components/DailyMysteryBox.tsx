@@ -7,6 +7,7 @@ import {
 import { Lottie } from 'lottie-react';
 import dollarCoinsChestAnimation from '../assets/lottie/dollar-coins-chest.json';
 import { useApp } from '../contexts/AppContext';
+import { calculateDecayingPoints } from '../utils/dailyChestChallenge';
 
 // Helper: Convert to Arabic-Indic digits
 const toArabicIndic = (num: number | string): string => {
@@ -81,7 +82,11 @@ export const DailyMysteryBox: React.FC<DailyMysteryBoxProps> = ({ className = ''
   const title = dailyGift?.title ?? 'تحدي اليوم';
   const target = dailyGift?.target ?? 5;
   const currentProgress = dailyGift?.currentProgress ?? 0;
-  const rewardPoints = dailyGift?.rewardPoints ?? 150;
+  const attemptsCount = dailyGift?.attemptsCount ?? 1;
+  const finalEarnedPoints = calculateDecayingPoints(attemptsCount);
+  const rewardPoints = dailyGift?.isClaimed && dailyGift?.rewardPoints
+    ? dailyGift.rewardPoints
+    : finalEarnedPoints;
   const progressPercent = Math.min(100, Math.round((currentProgress / target) * 100));
 
   // Refs for Lottie instances
@@ -426,7 +431,7 @@ export const DailyMysteryBox: React.FC<DailyMysteryBoxProps> = ({ className = ''
                     className="w-full py-2 px-3.5 rounded-xl bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 hover:from-amber-500 hover:to-amber-700 text-slate-900 font-black text-xs shadow-md glow-gold active:scale-95 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                   >
                     <Trophy className="w-3.5 h-3.5 fill-current" />
-                    <span>الحصول على الجائزة (+{toArabicIndic(rewardPoints)} نقطة)</span>
+                    <span>الحصول على الجائزة (+{toArabicIndic(finalEarnedPoints)} نقطة)</span>
                   </motion.button>
                 </div>
               ) : (
@@ -435,7 +440,10 @@ export const DailyMysteryBox: React.FC<DailyMysteryBoxProps> = ({ className = ''
                   <div>
                     <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-800 dark:text-[#C49B55] bg-amber-100/80 dark:bg-[#C49B55]/20 border border-transparent dark:border-[#C49B55]/30 px-2.5 py-0.5 rounded-full mb-1">
                       <Sparkles className="w-3 h-3 text-amber-600 dark:text-[#C49B55]" />
-                      <span>المكافأة: +{toArabicIndic(rewardPoints)} نقطة</span>
+                      <span>
+                        المكافأة: +{toArabicIndic(finalEarnedPoints)} نقطة
+                        {attemptsCount > 1 ? ` (المحاولة ${toArabicIndic(attemptsCount)})` : ''}
+                      </span>
                     </span>
                     <h4 className="text-xs sm:text-sm font-black text-slate-800 dark:text-gray-100 font-tajawal mt-0.5">
                       {title}
