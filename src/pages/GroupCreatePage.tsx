@@ -8,7 +8,8 @@ import {
 import { View } from '../types/challenges';
 import { ScopeSelector, JuzSurahSelector } from '../components/challenge/ScopeSelector';
 import { useApp, ModularRoomSettings } from '../contexts/AppContext';
-import { validateSurahChallengeScope, formatScopeSummary } from '../services/JuzRepository';
+import { validateSurahChallengeScope, formatScopeSummary, getJuzsForSurah } from '../services/JuzRepository';
+import { normalizeSurahName } from '../utils/arabic';
 import { islamicCategoriesList } from '../data/islamicCategories';
 import { IslamicInfoSettingsForm } from '../components/challenge/IslamicInfoSettingsForm';
 import { WhoAmISettingsModal } from '../components/WhoAmISettingsModal';
@@ -325,6 +326,110 @@ export const GroupCreatePage: React.FC<GroupCreatePageProps> = ({
     );
   }, [allChallenges, draftSurahScopeMode, draftSurahJuzs, draftSurahSurahs, draftSurahCount]);
 
+  // حساب الأسئلة المتوفرة لإكمال الآية داخل النطاق المختار
+  const draftAyahAvailableCount = useMemo(() => {
+    let pool = allChallenges.filter((c: any) => (c.type || '').toUpperCase() === 'COMPLETION');
+    if (draftAyahScopeMode === 'surah' && draftAyahSurahs.length > 0) {
+      pool = pool.filter((c: any) => {
+        const s = c.verses?.[0]?.surah || c.category || c.keyword || '';
+        return draftAyahSurahs.some((rs: string) => normalizeSurahName(rs) === normalizeSurahName(s) || s.includes(rs));
+      });
+    } else if (draftAyahScopeMode === 'juz' && draftAyahJuzs.length > 0 && draftAyahJuzs.length < 30) {
+      pool = pool.filter((c: any) => {
+        const j = c.verses?.[0]?.juz || (c.verses?.[0]?.surah ? getJuzsForSurah(c.verses[0].surah)[0] : null);
+        return j ? draftAyahJuzs.includes(Number(j)) : true;
+      });
+    }
+    return pool.length > 0 ? pool.length : 20;
+  }, [allChallenges, draftAyahScopeMode, draftAyahSurahs, draftAyahJuzs]);
+
+  // حساب الأسئلة المتوفرة للتحدي الصوتي
+  const draftAudioAvailableCount = useMemo(() => {
+    const pool = allChallenges.filter((c: any) => (c.type || '').toUpperCase() === 'STANDARD');
+    return pool.length > 0 ? pool.length : 20;
+  }, [allChallenges]);
+
+  // التحقق من حالة التحديات المفعلة لضبط الاستبعاد المتبادل (Mutual Exclusivity)
+  const isWhoAmISelected = Boolean(roomSettings.whoAmI?.isSelected);
+  const isAnyOtherSkillSelected = Boolean(
+    roomSettings.ayahCompletion.isSelected ||
+    roomSettings.surahName.isSelected ||
+    roomSettings.islamicQuestions.isSelected ||
+    roomSettings.audio?.isSelected
+  );
+
+  // دالة تفعيل التحديات مع الاستبعاد المتبادل (Mutual Exclusivity) لتحدي 'من أنا؟'
+  const handleSkillToggle = (skillKey: 'complete' | 'surah' | 'islamic' | 'audio' | 'who_am_i') => {
+    if (skillKey === 'who_am_i') {
+      const willSelect = !roomSettings.whoAmI?.isSelected;
+      if (willSelect) {
+        // إذا كان التحدي الذي يحاول المستخدم تفعيله هو 'who_am_i'، قم بتفريغ أي تحديات أخرى مفعلة
+        updateModularSettings({
+          ...roomSettings,
+          ayahCompletion: {
+            ...roomSettings.ayahCompletion,
+            isSelected: false
+          },
+          surahName: {
+            ...roomSettings.surahName,
+            isSelected: false
+          },
+          islamicQuestions: {
+            ...roomSettings.islamicQuestions,
+            isSelected: false
+          },
+          audio: roomSettings.audio
+            ? { ...roomSettings.audio, isSelected: false }
+            : undefined,
+          whoAmI: {
+            isSelected: true,
+            questionsCount: roomSettings.whoAmI?.questionsCount || 10,
+            categories: roomSettings.whoAmI?.categories?.length ? roomSettings.whoAmI.categories : ['الصحابة'],
+            categoryCounts: roomSettings.whoAmI?.categoryCounts || { 'الصحابة': 10 }
+          }
+        });
+      } else {
+        updateModularSettings({
+          ...roomSettings,
+          whoAmI: {
+            ...roomSettings.whoAmI!,
+            isSelected: false
+          }
+        });
+      }
+    } else {
+      // إذا كان التحدي الذي يحاول المستخدم تفعيله أي تحدي آخر، فقم فوراً بإلغاء تفعيل 'who_am_i'
+      const updated: ModularRoomSettings = {
+        ...roomSettings,
+        whoAmI: roomSettings.whoAmI ? { ...roomSettings.whoAmI, isSelected: false } : undefined
+      };
+
+      if (skillKey === 'complete') {
+        updated.ayahCompletion = {
+          ...updated.ayahCompletion,
+          isSelected: !roomSettings.ayahCompletion.isSelected
+        };
+      } else if (skillKey === 'surah') {
+        updated.surahName = {
+          ...updated.surahName,
+          isSelected: !roomSettings.surahName.isSelected
+        };
+      } else if (skillKey === 'islamic') {
+        updated.islamicQuestions = {
+          ...updated.islamicQuestions,
+          isSelected: !roomSettings.islamicQuestions.isSelected
+        };
+      } else if (skillKey === 'audio' && updated.audio) {
+        updated.audio = {
+          ...updated.audio,
+          isSelected: !roomSettings.audio?.isSelected
+        };
+      }
+
+      updateModularSettings(updated);
+    }
+  };
+
   // قيود الذكاء لتحدي اسم السورة الحالي المحفوظ في الشاشة الرئيسية
   const savedSurahValidation = useMemo(() => {
     if (!roomSettings.surahName.isSelected) return { isValid: true, errorMessage: null };
@@ -519,6 +624,8 @@ export const GroupCreatePage: React.FC<GroupCreatePageProps> = ({
               {!systemSettings.hideCompletionChallenge && (
                 <div
                   className={`p-4 rounded-3xl border-2 transition-all flex flex-col justify-between gap-3 text-right relative overflow-hidden ${
+                    isWhoAmISelected ? 'opacity-50' : ''
+                  } ${
                     roomSettings.ayahCompletion.isSelected
                       ? 'border-blue-500 bg-blue-50/40 shadow-sm'
                       : 'border-slate-100 hover:border-slate-200 bg-white text-slate-500'
@@ -539,15 +646,7 @@ export const GroupCreatePage: React.FC<GroupCreatePageProps> = ({
                       </div>
                       <button
                         type="button"
-                        onClick={() => {
-                          updateModularSettings({
-                            ...roomSettings,
-                            ayahCompletion: {
-                              ...roomSettings.ayahCompletion,
-                              isSelected: !roomSettings.ayahCompletion.isSelected
-                            }
-                          });
-                        }}
+                        onClick={() => handleSkillToggle('complete')}
                         className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all cursor-pointer ${
                           roomSettings.ayahCompletion.isSelected
                             ? 'bg-blue-600 border-blue-600 text-white'
@@ -574,7 +673,7 @@ export const GroupCreatePage: React.FC<GroupCreatePageProps> = ({
                       </div>
                     ) : (
                       <div className="text-[11px] text-slate-400 font-bold py-1">
-                        غير مفعّل • انقر لتخصيص النطاق والأسئلة
+                        {isWhoAmISelected ? 'معطّل (مستبعد مع من أنا؟)' : 'غير مفعّل • انقر لتخصيص النطاق والأسئلة'}
                       </div>
                     )}
                   </div>
@@ -598,6 +697,8 @@ export const GroupCreatePage: React.FC<GroupCreatePageProps> = ({
               {!systemSettings.hideSurahChallenge && (
                 <div
                   className={`p-4 rounded-3xl border-2 transition-all flex flex-col justify-between gap-3 text-right relative overflow-hidden ${
+                    isWhoAmISelected ? 'opacity-50' : ''
+                  } ${
                     roomSettings.surahName.isSelected
                       ? (!savedSurahValidation.isValid ? 'border-amber-500 bg-amber-50/40 shadow-sm' : 'border-purple-500 bg-purple-50/40 shadow-sm')
                       : 'border-slate-100 hover:border-slate-200 bg-white text-slate-500'
@@ -620,15 +721,7 @@ export const GroupCreatePage: React.FC<GroupCreatePageProps> = ({
                       </div>
                       <button
                         type="button"
-                        onClick={() => {
-                          updateModularSettings({
-                            ...roomSettings,
-                            surahName: {
-                              ...roomSettings.surahName,
-                              isSelected: !roomSettings.surahName.isSelected
-                            }
-                          });
-                        }}
+                        onClick={() => handleSkillToggle('surah')}
                         className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all cursor-pointer ${
                           roomSettings.surahName.isSelected
                             ? 'bg-purple-600 border-purple-600 text-white'
@@ -663,7 +756,7 @@ export const GroupCreatePage: React.FC<GroupCreatePageProps> = ({
                       </div>
                     ) : (
                       <div className="text-[11px] text-slate-400 font-bold py-1">
-                        غير مفعّل • انقر لتخصيص النطاق والأسئلة
+                        {isWhoAmISelected ? 'معطّل (مستبعد مع من أنا؟)' : 'غير مفعّل • انقر لتخصيص النطاق والأسئلة'}
                       </div>
                     )}
                   </div>
@@ -686,6 +779,8 @@ export const GroupCreatePage: React.FC<GroupCreatePageProps> = ({
               {/* 3. بطاقة تحدي المعلومات الإسلامية */}
               <div
                 className={`p-4 rounded-3xl border-2 transition-all flex flex-col justify-between gap-3 text-right relative overflow-hidden ${
+                  isWhoAmISelected ? 'opacity-50' : ''
+                } ${
                   roomSettings.islamicQuestions.isSelected
                     ? 'border-amber-500 bg-amber-50/40 shadow-sm'
                     : 'border-slate-100 hover:border-slate-200 bg-white text-slate-500'
@@ -706,15 +801,7 @@ export const GroupCreatePage: React.FC<GroupCreatePageProps> = ({
                     </div>
                     <button
                       type="button"
-                      onClick={() => {
-                        updateModularSettings({
-                          ...roomSettings,
-                          islamicQuestions: {
-                            ...roomSettings.islamicQuestions,
-                            isSelected: !roomSettings.islamicQuestions.isSelected
-                          }
-                        });
-                      }}
+                      onClick={() => handleSkillToggle('islamic')}
                       className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all cursor-pointer ${
                         roomSettings.islamicQuestions.isSelected
                           ? 'bg-amber-500 border-amber-500 text-white'
@@ -751,7 +838,7 @@ export const GroupCreatePage: React.FC<GroupCreatePageProps> = ({
                     </div>
                   ) : (
                     <div className="text-[11px] text-slate-400 font-bold py-1">
-                      غير مفعّل • انقر لتخصيص المواضيع والفئات
+                      {isWhoAmISelected ? 'معطّل (مستبعد مع من أنا؟)' : 'غير مفعّل • انقر لتخصيص المواضيع والفئات'}
                     </div>
                   )}
                 </div>
@@ -774,6 +861,8 @@ export const GroupCreatePage: React.FC<GroupCreatePageProps> = ({
               {!systemSettings.hideAudioChallenge && (
                 <div
                   className={`p-4 rounded-3xl border-2 transition-all flex flex-col justify-between gap-3 text-right relative overflow-hidden ${
+                    isWhoAmISelected ? 'opacity-50' : ''
+                  } ${
                     roomSettings.audio?.isSelected
                       ? 'border-brand-emerald bg-brand-emerald/5 shadow-sm'
                       : 'border-slate-100 hover:border-slate-200 bg-white text-slate-500'
@@ -794,15 +883,7 @@ export const GroupCreatePage: React.FC<GroupCreatePageProps> = ({
                       </div>
                       <button
                         type="button"
-                        onClick={() => {
-                          updateModularSettings({
-                            ...roomSettings,
-                            audio: {
-                              isSelected: !roomSettings.audio?.isSelected,
-                              questionsCount: roomSettings.audio?.questionsCount || 5
-                            }
-                          });
-                        }}
+                        onClick={() => handleSkillToggle('audio')}
                         className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all cursor-pointer ${
                           roomSettings.audio?.isSelected
                             ? 'bg-brand-emerald border-brand-emerald text-white'
@@ -822,7 +903,7 @@ export const GroupCreatePage: React.FC<GroupCreatePageProps> = ({
                       </div>
                     ) : (
                       <div className="text-[11px] text-slate-400 font-bold py-1">
-                        غير مفعّل • انقر لضبط عدد الأسئلة
+                        {isWhoAmISelected ? 'معطّل (مستبعد مع من أنا؟)' : 'غير مفعّل • انقر لضبط عدد الأسئلة'}
                       </div>
                     )}
                   </div>
@@ -845,6 +926,8 @@ export const GroupCreatePage: React.FC<GroupCreatePageProps> = ({
               {/* 5. بطاقة تحدي من أنا؟ */}
               <div
                 className={`p-4 rounded-3xl border-2 transition-all flex flex-col justify-between gap-3 text-right relative overflow-hidden ${
+                  isAnyOtherSkillSelected && !roomSettings.whoAmI?.isSelected ? 'opacity-50' : ''
+                } ${
                   roomSettings.whoAmI?.isSelected
                     ? 'border-indigo-600 bg-indigo-50/50 shadow-sm'
                     : 'border-slate-100 hover:border-slate-200 bg-white text-slate-500'
@@ -865,17 +948,7 @@ export const GroupCreatePage: React.FC<GroupCreatePageProps> = ({
                     </div>
                     <button
                       type="button"
-                      onClick={() => {
-                        updateModularSettings({
-                          ...roomSettings,
-                          whoAmI: {
-                            isSelected: !roomSettings.whoAmI?.isSelected,
-                            questionsCount: roomSettings.whoAmI?.questionsCount || 10,
-                            categories: roomSettings.whoAmI?.categories || ['أنبياء ورسل'],
-                            categoryCounts: roomSettings.whoAmI?.categoryCounts || { 'أنبياء ورسل': 10 }
-                          }
-                        });
-                      }}
+                      onClick={() => handleSkillToggle('who_am_i')}
                       className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all cursor-pointer ${
                         roomSettings.whoAmI?.isSelected
                           ? 'bg-indigo-600 border-indigo-600 text-white'
@@ -897,7 +970,7 @@ export const GroupCreatePage: React.FC<GroupCreatePageProps> = ({
                     </div>
                   ) : (
                     <div className="text-[11px] text-slate-400 font-bold py-1">
-                      غير مفعّل • انقر لاختيار الفئات والأسئلة
+                      {isAnyOtherSkillSelected ? 'معطّل (تحدٍ مستقل - تفعيله يلغي التحديات الأخرى)' : 'غير مفعّل • انقر لاختيار الفئات والأسئلة'}
                     </div>
                   )}
                 </div>
@@ -1136,21 +1209,43 @@ export const GroupCreatePage: React.FC<GroupCreatePageProps> = ({
                       <span>عدد الأسئلة المطلوبة:</span>
                       <span className="text-blue-600">{draftAyahCount} أسئلة</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      {[3, 5, 10, 15, 20].map(cnt => (
-                        <button
-                          key={cnt}
-                          type="button"
-                          onClick={() => setDraftAyahCount(cnt)}
-                          className={`flex-1 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
-                            draftAyahCount === cnt
-                              ? 'bg-blue-600 text-white shadow-xs'
-                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                          }`}
-                        >
-                          {cnt}
-                        </button>
-                      ))}
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min={1}
+                        max={draftAyahAvailableCount > 0 ? draftAyahAvailableCount : 1}
+                        value={draftAyahCount}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          if (raw === '') {
+                            setDraftAyahCount(1);
+                            return;
+                          }
+                          const num = parseInt(raw, 10);
+                          if (isNaN(num)) {
+                            setDraftAyahCount(1);
+                            return;
+                          }
+                          if (draftAyahAvailableCount > 0 && num > draftAyahAvailableCount) {
+                            setDraftAyahCount(draftAyahAvailableCount);
+                          } else if (num < 1) {
+                            setDraftAyahCount(1);
+                          } else {
+                            setDraftAyahCount(num);
+                          }
+                        }}
+                        className="w-full p-3 bg-slate-50 border border-gray-300 rounded-lg text-center text-lg font-black font-mono text-slate-800 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-500/20 transition-all shadow-inner"
+                        placeholder="أدخل عدد الأسئلة"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] font-bold text-slate-400 px-1">
+                      <span>الحد الأدنى: 1 سؤال</span>
+                      <span>
+                        الحد الأقصى المتاح:{' '}
+                        <strong className="text-blue-600 font-black">
+                          {draftAyahAvailableCount} سؤال
+                        </strong>
+                      </span>
                     </div>
                   </div>
 
@@ -1183,7 +1278,8 @@ export const GroupCreatePage: React.FC<GroupCreatePageProps> = ({
                             scopeMode: draftAyahScopeMode,
                             selectedJuzRange: draftAyahJuzs,
                             selectedSurahs: draftAyahSurahs
-                          }
+                          },
+                          whoAmI: roomSettings.whoAmI ? { ...roomSettings.whoAmI, isSelected: false } : undefined
                         });
                         setActiveModal(null);
                       }}
@@ -1231,21 +1327,43 @@ export const GroupCreatePage: React.FC<GroupCreatePageProps> = ({
                       <span>عدد الأسئلة المطلوبة:</span>
                       <span className="text-purple-600">{draftSurahCount} أسئلة</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      {[3, 5, 10, 15].map(cnt => (
-                        <button
-                          key={cnt}
-                          type="button"
-                          onClick={() => setDraftSurahCount(cnt)}
-                          className={`flex-1 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
-                            draftSurahCount === cnt
-                              ? 'bg-purple-600 text-white shadow-xs'
-                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                          }`}
-                        >
-                          {cnt}
-                        </button>
-                      ))}
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min={1}
+                        max={draftSurahValidation.availableQuestionsCount > 0 ? draftSurahValidation.availableQuestionsCount : 1}
+                        value={draftSurahCount}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          if (raw === '') {
+                            setDraftSurahCount(1);
+                            return;
+                          }
+                          const num = parseInt(raw, 10);
+                          if (isNaN(num)) {
+                            setDraftSurahCount(1);
+                            return;
+                          }
+                          if (draftSurahValidation.availableQuestionsCount > 0 && num > draftSurahValidation.availableQuestionsCount) {
+                            setDraftSurahCount(draftSurahValidation.availableQuestionsCount);
+                          } else if (num < 1) {
+                            setDraftSurahCount(1);
+                          } else {
+                            setDraftSurahCount(num);
+                          }
+                        }}
+                        className="w-full p-3 bg-slate-50 border border-gray-300 rounded-lg text-center text-lg font-black font-mono text-slate-800 focus:outline-none focus:border-purple-600 focus:ring-2 focus:ring-purple-500/20 transition-all shadow-inner"
+                        placeholder="أدخل عدد الأسئلة"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] font-bold text-slate-400 px-1">
+                      <span>الحد الأدنى: 1 سؤال</span>
+                      <span>
+                        الحد الأقصى المتاح:{' '}
+                        <strong className="text-purple-600 font-black">
+                          {draftSurahValidation.availableQuestionsCount} سؤال
+                        </strong>
+                      </span>
                     </div>
                   </div>
 
@@ -1294,7 +1412,8 @@ export const GroupCreatePage: React.FC<GroupCreatePageProps> = ({
                             scopeMode: draftSurahScopeMode,
                             selectedJuzRange: draftSurahJuzs,
                             selectedSurahs: draftSurahSurahs
-                          }
+                          },
+                          whoAmI: roomSettings.whoAmI ? { ...roomSettings.whoAmI, isSelected: false } : undefined
                         });
                         setActiveModal(null);
                       }}
@@ -1370,7 +1489,8 @@ export const GroupCreatePage: React.FC<GroupCreatePageProps> = ({
                           topics: draftIslamicTopics,
                           topicCounts: draftIslamicTopicCounts,
                           levels: draftIslamicLevels
-                        }
+                        },
+                        whoAmI: roomSettings.whoAmI ? { ...roomSettings.whoAmI, isSelected: false } : undefined
                       });
                       setActiveModal(null);
                     }}
@@ -1408,21 +1528,43 @@ export const GroupCreatePage: React.FC<GroupCreatePageProps> = ({
                       <span>عدد الأسئلة:</span>
                       <span className="text-brand-emerald">{draftAudioCount} أسئلة</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      {[3, 5, 10, 15].map(cnt => (
-                        <button
-                          key={cnt}
-                          type="button"
-                          onClick={() => setDraftAudioCount(cnt)}
-                          className={`flex-1 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
-                            draftAudioCount === cnt
-                              ? 'bg-brand-emerald text-white shadow-xs'
-                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                          }`}
-                        >
-                          {cnt}
-                        </button>
-                      ))}
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min={1}
+                        max={draftAudioAvailableCount > 0 ? draftAudioAvailableCount : 1}
+                        value={draftAudioCount}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          if (raw === '') {
+                            setDraftAudioCount(1);
+                            return;
+                          }
+                          const num = parseInt(raw, 10);
+                          if (isNaN(num)) {
+                            setDraftAudioCount(1);
+                            return;
+                          }
+                          if (draftAudioAvailableCount > 0 && num > draftAudioAvailableCount) {
+                            setDraftAudioCount(draftAudioAvailableCount);
+                          } else if (num < 1) {
+                            setDraftAudioCount(1);
+                          } else {
+                            setDraftAudioCount(num);
+                          }
+                        }}
+                        className="w-full p-3 bg-slate-50 border border-gray-300 rounded-lg text-center text-lg font-black font-mono text-slate-800 focus:outline-none focus:border-brand-emerald focus:ring-2 focus:ring-brand-emerald/20 transition-all shadow-inner"
+                        placeholder="أدخل عدد الأسئلة"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] font-bold text-slate-400 px-1">
+                      <span>الحد الأدنى: 1 سؤال</span>
+                      <span>
+                        الحد الأقصى المتاح:{' '}
+                        <strong className="text-brand-emerald font-black">
+                          {draftAudioAvailableCount} سؤال
+                        </strong>
+                      </span>
                     </div>
                   </div>
 
@@ -1435,7 +1577,8 @@ export const GroupCreatePage: React.FC<GroupCreatePageProps> = ({
                           audio: {
                             isSelected: true,
                             questionsCount: draftAudioCount
-                          }
+                          },
+                          whoAmI: roomSettings.whoAmI ? { ...roomSettings.whoAmI, isSelected: false } : undefined
                         });
                         setActiveModal(null);
                       }}
@@ -1468,6 +1611,10 @@ export const GroupCreatePage: React.FC<GroupCreatePageProps> = ({
                     setDraftWhoAmICategoryCounts(payload.categoryCounts);
                     updateModularSettings({
                       ...roomSettings,
+                      ayahCompletion: { ...roomSettings.ayahCompletion, isSelected: false },
+                      surahName: { ...roomSettings.surahName, isSelected: false },
+                      islamicQuestions: { ...roomSettings.islamicQuestions, isSelected: false },
+                      audio: roomSettings.audio ? { ...roomSettings.audio, isSelected: false } : undefined,
                       whoAmI: {
                         isSelected: true,
                         questionsCount: payload.questionsCount,

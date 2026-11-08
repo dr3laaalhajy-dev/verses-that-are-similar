@@ -148,13 +148,35 @@ export const WhoAmISettingsModal: React.FC<WhoAmISettingsModalProps> = ({
     };
   }, [selectedCategories]);
 
-  // التحقق والقيود: إذا كان العدد المتاح أقل من العدد المختار، يتم تقليص العدد المختار
+  // التحقق والقيود: إذا كان العدد المتاح أقل من العدد المختار، يتم تصحيحه للحد الأقصى المتاح
   useEffect(() => {
     if (availableQuestionsCount > 0 && selectedCount > availableQuestionsCount) {
-      const validOption = [20, 15, 10, 5].find((cnt) => cnt <= availableQuestionsCount);
-      setSelectedCount(validOption || availableQuestionsCount);
+      setSelectedCount(availableQuestionsCount);
+    } else if (availableQuestionsCount > 0 && selectedCount < 1) {
+      setSelectedCount(1);
     }
   }, [availableQuestionsCount, selectedCount]);
+
+  // معالجة الإدخال الحر لعدد الأسئلة مع التحقق البرمجي
+  const handleCountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const rawVal = e.target.value;
+    if (rawVal === '') {
+      setSelectedCount(1);
+      return;
+    }
+    const num = parseInt(rawVal, 10);
+    if (isNaN(num)) {
+      setSelectedCount(1);
+      return;
+    }
+    if (availableQuestionsCount > 0 && num > availableQuestionsCount) {
+      setSelectedCount(availableQuestionsCount);
+    } else if (num < 1) {
+      setSelectedCount(1);
+    } else {
+      setSelectedCount(num);
+    }
+  };
 
   // تبديل اختيار فئة
   const handleToggleCategory = (cat: string) => {
@@ -276,30 +298,28 @@ export const WhoAmISettingsModal: React.FC<WhoAmISettingsModalProps> = ({
           <span className="text-indigo-600 font-black text-xs">{selectedCount} أسئلة</span>
         </div>
 
-        <div className="flex items-center gap-2">
-          {[5, 10, 15, 20].map((cnt) => {
-            const isDisabled = !isLoadingCount && availableQuestionsCount < cnt;
-            const isSelected = selectedCount === cnt && !isDisabled;
+        {/* حقل الإدخال الحر لعدد الأسئلة */}
+        <div className="relative">
+          <input
+            type="number"
+            min={1}
+            max={availableQuestionsCount > 0 ? availableQuestionsCount : 1}
+            value={selectedCount}
+            onChange={handleCountChange}
+            disabled={!isLoadingCount && availableQuestionsCount === 0}
+            className="w-full p-3 bg-slate-50 border border-gray-300 rounded-lg text-center text-lg font-black font-mono text-slate-800 focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/20 transition-all shadow-inner disabled:opacity-50 disabled:cursor-not-allowed"
+            placeholder="أدخل عدد الأسئلة"
+          />
+        </div>
 
-            return (
-              <button
-                key={cnt}
-                type="button"
-                disabled={isDisabled}
-                onClick={() => setSelectedCount(cnt)}
-                className={`flex-1 py-2.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
-                  isSelected
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : isDisabled
-                    ? 'bg-slate-100/70 text-slate-300 cursor-not-allowed border border-dashed border-slate-200'
-                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 active:scale-95'
-                }`}
-                title={isDisabled ? `غير متاح (العدد المتوفر ${availableQuestionsCount} فقط)` : undefined}
-              >
-                {cnt}
-              </button>
-            );
-          })}
+        <div className="flex items-center justify-between text-[11px] font-bold text-slate-400 px-1">
+          <span>الحد الأدنى: 1 سؤال</span>
+          <span>
+            الحد الأقصى المتاح:{' '}
+            <strong className="text-indigo-600 font-black">
+              {availableQuestionsCount} سؤال
+            </strong>
+          </span>
         </div>
 
         {!isLoadingCount && availableQuestionsCount === 0 && (
