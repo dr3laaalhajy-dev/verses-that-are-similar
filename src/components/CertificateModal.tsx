@@ -1,4 +1,5 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Share2, Printer, Download, Check, Award, Sparkles, CheckCircle2 } from 'lucide-react';
 
@@ -37,6 +38,18 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
     month: 'long',
     year: 'numeric'
   });
+
+  // Body scroll lock when modal is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.classList.add('overflow-hidden');
+    } else {
+      document.body.classList.remove('overflow-hidden');
+    }
+    return () => {
+      document.body.classList.remove('overflow-hidden');
+    };
+  }, [isOpen]);
 
   // معالجة الطباعة
   const handlePrint = () => {
@@ -106,10 +119,10 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
 
   if (!isOpen) return null;
 
-  return (
+  return typeof document !== 'undefined' ? createPortal(
     <AnimatePresence>
       <div
-        className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex flex-col items-center justify-center p-3 sm:p-4 md:p-6 overflow-y-auto"
+        className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto"
         dir="rtl"
         onClick={(e) => {
           if (e.target === e.currentTarget) onClose();
@@ -120,7 +133,7 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 15 }}
           transition={{ duration: 0.25, ease: 'easeOut' }}
-          className="w-full max-w-4xl flex flex-col items-center my-auto"
+          className="relative w-full max-w-4xl max-h-[92vh] overflow-y-auto flex flex-col items-center"
         >
           {/* ========================================================= */}
           {/* شريط الأدوات العلوي (Top Controls) */}
@@ -378,8 +391,9 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
           }
         `}</style>
       </div>
-    </AnimatePresence>
-  );
+    </AnimatePresence>,
+    document.body
+  ) : null;
 };
 
 export default CertificateModal;

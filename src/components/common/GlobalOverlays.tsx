@@ -23,6 +23,40 @@ import { RoomInviteModal } from '../friends/RoomInviteModal';
 export const GlobalOverlays: React.FC = () => {
   const app = useApp();
 
+  // Body scroll lock for modal dialogs in GlobalOverlays
+  React.useEffect(() => {
+    const isAnyModalOpen = Boolean(
+      app.privateRoomModal?.isOpen ||
+      app.showTafsirModal ||
+      app.showCertificate ||
+      app.isSettingsOpen ||
+      app.isStreakModalOpen ||
+      app.showDownloadModal ||
+      app.showGooglePlayModal ||
+      app.showPrivacyModal ||
+      app.showIslamicConfigModal
+    );
+
+    if (isAnyModalOpen) {
+      document.body.classList.add('overflow-hidden');
+    } else {
+      document.body.classList.remove('overflow-hidden');
+    }
+    return () => {
+      document.body.classList.remove('overflow-hidden');
+    };
+  }, [
+    app.privateRoomModal?.isOpen,
+    app.showTafsirModal,
+    app.showCertificate,
+    app.isSettingsOpen,
+    app.isStreakModalOpen,
+    app.showDownloadModal,
+    app.showGooglePlayModal,
+    app.showPrivacyModal,
+    app.showIslamicConfigModal
+  ]);
+
   return (
     <>
       {/* 1. Confetti Celebration */}
@@ -227,18 +261,15 @@ export const GlobalOverlays: React.FC = () => {
       {/* 4. Selected Hadith Modal */}
       <AnimatePresence>
         {app.selectedHadith && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[1000] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-xl"
+          <div
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto"
             onClick={() => app.setSelectedHadith(null)}
           >
             <motion.div
               initial={{ scale: 0.9, y: 20 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.9, y: 20 }}
-              className={`p-5 md:p-12 rounded-2xl md:rounded-[3.5rem] max-w-4xl w-full max-h-[90vh] overflow-y-auto overflow-x-hidden shadow-2xl transition-all duration-500 theme-transition relative ${app.librarySettings.darkMode ? 'lib-dark' : 'glass border-white/20'}`}
+              className={`relative w-full max-w-4xl max-h-[90vh] overflow-y-auto overflow-x-hidden p-5 md:p-12 rounded-3xl shadow-2xl transition-all duration-500 theme-transition border ${app.librarySettings.darkMode ? 'lib-dark' : 'bg-white border-slate-100'}`}
               onClick={(e) => e.stopPropagation()}
             >
               <button
@@ -306,7 +337,7 @@ export const GlobalOverlays: React.FC = () => {
                 </div>
               </div>
             </motion.div>
-          </motion.div>
+          </div>
         )}
       </AnimatePresence>
 
@@ -447,12 +478,12 @@ export const GlobalOverlays: React.FC = () => {
       {/* Private Room Password Dialog */}
       <AnimatePresence>
         {app.privateRoomModal.isOpen && app.privateRoomModal.room && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              className="bg-white rounded-3xl p-6 md:p-8 max-w-sm w-full shadow-2xl border border-orange-100 text-right space-y-5"
+              className="relative w-full max-w-md bg-white rounded-3xl p-6 md:p-8 shadow-2xl border border-orange-100 text-right space-y-5 overflow-hidden"
             >
               <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                 <button
@@ -570,17 +601,12 @@ export const GlobalOverlays: React.FC = () => {
       {/* Tafsir Modal */}
       <AnimatePresence>
         {app.showTafsirModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[1000] flex items-center justify-center p-4 md:p-10 bg-slate-900/60 backdrop-blur-md"
-          >
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
             <motion.div
-              initial={{ scale: 0.9, y: 20 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.9, y: 20 }}
-              className="bg-white rounded-[2rem] md:rounded-[3.5rem] p-6 md:p-12 shadow-2xl max-w-2xl w-full relative overflow-hidden"
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="relative w-full max-w-2xl bg-white rounded-3xl p-6 md:p-10 shadow-2xl overflow-hidden"
             >
               <div className="absolute top-0 inset-x-0 h-2 bg-emerald-500" />
 
@@ -619,7 +645,7 @@ export const GlobalOverlays: React.FC = () => {
                 حسناً، فهمت
               </button>
             </motion.div>
-          </motion.div>
+          </div>
         )}
       </AnimatePresence>
 

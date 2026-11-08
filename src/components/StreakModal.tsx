@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Flame, X, Clock, AlertTriangle, ShieldCheck, Zap, ArrowLeft, Sparkles } from 'lucide-react';
 import { StreakInfo } from '../utils/streakManager';
@@ -16,19 +17,35 @@ export const StreakModal: React.FC<StreakModalProps> = ({
   streakInfo,
   onStartChallenge,
 }) => {
+  // Body scroll lock when modal is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.classList.add('overflow-hidden');
+    } else {
+      document.body.classList.remove('overflow-hidden');
+    }
+    return () => {
+      document.body.classList.remove('overflow-hidden');
+    };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const { streak, status, isGracePeriod, timeLeftFormatted } = streakInfo;
 
-  return (
+  return typeof document !== 'undefined' ? createPortal(
     <AnimatePresence>
-      <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xl">
+      <div
+        className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto"
+        onClick={onClose}
+      >
         <motion.div
           initial={{ scale: 0.9, opacity: 0, y: 20 }}
           animate={{ scale: 1, opacity: 1, y: 0 }}
           exit={{ scale: 0.9, opacity: 0, y: 20 }}
           transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-          className="bg-white rounded-3xl md:rounded-[2.5rem] p-6 md:p-8 max-w-md w-full shadow-2xl relative overflow-hidden text-center border border-slate-100"
+          onClick={(e) => e.stopPropagation()}
+          className="relative w-full max-w-md bg-white rounded-3xl p-6 md:p-8 shadow-2xl overflow-hidden text-center border border-slate-100"
           dir="rtl"
         >
           {/* Close button */}
@@ -172,6 +189,7 @@ export const StreakModal: React.FC<StreakModalProps> = ({
           </div>
         </motion.div>
       </div>
-    </AnimatePresence>
-  );
+    </AnimatePresence>,
+    document.body
+  ) : null;
 };

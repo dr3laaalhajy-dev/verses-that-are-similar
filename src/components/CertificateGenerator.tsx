@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { ChallengeCertificate } from './ChallengeCertificate';
 
@@ -66,14 +67,22 @@ export const CertificateGenerator: React.FC<CertificateGeneratorProps> = ({
     }
   }, [category, currentDate, onSave, verifiedPlayerName]);
 
-  return (
-    <div className="fixed inset-0 z-[1000] flex items-center justify-center p-3 sm:p-6 bg-slate-950/85 backdrop-blur-md overflow-y-auto" dir="rtl">
+  // Body scroll lock
+  useEffect(() => {
+    document.body.classList.add('overflow-hidden');
+    return () => {
+      document.body.classList.remove('overflow-hidden');
+    };
+  }, []);
+
+  return typeof document !== 'undefined' ? createPortal(
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto" dir="rtl">
       <motion.div
         initial={{ scale: 0.93, opacity: 0, y: 15 }}
         animate={{ scale: 1, opacity: 1, y: 0 }}
         exit={{ scale: 0.93, opacity: 0, y: 15 }}
         transition={{ type: 'spring', duration: 0.5, bounce: 0.15 }}
-        className="w-full max-w-4xl my-auto"
+        className="relative w-full max-w-4xl max-h-[92vh] overflow-y-auto flex flex-col items-center"
       >
         <ChallengeCertificate
           playerName={verifiedPlayerName}
@@ -88,8 +97,9 @@ export const CertificateGenerator: React.FC<CertificateGeneratorProps> = ({
           onClose={onClose}
         />
       </motion.div>
-    </div>
-  );
+    </div>,
+    document.body
+  ) : null;
 };
 
 export default CertificateGenerator;

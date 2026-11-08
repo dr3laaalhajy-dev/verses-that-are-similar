@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Trophy, Sparkles, History, XCircle, CheckCircle, ChevronDown, ChevronUp, Award } from 'lucide-react';
 import { View } from '../types/challenges';
@@ -40,6 +41,18 @@ export const SkillsResultsPage: React.FC<SkillsResultsPageProps> = ({
       setShowDetails(Boolean(externalShowMistakes));
     }
   }, [externalShowMistakes]);
+
+  // Body scroll lock when certificate modal is open
+  React.useEffect(() => {
+    if (showCertificateModal) {
+      document.body.classList.add('overflow-hidden');
+    } else {
+      document.body.classList.remove('overflow-hidden');
+    }
+    return () => {
+      document.body.classList.remove('overflow-hidden');
+    };
+  }, [showCertificateModal]);
 
   // Active state: prioritize prop if passed, otherwise use local state
   const isDetailsOpen = externalShowMistakes !== undefined ? externalShowMistakes : showDetails;
@@ -392,33 +405,36 @@ export const SkillsResultsPage: React.FC<SkillsResultsPageProps> = ({
       </div>
 
       {/* نافذة شهادة الإنجاز المنبثقة */}
-      <AnimatePresence>
-        {showCertificateModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 overflow-y-auto"
-          >
-            <motion.div
-              initial={{ scale: 0.9, y: 20 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.9, y: 20 }}
-              className="w-full max-w-5xl my-auto"
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {showCertificateModal && (
+            <div
+              className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto"
+              onClick={() => setShowCertificateModal(false)}
             >
-              <ChallengeCertificate
-                playerName={localStorage.getItem('quran_user_triple_name') || localStorage.getItem('quran_player_name') || 'فارس القرآن'}
-                challengeName={milestoneChallengeName}
-                score={`${sessionCorrect} من ${sessionCorrect + sessionWrong}`}
-                surahOrJuz="ضبط المتشابهات القرآنية"
-                onClose={() => setShowCertificateModal(false)}
-                showControls={true}
-                allowNameEdit={true}
-              />
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 15 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 15 }}
+                transition={{ duration: 0.25, ease: 'easeOut' }}
+                onClick={(e) => e.stopPropagation()}
+                className="relative w-full max-w-5xl max-h-[92vh] overflow-y-auto flex flex-col items-center"
+              >
+                <ChallengeCertificate
+                  playerName={localStorage.getItem('quran_user_triple_name') || localStorage.getItem('quran_player_name') || 'فارس القرآن'}
+                  challengeName={milestoneChallengeName}
+                  score={`${sessionCorrect} من ${sessionCorrect + sessionWrong}`}
+                  surahOrJuz="ضبط المتشابهات القرآنية"
+                  onClose={() => setShowCertificateModal(false)}
+                  showControls={true}
+                  allowNameEdit={true}
+                />
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
     </motion.div>
   );
 };

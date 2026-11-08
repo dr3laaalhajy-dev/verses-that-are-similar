@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   BookOpen, Clock, X, Check, Bell, Sparkles, CheckCircle2,
@@ -184,17 +185,33 @@ export const UserWirdModal: React.FC<UserWirdModalProps> = ({
     onClose();
   };
 
+  // Body scroll lock
+  useEffect(() => {
+    if (isOpen) {
+      document.body.classList.add('overflow-hidden');
+    } else {
+      document.body.classList.remove('overflow-hidden');
+    }
+    return () => {
+      document.body.classList.remove('overflow-hidden');
+    };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
-  return (
+  return typeof document !== 'undefined' ? createPortal(
     <AnimatePresence>
-      <div className="fixed inset-0 z-[1000] flex items-center justify-center p-3 sm:p-4 bg-slate-950/75 backdrop-blur-md overflow-y-auto">
+      <div
+        className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto"
+        onClick={onClose}
+      >
         <motion.div
           initial={{ scale: 0.92, opacity: 0, y: 20 }}
           animate={{ scale: 1, opacity: 1, y: 0 }}
           exit={{ scale: 0.92, opacity: 0, y: 20 }}
           transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-          className="bg-white dark:bg-slate-900 rounded-3xl md:rounded-[2.5rem] p-5 sm:p-7 max-w-lg w-full shadow-2xl relative overflow-hidden text-right border border-slate-200 dark:border-slate-800 my-auto"
+          onClick={(e) => e.stopPropagation()}
+          className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl p-5 sm:p-7 shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden text-right"
           dir="rtl"
         >
           {/* Header */}
@@ -474,8 +491,9 @@ export const UserWirdModal: React.FC<UserWirdModalProps> = ({
           )}
         </motion.div>
       </div>
-    </AnimatePresence>
-  );
+    </AnimatePresence>,
+    document.body
+  ) : null;
 };
 
 export default UserWirdModal;

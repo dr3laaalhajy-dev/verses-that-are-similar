@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, CheckCircle2, AlertCircle, Swords, Bell, Sparkles, Loader2 } from 'lucide-react';
 
@@ -131,6 +132,18 @@ export const GlobalModalWrapper: React.FC<GlobalModalWrapperProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
+  // Body scroll lock when modal is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.classList.add('overflow-hidden');
+    } else {
+      document.body.classList.remove('overflow-hidden');
+    }
+    return () => {
+      document.body.classList.remove('overflow-hidden');
+    };
+  }, [isOpen]);
+
   // Determine default icon based on type if not provided
   const renderIcon = () => {
     if (icon) return icon;
@@ -151,13 +164,13 @@ export const GlobalModalWrapper: React.FC<GlobalModalWrapperProps> = ({
 
   const hasEmblem = Boolean(icon || type !== 'default');
 
-  return (
+  return typeof document !== 'undefined' ? createPortal(
     <AnimatePresence>
       {isOpen && (
         <div
           dir="rtl"
           style={{ zIndex }}
-          className="fixed inset-0 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm overflow-y-auto"
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto"
           onClick={closeOnBackdropClick ? onClose : undefined}
         >
           {/* Modal Container */}
@@ -167,7 +180,7 @@ export const GlobalModalWrapper: React.FC<GlobalModalWrapperProps> = ({
             exit={{ opacity: 0, scale: 0.93, y: 16 }}
             transition={{ type: 'spring', damping: 26, stiffness: 360 }}
             onClick={(e) => e.stopPropagation()}
-            className={`relative w-full ${maxWidthClass} mx-4 bg-white dark:bg-[#151518] rounded-3xl shadow-2xl overflow-hidden border border-emerald-900/10 dark:border-slate-800 flex flex-col my-auto`}
+            className={`relative w-full ${maxWidthClass} bg-white dark:bg-[#151518] rounded-3xl shadow-2xl overflow-hidden border border-emerald-900/10 dark:border-slate-800 flex flex-col`}
           >
             {/* 1. Brand Identity Top Header (Green & Gold Gradient with Faint Islamic Pattern) */}
             <div
@@ -281,8 +294,9 @@ export const GlobalModalWrapper: React.FC<GlobalModalWrapperProps> = ({
           </motion.div>
         </div>
       )}
-    </AnimatePresence>
-  );
+    </AnimatePresence>,
+    document.body
+  ) : null;
 };
 
 export default GlobalModalWrapper;

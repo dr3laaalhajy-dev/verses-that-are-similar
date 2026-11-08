@@ -1,4 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Download, Share2, Printer, CheckCircle2, Award, Sparkles, Copy, Check, Edit3, X } from 'lucide-react';
 
 export interface ChallengeCertificateProps {
@@ -45,6 +46,18 @@ export const ChallengeCertificate: React.FC<ChallengeCertificateProps> = ({
       setTempName(initialPlayerName);
     }
   }, [initialPlayerName]);
+
+  // Body scroll lock when editing name modal is open
+  useEffect(() => {
+    if (isEditingName) {
+      document.body.classList.add('overflow-hidden');
+    } else {
+      document.body.classList.remove('overflow-hidden');
+    }
+    return () => {
+      document.body.classList.remove('overflow-hidden');
+    };
+  }, [isEditingName]);
 
   // توليد رقم مسلسل فريد وثابت للشهادة إذا لم يُمرر
   const finalCertId = useRef(
@@ -243,11 +256,15 @@ export const ChallengeCertificate: React.FC<ChallengeCertificateProps> = ({
       )}
 
       {/* نافذة منبثقة بسيطة لتعديل الاسم */}
-      {isEditingName && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 print:hidden">
+      {isEditingName && typeof document !== 'undefined' && createPortal(
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto print:hidden"
+          onClick={() => setIsEditingName(false)}
+        >
           <form
             onSubmit={handleSaveCustomName}
-            className="bg-white rounded-2xl p-5 max-w-sm w-full shadow-2xl border border-amber-200"
+            onClick={(e) => e.stopPropagation()}
+            className="relative w-full max-w-sm bg-white rounded-3xl p-6 shadow-2xl border border-amber-200 overflow-hidden"
           >
             <h3 className="text-base font-black text-slate-800 mb-1">
               تخصيص الاسم على الشهادة
@@ -279,7 +296,8 @@ export const ChallengeCertificate: React.FC<ChallengeCertificateProps> = ({
               </button>
             </div>
           </form>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ========================================================= */}

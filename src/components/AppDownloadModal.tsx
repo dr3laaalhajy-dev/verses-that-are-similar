@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   X,
@@ -127,26 +128,36 @@ export const AppDownloadModal: React.FC<AppDownloadModalProps> = ({
     }
   };
 
-  return (
+  // Body scroll lock
+  useEffect(() => {
+    if (isOpen) {
+      document.body.classList.add('overflow-hidden');
+    } else {
+      document.body.classList.remove('overflow-hidden');
+    }
+    return () => {
+      document.body.classList.remove('overflow-hidden');
+    };
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  return typeof document !== 'undefined' ? createPortal(
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[1050] flex items-center justify-center p-4" dir="rtl">
-          {/* Backdrop */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={onClose}
-            className="fixed inset-0 bg-slate-900/60 backdrop-blur-xl"
-          />
-
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto"
+          dir="rtl"
+          onClick={onClose}
+        >
           {/* Modal Container */}
           <motion.div
             initial={{ opacity: 0, scale: 0.93, y: 15 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.93, y: 15 }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-            className="relative w-full max-w-md bg-white rounded-3xl md:rounded-[2.5rem] shadow-2xl border border-emerald-100/80 p-6 sm:p-7 text-center my-auto overflow-hidden max-h-[92vh] flex flex-col justify-between"
+            onClick={(e) => e.stopPropagation()}
+            className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl border border-emerald-100/80 p-6 sm:p-7 text-center overflow-hidden max-h-[92vh] flex flex-col justify-between"
           >
             {/* Top Islamic Accent Line */}
             <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-emerald-600 via-brand-gold to-emerald-600" />
@@ -418,6 +429,7 @@ export const AppDownloadModal: React.FC<AppDownloadModalProps> = ({
           </motion.div>
         </div>
       )}
-    </AnimatePresence>
-  );
+    </AnimatePresence>,
+    document.body
+  ) : null;
 };

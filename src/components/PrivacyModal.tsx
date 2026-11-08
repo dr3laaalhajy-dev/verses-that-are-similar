@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ShieldCheck, FileText, X, ExternalLink, Check, HeartHandshake } from 'lucide-react';
 
@@ -15,12 +16,24 @@ export const PrivacyModal: React.FC<PrivacyModalProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'privacy' | 'terms'>(initialTab);
 
+  // Body scroll lock
+  useEffect(() => {
+    if (isOpen) {
+      document.body.classList.add('overflow-hidden');
+    } else {
+      document.body.classList.remove('overflow-hidden');
+    }
+    return () => {
+      document.body.classList.remove('overflow-hidden');
+    };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
-  return (
+  return typeof document !== 'undefined' ? createPortal(
     <AnimatePresence>
       <div
-        className="fixed inset-0 z-[1100] flex items-center justify-center p-3 sm:p-5 bg-slate-900/70 backdrop-blur-md overflow-y-auto"
+        className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto"
         onClick={onClose}
       >
         <motion.div
@@ -28,7 +41,7 @@ export const PrivacyModal: React.FC<PrivacyModalProps> = ({
           animate={{ scale: 1, opacity: 1, y: 0 }}
           exit={{ scale: 0.92, opacity: 0, y: 20 }}
           transition={{ duration: 0.2 }}
-          className="bg-white rounded-3xl md:rounded-[2.5rem] max-w-xl w-full shadow-2xl relative overflow-hidden border border-emerald-100 flex flex-col max-h-[88vh] my-auto"
+          className="relative w-full max-w-xl max-h-[88vh] bg-white rounded-3xl shadow-2xl overflow-hidden border border-emerald-100 flex flex-col"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
@@ -208,8 +221,9 @@ export const PrivacyModal: React.FC<PrivacyModalProps> = ({
           </div>
         </motion.div>
       </div>
-    </AnimatePresence>
-  );
+    </AnimatePresence>,
+    document.body
+  ) : null;
 };
 
 export default PrivacyModal;

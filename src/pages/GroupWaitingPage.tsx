@@ -77,6 +77,18 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
 
+  // Body scroll lock when modals are open
+  useEffect(() => {
+    if (isInfoModalOpen || isEditModalOpen) {
+      document.body.classList.add('overflow-hidden');
+    } else {
+      document.body.classList.remove('overflow-hidden');
+    }
+    return () => {
+      document.body.classList.remove('overflow-hidden');
+    };
+  }, [isInfoModalOpen, isEditModalOpen]);
+
   const formatGameModeName = (mode: string) => {
     switch (String(mode || '').toUpperCase()) {
       case 'COMPLETION':
@@ -998,15 +1010,16 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
         <AnimatePresence>
           {isInfoModalOpen && (
             <div
-              className="fixed inset-0 z-[99990] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs"
-              style={{ zIndex: 99990 }}
+              className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto"
               dir="rtl"
+              onClick={() => setIsInfoModalOpen(false)}
             >
               <motion.div
                 initial={{ opacity: 0, scale: 0.95, y: 10 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 10 }}
-                className="bg-white rounded-3xl p-5 sm:p-6 w-full max-w-md shadow-2xl border border-slate-100 text-right space-y-4 max-h-[90vh] overflow-y-auto"
+                onClick={(e) => e.stopPropagation()}
+                className="relative w-full max-w-md bg-white rounded-3xl p-5 sm:p-6 shadow-2xl border border-slate-100 text-right space-y-4 max-h-[90vh] overflow-y-auto"
               >
                 <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                   <div className="flex items-center gap-2">
@@ -1115,15 +1128,14 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
         <AnimatePresence>
           {isEditModalOpen && isCreator && (
             <div
-              className="fixed inset-0 z-[99999] flex items-center justify-center p-3 sm:p-4 md:p-6 bg-slate-950/75 backdrop-blur-sm"
-              style={{ zIndex: 99999 }}
+              className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto"
               dir="rtl"
             >
               <motion.div
                 initial={{ opacity: 0, scale: 0.95, y: 10 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 10 }}
-                className="bg-white rounded-3xl p-4 sm:p-6 md:p-8 w-full max-w-2xl shadow-2xl border border-slate-100 text-right max-h-[92vh] overflow-y-auto relative z-10"
+                className="relative w-full max-w-2xl bg-white rounded-3xl p-4 sm:p-6 md:p-8 shadow-2xl border border-slate-100 text-right max-h-[92vh] overflow-y-auto"
               >
                 <GroupCreatePage
                   mode="edit"

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Sparkles, Check, Search, AlertCircle, Hash } from 'lucide-react';
@@ -31,6 +31,18 @@ const IslamicRoomConfigModal: React.FC<IslamicRoomConfigModalProps> = ({
   onUpdateTopicCount,
 }) => {
   const [topicSearchQuery, setTopicSearchQuery] = useState('');
+
+  // Body scroll lock when modal is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.classList.add('overflow-hidden');
+    } else {
+      document.body.classList.remove('overflow-hidden');
+    }
+    return () => {
+      document.body.classList.remove('overflow-hidden');
+    };
+  }, [isOpen]);
 
   // Collect all available topics from all currently selected categories
   const allAvailableTopics = useMemo(() => {
@@ -177,15 +189,14 @@ const IslamicRoomConfigModal: React.FC<IslamicRoomConfigModalProps> = ({
   const modalContent = (
     <AnimatePresence>
       <div
-        className="fixed inset-0 z-[100000] flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs"
-        style={{ zIndex: 100000 }}
+        className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto"
         dir="rtl"
       >
         <motion.div
           initial={{ opacity: 0, scale: 0.95, y: 15 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 15 }}
-          className="bg-white rounded-3xl shadow-2xl border border-slate-100 w-full max-w-2xl max-h-[92vh] overflow-hidden flex flex-col relative"
+          className="relative w-full max-w-2xl max-h-[92vh] bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden flex flex-col"
         >
           {/* Header */}
           <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">

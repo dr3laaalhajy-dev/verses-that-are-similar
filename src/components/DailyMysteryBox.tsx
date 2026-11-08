@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Sparkles, Users, BookOpen, Trophy, CheckCircle2, ChevronLeft, Gift, X
@@ -60,6 +61,18 @@ export const DailyMysteryBox: React.FC<DailyMysteryBoxProps> = ({ className = ''
     const interval = setInterval(updateCountdown, 1000);
     return () => clearInterval(interval);
   }, []);
+
+  // Body scroll lock when modal is open
+  useEffect(() => {
+    if (isModalOpen) {
+      document.body.classList.add('overflow-hidden');
+    } else {
+      document.body.classList.remove('overflow-hidden');
+    }
+    return () => {
+      document.body.classList.remove('overflow-hidden');
+    };
+  }, [isModalOpen]);
 
   const isRevealed = dailyGift?.isRevealed ?? false;
   const isCompleted = dailyGift?.isCompleted ?? false;
@@ -249,25 +262,26 @@ export const DailyMysteryBox: React.FC<DailyMysteryBoxProps> = ({ className = ''
       {/* ======================================================== */}
       {/* 2. GIFT MODAL (النافذة المنبثقة الشاملة في منتصف الشاشة)   */}
       {/* ======================================================== */}
-      <AnimatePresence>
-        {isModalOpen && (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-obsidian-950/70 backdrop-blur-sm p-4"
-            onClick={() => setIsModalOpen(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              transition={{ duration: 0.3, ease: 'easeOut' }}
-              onClick={(e) => e.stopPropagation()}
-              className="bg-[#FDFBF7] dark:bg-[#151518] border border-amber-200/80 dark:border-[#C49B55]/25 rounded-3xl p-5 shadow-2xl max-w-xs w-full mx-4 relative text-center overflow-hidden flex flex-col justify-between gap-3.5 transition-all duration-300 transform"
-              style={{
-                backgroundColor: app.librarySettings?.darkMode ? '#151518' : '#FDFBF7',
-                borderColor: app.librarySettings?.darkMode ? 'rgba(196, 155, 85, 0.25)' : 'rgba(251, 191, 36, 0.5)',
-              }}
-              dir="rtl"
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {isModalOpen && (
+            <div
+              className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto"
+              onClick={() => setIsModalOpen(false)}
             >
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                transition={{ duration: 0.25, ease: 'easeOut' }}
+                onClick={(e) => e.stopPropagation()}
+                className="relative w-full max-w-md bg-white dark:bg-[#151518] rounded-3xl p-5 sm:p-6 shadow-2xl border border-amber-200/80 dark:border-[#C49B55]/25 overflow-hidden flex flex-col justify-between gap-3.5 text-center"
+                style={{
+                  backgroundColor: app.librarySettings?.darkMode ? '#151518' : '#FDFBF7',
+                  borderColor: app.librarySettings?.darkMode ? 'rgba(196, 155, 85, 0.25)' : 'rgba(251, 191, 36, 0.5)',
+                }}
+                dir="rtl"
+              >
               {/* Close Button */}
               <button
                 type="button"
@@ -444,7 +458,9 @@ export const DailyMysteryBox: React.FC<DailyMysteryBoxProps> = ({ className = ''
             </motion.div>
           </div>
         )}
-      </AnimatePresence>
+      </AnimatePresence>,
+      document.body
+    )}
     </>
   );
 };

@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Globe, Lock, Eye, EyeOff, Mic, CheckCircle, BookOpen, Sparkles, HelpCircle,
@@ -239,6 +240,18 @@ export const GroupCreatePage: React.FC<GroupCreatePageProps> = ({
 
   // حالة النافذة المنبثقة المفتوحة حالياً (Modal State)
   const [activeModal, setActiveModal] = useState<'complete' | 'surah' | 'islamic' | 'audio' | 'who_am_i' | null>(null);
+
+  // منع تمرير الخلفية عند فتح أي نافذة إعدادات
+  useEffect(() => {
+    if (activeModal) {
+      document.body.classList.add('overflow-hidden');
+    } else {
+      document.body.classList.remove('overflow-hidden');
+    }
+    return () => {
+      document.body.classList.remove('overflow-hidden');
+    };
+  }, [activeModal]);
 
   // مسودات الإعدادات المؤقتة داخل النوافذ المنبثقة
   // 1. مسودة إكمال الآية
@@ -1080,16 +1093,18 @@ export const GroupCreatePage: React.FC<GroupCreatePageProps> = ({
       {/* ========================================================================= */}
       {/* النوافذ المنبثقة المستقلة (MODULAR MODALS) لكل مهارة */}
       {/* ========================================================================= */}
-      <AnimatePresence>
-        {activeModal && (
-          <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              className="w-full max-w-xl bg-white rounded-3xl p-5 sm:p-6 shadow-2xl border border-slate-100 text-right space-y-5 max-h-[90vh] overflow-y-auto"
-              dir="rtl"
-            >
+      {typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {activeModal && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                className="relative w-full max-w-xl bg-white rounded-3xl p-5 sm:p-6 shadow-2xl border border-slate-100 text-right space-y-5 max-h-[90vh] overflow-y-auto"
+                dir="rtl"
+                onClick={(e) => e.stopPropagation()}
+              >
               {/* ---------------- 1. نافذة تحدي إكمال الآية ---------------- */}
               {activeModal === 'complete' && (
                 <>
@@ -1525,7 +1540,9 @@ export const GroupCreatePage: React.FC<GroupCreatePageProps> = ({
             </motion.div>
           </div>
         )}
-      </AnimatePresence>
+      </AnimatePresence>,
+      document.body
+    )}
     </motion.div>
   );
 };
