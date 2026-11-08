@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MapPin, Bell, Settings, X, RotateCcw, Globe, Sliders, CheckCircle2, Clock, Compass } from 'lucide-react';
 import * as adhan from 'adhan';
@@ -350,152 +351,163 @@ const Dashboard: React.FC<DashboardProps> = ({ className = '' }) => {
         </div>
       </motion.div>
 
-      {/* Settings Modal - Direct Manual City & Time Customization */}
-      <AnimatePresence>
-        {isSettingsOpen && (
-          <div className="fixed inset-0 z-[1000] flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xl">
-            <motion.div
-              initial={{ scale: 0.92, opacity: 0, y: 15 }}
-              animate={{ scale: 1, opacity: 1, y: 0 }}
-              exit={{ scale: 0.92, opacity: 0, y: 15 }}
-              className="bg-white dark:bg-slate-900 rounded-3xl md:rounded-[2.5rem] p-5 sm:p-7 max-w-lg w-full shadow-2xl relative overflow-hidden text-right border border-emerald-100 dark:border-slate-800 max-h-[92vh] flex flex-col"
-            >
-              {/* Close Button */}
-              <button
-                onClick={() => setIsSettingsOpen(false)}
-                className="absolute top-4 left-4 p-2 text-slate-400 hover:text-red-500 rounded-full hover:bg-slate-100 transition-colors cursor-pointer"
+      {/* Settings Modal - Direct Manual City & Time Customization (Rendered via Portal to break free of parent transforms) */}
+      {typeof document !== 'undefined' &&
+        createPortal(
+          <AnimatePresence>
+            {isSettingsOpen && (
+              <div
+                onClick={(e) => {
+                  if (e.target === e.currentTarget) setIsSettingsOpen(false);
+                }}
+                className="fixed inset-0 z-[9999] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
               >
-                <X className="w-5 h-5" />
-              </button>
+                <motion.div
+                  initial={{ scale: 0.95, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.95, opacity: 0 }}
+                  className="bg-white dark:bg-slate-900 rounded-3xl md:rounded-[2.5rem] p-5 sm:p-7 max-w-lg w-full shadow-2xl relative text-right border border-emerald-100 dark:border-slate-800 max-h-[90vh] overflow-y-auto flex flex-col my-auto"
+                >
+                  {/* Close Button */}
+                  <button
+                    onClick={() => setIsSettingsOpen(false)}
+                    className="absolute top-4 left-4 p-2 text-slate-400 hover:text-red-500 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
 
-              <div className="w-12 h-12 bg-emerald-50 rounded-2xl flex items-center justify-center mx-auto mb-3 text-emerald-600 border border-emerald-100">
-                <Sliders className="w-6 h-6" />
-              </div>
-
-              <h2 className="text-xl sm:text-2xl font-black text-slate-900 text-center mb-1">إعدادات مواقيت الصلاة</h2>
-              <p className="text-xs text-slate-500 text-center mb-5 font-medium">
-                اختر مدينتك واضبط مواعيد الصلوات يدوياً بدقة تامة
-              </p>
-
-              {/* Scrollable Modal Content */}
-              <div className="flex-1 overflow-y-auto space-y-4 pr-1 pl-1">
-                {/* 1. Country & City Selection */}
-                <div className="bg-slate-50/80 p-4 rounded-2xl border border-slate-200/70 space-y-3">
-                  <h4 className="text-xs font-black text-slate-800 flex items-center gap-2">
-                    <Globe className="w-4 h-4 text-emerald-600" />
-                    <span>اختيار الدولة والمدينة</span>
-                  </h4>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {/* Country Selector */}
-                    <div>
-                      <label className="text-[11px] font-bold text-slate-600 block mb-1.5">الدولة:</label>
-                      <select
-                        value={tempCountry}
-                        onChange={(e) => handleCountryChange(e.target.value)}
-                        className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-bold text-slate-800 text-xs focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all cursor-pointer"
-                      >
-                        {PRAYER_COUNTRIES.map((country) => (
-                          <option key={country.name} value={country.name}>
-                            {country.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* City Selector */}
-                    <div>
-                      <label className="text-[11px] font-bold text-slate-600 block mb-1.5">المدينة / المنطقة:</label>
-                      <select
-                        value={tempCity}
-                        onChange={(e) => handleCityChange(e.target.value)}
-                        className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-bold text-slate-800 text-xs focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all cursor-pointer"
-                      >
-                        {currentCountryData.cities.map((city) => (
-                          <option key={city.name} value={city.name}>
-                            {city.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                  <div className="w-12 h-12 bg-emerald-50 dark:bg-emerald-950/50 rounded-2xl flex items-center justify-center mx-auto mb-3 text-emerald-600 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-800/40">
+                    <Sliders className="w-6 h-6" />
                   </div>
-                </div>
 
-                {/* 2. Customizable Prayer Times */}
-                <div className="bg-white p-4 rounded-2xl border border-emerald-100 shadow-xs space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="text-xs font-black text-slate-900 flex items-center gap-1.5">
-                        <Clock className="w-4 h-4 text-emerald-600" />
-                        <span>مواعيد الصلوات (تعديل يدوي)</span>
+                  <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white text-center mb-1">
+                    إعدادات مواقيت الصلاة
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 text-center mb-5 font-medium">
+                    اختر مدينتك واضبط مواعيد الصلوات يدوياً بدقة تامة
+                  </p>
+
+                  {/* Scrollable Modal Content */}
+                  <div className="flex-1 overflow-y-auto space-y-4 pr-1 pl-1">
+                    {/* 1. Country & City Selection */}
+                    <div className="bg-slate-50/80 dark:bg-slate-800/60 p-4 rounded-2xl border border-slate-200/70 dark:border-slate-700/60 space-y-3">
+                      <h4 className="text-xs font-black text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                        <Globe className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                        <span>اختيار الدولة والمدينة</span>
                       </h4>
-                      <span className="text-[10px] text-slate-400 font-medium">
-                        انقر على أي وقت لتعديله بحسب توقيتك المحلي
-                      </span>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {/* Country Selector */}
+                        <div>
+                          <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400 block mb-1.5">الدولة:</label>
+                          <select
+                            value={tempCountry}
+                            onChange={(e) => handleCountryChange(e.target.value)}
+                            className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-bold text-slate-800 dark:text-slate-200 text-xs focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all cursor-pointer"
+                          >
+                            {PRAYER_COUNTRIES.map((country) => (
+                              <option key={country.name} value={country.name}>
+                                {country.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* City Selector */}
+                        <div>
+                          <label className="text-[11px] font-bold text-slate-600 dark:text-slate-400 block mb-1.5">المدينة / المنطقة:</label>
+                          <select
+                            value={tempCity}
+                            onChange={(e) => handleCityChange(e.target.value)}
+                            className="w-full p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-bold text-slate-800 dark:text-slate-200 text-xs focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all cursor-pointer"
+                          >
+                            {currentCountryData.cities.map((city) => (
+                              <option key={city.name} value={city.name}>
+                                {city.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
                     </div>
 
+                    {/* 2. Customizable Prayer Times */}
+                    <div className="bg-white dark:bg-slate-800/80 p-4 rounded-2xl border border-emerald-100 dark:border-slate-700/60 shadow-xs space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="text-xs font-black text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+                            <Clock className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                            <span>مواعيد الصلوات (تعديل يدوي)</span>
+                          </h4>
+                          <span className="text-[10px] text-slate-400 font-medium">
+                            انقر على أي وقت لتعديله بحسب توقيتك المحلي
+                          </span>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={handleResetToCityDefaults}
+                          className="flex items-center gap-1 text-[11px] font-bold text-emerald-700 dark:text-emerald-400 hover:text-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100/80 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                          title="استعادة أوقات المدينة الافتراضية"
+                        >
+                          <RotateCcw className="w-3 h-3" />
+                          <span>توقيت المدينة</span>
+                        </button>
+                      </div>
+
+                      {/* 5 Prayers Inputs Grid */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+                        {(['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'] as const).map((key) => (
+                          <div
+                            key={key}
+                            className="flex items-center justify-between p-2.5 bg-slate-50 dark:bg-slate-900/60 border border-slate-200/70 dark:border-slate-700/60 rounded-xl hover:border-emerald-300 transition-colors"
+                          >
+                            <span className="text-xs font-bold text-slate-700 dark:text-slate-300">{prayerNamesAr[key]}</span>
+                            <input
+                              type="time"
+                              value={tempTimes[key] || '00:00'}
+                              onChange={(e) => {
+                                const newTime = e.target.value;
+                                setTempTimes((prev) => ({ ...prev, [key]: newTime }));
+                              }}
+                              className="font-mono font-bold text-xs bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {feedbackMsg && (
+                      <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200/80 dark:border-emerald-800/40 rounded-xl text-xs font-bold text-emerald-800 dark:text-emerald-300 leading-relaxed flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                        <span>{feedbackMsg}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Modal Footer Actions */}
+                  <div className="mt-5 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center gap-2.5">
                     <button
                       type="button"
-                      onClick={handleResetToCityDefaults}
-                      className="flex items-center gap-1 text-[11px] font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100/80 px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
-                      title="استعادة أوقات المدينة الافتراضية"
+                      onClick={handleSaveSettings}
+                      className="flex-1 py-3 bg-emerald-700 hover:bg-emerald-800 active:scale-98 text-white rounded-xl font-black text-sm transition-all shadow-md shadow-emerald-700/20 cursor-pointer"
                     >
-                      <RotateCcw className="w-3 h-3" />
-                      <span>توقيت المدينة</span>
+                      حفظ التغييرات وتطبيق
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsSettingsOpen(false)}
+                      className="py-3 px-5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl font-bold text-sm transition-all cursor-pointer"
+                    >
+                      إلغاء
                     </button>
                   </div>
-
-                  {/* 5 Prayers Inputs Grid */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
-                    {(['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'] as const).map((key) => (
-                      <div
-                        key={key}
-                        className="flex items-center justify-between p-2.5 bg-slate-50 border border-slate-200/70 rounded-xl hover:border-emerald-300 transition-colors"
-                      >
-                        <span className="text-xs font-bold text-slate-700">{prayerNamesAr[key]}</span>
-                        <input
-                          type="time"
-                          value={tempTimes[key] || '00:00'}
-                          onChange={(e) => {
-                            const newTime = e.target.value;
-                            setTempTimes((prev) => ({ ...prev, [key]: newTime }));
-                          }}
-                          className="font-mono font-bold text-xs bg-white border border-slate-200 rounded-lg px-2 py-1 text-slate-800 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 cursor-pointer"
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {feedbackMsg && (
-                  <div className="p-3 bg-emerald-50 border border-emerald-200/80 rounded-xl text-xs font-bold text-emerald-800 leading-relaxed flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span>{feedbackMsg}</span>
-                  </div>
-                )}
+                </motion.div>
               </div>
-
-              {/* Modal Footer Actions */}
-              <div className="mt-5 pt-3 border-t border-slate-100 flex items-center gap-2.5">
-                <button
-                  type="button"
-                  onClick={handleSaveSettings}
-                  className="flex-1 py-3 bg-emerald-700 hover:bg-emerald-800 active:scale-98 text-white rounded-xl font-black text-sm transition-all shadow-md shadow-emerald-700/20 cursor-pointer"
-                >
-                  حفظ التغييرات وتطبيق
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsSettingsOpen(false)}
-                  className="py-3 px-5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-sm transition-all cursor-pointer"
-                >
-                  إلغاء
-                </button>
-              </div>
-            </motion.div>
-          </div>
+            )}
+          </AnimatePresence>,
+          document.body
         )}
-      </AnimatePresence>
     </div>
   );
 };
