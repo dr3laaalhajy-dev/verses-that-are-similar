@@ -294,11 +294,11 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
 
               <div className="relative inline-block mt-0.5 sm:mt-1">
                 <div className="flex items-center justify-center gap-2">
-                  <Sparkles className="w-3.5 h-3.5 sm:w-5 sm:h-5 text-[#D4AF37]" />
-                  <h1 className="font-quran text-xl sm:text-3xl md:text-4xl font-black bg-gradient-to-r from-[#806716] via-[#D4AF37] to-[#806716] bg-clip-text text-transparent drop-shadow-xs">
+                  <Sparkles className="w-3.5 h-3.5 sm:w-5 sm:h-5 text-[#c29631]" />
+                  <h1 className="font-quran text-xl sm:text-3xl md:text-4xl font-bold text-[#c29631] drop-shadow-sm">
                     شَهَادَةُ إِنجَازٍ وَتَفَوُّق
                   </h1>
-                  <Sparkles className="w-3.5 h-3.5 sm:w-5 sm:h-5 text-[#D4AF37]" />
+                  <Sparkles className="w-3.5 h-3.5 sm:w-5 sm:h-5 text-[#c29631]" />
                 </div>
                 <p className="text-[10px] sm:text-xs md:text-sm font-tajawal font-bold text-[#064E3B] tracking-wider mt-2 sm:mt-3">
                   تَطْبِيقُ مَتِين لِعُلُومِ القُرْآنِ الكَرِيمِ وَالمُتَشَابِهَات
