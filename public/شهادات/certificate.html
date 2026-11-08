@@ -69,6 +69,11 @@
 
     /* ستايل الطباعة المنعزل */
     @media print {
+      * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+
       @page {
         size: landscape;
         margin: 0;
@@ -372,35 +377,70 @@
           </span>
         </div>
 
-        <!-- المنتصف: الختم الذهبي الملكي ثلاثي الأبعاد -->
+        <!-- المنتصف: الختم الذهبي الملكي المعتمد SVG (Pure Vector Gold Stamp - يضمن الطباعة الملونة بنسبة 100%) -->
         <div class="flex flex-col items-center justify-center">
-          <div class="relative w-24 h-24">
+          <div class="relative w-24 h-24 flex items-center justify-center">
+            <svg viewBox="0 0 120 135" class="w-full h-full drop-shadow-md overflow-visible select-none" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <linearGradient id="htmlStampRibbonL" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#806716" />
+                  <stop offset="50%" stop-color="#AA8B24" />
+                  <stop offset="100%" stop-color="#55440E" />
+                </linearGradient>
+                <linearGradient id="htmlStampRibbonR" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#AA8B24" />
+                  <stop offset="50%" stop-color="#D4AF37" />
+                  <stop offset="100%" stop-color="#705912" />
+                </linearGradient>
+                <linearGradient id="htmlStampOuterGold" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#806716" />
+                  <stop offset="25%" stop-color="#D4AF37" />
+                  <stop offset="50%" stop-color="#FFF4D0" />
+                  <stop offset="75%" stop-color="#AA8B24" />
+                  <stop offset="100%" stop-color="#665210" />
+                </linearGradient>
+                <radialGradient id="htmlStampInnerGold" cx="45%" cy="40%" r="60%">
+                  <stop offset="0%" stop-color="#E5C768" />
+                  <stop offset="40%" stop-color="#C49E2C" />
+                  <stop offset="85%" stop-color="#806716" />
+                  <stop offset="100%" stop-color="#5A470C" />
+                </radialGradient>
+                <filter id="htmlStampGlow" x="-20%" y="-20%" width="140%" height="140%">
+                  <feDropShadow dx="0" dy="1.5" stdDeviation="2" flood-color="#3F2703" flood-opacity="0.25" />
+                </filter>
+              </defs>
 
-            <!-- أشرطة الختم الساتانية المتدلية -->
-            <div
-              class="absolute -bottom-3 left-1/2 -translate-x-1/2 w-10 h-6 flex justify-center gap-1 pointer-events-none">
-              <div class="w-3 h-6 bg-[#806716] transform -rotate-12 rounded-b-xs shadow-sm"></div>
-              <div class="w-3 h-6 bg-[#AA8B24] transform rotate-12 rounded-b-xs shadow-sm"></div>
-            </div>
+              <!-- أشرطة الختم المتدلية -->
+              <g filter="url(#htmlStampGlow)">
+                <polygon points="46,80 32,126 46,118 54,126 52,80" fill="url(#htmlStampRibbonL)" stroke="#55440E" stroke-width="0.5" />
+                <polygon points="68,80 66,126 74,118 88,126 74,80" fill="url(#htmlStampRibbonR)" stroke="#55440E" stroke-width="0.5" />
+              </g>
 
-            <!-- الختم الدائري المذهب ثلاثي الأبعاد -->
-            <div
-              class="relative w-full h-full rounded-full bg-gradient-to-tr from-[#806716] via-[#D4AF37] to-[#FDF8ED] p-1 shadow-xl shadow-amber-950/20 flex items-center justify-center">
-              <div
-                class="w-full h-full rounded-full border border-dashed border-[#806716] bg-gradient-to-br from-[#AA8B24] to-[#806716] text-[#FDF8ED] flex flex-col items-center justify-center p-1 text-center">
-                <svg class="w-7 h-7 text-[#FDF8ED] drop-shadow-sm" fill="currentColor" viewBox="0 0 24 24">
-                  <path
-                    d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-                </svg>
-                <span class="text-[9px] font-black uppercase tracking-tighter leading-none mt-0.5">
-                  مُعْتَمَدٌ
-                </span>
-                <span class="text-[7px] font-bold opacity-90 leading-tight">
-                  تطبيق متين
-                </span>
-              </div>
-            </div>
+              <!-- قرص الختم المذهب المتقن -->
+              <g filter="url(#htmlStampGlow)">
+                <circle cx="60" cy="54" r="50" fill="url(#htmlStampOuterGold)" stroke="#806716" stroke-width="1" />
+                <circle cx="60" cy="54" r="46.5" fill="none" stroke="#FFF7D6" stroke-width="0.8" opacity="0.8" />
+                <circle cx="60" cy="54" r="43" fill="none" stroke="#665210" stroke-width="1.2" stroke-dasharray="2.5,2" />
+                <circle cx="60" cy="54" r="40" fill="url(#htmlStampInnerGold)" stroke="#D4AF37" stroke-width="1" />
+              </g>
 
+              <!-- وسام الجائزة في الوسط -->
+              <g transform="translate(46, 26) scale(1.15)" stroke="#FDF8ED" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="8" r="6" fill="#FDF8ED" fill-opacity="0.15" />
+                <path d="m15.477 12.89 1.515 8.526a.5.5 0 0 1-.81.47l-4.182-3.137-4.182 3.137a.5.5 0 0 1-.81-.47l1.515-8.526" fill="#FDF8ED" fill-opacity="0.2" />
+              </g>
+
+              <!-- النصوص المعتمدة الرسمية -->
+              <text x="60" y="68" text-anchor="middle" fill="#FFFFFF" font-size="11" font-weight="900" font-family="'Cairo', 'Tajawal', sans-serif" style="letter-spacing: 0.8px; text-shadow: 0 1px 2px rgba(0,0,0,0.4)">
+                مُعْتَمَدٌ
+              </text>
+              <text x="60" y="79" text-anchor="middle" fill="#FFF4D0" font-size="7.5" font-weight="700" font-family="'Cairo', 'Tajawal', sans-serif" style="letter-spacing: 0.3px; text-shadow: 0 1px 1px rgba(0,0,0,0.3)">
+                تطبيق متين
+              </text>
+              <text x="60" y="87" text-anchor="middle" fill="#FDF8ED" font-size="6" font-weight="bold" style="letter-spacing: 2px">
+                ★ ★ ★
+              </text>
+            </svg>
           </div>
         </div>
 

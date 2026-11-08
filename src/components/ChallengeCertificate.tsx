@@ -103,7 +103,19 @@ export const ChallengeCertificate: React.FC<ChallengeCertificateProps> = ({
           <title>طباعة الشهادة</title>
           ${styles}
           <style>
-            /* إجبار الطباعة بالعرض (Landscape) وإزالة الهوامش */
+            /* إجبار المتصفح على طباعة ألوان الخلفية والتدرجات بدقة تامة */
+            @media print {
+              * {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+              }
+              @page { size: A4 landscape; margin: 0; }
+              body { margin: 0; padding: 0; background: white !important; }
+            }
+            * {
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
             @page { size: A4 landscape; margin: 0; }
             body { margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; background: white !important; }
             #certificate-wrapper { transform: scale(0.9); transform-origin: center; width: 100% !important; max-width: 1000px !important; }
@@ -459,27 +471,113 @@ export const ChallengeCertificate: React.FC<ChallengeCertificateProps> = ({
             </span>
           </div>
 
-          {/* المنتصف: الختم الذهبي الملكي (3D Golden Stamp) */}
+          {/* المنتصف: الختم الذهبي الملكي المعتمد SVG (Pure Vector Gold Stamp - يضمن الطباعة الملونة بنسبة 100%) */}
           <div className="flex flex-col items-center justify-center">
-            <div className="relative w-16 h-16 sm:w-22 sm:h-22 md:w-24 md:h-24">
-              {/* شريط الختم المتدلي */}
-              <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 w-8 sm:w-10 h-6 flex justify-center gap-1 pointer-events-none">
-                <div className="w-3 h-6 bg-[#806716] transform -rotate-12 rounded-b-xs" />
-                <div className="w-3 h-6 bg-[#AA8B24] transform rotate-12 rounded-b-xs" />
-              </div>
+            <div className="relative w-16 h-16 sm:w-22 sm:h-22 md:w-24 md:h-24 flex items-center justify-center">
+              <svg
+                viewBox="0 0 120 135"
+                className="w-full h-full drop-shadow-md overflow-visible select-none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <defs>
+                  <linearGradient id="chalStampRibbonL" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor="#806716" />
+                    <stop offset="50%" stopColor="#AA8B24" />
+                    <stop offset="100%" stopColor="#55440E" />
+                  </linearGradient>
+                  <linearGradient id="chalStampRibbonR" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor="#AA8B24" />
+                    <stop offset="50%" stopColor="#D4AF37" />
+                    <stop offset="100%" stopColor="#705912" />
+                  </linearGradient>
+                  <linearGradient id="chalStampOuterGold" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stopColor="#806716" />
+                    <stop offset="25%" stopColor="#D4AF37" />
+                    <stop offset="50%" stopColor="#FFF4D0" />
+                    <stop offset="75%" stopColor="#AA8B24" />
+                    <stop offset="100%" stopColor="#665210" />
+                  </linearGradient>
+                  <radialGradient id="chalStampInnerGold" cx="45%" cy="40%" r="60%">
+                    <stop offset="0%" stopColor="#E5C768" />
+                    <stop offset="40%" stopColor="#C49E2C" />
+                    <stop offset="85%" stopColor="#806716" />
+                    <stop offset="100%" stopColor="#5A470C" />
+                  </radialGradient>
+                  <filter id="chalStampGlow" x="-20%" y="-20%" width="140%" height="140%">
+                    <feDropShadow dx="0" dy="1.5" stdDeviation="2" floodColor="#3F2703" floodOpacity="0.25" />
+                  </filter>
+                </defs>
 
-              {/* الختم الدائري الموشّى */}
-              <div className="relative w-full h-full rounded-full bg-gradient-to-tr from-[#806716] via-[#D4AF37] to-[#FDF8ED] p-1 shadow-lg shadow-amber-900/20 flex items-center justify-center">
-                <div className="w-full h-full rounded-full border border-dashed border-[#806716] bg-gradient-to-br from-[#AA8B24] to-[#806716] text-[#FDF8ED] flex flex-col items-center justify-center p-1 text-center">
-                  <Award className="w-5 h-5 sm:w-7 sm:h-7 text-[#FDF8ED] drop-shadow-xs" />
-                  <span className="text-[8px] sm:text-[9px] font-black uppercase tracking-tighter leading-none mt-0.5">
-                    مُعْتَمَدٌ
-                  </span>
-                  <span className="text-[6px] sm:text-[7px] font-bold opacity-90 leading-tight">
-                    تطبيق متين
-                  </span>
-                </div>
-              </div>
+                {/* أشرطة الختم المتدلية */}
+                <g filter="url(#chalStampGlow)">
+                  <polygon
+                    points="46,80 32,126 46,118 54,126 52,80"
+                    fill="url(#chalStampRibbonL)"
+                    stroke="#55440E"
+                    strokeWidth="0.5"
+                  />
+                  <polygon
+                    points="68,80 66,126 74,118 88,126 74,80"
+                    fill="url(#chalStampRibbonR)"
+                    stroke="#55440E"
+                    strokeWidth="0.5"
+                  />
+                </g>
+
+                {/* قرص الختم المذهب المتقن */}
+                <g filter="url(#chalStampGlow)">
+                  <circle cx="60" cy="54" r="50" fill="url(#chalStampOuterGold)" stroke="#806716" strokeWidth="1" />
+                  <circle cx="60" cy="54" r="46.5" fill="none" stroke="#FFF7D6" strokeWidth="0.8" opacity="0.8" />
+                  <circle cx="60" cy="54" r="43" fill="none" stroke="#665210" strokeWidth="1.2" strokeDasharray="2.5,2" />
+                  <circle cx="60" cy="54" r="40" fill="url(#chalStampInnerGold)" stroke="#D4AF37" strokeWidth="1" />
+                </g>
+
+                {/* وسام الجائزة في الوسط */}
+                <g transform="translate(46, 26) scale(1.15)" stroke="#FDF8ED" strokeWidth="1.8" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="8" r="6" fill="#FDF8ED" fillOpacity="0.15" />
+                  <path d="m15.477 12.89 1.515 8.526a.5.5 0 0 1-.81.47l-4.182-3.137-4.182 3.137a.5.5 0 0 1-.81-.47l1.515-8.526" fill="#FDF8ED" fillOpacity="0.2" />
+                </g>
+
+                {/* النصوص المعتمدة الرسمية */}
+                <text
+                  x="60"
+                  y="68"
+                  textAnchor="middle"
+                  fill="#FFFFFF"
+                  fontSize="11"
+                  fontWeight="900"
+                  fontFamily="'Cairo', 'Tajawal', sans-serif"
+                  style={{ letterSpacing: '0.8px', textShadow: '0 1px 2px rgba(0,0,0,0.4)' }}
+                >
+                  مُعْتَمَدٌ
+                </text>
+
+                <text
+                  x="60"
+                  y="79"
+                  textAnchor="middle"
+                  fill="#FFF4D0"
+                  fontSize="7.5"
+                  fontWeight="700"
+                  fontFamily="'Cairo', 'Tajawal', sans-serif"
+                  style={{ letterSpacing: '0.3px', textShadow: '0 1px 1px rgba(0,0,0,0.3)' }}
+                >
+                  تطبيق متين
+                </text>
+
+                {/* نجوم التميز والتألق */}
+                <text
+                  x="60"
+                  y="87"
+                  textAnchor="middle"
+                  fill="#FDF8ED"
+                  fontSize="6"
+                  fontWeight="bold"
+                  style={{ letterSpacing: '2px' }}
+                >
+                  ★ ★ ★
+                </text>
+              </svg>
             </div>
           </div>
 
