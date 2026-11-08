@@ -11,6 +11,7 @@ import { useApp, ModularRoomSettings } from '../contexts/AppContext';
 import { validateSurahChallengeScope, formatScopeSummary } from '../services/JuzRepository';
 import { islamicCategoriesList } from '../data/islamicCategories';
 import { IslamicInfoSettingsForm } from '../components/challenge/IslamicInfoSettingsForm';
+import { WhoAmISettingsModal } from '../components/WhoAmISettingsModal';
 
 export interface GroupCreatePageProps {
   mode?: 'create' | 'edit';
@@ -278,8 +279,9 @@ export const GroupCreatePage: React.FC<GroupCreatePageProps> = ({
   const [draftAudioCount, setDraftAudioCount] = useState(roomSettings.audio?.questionsCount || 5);
 
   // 5. مسودة من أنا؟
-  const [draftWhoAmICategories, setDraftWhoAmICategories] = useState<string[]>(roomSettings.whoAmI?.categories || ['أنبياء ورسل']);
-  const [draftWhoAmICategoryCounts, setDraftWhoAmICategoryCounts] = useState<Record<string, number>>(roomSettings.whoAmI?.categoryCounts || { 'أنبياء ورسل': 10 });
+  const [draftWhoAmICategories, setDraftWhoAmICategories] = useState<string[]>(roomSettings.whoAmI?.categories || ['الصحابة']);
+  const [draftWhoAmIQuestionCount, setDraftWhoAmIQuestionCount] = useState<number>(roomSettings.whoAmI?.questionsCount || 10);
+  const [draftWhoAmICategoryCounts, setDraftWhoAmICategoryCounts] = useState<Record<string, number>>(roomSettings.whoAmI?.categoryCounts || { 'الصحابة': 10 });
 
   // فتح نافذة التحدي مع تهيئة المسودة من الإعدادات الحالية
   const openModal = (skill: 'complete' | 'surah' | 'islamic' | 'audio' | 'who_am_i') => {
@@ -303,8 +305,9 @@ export const GroupCreatePage: React.FC<GroupCreatePageProps> = ({
     } else if (skill === 'audio') {
       setDraftAudioCount(roomSettings.audio?.questionsCount || 5);
     } else if (skill === 'who_am_i') {
-      setDraftWhoAmICategories(roomSettings.whoAmI?.categories || ['أنبياء ورسل']);
-      setDraftWhoAmICategoryCounts(roomSettings.whoAmI?.categoryCounts || { 'أنبياء ورسل': 10 });
+      setDraftWhoAmICategories(roomSettings.whoAmI?.categories || ['الصحابة']);
+      setDraftWhoAmIQuestionCount(roomSettings.whoAmI?.questionsCount || 10);
+      setDraftWhoAmICategoryCounts(roomSettings.whoAmI?.categoryCounts || { 'الصحابة': 10 });
     }
     setActiveModal(skill);
   };
@@ -350,7 +353,7 @@ export const GroupCreatePage: React.FC<GroupCreatePageProps> = ({
       }
     }
     if (roomSettings.whoAmI?.isSelected) {
-      sum += roomSettings.whoAmI.categories.reduce((acc, c) => acc + (roomSettings.whoAmI?.categoryCounts[c] || 0), 0);
+      sum += roomSettings.whoAmI.questionsCount || roomSettings.whoAmI.categories.reduce((acc, c) => acc + (roomSettings.whoAmI?.categoryCounts[c] || 0), 0);
     }
     return sum;
   }, [roomSettings]);
@@ -888,7 +891,7 @@ export const GroupCreatePage: React.FC<GroupCreatePageProps> = ({
                       <span className="flex items-center gap-1.5 truncate">
                         <Check className="w-3.5 h-3.5 text-indigo-700 shrink-0" />
                         <span className="truncate">
-                          {roomSettings.whoAmI.categories.reduce((sum, c) => sum + (roomSettings.whoAmI?.categoryCounts[c] || 0), 0)} سؤال • {roomSettings.whoAmI.categories.length} فئات ({roomSettings.whoAmI.categories.join('، ')})
+                          {roomSettings.whoAmI.questionsCount || roomSettings.whoAmI.categories.reduce((sum, c) => sum + (roomSettings.whoAmI?.categoryCounts[c] || 0), 0)} سؤال • {roomSettings.whoAmI.categories.length} فئات ({roomSettings.whoAmI.categories.join('، ')})
                         </span>
                       </span>
                     </div>
@@ -1454,88 +1457,28 @@ export const GroupCreatePage: React.FC<GroupCreatePageProps> = ({
 
               {/* ---------------- 5. نافذة تحدي من أنا؟ ---------------- */}
               {activeModal === 'who_am_i' && (
-                <>
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
-                        <HelpCircle className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <h3 className="text-base sm:text-lg font-black text-slate-800">إعدادات تحدي من أنا؟</h3>
-                        <p className="text-xs text-slate-400 font-bold">اختر الفئات وحدد عدد الأسئلة</p>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setActiveModal(null)}
-                      className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center transition-all cursor-pointer"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-
-                  <div className="space-y-3">
-                    <label className="text-xs font-black text-slate-700">اختر الفئات المطلوبة للتحدي:</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {['أنبياء ورسل', 'صحابة', 'أمهات المؤمنين', 'شخصيات إسلامية', 'غزوات ومعارك'].map(cat => {
-                        const isSelected = draftWhoAmICategories.includes(cat);
-                        return (
-                          <button
-                            key={cat}
-                            type="button"
-                            onClick={() => {
-                              if (isSelected) {
-                                if (draftWhoAmICategories.length > 1) {
-                                  setDraftWhoAmICategories(draftWhoAmICategories.filter(c => c !== cat));
-                                }
-                              } else {
-                                setDraftWhoAmICategories([...draftWhoAmICategories, cat]);
-                                setDraftWhoAmICategoryCounts(prev => ({ ...prev, [cat]: 5 }));
-                              }
-                            }}
-                            className={`p-3 rounded-xl border-2 text-right transition-all cursor-pointer flex items-center justify-between ${
-                              isSelected
-                                ? 'border-indigo-600 bg-indigo-50 text-indigo-900 font-black'
-                                : 'border-slate-200 bg-white text-slate-600 font-bold'
-                            }`}
-                          >
-                            <span className="text-xs">{cat}</span>
-                            {isSelected && <Check className="w-4 h-4 text-indigo-600" />}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <div className="pt-2 flex items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        updateModularSettings({
-                          ...roomSettings,
-                          whoAmI: {
-                            isSelected: true,
-                            questionsCount: draftWhoAmICategories.reduce((sum, c) => sum + (draftWhoAmICategoryCounts[c] || 5), 0),
-                            categories: draftWhoAmICategories,
-                            categoryCounts: draftWhoAmICategoryCounts
-                          }
-                        });
-                        setActiveModal(null);
-                      }}
-                      className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black text-sm shadow-md transition-all cursor-pointer flex items-center justify-center gap-2"
-                    >
-                      <Check className="w-4 h-4" />
-                      <span>حفظ الإعدادات وتفعيل المهارة</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setActiveModal(null)}
-                      className="py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-2xl font-bold text-sm cursor-pointer"
-                    >
-                      إلغاء
-                    </button>
-                  </div>
-                </>
+                <WhoAmISettingsModal
+                  isEmbedded={true}
+                  selectedCategories={draftWhoAmICategories}
+                  questionCount={draftWhoAmIQuestionCount}
+                  availableCategories={whoAmIAvailableCategories}
+                  onSave={(payload) => {
+                    setDraftWhoAmICategories(payload.categories);
+                    setDraftWhoAmIQuestionCount(payload.questionsCount);
+                    setDraftWhoAmICategoryCounts(payload.categoryCounts);
+                    updateModularSettings({
+                      ...roomSettings,
+                      whoAmI: {
+                        isSelected: true,
+                        questionsCount: payload.questionsCount,
+                        categories: payload.categories,
+                        categoryCounts: payload.categoryCounts
+                      }
+                    });
+                    setActiveModal(null);
+                  }}
+                  onCancel={() => setActiveModal(null)}
+                />
               )}
             </motion.div>
           </div>
