@@ -1475,20 +1475,31 @@ export const GroupCreatePage: React.FC<GroupCreatePageProps> = ({
                       setDraftIslamicTopics(updated.topics);
                       setDraftIslamicTopicCounts(updated.topicCounts);
                     }}
-                    onSave={() => {
-                      const totalQ = draftIslamicTopics.includes('all')
-                        ? (draftIslamicTopicCounts['all'] || 5)
-                        : draftIslamicTopics.reduce((sum, t) => sum + (draftIslamicTopicCounts[t] || 0), 0);
+                    onSave={(finalSettings) => {
+                      const cats = finalSettings?.categories || draftIslamicCategories;
+                      const lvls = finalSettings?.levels || draftIslamicLevels;
+                      const tops = finalSettings?.topics || draftIslamicTopics;
+                      const counts = finalSettings?.topicCounts || draftIslamicTopicCounts;
+                      const totalQ = finalSettings?.questionsCount !== undefined
+                        ? finalSettings.questionsCount
+                        : (tops.includes('all')
+                            ? (counts['all'] || 5)
+                            : tops.reduce((sum, t) => sum + (counts[t] || 0), 0));
+
+                      setDraftIslamicCategories(cats);
+                      setDraftIslamicLevels(lvls);
+                      setDraftIslamicTopics(tops);
+                      setDraftIslamicTopicCounts(counts);
 
                       updateModularSettings({
                         ...roomSettings,
                         islamicQuestions: {
                           isSelected: true,
                           questionsCount: Math.max(1, totalQ),
-                          categories: draftIslamicCategories,
-                          topics: draftIslamicTopics,
-                          topicCounts: draftIslamicTopicCounts,
-                          levels: draftIslamicLevels
+                          categories: cats,
+                          topics: tops,
+                          topicCounts: counts,
+                          levels: lvls
                         },
                         whoAmI: roomSettings.whoAmI ? { ...roomSettings.whoAmI, isSelected: false } : undefined
                       });
