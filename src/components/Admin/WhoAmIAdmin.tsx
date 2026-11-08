@@ -61,6 +61,19 @@ export default function WhoAmIAdmin({ onNotify }: WhoAmIAdminProps) {
     title: string;
   } | null>(null);
 
+  // Body scroll lock when any modal is open
+  useEffect(() => {
+    const isAnyModalOpen = isCategoryModalOpen || isQuestionModalOpen || Boolean(deleteConfirm?.isOpen);
+    if (isAnyModalOpen) {
+      document.body.classList.add('overflow-hidden');
+    } else {
+      document.body.classList.remove('overflow-hidden');
+    }
+    return () => {
+      document.body.classList.remove('overflow-hidden');
+    };
+  }, [isCategoryModalOpen, isQuestionModalOpen, deleteConfirm?.isOpen]);
+
   // Load Categories
   const fetchCategories = async () => {
     try {
@@ -571,12 +584,12 @@ export default function WhoAmIAdmin({ onNotify }: WhoAmIAdminProps) {
       {/* ======================================================== */}
       <AnimatePresence>
         {isCategoryModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white w-full max-w-md rounded-[2.5rem] p-6 md:p-8 shadow-2xl border border-slate-100 text-right"
+              className="bg-white w-full max-w-md rounded-[2.5rem] p-6 md:p-8 shadow-2xl border border-slate-100 text-right max-h-[90vh] overflow-y-auto"
             >
               <div className="flex items-center justify-between pb-4 border-b border-slate-100 mb-5">
                 <div className="flex items-center gap-3">
@@ -650,7 +663,7 @@ export default function WhoAmIAdmin({ onNotify }: WhoAmIAdminProps) {
       {/* ======================================================== */}
       <AnimatePresence>
         {isQuestionModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
@@ -769,12 +782,12 @@ export default function WhoAmIAdmin({ onNotify }: WhoAmIAdminProps) {
       {/* ======================================================== */}
       <AnimatePresence>
         {deleteConfirm?.isOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white w-full max-w-sm rounded-[2rem] p-6 shadow-2xl border border-slate-100 text-center"
+              className="bg-white w-full max-w-sm rounded-[2rem] p-6 shadow-2xl border border-slate-100 text-center max-h-[90vh] overflow-y-auto"
             >
               <div className="w-12 h-12 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center mx-auto mb-4">
                 <Trash2 className="w-6 h-6" />

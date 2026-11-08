@@ -134,6 +134,18 @@ export const MushafPage: React.FC<MushafPageProps> = ({
     }
   };
 
+  // Body scroll lock when Mushaf features modal is open
+  useEffect(() => {
+    if (isFeaturesOpen) {
+      document.body.classList.add('overflow-hidden');
+    } else {
+      document.body.classList.remove('overflow-hidden');
+    }
+    return () => {
+      document.body.classList.remove('overflow-hidden');
+    };
+  }, [isFeaturesOpen]);
+
   // Smart Verification for Daily Mystery Gift: Active Reading Time Tracker
   useEffect(() => {
     const dailyGift = app?.dailyGift;
@@ -1063,7 +1075,7 @@ export const MushafPage: React.FC<MushafPageProps> = ({
                     {/* نافذة مميزات وخصائص المصحف الشريف العالمية */}
                     <AnimatePresence>
                       {isFeaturesOpen && (
-                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+                        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200 overflow-y-auto">
                           <motion.div
                             initial={{ opacity: 0, scale: 0.95, y: 10 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}

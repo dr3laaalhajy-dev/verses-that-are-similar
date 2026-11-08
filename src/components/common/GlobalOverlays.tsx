@@ -483,7 +483,7 @@ export const GlobalOverlays: React.FC = () => {
               initial={{ opacity: 0, scale: 0.95, y: 10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              className="relative w-full max-w-md bg-white rounded-3xl p-6 md:p-8 shadow-2xl border border-orange-100 text-right space-y-5 overflow-hidden"
+              className="relative w-full max-w-md max-h-[90vh] overflow-y-auto bg-white rounded-3xl p-6 md:p-8 shadow-2xl border border-orange-100 text-right space-y-5"
             >
               <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                 <button
@@ -606,7 +606,7 @@ export const GlobalOverlays: React.FC = () => {
               initial={{ scale: 0.9, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.9, opacity: 0, y: 20 }}
-              className="relative w-full max-w-2xl bg-white rounded-3xl p-6 md:p-10 shadow-2xl overflow-hidden"
+              className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto bg-white rounded-3xl p-6 md:p-10 shadow-2xl"
             >
               <div className="absolute top-0 inset-x-0 h-2 bg-emerald-500" />
 

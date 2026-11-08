@@ -157,7 +157,7 @@ export const AppDownloadModal: React.FC<AppDownloadModalProps> = ({
             exit={{ opacity: 0, scale: 0.93, y: 15 }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
             onClick={(e) => e.stopPropagation()}
-            className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl border border-emerald-100/80 p-6 sm:p-7 text-center overflow-hidden max-h-[92vh] flex flex-col justify-between"
+            className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl border border-emerald-100/80 p-6 sm:p-7 text-center max-h-[90vh] overflow-y-auto flex flex-col justify-between"
           >
             {/* Top Islamic Accent Line */}
             <div className="absolute top-0 inset-x-0 h-1.5 bg-gradient-to-r from-emerald-600 via-brand-gold to-emerald-600" />

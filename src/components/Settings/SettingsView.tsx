@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useApp } from '../../contexts/AppContext';
 import {
@@ -220,6 +220,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [deleteAccountError, setDeleteAccountError] = useState<string | null>(null);
   const [showDeletePass, setShowDeletePass] = useState(false);
+
+  // Body scroll lock when confirmation modals are open
+  useEffect(() => {
+    if (showUsernameConfirmModal || showDeleteAccountModal) {
+      document.body.classList.add('overflow-hidden');
+    } else {
+      document.body.classList.remove('overflow-hidden');
+    }
+    return () => {
+      document.body.classList.remove('overflow-hidden');
+    };
+  }, [showUsernameConfirmModal, showDeleteAccountModal]);
 
   // Handle Profile Update Submission
   const handleSaveProfileClick = (e: React.FormEvent) => {
@@ -1261,12 +1273,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       {/* ================================================= */}
       <AnimatePresence>
         {showUsernameConfirmModal && (
-          <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+          <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md overflow-y-auto">
             <motion.div
               initial={{ scale: 0.9, opacity: 0, y: 15 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.9, opacity: 0, y: 15 }}
-              className="bg-white rounded-3xl p-6 sm:p-7 max-w-md w-full shadow-2xl border border-amber-200 text-center relative overflow-hidden"
+              className="bg-white rounded-3xl p-6 sm:p-7 max-w-md w-full shadow-2xl border border-amber-200 text-center relative max-h-[90vh] overflow-y-auto"
             >
               <div className="w-14 h-14 bg-amber-50 rounded-2xl flex items-center justify-center mx-auto mb-4 text-amber-600 border border-amber-200">
                 <AlertTriangle className="w-7 h-7" />
@@ -1315,12 +1327,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       {/* ================================================= */}
       <AnimatePresence>
         {showDeleteAccountModal && (
-          <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+          <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md overflow-y-auto">
             <motion.div
               initial={{ scale: 0.9, opacity: 0, y: 15 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.9, opacity: 0, y: 15 }}
-              className="bg-white dark:bg-[#151518] rounded-3xl p-6 sm:p-7 max-w-md w-full shadow-2xl border border-red-200 dark:border-red-900/40 text-center relative overflow-hidden"
+              className="bg-white dark:bg-[#151518] rounded-3xl p-6 sm:p-7 max-w-md w-full shadow-2xl border border-red-200 dark:border-red-900/40 text-center relative max-h-[90vh] overflow-y-auto"
             >
               <div className="w-14 h-14 bg-red-50 dark:bg-red-950/40 rounded-2xl flex items-center justify-center mx-auto mb-4 text-red-600 border border-red-200 dark:border-red-900/50">
                 <Trash2 className="w-7 h-7" />

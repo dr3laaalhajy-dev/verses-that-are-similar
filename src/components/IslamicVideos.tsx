@@ -63,6 +63,18 @@ export const IslamicVideos: React.FC<IslamicVideosProps> = ({ onBack }) => {
     }
   }, [bookmarkedIds]);
 
+  // Body scroll lock when video modal is open
+  useEffect(() => {
+    if (activeVideo && playerMode === 'bottomSheet') {
+      document.body.classList.add('overflow-hidden');
+    } else {
+      document.body.classList.remove('overflow-hidden');
+    }
+    return () => {
+      document.body.classList.remove('overflow-hidden');
+    };
+  }, [activeVideo, playerMode]);
+
   const toggleBookmark = (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     setBookmarkedIds((prev) =>

@@ -37,6 +37,18 @@ export default function IslamicOccasionsModal({
   });
   const [copied, setCopied] = useState(false);
 
+  // Body scroll lock when modal is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.classList.add('overflow-hidden');
+    } else {
+      document.body.classList.remove('overflow-hidden');
+    }
+    return () => {
+      document.body.classList.remove('overflow-hidden');
+    };
+  }, [isOpen]);
+
   useEffect(() => {
     if (initialSelectedId) {
       setSelectedId(initialSelectedId);

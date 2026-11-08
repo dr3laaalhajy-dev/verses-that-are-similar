@@ -47,7 +47,7 @@ export const LibrarySettingsModal: React.FC<LibrarySettingsModalProps> = ({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.9, y: 20 }}
             onClick={(e) => e.stopPropagation()}
-            className={`relative w-full max-w-lg bg-white rounded-3xl shadow-2xl overflow-hidden border border-white/20 theme-transition ${settings.darkMode ? 'mushaf-dark border-white/5' : ''}`}
+            className={`relative w-full max-w-lg max-h-[90vh] overflow-y-auto bg-white rounded-3xl shadow-2xl border border-white/20 theme-transition ${settings.darkMode ? 'mushaf-dark border-white/5' : ''}`}
           >
             <div className="p-10">
               <div className="flex items-center justify-between mb-10">

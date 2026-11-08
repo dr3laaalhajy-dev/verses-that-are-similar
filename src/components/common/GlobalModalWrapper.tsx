@@ -180,7 +180,7 @@ export const GlobalModalWrapper: React.FC<GlobalModalWrapperProps> = ({
             exit={{ opacity: 0, scale: 0.93, y: 16 }}
             transition={{ type: 'spring', damping: 26, stiffness: 360 }}
             onClick={(e) => e.stopPropagation()}
-            className={`relative w-full ${maxWidthClass} bg-white dark:bg-[#151518] rounded-3xl shadow-2xl overflow-hidden border border-emerald-900/10 dark:border-slate-800 flex flex-col`}
+            className={`relative w-full ${maxWidthClass} max-h-[90vh] overflow-y-auto bg-white dark:bg-[#151518] rounded-3xl shadow-2xl border border-emerald-900/10 dark:border-slate-800 flex flex-col`}
           >
             {/* 1. Brand Identity Top Header (Green & Gold Gradient with Faint Islamic Pattern) */}
             <div

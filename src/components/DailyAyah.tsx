@@ -61,6 +61,18 @@ const DailyAyah: React.FC = () => {
   const [isTafsirModalOpen, setIsTafsirModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
 
+  // Body scroll lock when Tafsir modal is open
+  useEffect(() => {
+    if (isTafsirModalOpen) {
+      document.body.classList.add('overflow-hidden');
+    } else {
+      document.body.classList.remove('overflow-hidden');
+    }
+    return () => {
+      document.body.classList.remove('overflow-hidden');
+    };
+  }, [isTafsirModalOpen]);
+
   const fetchAyah = async (ayahNumber: number, saveToStorage = true) => {
     try {
       const response = await fetch(`https://api.alquran.cloud/v1/ayah/${ayahNumber}/editions/quran-uthmani,ar.muyassar`);

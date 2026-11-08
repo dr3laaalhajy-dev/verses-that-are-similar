@@ -78,6 +78,18 @@ const Dashboard: React.FC<DashboardProps> = ({ className = '' }) => {
 
   // Settings Modal state
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+  // Body scroll lock when prayer times settings modal is open
+  useEffect(() => {
+    if (isSettingsOpen) {
+      document.body.classList.add('overflow-hidden');
+    } else {
+      document.body.classList.remove('overflow-hidden');
+    }
+    return () => {
+      document.body.classList.remove('overflow-hidden');
+    };
+  }, [isSettingsOpen]);
   const [tempCountry, setTempCountry] = useState(selectedCountryName);
   const [tempCity, setTempCity] = useState(selectedCityName);
   const [tempTimes, setTempTimes] = useState<PrayerTimesDict>(prayerTimes);

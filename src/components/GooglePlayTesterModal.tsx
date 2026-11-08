@@ -221,7 +221,7 @@ export const GooglePlayTesterModal: React.FC<GooglePlayTesterModalProps> = ({
             exit={{ opacity: 0, scale: 0.94, y: 16 }}
             transition={{ type: 'spring', damping: 26, stiffness: 320 }}
             onClick={(e) => e.stopPropagation()}
-            className="relative w-full max-w-lg bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 text-white rounded-3xl shadow-2xl border border-emerald-500/30 p-6 sm:p-8 overflow-hidden z-10"
+            className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 text-white rounded-3xl shadow-2xl border border-emerald-500/30 p-6 sm:p-8 z-10"
           >
             {/* Ambient Background Lights */}
             <div className="absolute top-0 right-0 w-56 h-56 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />

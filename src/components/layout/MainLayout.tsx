@@ -128,6 +128,19 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
     };
   }, [app.playerName, fetchPendingFriendRequests]);
 
+  // Body scroll lock when Auth modal is open
+  useEffect(() => {
+    const isAuthModalOpen = !app.playerName && app.view !== 'admin';
+    if (isAuthModalOpen) {
+      document.body.classList.add('overflow-hidden');
+    } else {
+      document.body.classList.remove('overflow-hidden');
+    }
+    return () => {
+      document.body.classList.remove('overflow-hidden');
+    };
+  }, [app.playerName, app.view]);
+
 
 
   return (
@@ -331,7 +344,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
             <motion.div
               initial={{ scale: 0.9, y: 20 }}
               animate={{ scale: 1, y: 0 }}
-              className="glass p-6 sm:p-10 md:p-12 rounded-3xl md:rounded-[3.5rem] max-w-md w-full shadow-2xl text-center relative my-auto bg-white/95"
+              className="glass p-6 sm:p-10 md:p-12 rounded-3xl md:rounded-[3.5rem] max-w-md w-full shadow-2xl text-center relative my-auto bg-white/95 max-h-[90vh] overflow-y-auto"
             >
               <div className="w-16 h-16 md:w-20 md:h-20 bg-brand-emerald rounded-2xl md:rounded-3xl flex items-center justify-center mx-auto mb-5 md:mb-6 shadow-xl shadow-brand-emerald/20 text-white">
                 {app.playerAuthMode === 'register' ? (

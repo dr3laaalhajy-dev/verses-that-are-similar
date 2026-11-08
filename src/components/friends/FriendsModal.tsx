@@ -41,6 +41,18 @@ export const FriendsModal: React.FC<FriendsModalProps> = ({
   const [copiedMyId, setCopiedMyId] = useState(false);
   const [onlineKeys, setOnlineKeys] = useState<Set<string>>(new Set());
 
+  // Body scroll lock when modal is open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.classList.add('overflow-hidden');
+    } else {
+      document.body.classList.remove('overflow-hidden');
+    }
+    return () => {
+      document.body.classList.remove('overflow-hidden');
+    };
+  }, [isOpen]);
+
   // Listen to realtime presence & update local friend state without triggering full API refetch
   useEffect(() => {
     const unsubscribe = friendsRealtimeService.onPresenceChange((keys) => {
@@ -209,7 +221,7 @@ export const FriendsModal: React.FC<FriendsModalProps> = ({
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs" dir="rtl">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto" dir="rtl">
         <motion.div
           initial={{ opacity: 0, scale: 0.95, y: 15 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}

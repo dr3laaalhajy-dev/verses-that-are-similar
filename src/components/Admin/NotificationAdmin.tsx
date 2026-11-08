@@ -497,6 +497,18 @@ export const NotificationAdmin: React.FC<NotificationAdminProps> = ({
   const [isUpdating, setIsUpdating] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
+  // Body scroll lock when editing modal is open
+  useEffect(() => {
+    if (editingItem) {
+      document.body.classList.add('overflow-hidden');
+    } else {
+      document.body.classList.remove('overflow-hidden');
+    }
+    return () => {
+      document.body.classList.remove('overflow-hidden');
+    };
+  }, [editingItem]);
+
   const handleOpenEdit = (item: NotificationHistoryItem) => {
     setEditingItem(item);
     setEditTitle(item.title);
@@ -1445,12 +1457,12 @@ export const NotificationAdmin: React.FC<NotificationAdminProps> = ({
       {/* Edit Notification Modal */}
       <AnimatePresence>
         {editingItem && (
-          <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+          <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md overflow-y-auto">
             <motion.div
               initial={{ scale: 0.95, opacity: 0, y: 15 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 15 }}
-              className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-7 max-w-lg w-full shadow-2xl border border-slate-200 dark:border-slate-800 text-right space-y-4 relative"
+              className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-7 max-w-lg w-full shadow-2xl border border-slate-200 dark:border-slate-800 text-right space-y-4 relative max-h-[90vh] overflow-y-auto"
             >
               <div className="flex items-center justify-between pb-3 border-b border-slate-150 dark:border-slate-800">
                 <div className="flex items-center gap-2">

@@ -45,7 +45,7 @@ export const StreakModal: React.FC<StreakModalProps> = ({
           exit={{ scale: 0.9, opacity: 0, y: 20 }}
           transition={{ type: 'spring', damping: 25, stiffness: 300 }}
           onClick={(e) => e.stopPropagation()}
-          className="relative w-full max-w-md bg-white rounded-3xl p-6 md:p-8 shadow-2xl overflow-hidden text-center border border-slate-100"
+          className="relative w-full max-w-md max-h-[90vh] overflow-y-auto bg-white rounded-3xl p-6 md:p-8 shadow-2xl text-center border border-slate-100"
           dir="rtl"
         >
           {/* Close button */}

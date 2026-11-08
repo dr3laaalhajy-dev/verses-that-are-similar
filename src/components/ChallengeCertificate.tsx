@@ -316,7 +316,7 @@ export const ChallengeCertificate: React.FC<ChallengeCertificateProps> = ({
           <form
             onSubmit={handleSaveCustomName}
             onClick={(e) => e.stopPropagation()}
-            className="relative w-full max-w-sm bg-white rounded-3xl p-6 shadow-2xl border border-amber-200 overflow-hidden"
+            className="relative w-full max-w-sm max-h-[90vh] overflow-y-auto bg-white rounded-3xl p-6 shadow-2xl border border-amber-200"
           >
             <h3 className="text-base font-black text-slate-800 mb-1">
               تخصيص الاسم على الشهادة

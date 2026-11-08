@@ -1079,6 +1079,33 @@ export default function AdminDashboard({
   const [newPasswordVal, setNewPasswordVal] = useState('');
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   
+  // Body scroll lock when any admin modal is open
+  useEffect(() => {
+    const isAnyModalOpen = Boolean(
+      isPreviewUpdateModalOpen ||
+      isAddAdminModalOpen ||
+      isInviteCodesModalOpen ||
+      changingPasswordAdmin ||
+      editingUser ||
+      resetPasswordUser
+    );
+    if (isAnyModalOpen) {
+      document.body.classList.add('overflow-hidden');
+    } else {
+      document.body.classList.remove('overflow-hidden');
+    }
+    return () => {
+      document.body.classList.remove('overflow-hidden');
+    };
+  }, [
+    isPreviewUpdateModalOpen,
+    isAddAdminModalOpen,
+    isInviteCodesModalOpen,
+    changingPasswordAdmin,
+    editingUser,
+    resetPasswordUser
+  ]);
+
   // Custom Modal States
   const [modalConfig, setModalConfig] = useState({
     isOpen: false,
@@ -4888,12 +4915,12 @@ export default function AdminDashboard({
       {/* Add Admin Modal Window */}
       <AnimatePresence>
         {isAddAdminModalOpen && (
-          <div className="fixed inset-0 z-[1000] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[1000] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white rounded-[2.5rem] p-6 md:p-8 max-w-lg w-full shadow-2xl border border-slate-100"
+              className="bg-white rounded-[2.5rem] p-6 md:p-8 max-w-lg w-full shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto"
             >
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
@@ -5162,12 +5189,12 @@ export default function AdminDashboard({
       {/* Change Password Modal */}
       <AnimatePresence>
         {changingPasswordAdmin && (
-          <div className="fixed inset-0 z-[1000] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[1000] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white rounded-[2rem] p-8 max-w-md w-full shadow-2xl border border-slate-100"
+              className="bg-white rounded-[2rem] p-8 max-w-md w-full shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto"
             >
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
@@ -5227,7 +5254,7 @@ export default function AdminDashboard({
       <AnimatePresence>
         {editingUser && (
           <div 
-            className="fixed inset-0 z-[1000] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 cursor-pointer"
+            className="fixed inset-0 z-[1000] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 cursor-pointer overflow-y-auto"
             onClick={() => setEditingUser(null)}
           >
             <motion.div
@@ -5235,7 +5262,7 @@ export default function AdminDashboard({
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
-              className="bg-white rounded-[2.5rem] p-6 md:p-8 max-w-lg w-full shadow-2xl border border-slate-100 cursor-default"
+              className="bg-white rounded-[2.5rem] p-6 md:p-8 max-w-lg w-full shadow-2xl border border-slate-100 cursor-default max-h-[90vh] overflow-y-auto"
             >
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
@@ -5340,7 +5367,7 @@ export default function AdminDashboard({
       <AnimatePresence>
         {resetPasswordUser && (
           <div 
-            className="fixed inset-0 z-[1000] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 cursor-pointer"
+            className="fixed inset-0 z-[1000] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 cursor-pointer overflow-y-auto"
             onClick={() => setResetPasswordUser(null)}
           >
             <motion.div
@@ -5348,7 +5375,7 @@ export default function AdminDashboard({
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
-              className="bg-white rounded-[2.5rem] p-6 md:p-8 max-w-md w-full shadow-2xl border border-slate-100 cursor-default"
+              className="bg-white rounded-[2.5rem] p-6 md:p-8 max-w-md w-full shadow-2xl border border-slate-100 cursor-default max-h-[90vh] overflow-y-auto"
             >
               <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">

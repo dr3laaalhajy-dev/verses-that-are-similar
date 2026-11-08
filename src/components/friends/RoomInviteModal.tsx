@@ -27,6 +27,18 @@ export const RoomInviteModal: React.FC<RoomInviteModalProps> = ({
   const [doNotDisturb, setDoNotDisturb] = useState(false);
   const hasRespondedRef = useRef(false);
 
+  // Body scroll lock when invite modal is displayed
+  useEffect(() => {
+    if (invite) {
+      document.body.classList.add('overflow-hidden');
+    } else {
+      document.body.classList.remove('overflow-hidden');
+    }
+    return () => {
+      document.body.classList.remove('overflow-hidden');
+    };
+  }, [invite]);
+
   // Requirement 1: 10-second timeout timer.
   // When 10s elapses without action, dismiss modal and send socket event 'invite_ignored' to the sender.
   useEffect(() => {
@@ -184,12 +196,12 @@ export const RoomInviteModal: React.FC<RoomInviteModalProps> = ({
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65 backdrop-blur-xs" dir="rtl">
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/65 backdrop-blur-xs overflow-y-auto" dir="rtl">
         <motion.div
           initial={{ opacity: 0, scale: 0.9, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.9, y: 20 }}
-          className="relative w-full max-w-sm bg-white dark:bg-[#151518] rounded-3xl shadow-2xl border-2 border-amber-400/50 dark:border-amber-500/30 overflow-hidden text-center p-5 sm:p-6 space-y-4"
+          className="relative w-full max-w-sm max-h-[90vh] overflow-y-auto bg-white dark:bg-[#151518] rounded-3xl shadow-2xl border-2 border-amber-400/50 dark:border-amber-500/30 text-center p-5 sm:p-6 space-y-4"
         >
           {/* Animated Glow Icon */}
           <div className="relative mx-auto w-16 h-16 sm:w-20 sm:h-20 flex items-center justify-center">

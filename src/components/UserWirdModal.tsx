@@ -211,7 +211,7 @@ export const UserWirdModal: React.FC<UserWirdModalProps> = ({
           exit={{ scale: 0.92, opacity: 0, y: 20 }}
           transition={{ type: 'spring', damping: 25, stiffness: 300 }}
           onClick={(e) => e.stopPropagation()}
-          className="relative w-full max-w-lg bg-white dark:bg-slate-900 rounded-3xl p-5 sm:p-7 shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden text-right"
+          className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto bg-white dark:bg-slate-900 rounded-3xl p-5 sm:p-7 shadow-2xl border border-slate-200 dark:border-slate-800 text-right"
           dir="rtl"
         >
           {/* Header */}

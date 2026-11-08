@@ -275,7 +275,7 @@ export const DailyMysteryBox: React.FC<DailyMysteryBoxProps> = ({ className = ''
                 exit={{ scale: 0.95, opacity: 0 }}
                 transition={{ duration: 0.25, ease: 'easeOut' }}
                 onClick={(e) => e.stopPropagation()}
-                className="relative w-full max-w-md bg-white dark:bg-[#151518] rounded-3xl p-5 sm:p-6 shadow-2xl border border-amber-200/80 dark:border-[#C49B55]/25 overflow-hidden flex flex-col justify-between gap-3.5 text-center"
+                className="relative w-full max-w-md max-h-[90vh] overflow-y-auto bg-white dark:bg-[#151518] rounded-3xl p-5 sm:p-6 shadow-2xl border border-amber-200/80 dark:border-[#C49B55]/25 flex flex-col justify-between gap-3.5 text-center"
                 style={{
                   backgroundColor: app.librarySettings?.darkMode ? '#151518' : '#FDFBF7',
                   borderColor: app.librarySettings?.darkMode ? 'rgba(196, 155, 85, 0.25)' : 'rgba(251, 191, 36, 0.5)',
