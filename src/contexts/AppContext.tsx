@@ -689,24 +689,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Determine user's active achievement
   const getActiveAchievement = () => {
-    // 1. Check Seerah (Full Completion: 3 groups)
+    // 1. Check Seerah (Full Completion: 3 groups / 60 questions)
     const seerahSaved = localStorage.getItem('quran_quiz_progress_seerah');
     if (seerahSaved) {
       try {
         const parsed = JSON.parse(seerahSaved);
-        // Check for certificate or 3 levels reached
-        const hasSeerahCert = userCertificates.some(c => c.category === 'seerah');
-        if (hasSeerahCert || (parsed.easy >= 3 || parsed.hard >= 3)) return 'seerah';
+        if ((parsed.easy >= 3 && parsed.hard >= 3) || (Number(parsed.score || 0) >= 60)) return 'seerah';
       } catch { }
     }
 
-    // 2. Check General (Full Completion: 5 groups)
+    // 2. Check General (Full Completion: 5 groups / 100 questions)
     const generalSaved = localStorage.getItem('quran_quiz_progress_general');
     if (generalSaved) {
       try {
         const parsed = JSON.parse(generalSaved);
-        const hasGeneralCert = userCertificates.some(c => c.category === 'general');
-        if (hasGeneralCert || (parsed.easy >= 5 || parsed.hard >= 5)) return 'general';
+        if (parsed.easy >= 5 && parsed.hard >= 5) return 'general';
       } catch { }
     }
 
@@ -5680,20 +5677,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       // 1. Proactive sync of achievement flags before fetching rankings
       if (playerUsername || playerName) {
-        const hasSeerah = userCertificates.some(c => c.category === 'seerah') ||
-          (Boolean(localStorage.getItem('quran_quiz_progress_seerah')) && (() => {
+        const hasSeerah = Boolean(localStorage.getItem('quran_quiz_progress_seerah')) && (() => {
             try {
               const p = JSON.parse(localStorage.getItem('quran_quiz_progress_seerah') || '{}');
-              return (p.easy >= 3 || p.hard >= 3);
+              return (p.easy >= 3 && p.hard >= 3) || (Number(p.score || 0) >= 60);
             } catch { return false; }
-          })());
-        const hasGeneral = userCertificates.some(c => c.category === 'general') ||
-          (Boolean(localStorage.getItem('quran_quiz_progress_general')) && (() => {
+          })();
+        const hasGeneral = Boolean(localStorage.getItem('quran_quiz_progress_general')) && (() => {
             try {
               const p = JSON.parse(localStorage.getItem('quran_quiz_progress_general') || '{}');
-              return (p.easy >= 5 || p.hard >= 5);
+              return (p.easy >= 5 && p.hard >= 5);
             } catch { return false; }
-          })());
+          })();
         const storedFrame = localStorage.getItem('quran_active_frame') || activeFrame;
         // Requirement 1: If user chose "no frame" (null or 'none'), preserve null and do NOT force seerah/general
         const effectiveFrame = (storedFrame === 'seerah' || storedFrame === 'general')
@@ -6160,7 +6155,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         score: totalPoints,
         seerahCompleted: (getActiveAchievement() === 'seerah'),
         generalCompleted: (getActiveAchievement() === 'general'),
-        quranCompleted: (completedChallengeIds.size >= 15)
+        quranCompleted: (completedChallengeIds.size >= 100)
       })
     })
       .then(async (res) => {

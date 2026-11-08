@@ -19,131 +19,14 @@ import {
 import { supabase } from '../services/supabase';
 import { ChallengeCertificate } from './ChallengeCertificate';
 import { CertificateModal } from './CertificateModal';
-import { fetchUserMilestones, UserMilestonesStats } from '../services/milestoneProgressService';
+import {
+  fetchUserMilestones,
+  UserMilestonesStats,
+  MILESTONES_CONFIG,
+  MilestoneItem
+} from '../services/milestoneProgressService';
 
-export interface MilestoneItem {
-  id: string;
-  title: string;
-  category: string;
-  target: number;
-  icon: string;
-  scope: string;
-  rank: string;
-  fallbackProgress: number;
-}
-
-const MILESTONES_CONFIG: MilestoneItem[] = [
-  {
-    id: 'ayah_100',
-    title: 'إتمام 100 سؤال في تحدي إكمال الآية',
-    category: 'علوم القرآن',
-    icon: '📖',
-    target: 100,
-    scope: 'كامل القرآن الكريم',
-    rank: 'حافظ متقن',
-    fallbackProgress: 0,
-  },
-  {
-    id: 'figh_quiz',
-    title: 'ختم مسابقة الفقه والمعلومات الإسلامية',
-    category: 'الفقه الإسلامي',
-    icon: '⚖️',
-    target: 100,
-    scope: 'العبادات والمعاملات',
-    rank: 'فقيه متقن ومتميز',
-    fallbackProgress: 0,
-  },
-  {
-    id: 'surah_50',
-    title: 'إتمام 50 سؤالاً في تحدي تحديد اسم السورة',
-    category: 'متشابهات السور',
-    icon: '🕌',
-    target: 50,
-    scope: 'أجزاء عم وتبارك والمفصل',
-    rank: 'خبير المتشابهات',
-    fallbackProgress: 0,
-  },
-  {
-    id: 'seerah_60',
-    title: 'إتمام 60 سؤالاً في السيرة النبوية الشريفة',
-    category: 'السيرة النبوية',
-    icon: '📜',
-    target: 60,
-    scope: 'العهد المكي والمدني والغزوات',
-    rank: 'عالم بالسيرة النبوية',
-    fallbackProgress: 0,
-  },
-  {
-    id: 'akida_bank',
-    title: 'ختم بنك أسئلة العقيدة الإسلامية',
-    category: 'أصول الدين',
-    icon: '🛡️',
-    target: 100,
-    scope: 'أركان الإيمان والتوحيد الخالص',
-    rank: 'راسخ في العقيدة',
-    fallbackProgress: 0,
-  },
-  {
-    id: 'hadith_100',
-    title: 'إتمام 100 حديث شريف في السنة النبوية',
-    category: 'الحديث الشريف',
-    icon: '✨',
-    target: 100,
-    scope: 'متون الحديث والأربعين النووية',
-    rank: 'محدث متقن',
-    fallbackProgress: 0,
-  },
-  {
-    id: 'tafseer_100',
-    title: 'إتمام 100 سؤال في تفسير القرآن الكريم',
-    category: 'تفسير وبيان',
-    icon: '💡',
-    target: 100,
-    scope: 'معاني الآيات ومقاصد السور',
-    rank: 'عالم بالتفسير',
-    fallbackProgress: 0,
-  },
-  {
-    id: 'history_conquests',
-    title: 'ختم مسابقة التاريخ والفتوحات الإسلامية',
-    category: 'التاريخ الإسلامي',
-    icon: '🏛️',
-    target: 100,
-    scope: 'سير الخلفاء الراشدين والفتوحات',
-    rank: 'خبير بالتاريخ الإسلامي',
-    fallbackProgress: 0,
-  },
-  {
-    id: 'arabic_language',
-    title: 'إتمام مسابقة علوم اللغة العربية والمعاجم',
-    category: 'لغة الضاد',
-    icon: '🖋️',
-    target: 100,
-    scope: 'فصيح الألفاظ والنحو والبلاغة',
-    rank: 'أديب فصيح',
-    fallbackProgress: 0,
-  },
-  {
-    id: 'daily_streak_30',
-    title: 'سلسلة 30 يوماً متتالية في التحدي اليومي',
-    category: 'المثابرة والهمة',
-    icon: '🔥',
-    target: 30,
-    scope: 'الشهر القرآني المبارك',
-    rank: 'مواظب متفوق',
-    fallbackProgress: 0,
-  },
-  {
-    id: 'speed_1000',
-    title: 'المركز الأول و1000 نقطة في تحدي السرعة',
-    category: 'تحديات الصدارة',
-    icon: '⚡',
-    target: 1000,
-    scope: 'سرعة البديهة في المتشابهات',
-    rank: 'فارس السرعة الأول',
-    fallbackProgress: 0,
-  },
-];
+export type { MilestoneItem };
 
 interface AchievementsMilestoneTrackerProps {
   playerName?: string | null;
@@ -196,20 +79,10 @@ export const AchievementsMilestoneTracker: React.FC<AchievementsMilestoneTracker
           uniquePlayerId: localStorage.getItem('quran_player_id')
         });
 
-        // مطابقة التقدم لكل إنجاز بدقة تامة وبدون أي أرقام عشوائية
+        // مطابقة التقدم لكل إنجاز بدقة تامة وبدون أي أرقام عشوائية (Single Source of Truth)
         MILESTONES_CONFIG.forEach((m) => {
-          // فحص الشهادات المكتسبة مسبقاً والموثقة رسمياً
-          const hasClaimed = userCertificates.some(
-            (c) => c.category === m.id || c.category === m.category
-          );
-
-          if (hasClaimed) {
-            newProgress[m.id] = m.target;
-            return;
-          }
-
           // استخدام القيمة الدقيقة المحتسبة حصراً للإجابات الصحيحة في هذا القسم
-          const val = (stats as any)[m.id] ?? 0;
+          const val = stats[m.id] ?? 0;
           newProgress[m.id] = Math.min(Math.max(0, val), m.target);
         });
 

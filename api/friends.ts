@@ -564,11 +564,71 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         console.error('[Friends Profile] Error fetching wird stats:', e);
       }
 
-      // Calculate earned certificates for the target player
+      // Calculate earned certificates strictly based on actual progress (100% completion only)
       const completedIds = Array.isArray(target.completedChallengeIds) ? target.completedChallengeIds : [];
       const earnedCertificates: any[] = [];
 
-      if (completedIds.length >= 100 || target.quranCompleted) {
+      let ayahCount = 0;
+      let surahCount = 0;
+      if (completedIds.length > 0) {
+        try {
+          const { data: challengesRows } = await supabaseAdmin
+            .from('challenges')
+            .select('id, type')
+            .in('id', completedIds);
+
+          if (challengesRows && Array.isArray(challengesRows)) {
+            challengesRows.forEach((ch: any) => {
+              const chType = String(ch.type || '').toUpperCase();
+              if (chType === 'SURAH' || chType === 'SURAH_NAME') {
+                surahCount++;
+              } else if (chType === 'COMPLETION' || chType === 'STANDARD') {
+                ayahCount++;
+              }
+            });
+          }
+        } catch (err) {
+          console.error('[Friends Profile] Error querying challenges:', err);
+        }
+      }
+
+      // Query correct answers from user_answers
+      let seerahCount = 0;
+      let fiqhCount = 0;
+      try {
+        const candidateUserIds = [
+          target.uniquePlayerId,
+          target.username,
+          target.name,
+          target.id ? String(target.id) : null
+        ].filter(Boolean) as string[];
+
+        const { data: answers } = await supabaseAdmin
+          .from('user_answers')
+          .select('category, question_id, is_correct')
+          .in('user_id', candidateUserIds)
+          .eq('is_correct', true);
+
+        if (answers && Array.isArray(answers)) {
+          const seerahSet = new Set();
+          const fiqhSet = new Set();
+          answers.forEach((a: any) => {
+            const cat = String(a.category || '').toLowerCase();
+            if (cat === 'seerah' || cat === 'seerah_60' || cat === 'sirah') {
+              seerahSet.add(a.question_id);
+            } else if (cat === 'figh' || cat === 'figh_quiz' || cat === 'fiqh' || cat === 'general') {
+              fiqhSet.add(a.question_id);
+            }
+          });
+          seerahCount = seerahSet.size;
+          fiqhCount = fiqhSet.size;
+        }
+      } catch (err) {
+        console.error('[Friends Profile] Error querying user_answers:', err);
+      }
+
+      // Strict Validation: userProgress >= targetGoal
+      if (ayahCount >= 100) {
         earnedCertificates.push({
           id: 'ayah_100',
           title: 'إتمام 100 سؤال في تحدي إكمال الآية',
@@ -580,7 +640,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       }
 
-      if (target.seerahCompleted) {
+      if (surahCount >= 50) {
+        earnedCertificates.push({
+          id: 'surah_50',
+          title: 'إتمام 50 سؤالاً في تحدي تحديد اسم السورة',
+          category: 'متشابهات السور',
+          scope: 'أجزاء عم وتبارك والمفصل',
+          score: '100%',
+          icon: '🕌',
+          serial: `MTN-SRH50-${target.id}-50`
+        });
+      }
+
+      if (seerahCount >= 60) {
         earnedCertificates.push({
           id: 'seerah_60',
           title: 'إتمام 60 سؤالاً في السيرة النبوية الشريفة',
@@ -592,7 +664,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       }
 
-      if (target.generalCompleted) {
+      if (fiqhCount >= 100) {
         earnedCertificates.push({
           id: 'figh_quiz',
           title: 'ختم مسابقة الفقه والمعلومات الإسلامية',

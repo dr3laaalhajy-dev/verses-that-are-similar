@@ -5,7 +5,7 @@ import {
   Star, Copy, Check, Shield, Sparkles, UserMinus, Loader2, CheckCircle2, Lock
 } from 'lucide-react';
 import { CertificateModal } from '../CertificateModal';
-import { fetchUserMilestones } from '../../services/milestoneProgressService';
+import { getCompletedAchievements, CompletedAchievement } from '../../services/milestoneProgressService';
 
 export interface PublicProfileModalProps {
   isOpen: boolean;
@@ -56,7 +56,6 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
     if (!targetPlayer) return;
     setLoading(true);
     setError(null);
-    let certsList: any[] = [];
 
     try {
       const targetParam = targetPlayer.id || targetPlayer.uniquePlayerId || targetPlayer.username || targetPlayer.name;
@@ -70,11 +69,8 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
       if (res.ok) {
         const data = await res.json();
         setProfileData(data);
-        if (Array.isArray(data.earnedCertificates)) {
-          certsList = [...data.earnedCertificates];
-        }
       } else {
-        console.warn('[PublicProfileModal] Profile API returned non-OK status, falling back to local data.');
+        console.warn('[PublicProfileModal] Profile API returned non-OK status, falling back to basic player data.');
         setProfileData({
           player: {
             id: targetPlayer.id,
@@ -86,9 +82,9 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
             streak: (targetPlayer as any).streak || 0,
             activeFrame: (targetPlayer as any).activeFrame || null,
             equippedNameColor: (targetPlayer as any).equippedNameColor || null,
-            seerahCompleted: (targetPlayer as any).seerahCompleted || false,
-            generalCompleted: (targetPlayer as any).generalCompleted || false,
-            quranCompleted: (targetPlayer as any).quranCompleted || false,
+            seerahCompleted: false,
+            generalCompleted: false,
+            quranCompleted: false,
             createdAt: (targetPlayer as any).createdAt || (targetPlayer as any).since || new Date().toISOString()
           },
           wird: null,
@@ -97,47 +93,15 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
         });
       }
 
-      // حساب الإنجازات المكتسبة بناءً على القواعد الصارمة (is_correct = true)
-      try {
-        const stats = await fetchUserMilestones({
-          username: targetPlayer.username,
-          playerName: targetPlayer.name,
-          uniquePlayerId: targetPlayer.uniquePlayerId
-        });
+      // توحيد مصدر الحقيقة: جلب الإنجازات والشهادات المعتمدة بنسبة 100% فقط عبر الدالة الصارمة
+      const validCompletedAchievements = await getCompletedAchievements({
+        userId: targetPlayer.id,
+        username: targetPlayer.username,
+        playerName: targetPlayer.name,
+        uniquePlayerId: targetPlayer.uniquePlayerId
+      });
 
-        const milestoneMap = [
-          { id: 'ayah_100', title: 'إتمام 100 سؤال في تحدي إكمال الآية', category: 'علوم القرآن', target: 100, icon: '📖', scope: 'كامل القرآن الكريم' },
-          { id: 'figh_quiz', title: 'ختم مسابقة الفقه والمعلومات الإسلامية', category: 'الفقه الإسلامي', target: 100, icon: '⚖️', scope: 'العبادات والمعاملات' },
-          { id: 'surah_50', title: 'إتمام 50 سؤالاً في تحدي تحديد اسم السورة', category: 'متشابهات السور', target: 50, icon: '🕌', scope: 'أجزاء عم وتبارك والمفصل' },
-          { id: 'seerah_60', title: 'إتمام 60 سؤالاً في السيرة النبوية الشريفة', category: 'السيرة النبوية', target: 60, icon: '📜', scope: 'العهد المكي والمدني والغزوات' },
-          { id: 'akida_bank', title: 'ختم بنك أسئلة العقيدة الإسلامية', category: 'أصول الدين', target: 100, icon: '🛡️', scope: 'أركان الإيمان والتوحيد الخالص' },
-          { id: 'hadith_100', title: 'إتمام 100 حديث شريف في السنة النبوية', category: 'الحديث الشريف', target: 100, icon: '✨', scope: 'متون الحديث والأربعين النووية' },
-          { id: 'tafseer_100', title: 'إتمام 100 سؤال في تفسير القرآن الكريم', category: 'تفسير وبيان', target: 100, icon: '💡', scope: 'معاني الآيات ومقاصد السور' },
-          { id: 'history_conquests', title: 'ختم مسابقة التاريخ والفتوحات الإسلامية', category: 'التاريخ الإسلامي', target: 100, icon: '🏛️', scope: 'سير الخلفاء الراشدين والفتوحات' },
-          { id: 'arabic_language', title: 'إتمام مسابقة علوم اللغة العربية والمعاجم', category: 'لغة الضاد', target: 100, icon: '🖋️', scope: 'فصيح الألفاظ والنحو والبلاغة' },
-          { id: 'daily_streak_30', title: 'سلسلة 30 يوماً متتالية في التحدي اليومي', category: 'المثابرة والهمة', target: 30, icon: '🔥', scope: 'الشهر القرآني المبارك' },
-          { id: 'speed_1000', title: 'المركز الأول و1000 نقطة في تحدي السرعة', category: 'تحديات الصدارة', target: 1000, icon: '⚡', scope: 'سرعة البديهة في المتشابهات' }
-        ];
-
-        milestoneMap.forEach(m => {
-          const val = (stats as any)[m.id] || 0;
-          if (val >= m.target && !certsList.some(c => c.id === m.id)) {
-            certsList.push({
-              id: m.id,
-              title: m.title,
-              category: m.category,
-              scope: m.scope,
-              icon: m.icon,
-              score: m.id === 'speed_1000' ? `${val} نقطة` : (m.id === 'daily_streak_30' ? `${val} يوماً` : '100%'),
-              serial: `MTN-${m.id.toUpperCase()}-${targetPlayer.id || 101}`
-            });
-          }
-        });
-      } catch (e) {
-        console.warn('[PublicProfileModal] Error syncing milestones stats:', e);
-      }
-
-      setEarnedCertificates(certsList);
+      setEarnedCertificates(validCompletedAchievements);
     } catch (err: any) {
       console.warn('Error fetching public profile, utilizing targetPlayer fallback:', err);
       // Fallback gracefully to targetPlayer data so modal never breaks
@@ -152,16 +116,27 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
           streak: (targetPlayer as any).streak || 0,
           activeFrame: (targetPlayer as any).activeFrame || null,
           equippedNameColor: (targetPlayer as any).equippedNameColor || null,
-          seerahCompleted: (targetPlayer as any).seerahCompleted || false,
-          generalCompleted: (targetPlayer as any).generalCompleted || false,
-          quranCompleted: (targetPlayer as any).quranCompleted || false,
+          seerahCompleted: false,
+          generalCompleted: false,
+          quranCompleted: false,
           createdAt: (targetPlayer as any).createdAt || (targetPlayer as any).since || new Date().toISOString()
         },
         wird: null,
         friendshipStatus: (targetPlayer as any).status || 'ACCEPTED',
         isSelf: false
       });
-      setEarnedCertificates(certsList);
+
+      try {
+        const validCompletedAchievements = await getCompletedAchievements({
+          userId: targetPlayer.id,
+          username: targetPlayer.username,
+          playerName: targetPlayer.name,
+          uniquePlayerId: targetPlayer.uniquePlayerId
+        });
+        setEarnedCertificates(validCompletedAchievements);
+      } catch {
+        setEarnedCertificates([]);
+      }
     } finally {
       setLoading(false);
     }
@@ -282,10 +257,6 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
   const wird = profileData?.wird;
   const friendshipStatus = profileData?.friendshipStatus || 'NONE';
   const isSelf = profileData?.isSelf;
-
-  const hasSeerah = player?.seerahCompleted;
-  const hasGeneral = player?.generalCompleted;
-  const hasQuran = player?.quranCompleted;
   const activeFrame = player?.activeFrame;
 
   return (
