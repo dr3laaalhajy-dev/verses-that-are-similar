@@ -270,17 +270,20 @@ export async function fetchUserMilestones(params?: {
   playerName?: string | null;
   uniquePlayerId?: string | null;
   userId?: string | number | null;
+  isSelf?: boolean;
 }): Promise<UserMilestonesStats> {
   const localUsername = typeof window !== 'undefined' ? localStorage.getItem('quran_player_username') : null;
   const localName = typeof window !== 'undefined' ? (localStorage.getItem('quran_player_name') || localStorage.getItem('quran_user_name')) : null;
   const localId = typeof window !== 'undefined' ? localStorage.getItem('quran_player_id') : null;
 
   // التحقق إن كان المستخدم المطلوب هو نفس المستخدم المحلي المتصل حالياً
-  const isLocalUser = !params || (
-    (!params.username || params.username === localUsername) &&
-    (!params.playerName || params.playerName === localName) &&
-    (!params.uniquePlayerId || params.uniquePlayerId === localId) &&
-    (!params.userId || String(params.userId) === localId || String(params.userId) === localUsername)
+  const isLocalUser = Boolean(
+    !params ||
+    params.isSelf === true ||
+    (params.username && localUsername && params.username.toLowerCase() === localUsername.toLowerCase()) ||
+    (params.playerName && localName && params.playerName.toLowerCase() === localName.toLowerCase()) ||
+    (params.uniquePlayerId && localId && params.uniquePlayerId.toLowerCase() === localId.toLowerCase()) ||
+    (params.userId && localId && String(params.userId).toLowerCase() === localId.toLowerCase())
   );
 
   // القيم الافتراضية: إن لم يكن المستخدم المحلي، تبدأ دائماً من 0 لمنع تسريب بيانات المشاهد للملف الشخصي للاعبين الآخرين
@@ -335,7 +338,7 @@ export async function fetchUserMilestones(params?: {
 
       const { data } = await supabase
         .from('players')
-        .select('id, uniquePlayerId, username, name, completedChallengeIds, points, streak')
+        .select('id, uniquePlayerId, username, name, completedChallengeIds, points, streak, seerahCompleted, generalCompleted, quranCompleted')
         .or(orParts.join(','))
         .limit(1)
         .maybeSingle();
@@ -363,6 +366,17 @@ export async function fetchUserMilestones(params?: {
         stats.speed_1000 = isLocalUser
           ? Math.max(stats.speed_1000, dbPlayer.points)
           : dbPlayer.points;
+      }
+
+      // اعتماد الشهادات المكتملة الموثقة في قاعدة البيانات (100% Completion Flags)
+      if (dbPlayer.seerahCompleted) {
+        stats.seerah_60 = Math.max(stats.seerah_60, 60);
+      }
+      if (dbPlayer.generalCompleted) {
+        stats.figh_quiz = Math.max(stats.figh_quiz, 100);
+      }
+      if (dbPlayer.quranCompleted && completedChallengeIds.length >= 100) {
+        stats.ayah_100 = Math.max(stats.ayah_100, 100);
       }
     }
 
@@ -536,6 +550,7 @@ export async function getCompletedAchievements(
     username?: string | null;
     playerName?: string | null;
     uniquePlayerId?: string | null;
+    isSelf?: boolean;
   } | null
 ): Promise<CompletedAchievement[]> {
   let params: {
@@ -543,6 +558,7 @@ export async function getCompletedAchievements(
     username?: string | null;
     playerName?: string | null;
     uniquePlayerId?: string | null;
+    isSelf?: boolean;
   } = {};
 
   if (typeof userIdentifier === 'object' && userIdentifier !== null) {

@@ -5,7 +5,8 @@ import {
   Star, Copy, Check, Shield, Sparkles, UserMinus, Loader2, CheckCircle2, Lock
 } from 'lucide-react';
 import { CertificateModal } from '../CertificateModal';
-import { getCompletedAchievements, CompletedAchievement } from '../../services/milestoneProgressService';
+import { CompletedAchievement } from '../../services/milestoneProgressService';
+import { useAchievements } from '../../hooks/useAchievements';
 
 export interface PublicProfileModalProps {
   isOpen: boolean;
@@ -37,7 +38,6 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
   const [actionLoading, setActionLoading] = useState<boolean>(false);
   const [copiedId, setCopiedId] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [earnedCertificates, setEarnedCertificates] = useState<any[]>([]);
   const [selectedCertificate, setSelectedCertificate] = useState<any>(null);
 
   // Body scroll lock when modal is open
@@ -51,6 +51,31 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
       document.body.classList.remove('overflow-hidden');
     };
   }, [isOpen]);
+
+  // تحديد ما إذا كان الملف المعروض هو حساب المستخدم الحالي نفسه
+  const isSelf = Boolean(
+    profileData?.isSelf ||
+    (currentViewer?.username && targetPlayer?.username && currentViewer.username.toLowerCase() === targetPlayer.username.toLowerCase()) ||
+    (currentViewer?.uniquePlayerId && targetPlayer?.uniquePlayerId && currentViewer.uniquePlayerId.toLowerCase() === targetPlayer.uniquePlayerId.toLowerCase()) ||
+    (currentViewer?.id && targetPlayer?.id && currentViewer.id === targetPlayer.id)
+  );
+
+  // استخدام Hook الإنجازات الموحد (Single Source of Truth) المشترك بين الإعدادات والملف الشخصي
+  const {
+    completedAchievements: earnedCertificates,
+    loading: achievementsLoading,
+    refresh: refreshAchievements
+  } = useAchievements(
+    isOpen && targetPlayer
+      ? {
+          userId: targetPlayer.id,
+          username: targetPlayer.username,
+          playerName: targetPlayer.name,
+          uniquePlayerId: targetPlayer.uniquePlayerId,
+          isSelf
+        }
+      : null
+  );
 
   const fetchProfile = async () => {
     if (!targetPlayer) return;
@@ -82,9 +107,9 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
             streak: (targetPlayer as any).streak || 0,
             activeFrame: (targetPlayer as any).activeFrame || null,
             equippedNameColor: (targetPlayer as any).equippedNameColor || null,
-            seerahCompleted: false,
-            generalCompleted: false,
-            quranCompleted: false,
+            seerahCompleted: (targetPlayer as any).seerahCompleted || false,
+            generalCompleted: (targetPlayer as any).generalCompleted || false,
+            quranCompleted: (targetPlayer as any).quranCompleted || false,
             createdAt: (targetPlayer as any).createdAt || (targetPlayer as any).since || new Date().toISOString()
           },
           wird: null,
@@ -92,16 +117,6 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
           isSelf: false
         });
       }
-
-      // توحيد مصدر الحقيقة: جلب الإنجازات والشهادات المعتمدة بنسبة 100% فقط عبر الدالة الصارمة
-      const validCompletedAchievements = await getCompletedAchievements({
-        userId: targetPlayer.id,
-        username: targetPlayer.username,
-        playerName: targetPlayer.name,
-        uniquePlayerId: targetPlayer.uniquePlayerId
-      });
-
-      setEarnedCertificates(validCompletedAchievements);
     } catch (err: any) {
       console.warn('Error fetching public profile, utilizing targetPlayer fallback:', err);
       // Fallback gracefully to targetPlayer data so modal never breaks
@@ -116,27 +131,15 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
           streak: (targetPlayer as any).streak || 0,
           activeFrame: (targetPlayer as any).activeFrame || null,
           equippedNameColor: (targetPlayer as any).equippedNameColor || null,
-          seerahCompleted: false,
-          generalCompleted: false,
-          quranCompleted: false,
+          seerahCompleted: (targetPlayer as any).seerahCompleted || false,
+          generalCompleted: (targetPlayer as any).generalCompleted || false,
+          quranCompleted: (targetPlayer as any).quranCompleted || false,
           createdAt: (targetPlayer as any).createdAt || (targetPlayer as any).since || new Date().toISOString()
         },
         wird: null,
         friendshipStatus: (targetPlayer as any).status || 'ACCEPTED',
         isSelf: false
       });
-
-      try {
-        const validCompletedAchievements = await getCompletedAchievements({
-          userId: targetPlayer.id,
-          username: targetPlayer.username,
-          playerName: targetPlayer.name,
-          uniquePlayerId: targetPlayer.uniquePlayerId
-        });
-        setEarnedCertificates(validCompletedAchievements);
-      } catch {
-        setEarnedCertificates([]);
-      }
     } finally {
       setLoading(false);
     }
@@ -145,9 +148,9 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
   useEffect(() => {
     if (isOpen && targetPlayer) {
       fetchProfile();
+      refreshAchievements();
     } else {
       setProfileData(null);
-      setEarnedCertificates([]);
       setSelectedCertificate(null);
     }
   }, [isOpen, targetPlayer]);
@@ -256,7 +259,6 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
   const player = profileData?.player || targetPlayer;
   const wird = profileData?.wird;
   const friendshipStatus = profileData?.friendshipStatus || 'NONE';
-  const isSelf = profileData?.isSelf;
   const activeFrame = player?.activeFrame;
 
   return (

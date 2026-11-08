@@ -19,12 +19,8 @@ import {
 import { supabase } from '../services/supabase';
 import { ChallengeCertificate } from './ChallengeCertificate';
 import { CertificateModal } from './CertificateModal';
-import {
-  fetchUserMilestones,
-  UserMilestonesStats,
-  MILESTONES_CONFIG,
-  MilestoneItem
-} from '../services/milestoneProgressService';
+import { MilestoneItem } from '../services/milestoneProgressService';
+import { useAchievements } from '../hooks/useAchievements';
 
 export type { MilestoneItem };
 
@@ -49,78 +45,31 @@ export const AchievementsMilestoneTracker: React.FC<AchievementsMilestoneTracker
   const verifiedPlayerName = useMemo(() => {
     return (
       playerName ||
-      localStorage.getItem('quran_user_triple_name') ||
-      localStorage.getItem('quran_player_name') ||
-      localStorage.getItem('quran_user_name') ||
+      (typeof window !== 'undefined' && (
+        localStorage.getItem('quran_user_triple_name') ||
+        localStorage.getItem('quran_player_name') ||
+        localStorage.getItem('quran_user_name')
+      )) ||
       'علاء'
     );
   }, [playerName]);
 
-  // حالة التقدم الحية لكل إنجاز (Real-time Progress Mapping)
-  const [progressMap, setProgressMap] = useState<Record<string, number>>({});
-  const [isLoadingProgress, setIsLoadingProgress] = useState<boolean>(true);
-
   // حالة فتح نافذة معاينة وتحميل الشهادة المعتمدة
   const [activeCertMilestone, setActiveCertMilestone] = useState<MilestoneItem | null>(null);
 
-  // جلب وقراءة بيانات التقدم الفعلي من قاعدة البيانات والذاكرة المحلية
-  useEffect(() => {
-    let isMounted = true;
-
-    const fetchRealtimeProgress = async () => {
-      setIsLoadingProgress(true);
-      const newProgress: Record<string, number> = {};
-
-      try {
-        // جلب الإحصائيات الدقيقة مع الالتزام بشرط is_correct === true والعزل التام للأقسام
-        const stats = await fetchUserMilestones({
-          username: playerUsername,
-          playerName: playerName,
-          uniquePlayerId: localStorage.getItem('quran_player_id')
-        });
-
-        // مطابقة التقدم لكل إنجاز بدقة تامة وبدون أي أرقام عشوائية (Single Source of Truth)
-        MILESTONES_CONFIG.forEach((m) => {
-          // استخدام القيمة الدقيقة المحتسبة حصراً للإجابات الصحيحة في هذا القسم
-          const val = stats[m.id] ?? 0;
-          newProgress[m.id] = Math.min(Math.max(0, val), m.target);
-        });
-
-        if (isMounted) {
-          setProgressMap(newProgress);
-        }
-      } catch (err) {
-        console.error('[MilestoneTracker] Error computing progress:', err);
-      } finally {
-        if (isMounted) {
-          setIsLoadingProgress(false);
-        }
-      }
-    };
-
-    fetchRealtimeProgress();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [playerName, playerUsername, totalPoints, userCertificates]);
-
-  // حساب الإحصائيات الإجمالية
-  const { completedCount, totalCount, completionPercent } = useMemo(() => {
-    const total = MILESTONES_CONFIG.length;
-    let completed = 0;
-    MILESTONES_CONFIG.forEach((m) => {
-      const prog = progressMap[m.id] ?? 0;
-      if (prog >= m.target) {
-        completed++;
-      }
-    });
-    return {
-      completedCount: completed,
-      totalCount: total,
-      completionPercent: Math.round((completed / total) * 100)
-    };
-  }, [progressMap]);
+  // استخدام Hook الإنجازات الموحد (Single Source of Truth)
+  const {
+    milestones,
+    completedCount,
+    totalCount,
+    completionPercent,
+    loading: isLoadingProgress
+  } = useAchievements({
+    username: playerUsername,
+    playerName: playerName,
+    uniquePlayerId: typeof window !== 'undefined' ? localStorage.getItem('quran_player_id') : null,
+    isSelf: true
+  });
 
   // معالجة الضغط على زر معاينة وتحميل الشهادة
   const handleOpenCertificate = (milestone: MilestoneItem) => {
@@ -194,10 +143,10 @@ export const AchievementsMilestoneTracker: React.FC<AchievementsMilestoneTracker
       {/* شبكة بطاقات الإنجازات الـ 11 الحصرية (Milestone Cards) */}
       {/* ========================================================= */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {MILESTONES_CONFIG.map((milestone) => {
-          const currentProgress = progressMap[milestone.id] ?? 0;
-          const isUnlocked = currentProgress >= milestone.target;
-          const percent = Math.min(100, Math.round((currentProgress / milestone.target) * 100));
+        {milestones.map((milestone) => {
+          const currentProgress = milestone.currentProgress;
+          const isUnlocked = milestone.isCompleted;
+          const percent = milestone.percent;
 
           return (
             <div

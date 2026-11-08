@@ -628,7 +628,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       // Strict Validation: userProgress >= targetGoal
-      if (ayahCount >= 100) {
+      if (ayahCount >= 100 || (target.quranCompleted && completedIds.length >= 100)) {
         earnedCertificates.push({
           id: 'ayah_100',
           title: 'إتمام 100 سؤال في تحدي إكمال الآية',
@@ -652,7 +652,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       }
 
-      if (seerahCount >= 60) {
+      if (seerahCount >= 60 || target.seerahCompleted) {
         earnedCertificates.push({
           id: 'seerah_60',
           title: 'إتمام 60 سؤالاً في السيرة النبوية الشريفة',
@@ -664,7 +664,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       }
 
-      if (fiqhCount >= 100) {
+      if (fiqhCount >= 100 || target.generalCompleted) {
         earnedCertificates.push({
           id: 'figh_quiz',
           title: 'ختم مسابقة الفقه والمعلومات الإسلامية',
