@@ -254,15 +254,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const updateData: any = {};
 
-    // 1. Points handling: strictly 1 point per correct answer, never multiplied by 10
-    const addedPoints = Number(points || 0);
+    // 1. Points handling: strictly 1 point per correct answer for quizzes, full reward for gifts/chests
+    const isReward = Boolean(
+      req.body.isReward ||
+      req.body.source === 'mystery_gift' ||
+      req.body.source === 'daily_gift' ||
+      req.body.rewardPoints !== undefined ||
+      req.body.action === 'reward'
+    );
+    const rewardPointsVal = Number(req.body.rewardPoints || 0);
+    const addedPoints = Number(points || rewardPointsVal || 0);
     const explicitTotalPoints = req.body.totalPoints !== undefined ? Number(req.body.totalPoints) : null;
     const clientScore = req.body.score !== undefined ? Number(req.body.score) : null;
     const currentPts = Number(player.points || 0);
 
     if (addedPoints > 0) {
-      // Direct 1-to-1 point increment (strictly 1 point per correct answer)
-      const pointsToAward = Math.max(1, Math.min(addedPoints, 5));
+      // Direct point increment: rewards (e.g. daily gift) get full points, questions capped to 5
+      const pointsToAward = isReward ? addedPoints : Math.max(1, Math.min(addedPoints, 5));
       const nextTotal = explicitTotalPoints !== null && !isNaN(explicitTotalPoints)
         ? Math.max(currentPts + pointsToAward, explicitTotalPoints)
         : currentPts + pointsToAward;

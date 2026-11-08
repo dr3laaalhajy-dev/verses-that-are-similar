@@ -639,31 +639,64 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   }, []);
 
-  const claimDailyGiftReward = useCallback(() => {
-    setDailyGift(prev => {
-      if (!prev.isCompleted || prev.isClaimed) return prev;
-      const points = prev.rewardPoints || 100;
+  const claimDailyGiftReward = useCallback(async () => {
+    const gift = dailyGiftRef.current;
+    if (!gift || !gift.isCompleted || gift.isClaimed) return;
+    const points = gift.rewardPoints || 150;
 
-      setTotalPoints(current => {
-        const nextPoints = current + points;
-        try {
-          localStorage.setItem('quran_total_points', String(nextPoints));
-        } catch (e) { }
-        return nextPoints;
-      });
-
-      toast.success(`🎉 مبارك! تم استلام مكافأة صندوق اليوم (+${points} نقطة)!`);
-
-      const updated = {
-        ...prev,
-        isClaimed: true
-      };
+    let nextLocalPoints = 0;
+    setTotalPoints(current => {
+      nextLocalPoints = current + points;
       try {
-        localStorage.setItem('quran_daily_mystery_gift', JSON.stringify(updated));
+        localStorage.setItem('quran_total_points', String(nextLocalPoints));
       } catch (e) { }
-      return updated;
+      return nextLocalPoints;
     });
-  }, []);
+
+    toast.success(`🎉 مبارك! تم استلام مكافأة صندوق اليوم (+${points} نقطة)!`);
+
+    const updated: DailyMysteryGift = {
+      ...gift,
+      isClaimed: true
+    };
+    setDailyGift(updated);
+    dailyGiftRef.current = updated;
+    try {
+      localStorage.setItem('quran_daily_mystery_gift', JSON.stringify(updated));
+    } catch (e) { }
+
+    // Immediate database update with gift reward points
+    const ident = playerUsername || playerName || localStorage.getItem('quran_player_username') || localStorage.getItem('quran_player_name');
+    if (ident) {
+      try {
+        const res = await fetch('/api/player-score', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username: playerUsername || localStorage.getItem('quran_player_username'),
+            name: playerName || localStorage.getItem('quran_player_name'),
+            points: points,
+            rewardPoints: points,
+            isReward: true,
+            source: 'mystery_gift',
+            totalPoints: nextLocalPoints
+          })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const p = data?.player || data?.user || data;
+          if (p && typeof p.points === 'number') {
+            setTotalPoints(p.points);
+            try {
+              localStorage.setItem('quran_total_points', String(p.points));
+            } catch (e) { }
+          }
+        }
+      } catch (err) {
+        console.error('Failed to sync daily gift points to backend:', err);
+      }
+    }
+  }, [playerUsername, playerName]);
 
   // Islamic Occasions & Sunan (مواسم الطاعات وسنن الأيام)
   const [isOccasionsModalOpen, setIsOccasionsModalOpen] = useState(false);

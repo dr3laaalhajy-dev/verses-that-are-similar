@@ -147,8 +147,13 @@ export const DailyChestChallengePage: React.FC = () => {
     }
   };
 
-  const handleClaimRewardAndExit = () => {
-    app?.claimDailyGiftReward?.();
+  const handleClaimRewardAndExit = async () => {
+    if (app?.claimDailyGiftReward) {
+      await app.claimDailyGiftReward();
+    }
+    if (app?.refreshUserProfile) {
+      await app.refreshUserProfile();
+    }
     if (app?.setView) {
       app.setView('home');
     }

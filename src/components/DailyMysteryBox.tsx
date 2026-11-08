@@ -164,7 +164,25 @@ export const DailyMysteryBox: React.FC<DailyMysteryBoxProps> = ({ className = ''
     }
   }, [isClaimed]);
 
-  const handleClaimReward = (e?: React.MouseEvent) => {
+  const handleCloseModal = useCallback(() => {
+    setIsModalOpen(false);
+    if (app?.refreshUserProfile) {
+      app.refreshUserProfile();
+    }
+  }, [app]);
+
+  // Trigger fresh user balance fetch when the modal is closed
+  const prevModalOpenRef = useRef(isModalOpen);
+  useEffect(() => {
+    if (prevModalOpenRef.current && !isModalOpen) {
+      if (app?.refreshUserProfile) {
+        app.refreshUserProfile();
+      }
+    }
+    prevModalOpenRef.current = isModalOpen;
+  }, [isModalOpen, app]);
+
+  const handleClaimReward = async (e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     hasPlayedRef.current = true;
     if (modalLottieRef.current) {
@@ -181,11 +199,16 @@ export const DailyMysteryBox: React.FC<DailyMysteryBoxProps> = ({ className = ''
         cardLottieRef.current.animationItem.play();
       }
     }
-    app?.claimDailyGiftReward?.();
+    if (app?.claimDailyGiftReward) {
+      await app.claimDailyGiftReward();
+    }
+    if (app?.refreshUserProfile) {
+      await app.refreshUserProfile();
+    }
   };
 
   const handleGoToChallenge = () => {
-    setIsModalOpen(false);
+    handleCloseModal();
     if (type === 'daily_chest_challenge' || !type || type === 'room_challenge') {
       if (app?.setView) app.setView('daily_chest_challenge');
     } else if (type === 'reading_time') {
@@ -267,7 +290,7 @@ export const DailyMysteryBox: React.FC<DailyMysteryBoxProps> = ({ className = ''
           {isModalOpen && (
             <div
               className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 overflow-y-auto"
-              onClick={() => setIsModalOpen(false)}
+              onClick={handleCloseModal}
             >
               <motion.div
                 initial={{ scale: 0.95, opacity: 0 }}
@@ -285,7 +308,7 @@ export const DailyMysteryBox: React.FC<DailyMysteryBoxProps> = ({ className = ''
               {/* Close Button */}
               <button
                 type="button"
-                onClick={() => setIsModalOpen(false)}
+                onClick={handleCloseModal}
                 className="absolute top-3.5 left-3.5 p-1.5 text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-[#C49B55] rounded-full hover:bg-stone-200/60 dark:hover:bg-zinc-800/60 transition-colors cursor-pointer"
                 title="إغلاق"
               >
@@ -373,7 +396,7 @@ export const DailyMysteryBox: React.FC<DailyMysteryBoxProps> = ({ className = ''
 
                   <button
                     type="button"
-                    onClick={() => setIsModalOpen(false)}
+                    onClick={handleCloseModal}
                     className="w-full py-2 px-3 rounded-xl bg-white hover:bg-stone-100 dark:bg-zinc-900 dark:hover:bg-zinc-800 text-slate-700 dark:text-gray-200 font-bold text-xs border border-gray-200 dark:border-[#C49B55]/25 shadow-sm transition-all cursor-pointer"
                   >
                     إغلاق
