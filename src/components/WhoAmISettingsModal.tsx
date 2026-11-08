@@ -161,18 +161,16 @@ export const WhoAmISettingsModal: React.FC<WhoAmISettingsModalProps> = ({
   const handleCountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const rawVal = e.target.value;
     if (rawVal === '') {
-      setSelectedCount(1);
+      setSelectedCount('' as any);
       return;
     }
     const num = parseInt(rawVal, 10);
     if (isNaN(num)) {
-      setSelectedCount(1);
+      setSelectedCount('' as any);
       return;
     }
     if (availableQuestionsCount > 0 && num > availableQuestionsCount) {
       setSelectedCount(availableQuestionsCount);
-    } else if (num < 1) {
-      setSelectedCount(1);
     } else {
       setSelectedCount(num);
     }
@@ -191,10 +189,11 @@ export const WhoAmISettingsModal: React.FC<WhoAmISettingsModalProps> = ({
 
   // حفظ الإعدادات وتمرير الـ Payload
   const handleSave = () => {
+    const finalCount = Math.max(1, Number(selectedCount) || 1);
     const counts: Record<string, number> = {};
     if (selectedCategories.length > 0) {
-      const baseCount = Math.floor(selectedCount / selectedCategories.length);
-      let remainder = selectedCount % selectedCategories.length;
+      const baseCount = Math.floor(finalCount / selectedCategories.length);
+      let remainder = finalCount % selectedCategories.length;
       selectedCategories.forEach((cat) => {
         counts[cat] = Math.max(1, baseCount + (remainder > 0 ? 1 : 0));
         if (remainder > 0) remainder--;
@@ -203,7 +202,7 @@ export const WhoAmISettingsModal: React.FC<WhoAmISettingsModalProps> = ({
 
     onSave({
       isSelected: true,
-      questionsCount: selectedCount,
+      questionsCount: finalCount,
       categories: selectedCategories,
       categoryCounts: counts
     });
@@ -306,6 +305,17 @@ export const WhoAmISettingsModal: React.FC<WhoAmISettingsModalProps> = ({
             max={availableQuestionsCount > 0 ? availableQuestionsCount : 1}
             value={selectedCount}
             onChange={handleCountChange}
+            onFocus={(e) => {
+              e.target.select();
+              if (e.target.value === '0') {
+                setSelectedCount('' as any);
+              }
+            }}
+            onBlur={(e) => {
+              if (e.target.value === '' || Number(e.target.value) < 1) {
+                setSelectedCount(1);
+              }
+            }}
             disabled={!isLoadingCount && availableQuestionsCount === 0}
             className="w-full p-3 bg-slate-50 border border-gray-300 rounded-lg text-center text-lg font-black font-mono text-slate-800 focus:outline-none focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500/20 transition-all shadow-inner disabled:opacity-50 disabled:cursor-not-allowed"
             placeholder="أدخل عدد الأسئلة"

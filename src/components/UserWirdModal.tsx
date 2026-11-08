@@ -346,7 +346,25 @@ export const UserWirdModal: React.FC<UserWirdModalProps> = ({
                     min={1}
                     max={60}
                     value={pagesPerDay}
-                    onChange={(e) => setPagesPerDay(Math.max(1, Math.min(60, Number(e.target.value) || 1)))}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      if (raw === '') {
+                        setPagesPerDay('' as any);
+                        return;
+                      }
+                      setPagesPerDay(Math.max(1, Math.min(60, Number(raw) || 1)));
+                    }}
+                    onFocus={(e) => {
+                      e.target.select();
+                      if (e.target.value === '0') {
+                        setPagesPerDay('' as any);
+                      }
+                    }}
+                    onBlur={(e) => {
+                      if (e.target.value === '' || Number(e.target.value) < 1) {
+                        setPagesPerDay(1);
+                      }
+                    }}
                     className="w-16 px-2.5 py-1.5 text-center font-black text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100"
                   />
                 </div>
@@ -380,7 +398,25 @@ export const UserWirdModal: React.FC<UserWirdModalProps> = ({
                       min={1}
                       max={604}
                       value={currentPage}
-                      onChange={(e) => setCurrentPage(Math.max(1, Math.min(604, Number(e.target.value) || 1)))}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        if (raw === '') {
+                          setCurrentPage('' as any);
+                          return;
+                        }
+                        setCurrentPage(Math.max(1, Math.min(604, Number(raw) || 1)));
+                      }}
+                      onFocus={(e) => {
+                        e.target.select();
+                        if (e.target.value === '0') {
+                          setCurrentPage('' as any);
+                        }
+                      }}
+                      onBlur={(e) => {
+                        if (e.target.value === '' || Number(e.target.value) < 1) {
+                          setCurrentPage(1);
+                        }
+                      }}
                       className="w-full pr-10 pl-4 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-800 focus:bg-white focus:outline-none focus:border-brand-emerald font-black text-sm text-slate-800 dark:text-slate-100 transition-all"
                       placeholder="رقم الصفحة (1 - 604)"
                     />

@@ -707,6 +707,7 @@ export const MushafPage: React.FC<MushafPageProps> = ({
                     type="text"
                     inputMode="numeric"
                     value={currentPage}
+                    onFocus={(e) => e.target.select()}
                     onChange={(e) => {
                       const val = e.target.value.replace(/[^0-9]/g, '');
                       if (val === '') return;
@@ -917,6 +918,7 @@ export const MushafPage: React.FC<MushafPageProps> = ({
                                   type="text"
                                   inputMode="numeric"
                                   value={currentPage}
+                                  onFocus={(e) => e.target.select()}
                                   onChange={(e) => {
                                     const val = e.target.value.replace(/[^0-9]/g, '');
                                     if (val === '') return;
@@ -1018,6 +1020,7 @@ export const MushafPage: React.FC<MushafPageProps> = ({
                                   type="text"
                                   inputMode="numeric"
                                   value={currentPage}
+                                  onFocus={(e) => e.target.select()}
                                   onChange={(e) => {
                                     const val = e.target.value.replace(/[^0-9]/g, '');
                                     if (val === '') return;

@@ -175,6 +175,14 @@ const Encyclopedia: React.FC<EncyclopediaProps> = ({ onBack, darkMode = false })
                     const val = parseInt(e.target.value, 10);
                     if (!isNaN(val)) handleAyahChange(val);
                   }}
+                  onFocus={(e) => {
+                    e.target.select();
+                  }}
+                  onBlur={(e) => {
+                    if (e.target.value === '' || Number(e.target.value) < 1) {
+                      handleAyahChange(1);
+                    }
+                  }}
                   className={`flex-1 p-2 rounded-xl text-center font-black text-sm sm:text-base border outline-none transition-all ${
                     darkMode
                       ? 'bg-slate-800 border-slate-700 text-emerald-400 focus:border-emerald-500'

@@ -1038,8 +1038,24 @@ export const GroupCreatePage: React.FC<GroupCreatePageProps> = ({
                   disabled={!v1Timer}
                   value={v1Timer ? (v1TimePerQuestion || '') : ''}
                   onChange={(e) => {
-                    const val = e.target.value === '' ? 0 : parseInt(e.target.value, 10);
+                    const raw = e.target.value;
+                    if (raw === '') {
+                      setV1TimePerQuestion('' as any);
+                      return;
+                    }
+                    const val = parseInt(raw, 10);
                     setV1TimePerQuestion(isNaN(val) ? 0 : Math.max(0, Math.min(300, val)));
+                  }}
+                  onFocus={(e) => {
+                    e.target.select();
+                    if (e.target.value === '0') {
+                      setV1TimePerQuestion('' as any);
+                    }
+                  }}
+                  onBlur={(e) => {
+                    if (e.target.value === '') {
+                      setV1TimePerQuestion(0);
+                    }
                   }}
                   placeholder={v1Timer ? 'اكتب الثواني (مثال: 20)' : 'المؤقت معطل (0)'}
                   className={`w-full pl-14 pr-4 py-3 rounded-2xl border-2 font-black text-sm text-right shadow-xs transition-all ${
@@ -1218,20 +1234,29 @@ export const GroupCreatePage: React.FC<GroupCreatePageProps> = ({
                         onChange={(e) => {
                           const raw = e.target.value;
                           if (raw === '') {
-                            setDraftAyahCount(1);
+                            setDraftAyahCount('' as any);
                             return;
                           }
                           const num = parseInt(raw, 10);
                           if (isNaN(num)) {
-                            setDraftAyahCount(1);
+                            setDraftAyahCount('' as any);
                             return;
                           }
                           if (draftAyahAvailableCount > 0 && num > draftAyahAvailableCount) {
                             setDraftAyahCount(draftAyahAvailableCount);
-                          } else if (num < 1) {
-                            setDraftAyahCount(1);
                           } else {
                             setDraftAyahCount(num);
+                          }
+                        }}
+                        onFocus={(e) => {
+                          e.target.select();
+                          if (e.target.value === '0') {
+                            setDraftAyahCount('' as any);
+                          }
+                        }}
+                        onBlur={(e) => {
+                          if (e.target.value === '' || Number(e.target.value) < 1) {
+                            setDraftAyahCount(1);
                           }
                         }}
                         className="w-full p-3 bg-slate-50 border border-gray-300 rounded-lg text-center text-lg font-black font-mono text-slate-800 focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-500/20 transition-all shadow-inner"
@@ -1336,20 +1361,29 @@ export const GroupCreatePage: React.FC<GroupCreatePageProps> = ({
                         onChange={(e) => {
                           const raw = e.target.value;
                           if (raw === '') {
-                            setDraftSurahCount(1);
+                            setDraftSurahCount('' as any);
                             return;
                           }
                           const num = parseInt(raw, 10);
                           if (isNaN(num)) {
-                            setDraftSurahCount(1);
+                            setDraftSurahCount('' as any);
                             return;
                           }
                           if (draftSurahValidation.availableQuestionsCount > 0 && num > draftSurahValidation.availableQuestionsCount) {
                             setDraftSurahCount(draftSurahValidation.availableQuestionsCount);
-                          } else if (num < 1) {
-                            setDraftSurahCount(1);
                           } else {
                             setDraftSurahCount(num);
+                          }
+                        }}
+                        onFocus={(e) => {
+                          e.target.select();
+                          if (e.target.value === '0') {
+                            setDraftSurahCount('' as any);
+                          }
+                        }}
+                        onBlur={(e) => {
+                          if (e.target.value === '' || Number(e.target.value) < 1) {
+                            setDraftSurahCount(1);
                           }
                         }}
                         className="w-full p-3 bg-slate-50 border border-gray-300 rounded-lg text-center text-lg font-black font-mono text-slate-800 focus:outline-none focus:border-purple-600 focus:ring-2 focus:ring-purple-500/20 transition-all shadow-inner"
@@ -1548,20 +1582,29 @@ export const GroupCreatePage: React.FC<GroupCreatePageProps> = ({
                         onChange={(e) => {
                           const raw = e.target.value;
                           if (raw === '') {
-                            setDraftAudioCount(1);
+                            setDraftAudioCount('' as any);
                             return;
                           }
                           const num = parseInt(raw, 10);
                           if (isNaN(num)) {
-                            setDraftAudioCount(1);
+                            setDraftAudioCount('' as any);
                             return;
                           }
                           if (draftAudioAvailableCount > 0 && num > draftAudioAvailableCount) {
                             setDraftAudioCount(draftAudioAvailableCount);
-                          } else if (num < 1) {
-                            setDraftAudioCount(1);
                           } else {
                             setDraftAudioCount(num);
+                          }
+                        }}
+                        onFocus={(e) => {
+                          e.target.select();
+                          if (e.target.value === '0') {
+                            setDraftAudioCount('' as any);
+                          }
+                        }}
+                        onBlur={(e) => {
+                          if (e.target.value === '' || Number(e.target.value) < 1) {
+                            setDraftAudioCount(1);
                           }
                         }}
                         className="w-full p-3 bg-slate-50 border border-gray-300 rounded-lg text-center text-lg font-black font-mono text-slate-800 focus:outline-none focus:border-brand-emerald focus:ring-2 focus:ring-brand-emerald/20 transition-all shadow-inner"

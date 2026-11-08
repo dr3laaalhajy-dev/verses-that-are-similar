@@ -3386,6 +3386,7 @@ export default function AdminDashboard({
                         const val = parseInt(e.target.value, 10) || 1;
                         setVersionControlData({ ...versionControlData, latestAndroidVersionCode: val, latestVersionCode: val });
                       }}
+                      onFocus={(e) => e.target.select()}
                       className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:border-brand-emerald focus:ring-2 focus:ring-brand-emerald/10 outline-hidden font-bold text-slate-800 text-sm transition-all"
                       placeholder="مثال: 2 أو 3 أو 10"
                     />
@@ -4254,6 +4255,7 @@ export default function AdminDashboard({
                                           type="number"
                                           value={v.number}
                                           onChange={(e) => handleVerseChange(idx, 'number', parseInt(e.target.value) || 0)}
+                                          onFocus={(e) => e.target.select()}
                                           className="w-full px-4 py-3 rounded-xl bg-white border border-slate-200 outline-none focus:border-brand-emerald transition-all font-black tabular-nums"
                                         />
                                     </div>
@@ -5320,6 +5322,17 @@ export default function AdminDashboard({
                       min="0"
                       value={editUserPoints}
                       onChange={(e) => setEditUserPoints(Number(e.target.value))}
+                      onFocus={(e) => {
+                        e.target.select();
+                        if (e.target.value === '0') {
+                          setEditUserPoints('' as any);
+                        }
+                      }}
+                      onBlur={(e) => {
+                        if (e.target.value === '') {
+                          setEditUserPoints(0);
+                        }
+                      }}
                       className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl font-black outline-none focus:border-brand-emerald transition-all"
                       required
                     />
@@ -5335,6 +5348,17 @@ export default function AdminDashboard({
                       min="0"
                       value={editUserCups}
                       onChange={(e) => setEditUserCups(Number(e.target.value))}
+                      onFocus={(e) => {
+                        e.target.select();
+                        if (e.target.value === '0') {
+                          setEditUserCups('' as any);
+                        }
+                      }}
+                      onBlur={(e) => {
+                        if (e.target.value === '') {
+                          setEditUserCups(0);
+                        }
+                      }}
                       className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl font-black outline-none focus:border-brand-emerald transition-all"
                       required
                     />

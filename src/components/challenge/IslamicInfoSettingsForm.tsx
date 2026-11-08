@@ -179,18 +179,16 @@ const CategorySettingsModal: React.FC<CategorySettingsModalProps> = ({
   const handleCountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const rawVal = e.target.value;
     if (rawVal === '') {
-      setDraftCount(1);
+      setDraftCount('' as any);
       return;
     }
     const num = parseInt(rawVal, 10);
     if (isNaN(num)) {
-      setDraftCount(1);
+      setDraftCount('' as any);
       return;
     }
     if (categoryAvailableCount > 0 && num > categoryAvailableCount) {
       setDraftCount(categoryAvailableCount);
-    } else if (num < 1) {
-      setDraftCount(1);
     } else {
       setDraftCount(num);
     }
@@ -215,7 +213,7 @@ const CategorySettingsModal: React.FC<CategorySettingsModalProps> = ({
     setDraftTopicCounts(nextCounts);
 
     // تحديث إجمالي عدد الأسئلة ليعكس مجموع المواضيع المحددة
-    const newSum = updatedTopics.reduce((acc, t) => acc + (nextCounts[t] || 0), 0);
+    const newSum = updatedTopics.reduce((acc, t) => acc + (Number(nextCounts[t]) || 0), 0);
     if (newSum > 0) {
       setDraftCount(newSum);
     }
@@ -223,7 +221,14 @@ const CategorySettingsModal: React.FC<CategorySettingsModalProps> = ({
 
   // معالجة تغيير عدد أسئلة موضوع فرعي
   const handleTopicCountChange = (topicName: string, valStr: string, maxVal: number) => {
-    const raw = valStr === '' ? 1 : parseInt(valStr, 10);
+    if (valStr === '') {
+      setDraftTopicCounts({
+        ...draftTopicCounts,
+        [topicName]: '' as any
+      });
+      return;
+    }
+    const raw = parseInt(valStr, 10);
     const validVal = isNaN(raw) ? 1 : Math.max(1, Math.min(raw, maxVal));
     const nextCounts = {
       ...draftTopicCounts,
@@ -232,8 +237,8 @@ const CategorySettingsModal: React.FC<CategorySettingsModalProps> = ({
     setDraftTopicCounts(nextCounts);
 
     // تحديث إجمالي أسئلة المجال ليعكس مجموع المواضيع
-    const newSum = draftSelectedTopics.reduce((acc, t) => acc + (nextCounts[t] || 0), 0);
-    setDraftCount(newSum);
+    const newSum = draftSelectedTopics.reduce((acc, t) => acc + (Number(nextCounts[t]) || 0), 0);
+    setDraftCount(Math.max(1, newSum));
   };
 
   // حفظ الإعدادات الفرعية للمجال
@@ -356,6 +361,17 @@ const CategorySettingsModal: React.FC<CategorySettingsModalProps> = ({
               max={categoryAvailableCount > 0 ? categoryAvailableCount : 1}
               value={draftCount}
               onChange={handleCountChange}
+              onFocus={(e) => {
+                e.target.select();
+                if (e.target.value === '0') {
+                  setDraftCount('' as any);
+                }
+              }}
+              onBlur={(e) => {
+                if (e.target.value === '' || Number(e.target.value) < 1) {
+                  setDraftCount(1);
+                }
+              }}
               disabled={categoryAvailableCount === 0}
               className="w-full p-3 bg-slate-50 border border-gray-300 rounded-lg text-center text-lg font-black font-mono text-slate-800 focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 transition-all shadow-inner disabled:opacity-50 disabled:cursor-not-allowed"
               placeholder="أدخل عدد الأسئلة"
@@ -518,6 +534,17 @@ const CategorySettingsModal: React.FC<CategorySettingsModalProps> = ({
                                   max={t.availableCount}
                                   value={currentCount}
                                   onChange={e => handleTopicCountChange(t.name, e.target.value, t.availableCount)}
+                                  onFocus={(e) => {
+                                    e.target.select();
+                                    if (e.target.value === '0') {
+                                      handleTopicCountChange(t.name, '', t.availableCount);
+                                    }
+                                  }}
+                                  onBlur={(e) => {
+                                    if (e.target.value === '' || Number(e.target.value) < 1) {
+                                      handleTopicCountChange(t.name, '1', t.availableCount);
+                                    }
+                                  }}
                                   className="w-16 px-2 py-1 rounded-xl border border-amber-300 font-black text-xs text-center bg-white text-amber-900 focus:outline-none focus:border-amber-500 shadow-2xs font-mono"
                                 />
                                 <span className="text-xs font-bold text-amber-800">سؤال</span>
