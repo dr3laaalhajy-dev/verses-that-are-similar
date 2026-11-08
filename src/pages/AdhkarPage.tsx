@@ -209,10 +209,10 @@ export const AdhkarPage: React.FC<AdhkarPageProps> = ({
     let matchedType: string | null = null;
 
     if (pathname.startsWith('/library/adhkar/')) {
-      const sub = pathname.replace('/library/adhkar/', '').split('/')[0].split('?')[0].trim();
+      const sub = (pathname || '').replace('/library/adhkar/', '').split('/')[0]?.split('?')[0]?.trim() || '';
       if (sub) matchedType = sub;
     } else if (pathname.startsWith('/adhkar/')) {
-      const sub = pathname.replace('/adhkar/', '').split('/')[0].split('?')[0].trim();
+      const sub = (pathname || '').replace('/adhkar/', '').split('/')[0]?.split('?')[0]?.trim() || '';
       if (sub) matchedType = sub;
     }
     if (!matchedType) {

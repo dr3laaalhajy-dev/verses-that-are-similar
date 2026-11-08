@@ -203,7 +203,7 @@ const Dashboard: React.FC<DashboardProps> = ({ className = '' }) => {
     let targetPrayer: { key: string; name: string; time: string; targetDate: Date } | null = null;
 
     for (const p of prayers) {
-      const [h, m] = p.time.split(':').map(Number);
+      const [h, m] = (p?.time || '').split(':').map(Number);
       if (isNaN(h) || isNaN(m)) continue;
       const pDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0);
       if (pDate.getTime() > now.getTime()) {
@@ -214,7 +214,7 @@ const Dashboard: React.FC<DashboardProps> = ({ className = '' }) => {
 
     // If all today's prayers have passed, target tomorrow's Fajr
     if (!targetPrayer) {
-      const [h, m] = prayers[0].time.split(':').map(Number);
+      const [h, m] = (prayers[0]?.time || '').split(':').map(Number);
       const tomorrowFajr = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, h, m, 0);
       targetPrayer = { ...prayers[0], targetDate: tomorrowFajr };
     }

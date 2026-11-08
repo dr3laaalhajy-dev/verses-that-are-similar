@@ -64,7 +64,7 @@ export const HadithPage: React.FC<HadithPageProps> = ({
             <div className="flex-1 w-full text-right">
               <div className="text-base md:text-xl font-black text-slate-800 font-quran line-clamp-2">{hadith.title}</div>
               <p className="text-slate-500 font-medium text-[10px] md:text-sm mt-2 line-clamp-2 leading-relaxed md:leading-loose">
-                {hadith.hadith.split('\n').filter(l => l.trim()).slice(1, 4).join(' ')}...
+                {(hadith.hadith || '').split('\n').filter(l => l.trim()).slice(1, 4).join(' ')}...
               </p>
             </div>
             <div className="w-full h-px bg-slate-50 my-1 md:my-2" />

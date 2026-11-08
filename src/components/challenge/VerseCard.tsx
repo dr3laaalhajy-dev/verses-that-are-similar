@@ -30,7 +30,7 @@ export const VerseCard = memo(({ verse, keyword, isMatched, index, keywordWordCo
   };
 
   const renderHighlightedVerse = () => {
-    const words = verse.text.split(' ').filter(Boolean);
+    const words = (verse?.text || '').split(' ').filter(Boolean);
     // If we're hinting text (level 2+), show 25% more words per level after the keyword
     const visibleWordsCount = hintLevel >= 2
       ? keywordWordCount + Math.floor((words.length - keywordWordCount) * ((hintLevel - 1) * 0.25))

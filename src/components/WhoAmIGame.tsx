@@ -667,7 +667,7 @@ export default function WhoAmIGame({
           {revealed && (
             <>
               <p className="wai-answer">
-                الإجابة الصحيحة: <b>{question.answer.split('|')[0]}</b>
+                الإجابة الصحيحة: <b>{(question?.answer || '').split('|')[0]}</b>
               </p>
               <Scoreboard scores={scores} meId={currentUser.id} />
               {isEffectiveLeader ? (

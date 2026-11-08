@@ -2186,7 +2186,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           path = parsed.pathname;
         } catch {
           params = new URLSearchParams(window.location.search);
-          path = urlOrParams.split('?')[0];
+          path = (urlOrParams || '').split('?')[0];
         }
       } else if (urlOrParams instanceof URLSearchParams) {
         params = urlOrParams;
@@ -2235,11 +2235,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       if (isExplicitAdhkar) {
         let typeOrCategory: string | null = null;
-        if (path.startsWith('/library/adhkar/')) {
-          const sub = path.replace('/library/adhkar/', '').split('/')[0].split('?')[0].trim();
+        if (path?.startsWith('/library/adhkar/')) {
+          const sub = (path || '').replace('/library/adhkar/', '').split('/')[0]?.split('?')[0]?.trim() || '';
           if (sub) typeOrCategory = sub;
-        } else if (path.startsWith('/adhkar/')) {
-          const sub = path.replace('/adhkar/', '').split('/')[0].split('?')[0].trim();
+        } else if (path?.startsWith('/adhkar/')) {
+          const sub = (path || '').replace('/adhkar/', '').split('/')[0]?.split('?')[0]?.trim() || '';
           if (sub) typeOrCategory = sub;
         }
         if (!typeOrCategory) {
@@ -2321,8 +2321,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return;
       }
 
-      const cleanPath = path.replace(/^\//, '').split('?')[0].split('#')[0];
-      const rootSegment = cleanPath.split('/')[0];
+      const cleanPath = (path || '').replace(/^\//, '').split('?')[0]?.split('#')[0] || '';
+      const rootSegment = cleanPath.split('/')[0] || '';
 
       if (cleanPath === 'challenge/results' || cleanPath.startsWith('challenge/results')) {
         setIsMushafFullscreen(false);
@@ -2366,7 +2366,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       if (rootSegment === 'room') {
-        const targetRoomId = cleanPath.split('/')[1] || params.get('roomId') || params.get('room') || params.get('code');
+        const targetRoomId = (cleanPath || '').split('/')[1] || params.get('roomId') || params.get('room') || params.get('code');
         if (targetRoomId) {
           setIsMushafFullscreen(false);
           setShowScores(false);
@@ -3121,7 +3121,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       } else if (targetRoom.category || targetRoom.categoryFilter) {
         const catStr = String(targetRoom.categoryFilter || targetRoom.category || '');
-        const parts = catStr.split('+');
+        const parts = (catStr || '').split('+');
         for (const p of parts) {
           const m = p.match(/(.*?)\s*\((\d+)\)/);
           if (m) {
@@ -4981,7 +4981,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!isMultiplayer || !currentChallenge) return false;
     const allSurahs = getChallengeSurahsList(currentChallenge);
     const activeScope = getActiveScope(room, selectedSkillJuzs, selectedSkillSurahs, selectedJuz, currentChallenge?.type || 'SURAH');
-    const { bonusAnswers, outOfRangeAnswers } = splitSurahAnswersByScope(allSurahs, activeScope, currentChallenge.verses);
+    const { bonusAnswers, outOfRangeAnswers } = splitSurahAnswersByScope(allSurahs, activeScope, currentChallenge?.verses || []);
     return (bonusAnswers && bonusAnswers.length > 0) || (outOfRangeAnswers && outOfRangeAnswers.length > 0);
   }, [room?.id, view, currentChallenge, selectedSkillJuzs, selectedSkillSurahs, selectedJuz]);
 
@@ -4992,7 +4992,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const normVal = normalizeSurahName(val);
       const allCorrect = getChallengeSurahsList(currentChallenge);
       const activeScope = getActiveScope(room, selectedSkillJuzs, selectedSkillSurahs, selectedJuz, currentChallenge?.type || 'SURAH');
-      const { bonusAnswers } = splitSurahAnswersByScope(allCorrect, activeScope, currentChallenge.verses);
+      const { bonusAnswers } = splitSurahAnswersByScope(allCorrect, activeScope, currentChallenge?.verses || []);
 
       const matchedBonus = bonusAnswers.find(b => normalizeSurahName(b.surah) === normVal);
       if (matchedBonus && !discoveredBonusSurahs.includes(matchedBonus.surah)) {
@@ -5017,7 +5017,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const { inRangeAnswers } = splitSurahAnswersByScope(
         allSurahs,
         activeScope,
-        currentChallenge.verses
+        currentChallenge?.verses || []
       );
 
       // Initialize with correct number of empty strings strictly for inRangeAnswers
@@ -5038,7 +5038,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const normVal = normalizeSurahName(val);
       const allCorrect = getChallengeSurahsList(currentChallenge);
       const activeScope = getActiveScope(room, selectedSkillJuzs, selectedSkillSurahs, selectedJuz, currentChallenge?.type || 'SURAH');
-      const { bonusAnswers, inRangeAnswers } = splitSurahAnswersByScope(allCorrect, activeScope, currentChallenge.verses);
+      const { bonusAnswers, inRangeAnswers } = splitSurahAnswersByScope(allCorrect, activeScope, currentChallenge?.verses || []);
 
       const matchedBonus = bonusAnswers.find(b => normalizeSurahName(b.surah) === normVal);
       if (matchedBonus && !discoveredBonusSurahs.includes(matchedBonus.surah)) {
@@ -5086,7 +5086,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (val && val.trim() && currentChallenge && !skillsFeedback && !isComplete) {
       const allCorrect = getChallengeSurahsList(currentChallenge);
       const activeScope = getActiveScope(room, selectedSkillJuzs, selectedSkillSurahs, selectedJuz, currentChallenge?.type || 'SURAH');
-      const { inRangeAnswers } = splitSurahAnswersByScope(allCorrect, activeScope, currentChallenge.verses);
+      const { inRangeAnswers } = splitSurahAnswersByScope(allCorrect, activeScope, currentChallenge?.verses || []);
       const normalizedRequired = inRangeAnswers.map(a => normalizeSurahName(a.surah));
 
       const candidateInputs = [...surahInputs];
@@ -5553,7 +5553,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const { inRangeAnswers, outOfRangeAnswers } = splitSurahAnswersByScope(
       correctSurahs,
       activeScope,
-      currentQuestion.verses
+      currentQuestion?.verses || []
     );
 
     const requiredSurahNames = inRangeAnswers.map(a => a.surah);
@@ -6443,26 +6443,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         generateOptions('surah', targetVerses[0]?.surah || '');
       } else {
         const firstUnmatched = targetVerses.find(v => !matchedIds.has(v.id));
-        const lastWord = firstUnmatched ? firstUnmatched.text.split(' ').filter(Boolean).slice(-1)[0] : '';
+        const lastWord = firstUnmatched ? (firstUnmatched.text || '').split(' ').filter(Boolean).slice(-1)[0] || '' : '';
         const correctVal = currentChallenge?.correctText || lastWord;
         generateOptions('complete', correctVal);
       }
     }
   }, [view, skillsType, targetVerses, matchedIds.size, generateOptions, roomGameMode, currentChallenge?.id || currentChallenge?.keyword, challengeMode]);
 
-  const keywordWordCount = useMemo(() => KEYWORD.split(' ').filter(Boolean).length, [KEYWORD]);
+  const keywordWordCount = useMemo(() => {
+    if (!KEYWORD) return 0;
+    return (KEYWORD || '').split(' ').filter(Boolean).length;
+  }, [KEYWORD]);
 
   const distinguishingWordCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    const normalizedKeyword = normalizeArabicText(KEYWORD);
+    if (!KEYWORD || !targetVerses || targetVerses.length === 0) return counts;
+
+    const normalizedKeyword = normalizeArabicText(KEYWORD || '');
 
     targetVerses.forEach(verse => {
-      const normalizedVerse = normalizeArabicText(verse.text);
+      if (!verse) return;
+      const normalizedVerse = normalizeArabicText(verse.text || '');
       const uniquePart = normalizedVerse.replace(normalizedKeyword, '').trim();
-      const uniqueWords = uniquePart.split(' ').filter(Boolean);
+      const uniqueWords = (uniquePart || '').split(' ').filter(Boolean);
 
       if (uniqueWords.length === 0) {
-        counts[verse.id] = 0;
+        if (verse.id) counts[verse.id] = 0;
         return;
       }
 
@@ -6470,8 +6476,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       while (wordsNeeded < uniqueWords.length) {
         const prefix = uniqueWords.slice(0, wordsNeeded).join(' ');
         const isUnique = !targetVerses.some(otherVerse => {
-          if (otherVerse.id === verse.id) return false;
-          const otherNormalized = normalizeArabicText(otherVerse.text);
+          if (!otherVerse || otherVerse.id === verse.id) return false;
+          const otherNormalized = normalizeArabicText(otherVerse.text || '');
           const otherUniquePart = otherNormalized.replace(normalizedKeyword, '').trim();
           return otherUniquePart.startsWith(prefix);
         });
@@ -6479,30 +6485,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (isUnique) break;
         wordsNeeded++;
       }
-      counts[verse.id] = Math.max(wordsNeeded, Math.min(2, uniqueWords.length));
+      if (verse.id) {
+        counts[verse.id] = Math.max(wordsNeeded, Math.min(2, uniqueWords.length));
+      }
     });
     return counts;
   }, [targetVerses, KEYWORD]);
 
   // التحقق من المطابقة كلما تغير النص المسموع
   useEffect(() => {
-    if (!transcript) return;
+    if (!transcript || !targetVerses || targetVerses.length === 0) return;
 
-    const normalizedTranscript = normalizeArabicText(transcript);
-    const transcriptWords = normalizedTranscript.split(' ').filter(Boolean);
+    const normalizedTranscript = normalizeArabicText(transcript || '');
+    const transcriptWords = (normalizedTranscript || '').split(' ').filter(Boolean);
 
     const candidates: { verse: Verse, score: number, distRatio: number, fullRatio: number }[] = [];
     const newWordStates = { ...wordStates };
     let countsChanged = false;
 
     targetVerses.forEach(verse => {
-      if (matchedIds.has(verse.id)) return;
+      if (!verse || !verse.id || matchedIds.has(verse.id)) return;
 
-      const normalizedVerse = normalizeArabicText(verse.text);
-      const normalizedKeyword = normalizeArabicText(KEYWORD);
+      const normalizedVerse = normalizeArabicText(verse.text || '');
+      const normalizedKeyword = normalizeArabicText(KEYWORD || '');
 
       const uniquePart = normalizedVerse.replace(normalizedKeyword, '').trim();
-      const uniqueWords = uniquePart.split(' ').filter(Boolean);
+      const uniqueWords = (uniquePart || '').split(' ').filter(Boolean);
 
       if (uniqueWords.length === 0) {
         if (normalizedTranscript.includes(normalizedKeyword)) {
@@ -6558,11 +6566,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       else if (difficulty === 'medium') requiredFullRatio = 0.85;
 
       // Full Text Match Fallback: If the transcript clearly contains the verse, consider it matched
-      const normalizedTranscriptFull = normalizeArabicText(transcript);
-      const normalizedVerseMatch = normalizeArabicText(verse.text);
+      const normalizedTranscriptFull = normalizeArabicText(transcript || '');
+      const normalizedVerseMatch = normalizeArabicText(verse.text || '');
       const isFullTextMatch = normalizedTranscriptFull.includes(normalizedVerseMatch) ||
         (getSimilarity(normalizedTranscriptFull, normalizedVerseMatch) > 0.85) ||
-        (normalizedTranscriptFull.includes(normalizeArabicText(KEYWORD)) &&
+        (normalizedTranscriptFull.includes(normalizeArabicText(KEYWORD || '')) &&
+          uniqueWords.length > 0 &&
           uniqueWords.filter(w => normalizedTranscriptFull.includes(normalizeArabicText(w))).length / uniqueWords.length >= 0.8);
 
       if (isFullTextMatch || fullRatio >= requiredFullRatio || similarity > 0.9 || (correctCount + skippedCount >= uniqueWords.length - 1 && uniqueWords.length > 3)) {
