@@ -135,3 +135,81 @@ export function generateCompletionChallenges(
 
   return challenges;
 }
+
+export interface GeneratedSurahChallenge {
+  id: number;
+  type: 'SURAH';
+  keyword: string;
+  verseText: string;
+  text: string;
+  correctText: string;
+  surah: string;
+  category: string;
+  level: string;
+  inRangeAnswers: Array<{ surah: string; juzText: string; verseText: string }>;
+  outOfRangeAnswers: Array<{ surah: string; juzText: string; verseText: string }>;
+  verses: Array<{
+    id: string;
+    number: number;
+    surah_number: number;
+    verse_number: number;
+    text: string;
+    surah: string;
+    juz: number;
+  }>;
+}
+
+/**
+ * يولد تحديات "تحديد اسم السورة" ديناميكياً من آيات القرآن الكريم
+ */
+export function generateSurahChallenges(
+  count: number = 20,
+  filter?: { juzs?: number[]; surahs?: string[] }
+): GeneratedSurahChallenge[] {
+  const allVerses: any[] = [];
+  quranData.forEach(surah => {
+    if (filter?.surahs && filter.surahs.length > 0) {
+      const match = filter.surahs.some(s => {
+        const cleanS = s.replace(/^سورة\s+/, '').trim();
+        return surah.name === cleanS || surah.name.replace(/[أإآ]/g, 'ا') === cleanS.replace(/[أإآ]/g, 'ا');
+      });
+      if (!match) return;
+    }
+
+    surah.verses.forEach((v: any) => {
+      const juzNum = getJuzForVerse(surah.id, v.id);
+      if (filter?.juzs && filter.juzs.length > 0 && filter.juzs.length < 30) {
+        if (!filter.juzs.includes(juzNum)) return;
+      }
+      if (v.text && v.text.split(' ').length >= 4) {
+        allVerses.push({ ...v, surahName: surah.name, surahId: surah.id, juzNum });
+      }
+    });
+  });
+
+  const shuffled = [...allVerses].sort(() => 0.5 - Math.random()).slice(0, count);
+
+  return shuffled.map((v, idx) => ({
+    id: 85000 + idx,
+    type: 'SURAH',
+    keyword: v.text,
+    verseText: v.text,
+    text: v.text,
+    correctText: JSON.stringify([v.surahName]),
+    surah: v.surahName,
+    category: `سورة ${v.surahName}`,
+    level: 'medium',
+    inRangeAnswers: [{ surah: v.surahName, juzText: `الجزء ${v.juzNum}`, verseText: v.text }],
+    outOfRangeAnswers: [],
+    verses: [{
+      id: `gen-surah-${v.surahId}-${v.id}-${idx}`,
+      number: v.id,
+      surah_number: v.surahId,
+      verse_number: v.id,
+      text: v.text,
+      surah: v.surahName,
+      juz: v.juzNum
+    }]
+  }));
+}
+

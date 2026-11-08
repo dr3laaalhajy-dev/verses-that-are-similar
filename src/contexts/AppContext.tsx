@@ -22,7 +22,8 @@ import {
   getAvailableSurahChallenges,
   getChallengeSurahsList,
   getTrueJuzForPosition,
-  formatScopeSummary
+  formatScopeSummary,
+  validateSurahChallengeScope
 } from '../services/JuzRepository';
 
 export interface AyahCompletionSettings {
@@ -82,7 +83,7 @@ import { getRandomIslamicRoomQuestions, getTargetedIslamicQuestions, getTotalIsl
 import { islamicCategoriesList } from '../data/islamicCategories';
 import { calculateStreakInfo, StreakInfo, getTodayLocalDateStr } from '../utils/streakManager';
 import { LeaderboardUser, compareLeaderboardUsers, calculateHiddenRankingScore } from '../utils/leaderboardRanking';
-import { generateCompletionChallenges } from '../services/challengeGenerator';
+import { generateCompletionChallenges, generateSurahChallenges } from '../services/challengeGenerator';
 import { defaultChallenges } from '../data/defaultChallenges';
 import {
   getHijriDate,
@@ -2494,12 +2495,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return t === 'STANDARD' || t === 'AUDIO' || t === '';
     }).length;
     const completeLocal = allChallenges.filter(c => (c.type || '').toUpperCase() === 'COMPLETION').length;
-    const surahLocal = allChallenges.filter(c => (c.type || '').toUpperCase() === 'SURAH').length;
+    const surahAvailable = getAvailableSurahChallenges(allChallenges, {
+      scopeMode: roomScopeMode,
+      selectedJuzs: roomSelectedJuzs,
+      selectedSurahs: roomSelectedSurahs
+    }).length;
 
     setAvailableSkillCounts({
-      audio: audioLocal,
-      complete: completeLocal,
-      surah: surahLocal
+      audio: audioLocal > 0 ? audioLocal : 20,
+      complete: Math.max(100, completeLocal),
+      surah: Math.max(24, surahAvailable)
     });
 
     try {
@@ -2509,15 +2514,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (data.counts) {
           setAvailableSkillCounts({
             audio: Math.max(audioLocal, Number(data.counts.audio) || 0),
-            complete: Math.max(completeLocal, Number(data.counts.complete) || 0),
-            surah: Math.max(surahLocal, Number(data.counts.surah) || 0)
+            complete: Math.max(100, completeLocal, Number(data.counts.complete) || 0),
+            surah: Math.max(24, surahAvailable, Number(data.counts.surah) || 0)
           });
         }
       }
     } catch {
       // Fallback already set
     }
-  }, [allChallenges]);
+  }, [allChallenges, roomScopeMode, roomSelectedJuzs, roomSelectedSurahs]);
 
   useEffect(() => {
     if (view === 'group_create') {
@@ -2580,23 +2585,45 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const sum = selectedWhoAmICategories.reduce((acc, cat) => acc + (Math.max(0, Number(whoAmICategoryCounts[cat])) || 0), 0);
       return sum <= 0;
     }
-    for (const skill of ['audio', 'complete', 'surah'] as const) {
-      const isHidden =
-        (skill === 'audio' && systemSettings.hideAudioChallenge) ||
-        (skill === 'complete' && systemSettings.hideCompletionChallenge) ||
-        (skill === 'surah' && systemSettings.hideSurahChallenge);
 
-      if (v1GameModes.includes(skill) && !isHidden) {
-        const count = Number(skillQuestionCounts[skill]) || 0;
-        const max = availableSkillCounts[skill] || 0;
-        if (count <= 0 || (max > 0 && count > max)) {
-          return true;
-        }
+    // 1. Audio challenge: manual database records
+    if (v1GameModes.includes('audio') && !systemSettings.hideAudioChallenge) {
+      const audioCount = Math.max(0, Number(roomSettings.audio?.questionsCount || skillQuestionCounts.audio) || 0);
+      const maxAudio = availableSkillCounts.audio || 0;
+      if (audioCount <= 0 || (maxAudio > 0 && audioCount > maxAudio)) {
+        return true;
       }
     }
+
+    // 2. Completion challenge: dynamic generation from Quran
+    if (v1GameModes.includes('complete') && !systemSettings.hideCompletionChallenge) {
+      const completeCount = Math.max(0, Number(roomSettings.ayahCompletion?.questionsCount || skillQuestionCounts.complete) || 0);
+      if (completeCount <= 0 || completeCount > 100) {
+        return true;
+      }
+    }
+
+    // 3. Surah challenge: dynamic validation from Quran scope
+    if (v1GameModes.includes('surah') && !systemSettings.hideSurahChallenge) {
+      const surahCount = Math.max(0, Number(roomSettings.surahName?.questionsCount || skillQuestionCounts.surah) || 0);
+      if (surahCount <= 0) {
+        return true;
+      }
+      const sScope = {
+        scopeMode: roomSettings.surahName?.scopeMode || roomScopeMode,
+        selectedJuzs: roomSettings.surahName?.selectedJuzRange || roomSelectedJuzs,
+        selectedSurahs: roomSettings.surahName?.selectedSurahs || roomSelectedSurahs
+      };
+      const surahVal = validateSurahChallengeScope(allChallenges, sScope, surahCount);
+      if (!surahVal.isValid) {
+        return true;
+      }
+    }
+
+    // 4. Islamic questions
     if (v1GameModes.includes('islamic')) {
       if (islamicRoomTopics.includes('all')) {
-        const count = Number(islamicTopicQuestionCounts['all']) || 0;
+        const count = Math.max(0, Number(islamicTopicQuestionCounts['all'] ?? roomSettings.islamicQuestions?.questionsCount) || 0);
         const max = getTotalIslamicAvailableCount(islamicRoomCategories, islamicRoomLevels, ['all']);
         if (count <= 0 || (max > 0 && count > max)) {
           return true;
@@ -2613,7 +2640,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }
     return false;
-  }, [v1GameModes, skillQuestionCounts, availableSkillCounts, islamicRoomTopics, islamicTopicQuestionCounts, islamicRoomCategories, islamicRoomLevels, systemSettings]);
+  }, [
+    v1GameModes,
+    skillQuestionCounts,
+    roomSettings,
+    availableSkillCounts,
+    allChallenges,
+    roomScopeMode,
+    roomSelectedJuzs,
+    roomSelectedSurahs,
+    selectedWhoAmICategories,
+    whoAmICategoryCounts,
+    islamicRoomTopics,
+    islamicTopicQuestionCounts,
+    islamicRoomCategories,
+    islamicRoomLevels,
+    systemSettings
+  ]);
 
   const handleJoinV1 = async (roomId: string, password?: string) => {
     if (!playerName) {
@@ -2812,6 +2855,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             if (filtered.length >= Math.min(3, completeCount)) pool = filtered;
           }
           const picked = [...pool].sort(() => Math.random() - 0.5).slice(0, completeCount);
+          if (picked.length < completeCount) {
+            const needed = completeCount - picked.length;
+            const gen = generateCompletionChallenges(needed, {
+              surahs: cScopeMode === 'surah' ? cSurahs : undefined,
+              juzs: cScopeMode === 'juz' ? cJuzs : undefined
+            });
+            const mappedGen = gen.map((g, idx) => ({
+              id: 98000 + picked.length + idx,
+              type: 'COMPLETION',
+              keyword: g.prompt,
+              verseText: g.prompt,
+              text: g.prompt,
+              category: g.verseSource,
+              level: 'medium',
+              options: g.options.map(opt => ({
+                text: opt,
+                isCorrect: opt === g.options[g.correctIndex]
+              })),
+              correctText: g.options[g.correctIndex],
+              verses: [{
+                id: `gen-comp-${idx}`,
+                number: 1,
+                text: g.prompt,
+                surah: g.surah || '',
+                juz: g.juz || 1
+              }]
+            }));
+            picked.push(...mappedGen);
+          }
           customChallenges.push(...picked);
         }
       }
@@ -2830,6 +2902,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             selectedSurahs: sSurahs
           });
           const picked = [...available].sort(() => Math.random() - 0.5).slice(0, surahCount);
+          if (picked.length < surahCount) {
+            const needed = surahCount - picked.length;
+            const extra = generateSurahChallenges(needed, {
+              surahs: sScopeMode === 'surah' ? sSurahs : undefined,
+              juzs: sScopeMode === 'juz' ? sJuzs : undefined
+            });
+            picked.push(...extra);
+          }
           customChallenges.push(...picked);
         }
       }
@@ -3182,6 +3262,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               if (filtered.length >= Math.min(3, completeCount)) pool = filtered;
             }
             const picked = [...pool].sort(() => Math.random() - 0.5).slice(0, completeCount);
+            if (picked.length < completeCount) {
+              const needed = completeCount - picked.length;
+              const gen = generateCompletionChallenges(needed, {
+                surahs: cScopeMode === 'surah' ? cSurahs : undefined,
+                juzs: cScopeMode === 'juz' ? cJuzs : undefined
+              });
+              const mappedGen = gen.map((g, idx) => ({
+                id: 98000 + picked.length + idx,
+                type: 'COMPLETION',
+                keyword: g.prompt,
+                verseText: g.prompt,
+                text: g.prompt,
+                category: g.verseSource,
+                level: 'medium',
+                options: g.options.map(opt => ({
+                  text: opt,
+                  isCorrect: opt === g.options[g.correctIndex]
+                })),
+                correctText: g.options[g.correctIndex],
+                verses: [{
+                  id: `gen-comp-upd-${idx}`,
+                  number: 1,
+                  text: g.prompt,
+                  surah: g.surah || '',
+                  juz: g.juz || 1
+                }]
+              }));
+              picked.push(...mappedGen);
+            }
             customChallenges.push(...picked);
           }
         }
@@ -3200,6 +3309,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               selectedSurahs: sSurahs
             });
             const picked = [...available].sort(() => Math.random() - 0.5).slice(0, surahCount);
+            if (picked.length < surahCount) {
+              const needed = surahCount - picked.length;
+              const extra = generateSurahChallenges(needed, {
+                surahs: sScopeMode === 'surah' ? sSurahs : undefined,
+                juzs: sScopeMode === 'juz' ? sJuzs : undefined
+              });
+              picked.push(...extra);
+            }
             customChallenges.push(...picked);
           }
         }

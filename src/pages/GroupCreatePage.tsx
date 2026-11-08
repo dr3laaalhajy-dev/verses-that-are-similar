@@ -340,14 +340,14 @@ export const GroupCreatePage: React.FC<GroupCreatePageProps> = ({
         return j ? draftAyahJuzs.includes(Number(j)) : true;
       });
     }
-    return pool.length > 0 ? pool.length : 20;
+    return Math.max(pool.length, 50);
   }, [allChallenges, draftAyahScopeMode, draftAyahSurahs, draftAyahJuzs]);
 
   // حساب الأسئلة المتوفرة للتحدي الصوتي
   const draftAudioAvailableCount = useMemo(() => {
     const pool = allChallenges.filter((c: any) => (c.type || '').toUpperCase() === 'STANDARD');
-    return pool.length > 0 ? pool.length : 20;
-  }, [allChallenges]);
+    return (availableSkillCounts && availableSkillCounts.audio) ? availableSkillCounts.audio : (pool.length > 0 ? pool.length : 20);
+  }, [allChallenges, availableSkillCounts]);
 
   // التحقق من حالة التحديات المفعلة لضبط الاستبعاد المتبادل (Mutual Exclusivity)
   const isWhoAmISelected = Boolean(roomSettings.whoAmI?.isSelected);
