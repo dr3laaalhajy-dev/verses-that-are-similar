@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Zap, Loader2, Users, AlertCircle, Trophy, CheckCircle2, XCircle } from 'lucide-react';
+import { Zap, Loader2, Users, AlertCircle, Trophy, CheckCircle2, XCircle, Plus, ShoppingBag } from 'lucide-react';
 import { View } from '../types/challenges';
 import { SkillsChallengeHeader } from '../components/challenge/SkillsChallengeHeader';
 import { AudioChallengeUI } from '../components/challenge/AudioChallengeUI';
@@ -129,6 +129,8 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
   handleSurahInputChange
 }) => {
   const app = useApp();
+  const powerups = app?.powerups || { freeze: freezeTimeCount || 0, fiftyFifty: deleteTwoCount || 0 };
+  const buyPowerup = app?.buyPowerup || ((_type: 'freeze' | 'fiftyFifty') => false);
   const appRef = useRef(app);
   useEffect(() => {
     appRef.current = app;
@@ -602,101 +604,135 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
         </motion.div>
       )}
 
-      {/* In-game Power-ups Store (متجر وسائل المساعدة) */}
+      {/* Power-ups HUD & Store (المخزون والمتجر) */}
       {showPowerUpsStore && (
-        <div className="w-full max-w-lg mx-auto my-2 px-1">
-          <div className="bg-gradient-to-r from-amber-500/10 via-emerald-500/10 to-amber-500/10 dark:from-slate-800/80 dark:to-slate-800/80 p-2 sm:p-2.5 rounded-2xl border border-amber-500/30 dark:border-amber-500/20 backdrop-blur-md shadow-xs flex flex-col sm:flex-row items-center justify-between gap-2">
-            {/* Store Title & Player Current Points */}
-            <div className="flex items-center justify-between w-full sm:w-auto gap-2 px-1">
-              <div className="flex items-center gap-1.5 text-xs font-black text-amber-600 dark:text-amber-400">
-                <span className="text-sm">🛒</span>
-                <span>متجر المساعدات</span>
-              </div>
-              <div className="flex items-center gap-1 bg-amber-500/15 dark:bg-amber-500/20 border border-amber-500/30 px-2.5 py-0.5 rounded-full text-[11px] font-black text-amber-700 dark:text-amber-300">
-                <span>🪙</span>
-                <span>{totalPoints} نقطة</span>
-              </div>
+        <div className="w-full max-w-lg mx-auto my-2 px-1 space-y-2">
+          {/* Top Action Buttons (Usage from Inventory) */}
+          <div className="flex items-center justify-center gap-2.5 sm:gap-4">
+            {/* Freeze Time Action Button */}
+            {hasActiveTimer && (
+              <button
+                type="button"
+                onClick={handleExecuteFreezeTime}
+                disabled={isPowerUpUsedThisQuestion || isFreezeActive || hasAnsweredCurrentQuestion}
+                title={
+                  (powerups.freeze || 0) <= 0
+                    ? 'رصيدك صفر، قم بالشراء من المتجر أدناه'
+                    : 'تجميد الوقت لمدة 10 ثوانٍ'
+                }
+                className={`flex items-center gap-2 px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-2xl border text-xs sm:text-sm font-black shadow-xs transition-all active:scale-95 cursor-pointer ${
+                  isFreezeActive
+                    ? 'bg-cyan-100 dark:bg-cyan-950/60 text-cyan-800 dark:text-cyan-300 border-cyan-400 ring-2 ring-cyan-300 animate-pulse'
+                    : isPowerUpUsedThisQuestion || hasAnsweredCurrentQuestion
+                    ? 'bg-slate-100 dark:bg-slate-800/50 text-slate-400 border-slate-200 dark:border-slate-700 opacity-50 cursor-not-allowed'
+                    : (powerups.freeze || 0) > 0
+                    ? 'bg-white dark:bg-slate-800 hover:bg-cyan-50 dark:hover:bg-cyan-950/40 text-cyan-700 dark:text-cyan-300 border-cyan-300 dark:border-cyan-700 hover:border-cyan-400'
+                    : 'bg-slate-100 dark:bg-slate-800/60 text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-700 opacity-60'
+                }`}
+              >
+                <span className="text-base leading-none">🧊</span>
+                <span>تجميد الوقت</span>
+                <span
+                  className={`px-2 py-0.5 rounded-full text-xs font-black transition-all ${
+                    (powerups.freeze || 0) > 0
+                      ? 'bg-cyan-500 text-white shadow-xs'
+                      : 'bg-slate-200 dark:bg-slate-700 text-slate-500'
+                  }`}
+                >
+                  {powerups.freeze || 0}
+                </span>
+              </button>
+            )}
+
+            {/* 50/50 Delete Two Action Button */}
+            {hasMultipleChoiceOptions && (
+              <button
+                type="button"
+                onClick={handleExecuteDeleteTwo}
+                disabled={
+                  isPowerUpUsedThisQuestion ||
+                  hasAnsweredCurrentQuestion ||
+                  eliminatedOptionIndices.length > 0
+                }
+                title={
+                  (powerups.fiftyFifty || 0) <= 0
+                    ? 'رصيدك صفر، قم بالشراء من المتجر أدناه'
+                    : 'حذف إجابتين خاطئتين'
+                }
+                className={`flex items-center gap-2 px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-2xl border text-xs sm:text-sm font-black shadow-xs transition-all active:scale-95 cursor-pointer ${
+                  eliminatedOptionIndices.length > 0
+                    ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border-amber-400 ring-2 ring-amber-300'
+                    : isPowerUpUsedThisQuestion || hasAnsweredCurrentQuestion
+                    ? 'bg-slate-100 dark:bg-slate-800/50 text-slate-400 border-slate-200 dark:border-slate-700 opacity-50 cursor-not-allowed'
+                    : (powerups.fiftyFifty || 0) > 0
+                    ? 'bg-white dark:bg-slate-800 hover:bg-amber-50 dark:hover:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-700 hover:border-amber-400'
+                    : 'bg-slate-100 dark:bg-slate-800/60 text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-700 opacity-60'
+                }`}
+              >
+                <span className="text-base leading-none">✂️</span>
+                <span>حذف إجابتين (50/50)</span>
+                <span
+                  className={`px-2 py-0.5 rounded-full text-xs font-black transition-all ${
+                    (powerups.fiftyFifty || 0) > 0
+                      ? 'bg-amber-500 text-white shadow-xs'
+                      : 'bg-slate-200 dark:bg-slate-700 text-slate-500'
+                  }`}
+                >
+                  {powerups.fiftyFifty || 0}
+                </span>
+              </button>
+            )}
+          </div>
+
+          {/* Store Bar (متجر الشراء للمخزون) */}
+          <div className="bg-gradient-to-r from-amber-500/10 via-emerald-500/10 to-amber-500/10 dark:from-slate-800/80 dark:to-slate-800/80 p-2 sm:p-2.5 rounded-2xl border border-amber-500/20 backdrop-blur-md shadow-xs flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 text-xs font-black text-amber-600 dark:text-amber-400">
+              <ShoppingBag className="w-4 h-4 text-amber-500" />
+              <span>متجر المساعدات:</span>
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold hidden sm:inline">(اشترِ وخزّن في رصيدك)</span>
             </div>
 
-            {/* Store Items (Action Buttons) */}
-            <div className="flex items-center justify-center gap-2 w-full sm:w-auto">
-              {/* 1. Freeze Time Button (Only when room/challenge has active timer) */}
+            <div className="flex items-center gap-1.5 flex-wrap">
               {hasActiveTimer && (
                 <button
                   type="button"
-                  onClick={handleExecuteFreezeTime}
-                  disabled={isPowerUpUsedThisQuestion || isFreezeActive || hasAnsweredCurrentQuestion}
-                  title={
-                    freezeTimeCount <= 0 && totalPoints < 30
-                      ? 'نقاطك لا تكفي (تحتاج 30 نقطة)'
-                      : 'تجميد الوقت لمدة 10 ثوانٍ'
-                  }
-                  className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-black transition-all shadow-xs cursor-pointer ${
-                    isFreezeActive
-                      ? 'bg-cyan-100 dark:bg-cyan-950/60 text-cyan-800 dark:text-cyan-300 border-cyan-400 ring-2 ring-cyan-300 animate-pulse'
-                      : isPowerUpUsedThisQuestion || hasAnsweredCurrentQuestion
-                      ? 'bg-slate-100 dark:bg-slate-800/50 text-slate-400 border-slate-200 dark:border-slate-700 opacity-50 cursor-not-allowed'
-                      : freezeTimeCount <= 0 && totalPoints < 30
-                      ? 'bg-slate-100 dark:bg-slate-800/50 text-slate-400 border-slate-200 dark:border-slate-700 opacity-50 hover:opacity-60'
-                      : 'bg-white dark:bg-slate-800 text-cyan-700 dark:text-cyan-300 border-cyan-300 dark:border-cyan-700/60 hover:bg-cyan-50 dark:hover:bg-cyan-950/40 hover:border-cyan-400 active:scale-95'
+                  onClick={() => buyPowerup('freeze')}
+                  title={`شراء 1 تجميد وقت وإضافته للمخزون بـ 30 نقطة (رصيدك: ${totalPoints})`}
+                  disabled={totalPoints < 30}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-xl border text-[11px] font-black transition-all cursor-pointer ${
+                    totalPoints >= 30
+                      ? 'bg-cyan-50 dark:bg-cyan-950/40 hover:bg-cyan-100 dark:hover:bg-cyan-900/50 text-cyan-800 dark:text-cyan-300 border-cyan-300 dark:border-cyan-700/60 active:scale-95 shadow-xs'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700 opacity-50 cursor-not-allowed'
                   }`}
                 >
-                  <span className="text-sm">🧊</span>
-                  <span>تجميد الوقت</span>
-                  <span
-                    className={`px-1.5 py-0.2 rounded-md text-[10px] font-black ${
-                      freezeTimeCount > 0
-                        ? 'bg-cyan-500 text-white'
-                        : totalPoints >= 30
-                        ? 'bg-cyan-100 dark:bg-cyan-900/60 text-cyan-700 dark:text-cyan-300 border border-cyan-300 dark:border-cyan-700'
-                        : 'bg-slate-200 dark:bg-slate-700 text-slate-500'
-                    }`}
-                  >
-                    {freezeTimeCount > 0 ? `مجاني (${freezeTimeCount})` : '-30 نقطة'}
-                  </span>
+                  <Plus className="w-3 h-3 text-cyan-600 dark:text-cyan-400" />
+                  <span>تجميد وقت</span>
+                  <span className="font-mono text-[10px] opacity-80">(-30ن)</span>
                 </button>
               )}
 
-              {/* 2. Eliminate 2 Choices Button (Only for multiple choice questions) */}
               {hasMultipleChoiceOptions && (
                 <button
                   type="button"
-                  onClick={handleExecuteDeleteTwo}
-                  disabled={
-                    isPowerUpUsedThisQuestion ||
-                    hasAnsweredCurrentQuestion ||
-                    eliminatedOptionIndices.length > 0
-                  }
-                  title={
-                    deleteTwoCount <= 0 && totalPoints < 50
-                      ? 'نقاطك لا تكفي (تحتاج 50 نقطة)'
-                      : 'حذف إجابتين خاطئتين'
-                  }
-                  className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-black transition-all shadow-xs cursor-pointer ${
-                    eliminatedOptionIndices.length > 0
-                      ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border-amber-400 ring-2 ring-amber-300'
-                      : isPowerUpUsedThisQuestion || hasAnsweredCurrentQuestion
-                      ? 'bg-slate-100 dark:bg-slate-800/50 text-slate-400 border-slate-200 dark:border-slate-700 opacity-50 cursor-not-allowed'
-                      : deleteTwoCount <= 0 && totalPoints < 50
-                      ? 'bg-slate-100 dark:bg-slate-800/50 text-slate-400 border-slate-200 dark:border-slate-700 opacity-50 hover:opacity-60'
-                      : 'bg-white dark:bg-slate-800 text-amber-700 dark:text-amber-300 border-amber-300 dark:border-amber-700/60 hover:bg-amber-50 dark:hover:bg-amber-950/40 hover:border-amber-400 active:scale-95'
+                  onClick={() => buyPowerup('fiftyFifty')}
+                  title={`شراء 1 حذف إجابتين وإضافته للمخزون بـ 50 نقطة (رصيدك: ${totalPoints})`}
+                  disabled={totalPoints < 50}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-xl border text-[11px] font-black transition-all cursor-pointer ${
+                    totalPoints >= 50
+                      ? 'bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/50 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700/60 active:scale-95 shadow-xs'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700 opacity-50 cursor-not-allowed'
                   }`}
                 >
-                  <span className="text-sm">✂️</span>
+                  <Plus className="w-3 h-3 text-amber-600 dark:text-amber-400" />
                   <span>حذف إجابتين</span>
-                  <span
-                    className={`px-1.5 py-0.2 rounded-md text-[10px] font-black ${
-                      deleteTwoCount > 0
-                        ? 'bg-amber-500 text-white'
-                        : totalPoints >= 50
-                        ? 'bg-amber-100 dark:bg-amber-900/60 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-700'
-                        : 'bg-slate-200 dark:bg-slate-700 text-slate-500'
-                    }`}
-                  >
-                    {deleteTwoCount > 0 ? `مجاني (${deleteTwoCount})` : '-50 نقطة'}
-                  </span>
+                  <span className="font-mono text-[10px] opacity-80">(-50ن)</span>
                 </button>
               )}
+
+              <div className="flex items-center gap-1 bg-amber-500/15 dark:bg-amber-500/20 border border-amber-500/30 px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-black text-amber-700 dark:text-amber-300">
+                <span>🪙</span>
+                <span>{totalPoints}</span>
+              </div>
             </div>
           </div>
         </div>

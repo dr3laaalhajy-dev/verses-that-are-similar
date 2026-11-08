@@ -812,17 +812,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [isSyncing, setIsSyncing] = useState(false);
 
-  // Power-ups state (Freeze Time 🧊 & 50/50 ✂️)
-  const [freezeTimeCount, setFreezeTimeCount] = useState<number>(() => {
-    return Number(localStorage.getItem('quran_freeze_count') ?? 3);
+  // Power-ups Inventory State ({ freeze: number, fiftyFifty: number })
+  const [powerups, setPowerups] = useState<{ freeze: number; fiftyFifty: number }>(() => {
+    const freeze = Number(localStorage.getItem('quran_freeze_count') ?? 3);
+    const fiftyFifty = Number(localStorage.getItem('quran_delete_two_count') ?? 3);
+    return {
+      freeze: isNaN(freeze) ? 3 : freeze,
+      fiftyFifty: isNaN(fiftyFifty) ? 3 : fiftyFifty
+    };
   });
-  const [deleteTwoCount, setDeleteTwoCount] = useState<number>(() => {
-    return Number(localStorage.getItem('quran_delete_two_count') ?? 3);
-  });
+  const [freezeTimeCount, setFreezeTimeCount] = useState<number>(() => powerups.freeze);
+  const [deleteTwoCount, setDeleteTwoCount] = useState<number>(() => powerups.fiftyFifty);
   const [isFreezeActive, setIsFreezeActive] = useState(false);
   const [freezeSecondsLeft, setFreezeSecondsLeft] = useState(0);
   const [isPowerUpUsedThisQuestion, setIsPowerUpUsedThisQuestion] = useState(false);
   const [eliminatedOptionIndices, setEliminatedOptionIndices] = useState<number[]>([]);
+
+  useEffect(() => {
+    setFreezeTimeCount(powerups.freeze);
+    setDeleteTwoCount(powerups.fiftyFifty);
+  }, [powerups.freeze, powerups.fiftyFifty]);
 
   // Cosmetics State
   const [showCosmeticStore, setShowCosmeticStore] = useState(false);
@@ -4905,35 +4914,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setEliminatedOptionIndices([]);
   }, [currentChallengeIndex, currentChallenge?.id]);
 
-  const handleExecuteFreezeTime = () => {
-    const COST = 30;
-    if (isPowerUpUsedThisQuestion) {
-      toast.error('يمكنك استخدام مساعدة واحدة فقط في هذا السؤال');
-      return;
-    }
-    if (isFreezeActive) {
-      return;
+  const buyPowerup = (type: 'freeze' | 'fiftyFifty') => {
+    const cost = type === 'freeze' ? 30 : 50;
+    if (totalPoints < cost) {
+      toast.error(`نقاطك لا تكفي! تكلفة الأداة ${cost} نقطة (رصيدك الحالي: ${totalPoints})`);
+      return false;
     }
 
-    if (freezeTimeCount > 0) {
-      setFreezeTimeCount(prev => {
-        const next = Math.max(0, prev - 1);
-        localStorage.setItem('quran_freeze_count', next.toString());
-        return next;
-      });
-      setIsFreezeActive(true);
-      setFreezeSecondsLeft(10);
-      setIsPowerUpUsedThisQuestion(true);
-      toast.success('تم تجميد الوقت لمدة 10 ثوانٍ! 🧊 (مجاناً)');
-      return;
-    }
-
-    if (totalPoints < COST) {
-      toast.error(`نقاطك لا تكفي! تكلفة تجميد الوقت ${COST} نقطة (رصيدك الحالي: ${totalPoints})`);
-      return;
-    }
-
-    const nextPoints = totalPoints - COST;
+    const nextPoints = totalPoints - cost;
     setTotalPoints(nextPoints);
     localStorage.setItem('quran_total_points', nextPoints.toString());
 
@@ -4954,14 +4942,50 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }).catch(err => console.warn('[PowerUps] DB points sync error:', err));
     }
 
+    // Add +1 to inventory in State and localStorage (Without activating!)
+    setPowerups(prev => {
+      const nextCount = (prev[type] || 0) + 1;
+      const key = type === 'freeze' ? 'quran_freeze_count' : 'quran_delete_two_count';
+      localStorage.setItem(key, nextCount.toString());
+      return { ...prev, [type]: nextCount };
+    });
+
+    if (type === 'freeze') {
+      toast.success('تمت إضافة تجميد الوقت إلى مخزونك (+1) 🧊 (-30 نقطة)');
+    } else {
+      toast.success('تمت إضافة حذف إجابتين إلى مخزونك (+1) ✂️ (-50 نقطة)');
+    }
+    return true;
+  };
+
+  const handleExecuteFreezeTime = () => {
+    if (isPowerUpUsedThisQuestion) {
+      toast.error('يمكنك استخدام مساعدة واحدة فقط في هذا السؤال');
+      return;
+    }
+    if (isFreezeActive) {
+      return;
+    }
+
+    if ((powerups.freeze || 0) <= 0) {
+      toast.error('رصيدك من تجميد الوقت صفر! قم بالشراء من المتجر أولاً 🛒');
+      return;
+    }
+
+    // Deduct -1 from inventory
+    setPowerups(prev => {
+      const nextCount = Math.max(0, (prev.freeze || 0) - 1);
+      localStorage.setItem('quran_freeze_count', nextCount.toString());
+      return { ...prev, freeze: nextCount };
+    });
+
     setIsFreezeActive(true);
     setFreezeSecondsLeft(10);
     setIsPowerUpUsedThisQuestion(true);
-    toast.success(`تم شراء وتفعيل تجميد الوقت بنجاح! 🧊 (-${COST} نقطة)`);
+    toast.success('تم تفعيل تجميد الوقت لمدة 10 ثوانٍ! 🧊');
   };
 
   const handleExecuteDeleteTwo = () => {
-    const COST = 50;
     if (isPowerUpUsedThisQuestion) {
       toast.error('يمكنك استخدام مساعدة واحدة فقط في هذا السؤال');
       return;
@@ -4975,8 +4999,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
 
-    if (deleteTwoCount <= 0 && totalPoints < COST) {
-      toast.error(`نقاطك لا تكفي! تكلفة حذف إجابتين ${COST} نقطة (رصيدك الحالي: ${totalPoints})`);
+    if ((powerups.fiftyFifty || 0) <= 0) {
+      toast.error('رصيدك من حذف الإجابات صفر! قم بالشراء من المتجر أولاً 🛒');
       return;
     }
 
@@ -4996,42 +5020,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     wrongIndices.sort(() => Math.random() - 0.5);
     const toEliminate = wrongIndices.slice(0, 2);
 
-    if (deleteTwoCount > 0) {
-      setDeleteTwoCount(prev => {
-        const next = Math.max(0, prev - 1);
-        localStorage.setItem('quran_delete_two_count', next.toString());
-        return next;
-      });
-      setEliminatedOptionIndices(toEliminate);
-      setIsPowerUpUsedThisQuestion(true);
-      toast.success('تم حذف إجابتين خاطئتين! ✂️ (مجاناً)');
-      return;
-    }
-
-    const nextPoints = totalPoints - COST;
-    setTotalPoints(nextPoints);
-    localStorage.setItem('quran_total_points', nextPoints.toString());
-
-    // Sync points deduction to DB
-    const cleanU = (playerUsername || '').trim();
-    const cleanN = (playerName || '').trim();
-    if (cleanU || cleanN) {
-      fetch('/api/player-score', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username: cleanU,
-          name: cleanN,
-          totalPoints: nextPoints,
-          score: nextPoints,
-          roomId: room?.id
-        })
-      }).catch(err => console.warn('[PowerUps] DB points sync error:', err));
-    }
+    // Deduct -1 from inventory
+    setPowerups(prev => {
+      const nextCount = Math.max(0, (prev.fiftyFifty || 0) - 1);
+      localStorage.setItem('quran_delete_two_count', nextCount.toString());
+      return { ...prev, fiftyFifty: nextCount };
+    });
 
     setEliminatedOptionIndices(toEliminate);
     setIsPowerUpUsedThisQuestion(true);
-    toast.success(`تم شراء حذف إجابتين بنجاح! ✂️ (-${COST} نقطة)`);
+    toast.success('تم حذف إجابتين خاطئتين! ✂️');
   };
 
   // Reset Speed timer on each match
@@ -7021,6 +7019,8 @@ ${versesList}
     },
 
     // Power-ups
+    powerups, setPowerups,
+    buyPowerup,
     freezeTimeCount, setFreezeTimeCount,
     deleteTwoCount, setDeleteTwoCount,
     isFreezeActive, setIsFreezeActive,
