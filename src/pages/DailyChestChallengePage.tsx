@@ -158,7 +158,7 @@ export const DailyChestChallengePage: React.FC = () => {
 
   return (
     <div
-      className="min-h-screen bg-radial from-slate-50 via-amber-50/30 to-emerald-50/20 dark:from-slate-950 dark:via-obsidian-950 dark:to-zinc-950 text-slate-800 dark:text-slate-100 flex flex-col items-center justify-center min-h-[calc(100vh-100px)] w-full gap-4 md:gap-8 px-4 py-6 relative overflow-hidden select-none"
+      className="min-h-screen bg-radial from-slate-50 via-amber-50/30 to-emerald-50/20 dark:from-slate-950 dark:via-obsidian-950 dark:to-zinc-950 text-slate-800 dark:text-slate-100 flex flex-col items-center justify-center min-h-[calc(100vh-100px)] w-full gap-5 md:gap-6 px-4 py-6 relative overflow-hidden select-none"
       dir="rtl"
     >
       {/* Background Islamic Geometric Watermark */}
@@ -167,7 +167,7 @@ export const DailyChestChallengePage: React.FC = () => {
       {/* ───────────────────────────────────────────────────────────── */}
       {/* 1. PROGRESS HEADER (شريط التقدم والقلوب والهدف المطلوب)       */}
       {/* ───────────────────────────────────────────────────────────── */}
-      <div className="w-full max-w-2xl flex flex-col gap-4 mb-4 relative z-10">
+      <div className="w-full max-w-3xl flex flex-col gap-3 relative z-10">
         {/* Navigation, Challenge Badge & Lives Hearts */}
         <header className="w-full flex items-center justify-between gap-3">
           <button
@@ -248,7 +248,7 @@ export const DailyChestChallengePage: React.FC = () => {
       {/* ───────────────────────────────────────────────────────────── */}
       {/* 2. MAIN GAMEPLAY AREA                                        */}
       {/* ───────────────────────────────────────────────────────────── */}
-      <main className="w-full max-w-2xl relative z-10">
+      <main className="w-full max-w-3xl relative z-10">
         <AnimatePresence mode="wait">
           {gameStatus === 'playing' && currentQuestion && (
             <motion.div
