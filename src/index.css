@@ -589,3 +589,64 @@ button {
   animation: fadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+/* ═══════════════════════════════════════════════════════════════════
+   MULTIPLAYER GAMIFIED THEME (Force Theme in both Light & Dark modes)
+   ═══════════════════════════════════════════════════════════════════ */
+.gamified-game-theme,
+html.dark .gamified-game-theme,
+.lib-dark .gamified-game-theme {
+  background: linear-gradient(135deg, #115e59 0%, #047857 50%, #14532d 100%) !important;
+  color: #ffffff !important;
+}
+
+/* Force Light Card styling for Question Card */
+.gamified-game-theme .gamified-card,
+html.dark .gamified-game-theme .gamified-card,
+.lib-dark .gamified-game-theme .gamified-card,
+.gamified-game-theme .glass,
+html.dark .gamified-game-theme .glass,
+.lib-dark .gamified-game-theme .glass {
+  background-color: rgba(255, 255, 255, 0.95) !important;
+  background-image: none !important;
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.35) !important;
+  border: 1px solid rgba(255, 255, 255, 0.8) !important;
+  border-radius: 1.5rem !important;
+  color: #1e293b !important;
+}
+
+/* Quran Verse inside Gamified Card */
+.gamified-game-theme .quran-text,
+html.dark .gamified-game-theme .quran-text,
+.lib-dark .gamified-game-theme .quran-text {
+  color: #064e3b !important;
+}
+
+/* Unselected options inside Gamified Theme */
+.gamified-game-theme .gamified-option-btn,
+html.dark .gamified-game-theme .gamified-option-btn,
+.lib-dark .gamified-game-theme .gamified-option-btn {
+  background-color: #ffffff !important;
+  border-color: #e2e8f0 !important;
+  color: #1e293b !important;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05) !important;
+}
+
+.gamified-game-theme .gamified-option-btn:hover,
+html.dark .gamified-game-theme .gamified-option-btn:hover,
+.lib-dark .gamified-game-theme .gamified-option-btn:hover {
+  background-color: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+}
+
+/* Surah Inputs inside Gamified Theme */
+.gamified-game-theme input,
+html.dark .gamified-game-theme input,
+.lib-dark .gamified-game-theme input {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+

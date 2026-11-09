@@ -3687,14 +3687,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       (room?.hostUsername && playerUsername && room.hostUsername.toLowerCase() === playerUsername.toLowerCase())
     );
 
-    if (!isLastQuestion && isHost && !isAdvancingRef.current) {
+    if (isHost && !isAdvancingRef.current) {
       isAdvancingRef.current = true;
       try {
         const res = await fetch('/api/1v1', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            action: 'advance-question',
+            action: isLastQuestion ? 'end-room' : 'advance-question',
             roomId: room.id,
             playerId: playerUsername || playerName,
             questionIndex: room.currentQuestionIndex ?? currentChallengeIndex
@@ -3704,8 +3704,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         isAdvancingRef.current = false;
         if (res.ok && data) {
           setRoom(data);
-          if (data.status === 'FINISHED') {
+          if (data.status === 'FINISHED' || data.status === 'completed') {
             recordDailyGiftRoomMatch();
+            router.push('/challenge/results');
             setView('group_game');
           } else if (data.currentQuestionIndex > currentChallengeIndex) {
             resetQuestionUIState(data.currentQuestionIndex, data);
@@ -5589,6 +5590,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             if (!isLastQ && data.currentQuestionIndex !== undefined && data.currentQuestionIndex > currentChallengeIndex) {
               resetQuestionUIState(data.currentQuestionIndex, data);
             }
+            if (data.status === 'completed' || data.status === 'FINISHED') {
+              recordDailyGiftRoomMatch();
+              router.push('/challenge/results');
+              setView('group_game');
+            }
           }
         }).catch(err => console.error('Error submitting room answer:', err));
         return;
@@ -5801,6 +5807,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (!isLastQ && data.currentQuestionIndex !== undefined && data.currentQuestionIndex > currentChallengeIndex) {
             resetQuestionUIState(data.currentQuestionIndex, data);
           }
+          if (data.status === 'completed' || data.status === 'FINISHED') {
+            recordDailyGiftRoomMatch();
+            router.push('/challenge/results');
+            setView('group_game');
+          }
         }
       }).catch(err => console.error('Error submitting room surah answer:', err));
       return;
@@ -5914,6 +5925,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setRoom(data);
           if (!isLastQ && data.currentQuestionIndex !== undefined && data.currentQuestionIndex > currentChallengeIndex) {
             resetQuestionUIState(data.currentQuestionIndex, data);
+          }
+          if (data.status === 'completed' || data.status === 'FINISHED') {
+            recordDailyGiftRoomMatch();
+            router.push('/challenge/results');
+            setView('group_game');
           }
         }
       }).catch(err => console.error('Error submitting SYNC skip:', err));

@@ -227,7 +227,9 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
     const hasCurrentAnswer = Boolean(ans && (ans.questionIndex === undefined || ans.questionIndex === currentQuestionIdx));
     const pProg = room?.playersProgress ? (room.playersProgress[pId] || room.playersProgress[p.username] || room.playersProgress[p.name]) : null;
     const hasProgressAnswer = Boolean(pProg && ((pProg.playerCurrentQuestionIndex !== undefined && pProg.playerCurrentQuestionIndex > currentQuestionIdx) || (isLastQuestion && pProg.progress === 100)));
-    return hasCurrentAnswer || hasProgressAnswer;
+    const isMe = String(p.id) === String(currentUserId) || p.username === playerUsername || p.name === playerName;
+    const hasLocalAnswer = isMe && Boolean(hasAnsweredCurrentQuestion || skillsFeedback);
+    return hasCurrentAnswer || hasProgressAnswer || hasLocalAnswer;
   }).length;
 
   const hasAllAnswered = activeCount > 0 && validAnswersCount >= activeCount;
@@ -378,31 +380,41 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
   // ── Unified Question Transition & Finalization Logic ──
   // Triggers when all active participants have completed their answer for the current question
   const isTransitioningRef = useRef<boolean>(false);
+  const finishTriggeredRef = useRef<number | null>(null);
 
   useEffect(() => {
     isTransitioningRef.current = false;
+    finishTriggeredRef.current = null;
   }, [room?.id, currentQuestionIdx]);
 
   useEffect(() => {
-    if (!room?.id || room.status !== 'PLAYING' || !hasAllAnswered || isWhoAmI) {
+    if (!room?.id || (room.status !== 'PLAYING' && room.status !== 'completed' && room.status !== 'FINISHED') || isWhoAmI) {
       return;
     }
 
-    if (isTransitioningRef.current) return;
+    if (room.status === 'completed' || room.status === 'FINISHED') {
+      appRef.current?.recordDailyGiftRoomMatch?.();
+      router.push('/challenge/results');
+      setView('group_game');
+      return;
+    }
+
+    if (!hasAllAnswered) return;
 
     if (isLastQuestion) {
       // ⚠️ هذا هو السؤال الأخير: يجب إنهاء التحدي وتوجيه الجميع لشاشة النتيجة
-      const delay = isEffectiveHost ? 1500 : 2500;
+      if (finishTriggeredRef.current === currentQuestionIdx) return;
+      finishTriggeredRef.current = currentQuestionIdx;
+
+      const delay = isEffectiveHost ? 1200 : 2000;
       const timer = setTimeout(() => {
-        if (isTransitioningRef.current) return;
-        isTransitioningRef.current = true;
         handleEndRoom();
       }, delay);
       return () => clearTimeout(timer);
     } else {
       // الانتقال للسؤال التالي بشكل طبيعي
-      if (advancingQuestionRef.current === currentQuestionIdx) return;
-      const delay = isEffectiveHost ? 1000 : 2500;
+      if (advancingQuestionRef.current === currentQuestionIdx || isTransitioningRef.current) return;
+      const delay = isEffectiveHost ? 1000 : 2000;
       const timer = setTimeout(async () => {
         if (advancingQuestionRef.current === currentQuestionIdx || isTransitioningRef.current) return;
         advancingQuestionRef.current = currentQuestionIdx;
@@ -454,7 +466,7 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
 
       return () => clearTimeout(timer);
     }
-  }, [hasAllAnswered, room?.id, room?.status, isLastQuestion, isEffectiveHost, currentQuestionIdx, isWhoAmI, playerUsername, playerName, totalQuestions, setRoom]);
+  }, [hasAllAnswered, room?.id, room?.status, isLastQuestion, isEffectiveHost, currentQuestionIdx, isWhoAmI, playerUsername, playerName, totalQuestions, setRoom, setView, router]);
   if (!currentChallenge) {
     return (
       <div className="flex flex-col items-center justify-center py-40">
@@ -663,11 +675,17 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
     return (
       <div
         key="group_challenge_game"
-        className="fixed inset-0 z-40 bg-gradient-to-b from-slate-900 via-slate-950 to-slate-900 text-white flex flex-col h-[100dvh] max-h-[100dvh] overflow-hidden select-none"
+        className="gamified-game-theme fixed inset-0 z-40 bg-gradient-to-br from-teal-800 via-emerald-700 to-green-900 text-white flex flex-col h-[100dvh] max-h-[100dvh] overflow-hidden select-none"
         dir="rtl"
       >
+        {/* Islamic Pattern Background with 7% Opacity */}
+        <div
+          className="absolute inset-0 bg-[url('/islamic_pattern.png')] bg-repeat opacity-[0.07] pointer-events-none mix-blend-overlay z-0"
+          aria-hidden="true"
+        />
+
         {/* 1. Compact Top Header */}
-        <header className="shrink-0 h-11 sm:h-12 px-3 sm:px-4 flex items-center justify-between border-b border-white/10 bg-slate-900/80 backdrop-blur-md relative z-30 pt-[env(safe-area-inset-top,0px)]">
+        <header className="shrink-0 h-11 sm:h-12 px-3 sm:px-4 flex items-center justify-between border-b border-white/15 bg-emerald-950/40 backdrop-blur-md relative z-30 pt-[env(safe-area-inset-top,0px)]">
           {/* Right: Settings/More Menu + Question Counter */}
           <div className="flex items-center gap-2">
             <div className="relative">
@@ -693,7 +711,7 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
                       initial={{ opacity: 0, scale: 0.9, y: -5 }}
                       animate={{ opacity: 1, scale: 1, y: 0 }}
                       exit={{ opacity: 0, scale: 0.9, y: -5 }}
-                      className="absolute right-0 top-10 z-50 w-52 p-2 rounded-2xl bg-slate-900/95 backdrop-blur-xl border border-white/20 shadow-2xl flex flex-col gap-1.5"
+                      className="absolute right-0 top-10 z-50 w-52 p-2 rounded-2xl bg-emerald-950/95 backdrop-blur-xl border border-white/20 shadow-2xl flex flex-col gap-1.5"
                     >
                       <div className="flex items-center justify-between px-2 py-1 border-b border-white/10 text-xs font-black text-slate-300">
                         <span>خيارات التحدي</span>
@@ -798,10 +816,14 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
 
         {/* Discreet Waiting Indicator after answer */}
         {room && room.transitionMode !== 'ASYNC' && hasAnsweredCurrentQuestion && (
-          <div className="shrink-0 text-center py-1">
-            <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-[11px] font-black animate-pulse">
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-              <span>تم تسجيل إجابتك • بانتظار باقي اللاعبين...</span>
+          <div className="shrink-0 text-center py-1 relative z-20">
+            <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-emerald-500/25 text-emerald-200 border border-emerald-400/30 text-[11px] font-black animate-pulse shadow-sm">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-300" />
+              <span>
+                {hasAllAnswered && isLastQuestion
+                  ? 'اكتملت إجابات الجميع • جاري عرض النتائج...'
+                  : 'تم تسجيل إجابتك • بانتظار باقي اللاعبين...'}
+              </span>
             </span>
           </div>
         )}
@@ -871,12 +893,12 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
         )}
 
         {/* 2. Middle Content Area: Question & Options (Flex-1, Scroll-Free) */}
-        <div className="flex-1 flex flex-col justify-center items-center px-2 sm:px-4 py-1 overflow-hidden w-full max-w-2xl mx-auto">
+        <div className="flex-1 flex flex-col justify-center items-center px-2 sm:px-4 py-1 overflow-hidden w-full max-w-2xl mx-auto relative z-10">
           {renderChallengeMainContent(true)}
         </div>
 
         {/* 3. Bottom Area: Compact Player Status Row + Reactions FAB */}
-        <footer className="shrink-0 w-full px-3 py-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] flex items-center justify-between border-t border-white/10 bg-slate-900/90 backdrop-blur-md relative z-30">
+        <footer className="shrink-0 w-full px-3 py-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] flex items-center justify-between border-t border-white/15 bg-emerald-950/50 backdrop-blur-md relative z-30">
           {/* Horizontal Avatars Row for Players */}
           <div className="flex items-center gap-2 overflow-x-auto py-1 px-1 no-scrollbar max-w-[calc(100%-3.5rem)]">
             {(room.participants || []).map((p: any) => {

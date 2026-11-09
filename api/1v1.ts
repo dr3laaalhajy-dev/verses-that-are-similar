@@ -1037,7 +1037,7 @@ async function handlePoll(req: VercelRequest, res: VercelResponse) {
       const totalQ = room.questionCount || 5
       const isLastQuestion = curQ >= totalQ - 1
 
-      if (!isLastQuestion && (isTimerExpired || allOnlineAnswered)) {
+      if (isTimerExpired || allOnlineAnswered) {
         try {
           const { data: freshRoom } = await supabaseAdmin.from('rooms').select('*').eq('id', room.id).maybeSingle()
           if (freshRoom && freshRoom.status === 'PLAYING' && freshRoom.currentQuestionIndex === curQ) {
@@ -1234,6 +1234,29 @@ async function handleSubmitAnswer(req: VercelRequest, res: VercelResponse) {
           }
         }).catch(e => console.warn('[SubmitAnswer] Broadcast error:', e))
       } catch (_) {}
+
+      // Check if all active online players have now answered the current question
+      const curQ = Number(questionIndex)
+      const validAnswers = Object.entries(currentAnswers).filter(([k, a]: [string, any]) => {
+        if (k === '__lastReaction' || k === '_firstCorrectUserId') return false
+        return a && (a.questionIndex === undefined || a.questionIndex === curQ)
+      })
+
+      const onlinePlayers = Object.entries(playersProgress).filter(([id, p]: [string, any]) => {
+        if (id === '__lastReaction' || id === '_firstCorrectUserId') return false
+        return p && p.isOnline !== false && !p.hasLeft && !p.isResigned && !p.isAbandoned && p.status !== 'abandoned'
+      })
+
+      const allOnlineAnswered = onlinePlayers.length > 0 && validAnswers.length >= onlinePlayers.length
+
+      if (allOnlineAnswered) {
+        // Automatically advance to next question OR finalize room if it's the last question
+        await advanceRoomToNextQuestionTx(
+          null,
+          { ...room, currentAnswers, playersProgress },
+          currentAnswers
+        )
+      }
     }
 
     const fullRoom = await getFullRoom(roomId as string)
@@ -1612,7 +1635,7 @@ async function handlePresence(req: VercelRequest, res: VercelResponse) {
         return a && (a.questionIndex === undefined || a.questionIndex === curQ)
       })
 
-      if (!isLastQuestion && allRemainingAnswered) {
+      if (allRemainingAnswered) {
         const { data: freshRoom } = await supabaseAdmin.from('rooms').select('*').eq('id', room.id).maybeSingle()
         if (freshRoom && freshRoom.status === 'PLAYING' && freshRoom.currentQuestionIndex === curQ) {
           const freshProgress = (freshRoom.playersProgress as any) || {}
@@ -1854,7 +1877,7 @@ async function handleResign(req: VercelRequest, res: VercelResponse) {
           return a && (a.questionIndex === undefined || a.questionIndex === curQ)
         })
 
-        if (!isLastQuestion && allRemainingAnswered) {
+        if (allRemainingAnswered) {
           await supabaseAdmin.from('rooms').update(updateData).eq('id', room.id)
           const { data: freshRoom } = await supabaseAdmin.from('rooms').select('*').eq('id', room.id).maybeSingle()
           if (freshRoom && freshRoom.status === 'PLAYING') {

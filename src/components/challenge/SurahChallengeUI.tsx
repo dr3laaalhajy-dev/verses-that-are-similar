@@ -89,7 +89,7 @@ export const SurahChallengeUI: React.FC<SurahChallengeUIProps> = ({
 
   return (
   <div className="flex flex-col items-center gap-2 md:gap-4 w-full max-w-xl md:max-w-3xl lg:max-w-4xl mx-auto">
-    <div className="glass p-3.5 md:p-8 lg:p-10 rounded-2xl md:rounded-3xl w-full text-center border-white/80 shadow-lg relative overflow-hidden group">
+    <div className="glass gamified-card bg-white/95 backdrop-blur-sm shadow-2xl p-4 md:p-8 lg:p-10 rounded-3xl w-full text-center border border-white/80 relative overflow-hidden group">
       <div className="absolute top-0 inset-x-0 h-1 bg-linear-to-r from-transparent via-brand-gold/30 to-transparent" />
       <div className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-bold text-brand-emerald leading-loose quran-text mb-3.5 md:mb-7 px-2 md:px-4 drop-shadow-xs">
         {renderQuranText(verseText)}

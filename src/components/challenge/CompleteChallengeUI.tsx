@@ -91,7 +91,7 @@ export const CompleteChallengeUI: React.FC<CompleteChallengeUIProps> = ({
         )}
       </AnimatePresence>
 
-      <div className="glass p-3.5 md:p-8 lg:p-10 rounded-2xl md:rounded-3xl w-full text-center border-white/80 shadow-lg relative overflow-hidden">
+      <div className="glass gamified-card bg-white/95 backdrop-blur-sm shadow-2xl p-4 md:p-8 lg:p-10 rounded-3xl w-full text-center border border-white/80 relative overflow-hidden">
         <div className="absolute top-0 inset-x-0 h-1 bg-linear-to-r from-transparent via-brand-emerald/30 to-transparent" />
         <div className="text-xl sm:text-2xl md:text-3xl lg:text-4xl font-bold text-brand-emerald leading-loose quran-text mb-3.5 md:mb-7 px-2 md:px-4">
           {renderQuranText(verseText)}
@@ -113,7 +113,7 @@ export const CompleteChallengeUI: React.FC<CompleteChallengeUIProps> = ({
             const isSelected = selectedOption === opt || (rawSelectedText !== null && rawSelectedText === opt.text);
             const isOptionCorrect = !!opt.isCorrect || (correctText && superNormalizeArabic(opt.text) === superNormalizeArabic(correctText));
 
-            let btnClass = 'bg-white border-slate-100 text-slate-700 hover:border-brand-gold/30 hover:bg-brand-gold/5';
+            let btnClass = 'gamified-option-btn bg-white border-slate-100 text-slate-700 hover:border-brand-gold/30 hover:bg-brand-gold/5';
             if (feedback) {
               if (isOptionCorrect) {
                 btnClass = 'bg-emerald-600 border-emerald-600 text-white shadow-lg ring-2 ring-emerald-300 font-black scale-[1.02]';
