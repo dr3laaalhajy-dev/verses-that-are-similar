@@ -40,6 +40,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     case 'send-invite':
     case 'check-invite':
       return handleSendInviteAPI(req, res)
+    case 'rematch':
+    case 'play-again':
+    case 'playAgain':
+      return handleRematch(req, res)
     default:
       return res.status(400).json({ message: 'Invalid action' })
   }
@@ -187,7 +191,9 @@ async function getFullRoom(roomId: string) {
     currentAnswers: validAnswers,
     participants: playersWithPresence,
     players,
-    challenges: mapChallenges(orderedChallenges)
+    challenges: mapChallenges(orderedChallenges),
+    nextRoomId: (room as any).nextRoomId || progress.__rematch?.nextRoomId || null,
+    playAgainUsers: (room as any).playAgainUsers || progress.__rematch?.playAgainUsers || []
   };
 }
 
@@ -2248,4 +2254,275 @@ async function handleSendInviteAPI(req: VercelRequest, res: VercelResponse) {
   }
 
   return res.status(200).json({ success: true, message: 'Invite allowed' })
+}
+
+async function handleRematch(req: VercelRequest, res: VercelResponse) {
+  const { roomId, playerId, playerName } = req.body;
+  if (!roomId) {
+    return res.status(400).json({ message: 'Missing roomId' });
+  }
+
+  try {
+    const { data: room, error: fetchErr } = await supabaseAdmin
+      .from('rooms')
+      .select('*')
+      .eq('id', roomId as string)
+      .maybeSingle();
+
+    if (fetchErr || !room) {
+      return res.status(404).json({ message: 'Room not found' });
+    }
+
+    let player = await findPlayer(playerId, playerName);
+    if (!player && playerName) {
+      const { data: newP } = await supabaseAdmin
+        .from('players')
+        .insert({ name: playerName })
+        .select()
+        .single();
+      player = newP;
+    }
+
+    if (!player) {
+      return res.status(400).json({ message: 'Player not found' });
+    }
+
+    const userInfo = {
+      id: player.id,
+      name: player.name,
+      username: player.username || null,
+      avatar: (player as any).avatar || null,
+      timestamp: Date.now()
+    };
+
+    const roomProgress = (room.playersProgress as any) || {};
+    let nextRoomId = (room as any).nextRoomId || roomProgress.__rematch?.nextRoomId || null;
+    let playAgainUsers: any[] = Array.isArray((room as any).playAgainUsers)
+      ? (room as any).playAgainUsers
+      : (Array.isArray(roomProgress.__rematch?.playAgainUsers) ? roomProgress.__rematch.playAgainUsers : []);
+
+    // ─────────────────────────────────────────────────────────────────
+    // CASE A: Next Room Already Exists (Join Next Room)
+    // ─────────────────────────────────────────────────────────────────
+    if (nextRoomId) {
+      const { data: existingNextRoom } = await supabaseAdmin
+        .from('rooms')
+        .select('*')
+        .eq('id', nextRoomId)
+        .maybeSingle();
+
+      if (existingNextRoom && existingNextRoom.status !== 'CANCELLED') {
+        const alreadyInList = playAgainUsers.some(
+          (u: any) => String(u.id) === String(player.id) || u.name === player.name
+        );
+        if (!alreadyInList) {
+          playAgainUsers.push(userInfo);
+          const updatedOldProgress = {
+            ...roomProgress,
+            __rematch: { nextRoomId, playAgainUsers }
+          };
+          try {
+            await supabaseAdmin.from('rooms').update({
+              nextRoomId,
+              playAgainUsers,
+              playersProgress: updatedOldProgress
+            }).eq('id', room.id);
+          } catch (_) {
+            await supabaseAdmin.from('rooms').update({
+              playersProgress: updatedOldProgress
+            }).eq('id', room.id);
+          }
+
+          try {
+            supabaseAdmin.channel(`room_sync_${room.id}`).send({
+              type: 'broadcast',
+              event: 'play_again_updated',
+              payload: {
+                roomId: room.id,
+                nextRoomId,
+                playAgainUsers,
+                player: userInfo
+              }
+            }).catch(() => {});
+          } catch (_) {}
+        }
+
+        const nextProg = (existingNextRoom.playersProgress as any) || {};
+        if (!nextProg[player.id]) {
+          nextProg[player.id] = {
+            progress: 0,
+            name: player.name,
+            joinedAt: Date.now(),
+            status: 'joined',
+            isOnline: true
+          };
+          await supabaseAdmin.from('rooms').update({
+            playersProgress: nextProg,
+            player2Id: existingNextRoom.player2Id || (existingNextRoom.player1Id !== player.id ? player.id : existingNextRoom.player2Id)
+          }).eq('id', existingNextRoom.id);
+
+          try {
+            supabaseAdmin.channel(`room_sync_${existingNextRoom.id}`).send({
+              type: 'broadcast',
+              event: 'player_joined',
+              payload: {
+                playerId: player.id,
+                playerName: player.name,
+                playerUsername: player.username || null,
+                roomId: existingNextRoom.id
+              }
+            }).catch(() => {});
+          } catch (_) {}
+        }
+
+        const fullNextRoom = await getFullRoom(existingNextRoom.id);
+        return res.status(200).json({
+          success: true,
+          isCreator: false,
+          nextRoomId: existingNextRoom.id,
+          room: fullNextRoom,
+          playAgainUsers
+        });
+      }
+    }
+
+    // ─────────────────────────────────────────────────────────────────
+    // CASE B: First Player Clicks — Create Brand New Rematch Room
+    // ─────────────────────────────────────────────────────────────────
+    const maxQuestions = Number(room.questionCount) || 5;
+
+    let query = supabaseAdmin.from('challenges').select('id');
+    const cats = Array.isArray(room.surahFilters) && room.surahFilters.length > 0
+      ? room.surahFilters
+      : (room.categoryFilter && room.categoryFilter !== "" ? [room.categoryFilter] : []);
+    if (cats.length > 0) {
+      query = query.in('category', cats);
+    }
+
+    const modesList: string[] = room.gameMode ? [room.gameMode] : [];
+    const typeConditions: string[] = [];
+    for (const m of modesList) {
+      const upper = String(m).toUpperCase();
+      if (upper === 'COMPLETION' || upper === 'COMPLETE') typeConditions.push('COMPLETION');
+      else if (upper === 'SURAH') typeConditions.push('SURAH');
+      else if (upper === 'STANDARD' || upper === 'AUDIO') typeConditions.push('STANDARD', 'AUDIO', '');
+    }
+    if (typeConditions.length > 0) {
+      query = query.in('type', Array.from(new Set(typeConditions)));
+    }
+
+    const { data: allMatching } = await query;
+    let selectedIds: any[] = [];
+    const oldIds = new Set(Array.isArray(room.challengeIds) ? room.challengeIds : []);
+
+    if (allMatching && allMatching.length > 0) {
+      const freshPool = allMatching.filter((c: any) => !oldIds.has(c.id));
+      const poolToUse = freshPool.length >= maxQuestions ? freshPool : allMatching;
+      const shuffled = poolToUse.map((c: any) => c.id).sort(() => Math.random() - 0.5);
+      selectedIds = shuffled.slice(0, maxQuestions);
+    }
+
+    if (selectedIds.length === 0) {
+      const { data: fallback } = await supabaseAdmin.from('challenges').select('id').limit(maxQuestions * 3);
+      if (fallback && fallback.length > 0) {
+        selectedIds = fallback.map((c: any) => c.id).sort(() => Math.random() - 0.5).slice(0, maxQuestions);
+      }
+    }
+
+    let code = '';
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let isUnique = false;
+    while (!isUnique) {
+      code = '';
+      for (let i = 0; i < 6; i++) code += chars.charAt(Math.floor(Math.random() * chars.length));
+      const { data: existing } = await supabaseAdmin
+        .from('rooms')
+        .select('id')
+        .eq('code', code)
+        .maybeSingle();
+      if (!existing) isUnique = true;
+    }
+
+    const baseName = (room.name || 'غرفة التحدي').replace(/\s*\(جولة.*?\)/, '').trim();
+    const newRoomInsert: any = {
+      code,
+      name: `${baseName} (جولة جديدة)`,
+      isPrivate: Boolean(room.isPrivate),
+      password: room.password || null,
+      player1Id: player.id,
+      challengeIds: selectedIds,
+      status: 'WAITING',
+      surahFilters: room.surahFilters || [],
+      categoryFilter: room.categoryFilter || "",
+      questionCount: selectedIds.length || maxQuestions,
+      maxPlayers: 999,
+      gameMode: room.gameMode || "STANDARD",
+      transitionMode: room.transitionMode || "SYNC",
+      timePerQuestion: Number(room.timePerQuestion || 0),
+      playersProgress: {
+        [String(player.id)]: {
+          progress: 0,
+          name: player.name,
+          joinedAt: Date.now(),
+          isOnline: true,
+          status: 'joined'
+        }
+      }
+    };
+
+    const { data: newRoom, error: createError } = await supabaseAdmin
+      .from('rooms')
+      .insert(newRoomInsert)
+      .select()
+      .single();
+
+    if (createError || !newRoom) {
+      console.error('Failed to create rematch room:', createError);
+      return res.status(500).json({ message: 'Failed to create rematch room', error: createError?.message });
+    }
+
+    playAgainUsers = [userInfo];
+    nextRoomId = newRoom.id;
+    const updatedOldProgress = {
+      ...roomProgress,
+      __rematch: { nextRoomId, playAgainUsers }
+    };
+
+    try {
+      await supabaseAdmin.from('rooms').update({
+        nextRoomId,
+        playAgainUsers,
+        playersProgress: updatedOldProgress
+      }).eq('id', room.id);
+    } catch (_) {
+      await supabaseAdmin.from('rooms').update({
+        playersProgress: updatedOldProgress
+      }).eq('id', room.id);
+    }
+
+    try {
+      supabaseAdmin.channel(`room_sync_${room.id}`).send({
+        type: 'broadcast',
+        event: 'rematch_created',
+        payload: {
+          roomId: room.id,
+          nextRoomId: newRoom.id,
+          playAgainUsers,
+          creator: userInfo
+        }
+      }).catch(() => {});
+    } catch (_) {}
+
+    const fullNewRoom = await getFullRoom(newRoom.id);
+    return res.status(200).json({
+      success: true,
+      isCreator: true,
+      nextRoomId: newRoom.id,
+      room: fullNewRoom,
+      playAgainUsers
+    });
+  } catch (err: any) {
+    console.error('Error in handleRematch:', err);
+    return res.status(500).json({ message: 'Internal Server Error', error: err.message });
+  }
 }

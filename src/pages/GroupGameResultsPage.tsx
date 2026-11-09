@@ -1,10 +1,11 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trophy, Zap, Sparkles } from 'lucide-react';
+import { Trophy, Zap, Sparkles, RotateCcw } from 'lucide-react';
 import { View } from '../types/challenges';
 import WhoAmIGame from '../components/WhoAmIGame';
 import { LiveReactionsOverlay } from '../components/LiveReactionsOverlay';
 import { useApp } from '../contexts/AppContext';
+import { supabase } from '../services/supabase';
 
 export interface GroupGameResultsPageProps {
   room: any;
@@ -126,6 +127,104 @@ export const GroupGameResultsPage: React.FC<GroupGameResultsPageProps> = ({
       }
     }
   }, [room?.status, room?.id, app, playerName, playerUsername, sortedPlayers, isEligibleForBonus]);
+
+  // Rematch / Play Again States
+  const [playAgainUsers, setPlayAgainUsers] = useState<any[]>(() => {
+    return room?.playAgainUsers || room?.playersProgress?.__rematch?.playAgainUsers || [];
+  });
+  const [nextRoomId, setNextRoomId] = useState<string | null>(() => {
+    return room?.nextRoomId || room?.playersProgress?.__rematch?.nextRoomId || null;
+  });
+  const [isRematchLoading, setIsRematchLoading] = useState(false);
+
+  // Sync state if room prop updates with rematch info
+  useEffect(() => {
+    const list = room?.playAgainUsers || room?.playersProgress?.__rematch?.playAgainUsers;
+    if (Array.isArray(list) && list.length > 0) {
+      setPlayAgainUsers(list);
+    }
+    const nId = room?.nextRoomId || room?.playersProgress?.__rematch?.nextRoomId;
+    if (nId) {
+      setNextRoomId(nId);
+    }
+  }, [room?.playAgainUsers, room?.playersProgress, room?.nextRoomId]);
+
+  // Realtime Listener for Rematch and Play Again updates
+  useEffect(() => {
+    if (!room?.id) return;
+
+    const channelName = `room_sync_${room.id}`;
+    const channel = supabase.channel(channelName);
+
+    const handleRematchEvent = (payload: any) => {
+      const data = payload?.payload || payload;
+      if (data?.playAgainUsers) {
+        setPlayAgainUsers(data.playAgainUsers);
+      }
+      if (data?.nextRoomId) {
+        setNextRoomId(data.nextRoomId);
+      }
+    };
+
+    channel
+      .on('broadcast', { event: 'play_again_updated' }, handleRematchEvent)
+      .on('broadcast', { event: 'rematch_created' }, handleRematchEvent)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${room.id}` }, (payload: any) => {
+        const newDoc = payload?.new;
+        if (newDoc) {
+          const rematchInfo = newDoc.playersProgress?.__rematch || {};
+          if (newDoc.playAgainUsers || rematchInfo.playAgainUsers) {
+            setPlayAgainUsers(newDoc.playAgainUsers || rematchInfo.playAgainUsers);
+          }
+          if (newDoc.nextRoomId || rematchInfo.nextRoomId) {
+            setNextRoomId(newDoc.nextRoomId || rematchInfo.nextRoomId);
+          }
+        }
+      })
+      .subscribe();
+
+    return () => {
+      try {
+        supabase.removeChannel(channel);
+      } catch (_) {}
+    };
+  }, [room?.id]);
+
+  const isCurrentUserInPlayAgain = playAgainUsers.some(
+    (u: any) =>
+      (playerName && u.name === playerName) ||
+      (playerUsername && u.username === playerUsername) ||
+      (app?.playerId && String(u.id) === String(app.playerId))
+  );
+
+  const handlePlayAgain = async () => {
+    if (isRematchLoading || !room?.id) return;
+    setIsRematchLoading(true);
+
+    try {
+      const res = await fetch('/api/1v1', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'rematch',
+          roomId: room.id,
+          playerId: app?.playerId || playerUsername || playerName,
+          playerName: playerName || playerUsername
+        })
+      });
+      const data = await res.json();
+      if (data && data.success && data.room) {
+        setRoom(data.room);
+        localStorage.setItem('activeRoomId', String(data.room.id));
+        setView('group_waiting');
+      }
+    } catch (err) {
+      console.error('Error starting rematch:', err);
+    } finally {
+      setIsRematchLoading(false);
+    }
+  };
+
   if (room?.gameMode === 'WHO_AM_I') {
     return (
       <motion.div
@@ -335,15 +434,78 @@ export const GroupGameResultsPage: React.FC<GroupGameResultsPageProps> = ({
                 </div>
               )}
 
-              <button
-                onClick={() => {
-                  setRoom(null);
-                  setView('home');
-                }}
-                className="px-8 py-3.5 bg-brand-emerald text-white rounded-2xl font-black text-base md:text-lg shadow-lg hover:scale-105 transition-all"
-              >
-                العودة للرئيسية
-              </button>
+              <div className="flex flex-col items-center gap-3 w-full max-w-md mx-auto">
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-3 w-full">
+                  {/* Rematch / Play Again Button */}
+                  <button
+                    onClick={handlePlayAgain}
+                    disabled={isRematchLoading}
+                    className={`w-full sm:w-auto flex-1 px-6 py-3.5 rounded-2xl font-black text-sm md:text-base flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95 cursor-pointer ${
+                      isRematchLoading
+                        ? 'bg-emerald-700/60 text-white cursor-wait opacity-80'
+                        : nextRoomId && !isCurrentUserInPlayAgain
+                          ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:brightness-105 text-white ring-2 ring-amber-300 animate-pulse'
+                          : 'bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:brightness-105 text-white'
+                    }`}
+                  >
+                    <RotateCcw className={`w-4 h-4 md:w-5 md:h-5 ${isRematchLoading ? 'animate-spin' : ''}`} />
+                    <span>
+                      {isRematchLoading
+                        ? 'جاري تجهيز الغرفة...'
+                        : nextRoomId && !isCurrentUserInPlayAgain
+                          ? 'انضم للتحدي الجديد 🚀'
+                          : isCurrentUserInPlayAgain
+                            ? 'الانتقال للغرفة الجديدة 🔄'
+                            : 'العب مرة أخرى 🔄'}
+                    </span>
+                  </button>
+
+                  {/* Return Home Button */}
+                  <button
+                    onClick={() => {
+                      setRoom(null);
+                      localStorage.removeItem('activeRoomId');
+                      setView('home');
+                    }}
+                    className="w-full sm:w-auto px-6 py-3.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-2xl font-bold text-sm md:text-base shadow-xs transition-all cursor-pointer"
+                  >
+                    العودة للرئيسية
+                  </button>
+                </div>
+
+                {/* Avatars Row of Ready Players */}
+                {playAgainUsers.length > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-800 dark:text-emerald-200 font-bold"
+                  >
+                    {/* Avatars Stack */}
+                    <div className="flex items-center -space-x-1.5 space-x-reverse">
+                      {playAgainUsers.slice(0, 5).map((u: any, i: number) => {
+                        const initial = (u.name || 'ل').trim().charAt(0);
+                        return (
+                          <div
+                            key={u.id || i}
+                            className="w-6 h-6 rounded-full bg-emerald-600 border-2 border-white text-white text-[10px] font-black flex items-center justify-center shadow-xs"
+                            title={u.name}
+                          >
+                            {initial}
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <span>
+                      {playAgainUsers.length === 1
+                        ? `${playAgainUsers[0].name} مستعد للعب مرة أخرى!`
+                        : playAgainUsers.length === 2
+                          ? `${playAgainUsers[0].name} و ${playAgainUsers[1].name} مستعدان للعب!`
+                          : `${playAgainUsers[0].name} و ${playAgainUsers[1].name} و ${playAgainUsers.length - 2} آخرين مستعدون للعب! 🔥`}
+                    </span>
+                  </motion.div>
+                )}
+              </div>
             </div>
           </motion.div>
         ) : (
