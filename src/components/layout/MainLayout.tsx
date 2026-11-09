@@ -458,10 +458,14 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (typeof app.setPrivacyModalInitialTab === 'function') {
-                            app.setPrivacyModalInitialTab('privacy');
+                          if (typeof app.openPrivacyModal === 'function') {
+                            app.openPrivacyModal('privacy');
+                          } else {
+                            if (typeof app.setPrivacyModalInitialTab === 'function') {
+                              app.setPrivacyModalInitialTab('privacy');
+                            }
+                            app.setShowPrivacyModal(true);
                           }
-                          app.setShowPrivacyModal(true);
                         }}
                         className="text-brand-emerald hover:text-emerald-700 underline font-black inline cursor-pointer"
                       >
@@ -472,10 +476,14 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (typeof app.setPrivacyModalInitialTab === 'function') {
-                            app.setPrivacyModalInitialTab('terms');
+                          if (typeof app.openPrivacyModal === 'function') {
+                            app.openPrivacyModal('terms');
+                          } else {
+                            if (typeof app.setPrivacyModalInitialTab === 'function') {
+                              app.setPrivacyModalInitialTab('terms');
+                            }
+                            app.setShowPrivacyModal(true);
                           }
-                          app.setShowPrivacyModal(true);
                         }}
                         className="text-brand-emerald hover:text-emerald-700 underline font-black inline cursor-pointer"
                       >

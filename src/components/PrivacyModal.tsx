@@ -16,6 +16,13 @@ export const PrivacyModal: React.FC<PrivacyModalProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'privacy' | 'terms'>(initialTab);
 
+  // Synchronize active tab whenever modal opens or initialTab prop changes
+  useEffect(() => {
+    if (isOpen) {
+      setActiveTab(initialTab);
+    }
+  }, [isOpen, initialTab]);
+
   // Body scroll lock
   useEffect(() => {
     if (isOpen) {

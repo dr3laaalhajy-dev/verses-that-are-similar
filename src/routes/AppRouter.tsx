@@ -420,10 +420,15 @@ export const AppRouter: React.FC = () => {
           }}
           onOpenDownloadApp={() => app.setShowGooglePlayModal(true)}
           onOpenPrivacyPolicy={(tab) => {
-            if (typeof app.setPrivacyModalInitialTab === 'function') {
-              app.setPrivacyModalInitialTab(tab || 'privacy');
+            const targetTab = tab === 'terms' ? 'terms' : 'privacy';
+            if (typeof app.openPrivacyModal === 'function') {
+              app.openPrivacyModal(targetTab);
+            } else {
+              if (typeof app.setPrivacyModalInitialTab === 'function') {
+                app.setPrivacyModalInitialTab(targetTab);
+              }
+              app.setShowPrivacyModal(true);
             }
-            app.setShowPrivacyModal(true);
           }}
           canAccessAdmin={
             app.adminRole === 'FOUNDER' ||

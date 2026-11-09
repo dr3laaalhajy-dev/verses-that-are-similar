@@ -913,6 +913,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const [privacyModalInitialTab, setPrivacyModalInitialTab] = useState<'privacy' | 'terms'>('privacy');
 
+  const openPrivacyModal = useCallback((tab: 'privacy' | 'terms' = 'privacy') => {
+    setPrivacyModalInitialTab(tab);
+    setShowPrivacyModal(true);
+  }, []);
+
   // 1v1 State
   const roomRef = useRef<any>(null);
   const [room, _setRoom] = useState<any>(null);
@@ -7341,6 +7346,7 @@ ${versesList}
     showAboutModal, setShowAboutModal,
     showPrivacyModal, setShowPrivacyModal,
     privacyModalInitialTab, setPrivacyModalInitialTab,
+    openPrivacyModal,
     showDownloadModal, setShowDownloadModal,
     showTesterModal: showGooglePlayModal, setShowTesterModal: setShowGooglePlayModal,
     showGooglePlayModal, setShowGooglePlayModal,
