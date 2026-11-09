@@ -56,6 +56,39 @@ export default function WhoAmIGame({
   const revealingRef = useRef<string | null>(null);
   const queueRef = useRef<any[]>([]);
 
+  // ── Anti-Cheat System with 5-Second Grace Period ──
+  const cheatTimerRef = useRef<any>(null);
+
+  useEffect(() => {
+    if (!roomId) return;
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        if (cheatTimerRef.current) clearTimeout(cheatTimerRef.current);
+        cheatTimerRef.current = setTimeout(() => {
+          if (typeof onWithdraw === 'function') {
+            onWithdraw();
+          }
+        }, 5000);
+      } else if (document.visibilityState === 'visible') {
+        if (cheatTimerRef.current) {
+          clearTimeout(cheatTimerRef.current);
+          cheatTimerRef.current = null;
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (cheatTimerRef.current) {
+        clearTimeout(cheatTimerRef.current);
+        cheatTimerRef.current = null;
+      }
+    };
+  }, [roomId, onWithdraw]);
+
   const round = rounds[rounds.length - 1] || null;
   const roundId = round?.id;
 

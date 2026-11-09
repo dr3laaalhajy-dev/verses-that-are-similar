@@ -141,6 +141,54 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
   const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false);
   const isMultiplayer = Boolean(room?.id || (room as any)?.room_code || room?.host_id || (room as any)?.participants?.length);
 
+  // ── Anti-Cheat System with Grace Period (5 seconds) ──
+  // If the user navigates away or hides the screen (document.visibilityState === 'hidden'),
+  // a 5-second grace period timer starts. If they return within 5 seconds, the timer is cancelled.
+  // If they stay away for more than 5 seconds, they are disqualified and withdrawn from the room.
+  const cheatTimerRef = useRef<any>(null);
+
+  useEffect(() => {
+    // Only active during an in-progress multiplayer group challenge
+    if (!isMultiplayer || !room?.id || (room.status !== 'PLAYING' && room.status !== 'in-progress')) {
+      if (cheatTimerRef.current) {
+        clearTimeout(cheatTimerRef.current);
+        cheatTimerRef.current = null;
+      }
+      return;
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        // Start 5-second countdown timer
+        if (cheatTimerRef.current) clearTimeout(cheatTimerRef.current);
+        cheatTimerRef.current = setTimeout(() => {
+          app?.toast?.error?.('تم اعتبارك منسحباً لمغادرتك شاشة التحدي لأكثر من 5 ثوانٍ');
+          if (typeof app?.handleWithdraw === 'function') {
+            app.handleWithdraw();
+          } else if (typeof app?.handleResignGroupChallenge === 'function') {
+            app.handleResignGroupChallenge();
+          }
+        }, 5000);
+      } else if (document.visibilityState === 'visible') {
+        // Player returned before 5 seconds, cancel the timer!
+        if (cheatTimerRef.current) {
+          clearTimeout(cheatTimerRef.current);
+          cheatTimerRef.current = null;
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (cheatTimerRef.current) {
+        clearTimeout(cheatTimerRef.current);
+        cheatTimerRef.current = null;
+      }
+    };
+  }, [isMultiplayer, room?.id, room?.status, app]);
+
   const currentUserId = playerUsername || playerName;
   const isHost = Boolean(
     (room?.host_id && String(currentUserId) === String(room.host_id)) ||
