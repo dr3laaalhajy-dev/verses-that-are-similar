@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trophy, Zap } from 'lucide-react';
+import { Trophy, Zap, Sparkles } from 'lucide-react';
 import { View } from '../types/challenges';
 import WhoAmIGame from '../components/WhoAmIGame';
 import { LiveReactionsOverlay } from '../components/LiveReactionsOverlay';
@@ -27,6 +27,54 @@ export const GroupGameResultsPage: React.FC<GroupGameResultsPageProps> = ({
 }) => {
   const app = useApp();
 
+  // Calculate sorted rankings for rewards and UI
+  const sortedPlayers = React.useMemo(() => {
+    return (room?.participants || [])
+      .map((p: any) => {
+        const prog = room?.playersProgress?.[p.id] || {};
+        const totalQ = room?.questionCount || 1;
+        const isAbandoned = Boolean(
+          prog.isAbandoned ||
+          prog.status === 'abandoned' ||
+          prog.isResigned ||
+          prog.isDisqualified ||
+          prog.hasLeft
+        );
+        const correctCount = isAbandoned ? 0 : (prog.correctCount || 0);
+        const accuracy = isAbandoned ? 0 : (prog.accuracy ?? Math.round((correctCount / totalQ) * 100));
+        const score = isAbandoned ? 0 : (prog.finalTotalScore ?? prog.score ?? 0);
+        const basePoints = isAbandoned ? 0 : (prog.basePoints ?? (correctCount * 1));
+        const bonusPoints = isAbandoned ? 0 : (prog.bonusPoints || 0);
+        const speedBonusCount = isAbandoned ? 0 : (prog.speedBonusCount || 0);
+        const completionBonus = isAbandoned ? 0 : (prog.completionBonus || 0);
+        const accuracyBonus = isAbandoned ? 0 : (prog.accuracyBonus || 0);
+        const isFinished = !isAbandoned && !!prog.finishTime;
+
+        return {
+          ...p,
+          isAbandoned,
+          finishTime: prog.finishTime,
+          score,
+          basePoints,
+          bonusPoints,
+          speedBonusCount,
+          completionBonus,
+          accuracyBonus,
+          correctCount,
+          accuracy,
+          isFinished
+        };
+      })
+      .sort((a: any, b: any) => {
+        if (a.isAbandoned !== b.isAbandoned) return a.isAbandoned ? 1 : -1;
+        if (b.score !== a.score) return b.score - a.score;
+        return (a.finishTime || Infinity) - (b.finishTime || Infinity);
+      });
+  }, [room?.participants, room?.playersProgress, room?.questionCount]);
+
+  const totalPlayers = sortedPlayers.length;
+  const isEligibleForBonus = totalPlayers > 5; // الغرفة مؤهلة للبونص فقط إذا كان فيها 6 لاعبين أو أكثر
+
   // Smart Verification for Daily Mystery Gift & Rank-based Rewards sync
   useEffect(() => {
     if (room?.status === 'FINISHED' || room?.status === 'completed') {
@@ -37,46 +85,22 @@ export const GroupGameResultsPage: React.FC<GroupGameResultsPageProps> = ({
         if (!sessionStorage.getItem(sessionKey)) {
           sessionStorage.setItem(sessionKey, 'true');
 
-          const ranked = (room.participants || [])
-            .map((p: any) => {
-              const prog = room.playersProgress?.[p.id] || {};
-              const isAbandoned = Boolean(
-                prog.isAbandoned ||
-                prog.status === 'abandoned' ||
-                prog.isResigned ||
-                prog.isDisqualified ||
-                prog.hasLeft
-              );
-              return {
-                id: p.id,
-                name: p.name,
-                username: p.username,
-                isAbandoned,
-                score: isAbandoned ? 0 : (prog.finalTotalScore ?? prog.score ?? 0),
-                finishTime: prog.finishTime || Infinity
-              };
-            })
-            .sort((a: any, b: any) => {
-              if (a.isAbandoned !== b.isAbandoned) return a.isAbandoned ? 1 : -1;
-              if (b.score !== a.score) return b.score - a.score;
-              return a.finishTime - b.finishTime;
-            });
-
-          const myIndex = ranked.findIndex((p: any) =>
+          const myIndex = sortedPlayers.findIndex((p: any) =>
             (playerName && p.name === playerName) ||
             (playerUsername && p.username === playerUsername) ||
             (p.id && String(p.id) === String(app?.playerId))
           );
 
-          if (myIndex !== -1 && !ranked[myIndex].isAbandoned) {
+          if (myIndex !== -1 && !sortedPlayers[myIndex].isAbandoned) {
             let earnedTrophy = 0;
             let bonusPoints = 0;
+
             if (myIndex === 0) {
-              earnedTrophy = 1;
-              bonusPoints = 50;
-            } else if (myIndex === 1) {
+              earnedTrophy = 1; // الكأس للمركز الأول دائماً
+              if (isEligibleForBonus) bonusPoints = 50;
+            } else if (myIndex === 1 && isEligibleForBonus) {
               bonusPoints = 30;
-            } else if (myIndex === 2) {
+            } else if (myIndex === 2 && isEligibleForBonus) {
               bonusPoints = 15;
             }
 
@@ -101,7 +125,7 @@ export const GroupGameResultsPage: React.FC<GroupGameResultsPageProps> = ({
         }
       }
     }
-  }, [room?.status, room?.id, app, playerName, playerUsername]);
+  }, [room?.status, room?.id, app, playerName, playerUsername, sortedPlayers, isEligibleForBonus]);
   if (room?.gameMode === 'WHO_AM_I') {
     return (
       <motion.div
@@ -160,51 +184,15 @@ export const GroupGameResultsPage: React.FC<GroupGameResultsPageProps> = ({
               <Trophy className="w-14 h-14 md:w-16 md:h-16 text-brand-gold mx-auto mb-4 drop-shadow-md" />
               <h2 className="text-2xl md:text-3xl font-black text-brand-emerald mb-3">اكتمل السباق!</h2>
 
-              <div className="max-w-lg mx-auto space-y-3 mb-8 text-right">
-                {(room?.participants || [])
-                  .map((p: any) => {
-                    const prog = room?.playersProgress?.[p.id] || {};
-                    const totalQ = room?.questionCount || 1;
-                    const isAbandoned = Boolean(
-                      prog.isAbandoned ||
-                      prog.status === 'abandoned' ||
-                      prog.isResigned ||
-                      prog.isDisqualified ||
-                      prog.hasLeft
-                    );
-                    const correctCount = isAbandoned ? 0 : (prog.correctCount || 0);
-                    const accuracy = isAbandoned ? 0 : (prog.accuracy ?? Math.round((correctCount / totalQ) * 100));
-                    const score = isAbandoned ? 0 : (prog.finalTotalScore ?? prog.score ?? 0);
-                    const basePoints = isAbandoned ? 0 : (prog.basePoints ?? (correctCount * 1));
-                    const bonusPoints = isAbandoned ? 0 : (prog.bonusPoints || 0);
-                    const speedBonusCount = isAbandoned ? 0 : (prog.speedBonusCount || 0);
-                    const completionBonus = isAbandoned ? 0 : (prog.completionBonus || 0);
-                    const accuracyBonus = isAbandoned ? 0 : (prog.accuracyBonus || 0);
-                    const isFinished = !isAbandoned && !!prog.finishTime;
-
-                    return {
-                      ...p,
-                      isAbandoned,
-                      finishTime: prog.finishTime,
-                      score,
-                      basePoints,
-                      bonusPoints,
-                      speedBonusCount,
-                      completionBonus,
-                      accuracyBonus,
-                      correctCount,
-                      accuracy,
-                      isFinished
-                    };
-                  })
-                  .sort((a: any, b: any) => {
-                    if (a.isAbandoned !== b.isAbandoned) return a.isAbandoned ? 1 : -1;
-                    if (b.score !== a.score) return b.score - a.score;
-                    return (a.finishTime || Infinity) - (b.finishTime || Infinity);
-                  })
-                  .map((p: any, idx: number) => {
-                    const rankBonus = p.isAbandoned ? 0 : (idx === 0 ? 50 : idx === 1 ? 30 : idx === 2 ? 15 : 0);
-                    const finalTotalPoints = p.score + rankBonus;
+              <div className="max-w-lg mx-auto space-y-3 mb-6 text-right">
+                {sortedPlayers.map((p: any, idx: number) => {
+                  let rankBonus = 0;
+                  if (!p.isAbandoned && isEligibleForBonus) {
+                    if (idx === 0) rankBonus = 50;
+                    else if (idx === 1) rankBonus = 30;
+                    else if (idx === 2) rankBonus = 15;
+                  }
+                  const finalTotalPoints = p.score + rankBonus;
 
                     return (
                       <motion.div
@@ -290,21 +278,25 @@ export const GroupGameResultsPage: React.FC<GroupGameResultsPageProps> = ({
                                 </span>
                               )}
 
-                              {/* Rank Bonus Badge for Top 3 */}
-                              {idx === 0 && (
-                                <span className="bg-amber-100 text-amber-900 px-2 py-0.5 rounded-md flex items-center gap-1 border border-amber-300 shadow-xs">
-                                  <span>🥇 +50 نقطة بونص المركز الأول</span>
-                                </span>
-                              )}
-                              {idx === 1 && (
-                                <span className="bg-slate-100 text-slate-800 px-2 py-0.5 rounded-md flex items-center gap-1 border border-slate-300 shadow-xs">
-                                  <span>🥈 +30 نقطة بونص المركز الثاني</span>
-                                </span>
-                              )}
-                              {idx === 2 && (
-                                <span className="bg-amber-50 text-amber-900 px-2 py-0.5 rounded-md flex items-center gap-1 border border-amber-200 shadow-xs">
-                                  <span>🥉 +15 نقطة بونص المركز الثالث</span>
-                                </span>
+                              {/* Rank Bonus Badge for Top 3 (Only if room has > 5 players) */}
+                              {isEligibleForBonus && (
+                                <>
+                                  {idx === 0 && (
+                                    <span className="bg-amber-100 text-amber-900 px-2 py-0.5 rounded-md flex items-center gap-1 border border-amber-300 shadow-xs">
+                                      <span>🥇 +50 نقطة بونص المركز الأول</span>
+                                    </span>
+                                  )}
+                                  {idx === 1 && (
+                                    <span className="bg-slate-100 text-slate-800 px-2 py-0.5 rounded-md flex items-center gap-1 border border-slate-300 shadow-xs">
+                                      <span>🥈 +30 نقطة بونص المركز الثاني</span>
+                                    </span>
+                                  )}
+                                  {idx === 2 && (
+                                    <span className="bg-amber-50 text-amber-900 px-2 py-0.5 rounded-md flex items-center gap-1 border border-amber-200 shadow-xs">
+                                      <span>🥉 +15 نقطة بونص المركز الثالث</span>
+                                    </span>
+                                  )}
+                                </>
                               )}
                             {p.bonusPoints > 0 && (
                               <span className="bg-amber-100 text-amber-900 px-2 py-0.5 rounded-md flex items-center gap-1 border border-amber-300 shadow-xs">
@@ -334,6 +326,14 @@ export const GroupGameResultsPage: React.FC<GroupGameResultsPageProps> = ({
                   );
                 })}
               </div>
+
+              {/* Anti-Farming UI Notice when players count is 5 or less */}
+              {!isEligibleForBonus && (
+                <div className="max-w-lg mx-auto mb-6 p-3 rounded-2xl bg-amber-500/10 border border-amber-400/25 text-xs text-amber-800 dark:text-amber-200 font-bold flex items-center justify-center gap-2 text-center">
+                  <Sparkles className="w-4 h-4 text-amber-500 shrink-0" />
+                  <span>التحديات التي تضم أكثر من 5 لاعبين تمنح نقاطاً إضافية للمراكز الأولى!</span>
+                </div>
+              )}
 
               <button
                 onClick={() => {

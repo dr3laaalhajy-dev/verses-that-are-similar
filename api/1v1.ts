@@ -786,11 +786,16 @@ async function applyRoomTrophies(_tx: any, room: any, progress: Record<string, a
     .filter(p => !isNaN(p.id) && p.id > 0)
     .sort((a, b) => b.score - a.score || a.finishTime - b.finishTime);
 
-  // Rank-based Rewards Distribution:
-  // Rank 1 (Index 0): Trophy (+1) + Base Points + 50 Bonus Points
-  // Rank 2 (Index 1): Trophy (0)  + Base Points + 30 Bonus Points
-  // Rank 3 (Index 2): Trophy (0)  + Base Points + 15 Bonus Points
+  // Anti-Farming Condition & Rank-based Rewards Distribution:
+  // Total players check: Rooms are eligible for bonus points ONLY if total players > 5 (6+ players)
+  // Rank 1 (Index 0): Trophy (+1) + Base Points + 50 Bonus Points (if totalPlayers > 5)
+  // Rank 2 (Index 1): Trophy (0)  + Base Points + 30 Bonus Points (if totalPlayers > 5)
+  // Rank 3 (Index 2): Trophy (0)  + Base Points + 15 Bonus Points (if totalPlayers > 5)
   // Rank 4+ (Index 3+): Trophy (0) + Base Points only (0 Bonus Points)
+  // Note: 1st place always earns the Trophy (+1) regardless of player count
+  const totalPlayers = ranked.length;
+  const isEligibleForBonus = totalPlayers > 5;
+
   for (let index = 0; index < ranked.length; index++) {
     const player = ranked[index];
     const targetId = player.id;
@@ -798,12 +803,12 @@ async function applyRoomTrophies(_tx: any, room: any, progress: Record<string, a
     let bonusPoints = 0;
 
     if (index === 0) {
-      earnedTrophy = 1;
-      bonusPoints = 50; // مكافأة المركز الأول
-    } else if (index === 1) {
-      bonusPoints = 30; // مكافأة المركز الثاني
-    } else if (index === 2) {
-      bonusPoints = 15; // مكافأة المركز الثالث
+      earnedTrophy = 1; // الكأس للمركز الأول دائماً
+      if (isEligibleForBonus) bonusPoints = 50;
+    } else if (index === 1 && isEligibleForBonus) {
+      bonusPoints = 30;
+    } else if (index === 2 && isEligibleForBonus) {
+      bonusPoints = 15;
     }
 
     const pKey = String(targetId);
@@ -811,6 +816,7 @@ async function applyRoomTrophies(_tx: any, room: any, progress: Record<string, a
       progress[pKey].rank = index + 1;
       progress[pKey].earnedTrophies = earnedTrophy;
       progress[pKey].rankBonus = bonusPoints;
+      progress[pKey].isEligibleForBonus = isEligibleForBonus;
       progress[pKey].finalTotalPoints = (player.score || 0) + bonusPoints;
     }
 
