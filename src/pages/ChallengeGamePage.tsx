@@ -131,6 +131,7 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
   const app = useApp();
   const powerups = app?.powerups || { freeze: freezeTimeCount || 0, fiftyFifty: deleteTwoCount || 0 };
   const buyPowerup = app?.buyPowerup || ((_type: 'freeze' | 'fiftyFifty') => false);
+  const isPurchasingPowerup = !!app?.isPurchasingPowerup;
   const appRef = useRef(app);
   useEffect(() => {
     appRef.current = app;
@@ -1006,14 +1007,18 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
                       <button
                         type="button"
                         onClick={() => buyPowerup('freeze')}
-                        disabled={totalPoints < 30}
+                        disabled={totalPoints < 30 || isPurchasingPowerup}
                         className={`px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1 transition-all cursor-pointer ${
-                          totalPoints >= 30
+                          totalPoints >= 30 && !isPurchasingPowerup
                             ? 'bg-cyan-500 text-white hover:bg-cyan-400 active:scale-95 shadow-md'
                             : 'bg-slate-800 text-slate-500 opacity-50 cursor-not-allowed'
                         }`}
                       >
-                        <Plus className="w-3.5 h-3.5" />
+                        {isPurchasingPowerup ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Plus className="w-3.5 h-3.5" />
+                        )}
                         <span>30ن</span>
                       </button>
                     </div>
@@ -1031,14 +1036,18 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
                       <button
                         type="button"
                         onClick={() => buyPowerup('fiftyFifty')}
-                        disabled={totalPoints < 50}
+                        disabled={totalPoints < 50 || isPurchasingPowerup}
                         className={`px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1 transition-all cursor-pointer ${
-                          totalPoints >= 50
+                          totalPoints >= 50 && !isPurchasingPowerup
                             ? 'bg-amber-500 text-white hover:bg-amber-400 active:scale-95 shadow-md'
                             : 'bg-slate-800 text-slate-500 opacity-50 cursor-not-allowed'
                         }`}
                       >
-                        <Plus className="w-3.5 h-3.5" />
+                        {isPurchasingPowerup ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Plus className="w-3.5 h-3.5" />
+                        )}
                         <span>50ن</span>
                       </button>
                     </div>
@@ -1274,14 +1283,18 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
                   type="button"
                   onClick={() => buyPowerup('freeze')}
                   title={`شراء 1 تجميد وقت وإضافته للمخزون بـ 30 نقطة (رصيدك: ${totalPoints})`}
-                  disabled={totalPoints < 30}
+                  disabled={totalPoints < 30 || isPurchasingPowerup}
                   className={`flex items-center gap-1 px-2.5 py-1 rounded-xl border text-[11px] font-black transition-all cursor-pointer ${
-                    totalPoints >= 30
+                    totalPoints >= 30 && !isPurchasingPowerup
                       ? 'bg-cyan-50 dark:bg-cyan-950/40 hover:bg-cyan-100 dark:hover:bg-cyan-900/50 text-cyan-800 dark:text-cyan-300 border-cyan-300 dark:border-cyan-700/60 active:scale-95 shadow-xs'
                       : 'bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700 opacity-50 cursor-not-allowed'
                   }`}
                 >
-                  <Plus className="w-3 h-3 text-cyan-600 dark:text-cyan-400" />
+                  {isPurchasingPowerup ? (
+                    <Loader2 className="w-3 h-3 text-cyan-600 dark:text-cyan-400 animate-spin" />
+                  ) : (
+                    <Plus className="w-3 h-3 text-cyan-600 dark:text-cyan-400" />
+                  )}
                   <span>تجميد وقت</span>
                   <span className="font-mono text-[10px] opacity-80">(-30ن)</span>
                 </button>
@@ -1292,14 +1305,18 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
                   type="button"
                   onClick={() => buyPowerup('fiftyFifty')}
                   title={`شراء 1 حذف إجابتين وإضافته للمخزون بـ 50 نقطة (رصيدك: ${totalPoints})`}
-                  disabled={totalPoints < 50}
+                  disabled={totalPoints < 50 || isPurchasingPowerup}
                   className={`flex items-center gap-1 px-2.5 py-1 rounded-xl border text-[11px] font-black transition-all cursor-pointer ${
-                    totalPoints >= 50
+                    totalPoints >= 50 && !isPurchasingPowerup
                       ? 'bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/50 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700/60 active:scale-95 shadow-xs'
                       : 'bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700 opacity-50 cursor-not-allowed'
                   }`}
                 >
-                  <Plus className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+                  {isPurchasingPowerup ? (
+                    <Loader2 className="w-3 h-3 text-amber-600 dark:text-amber-400 animate-spin" />
+                  ) : (
+                    <Plus className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+                  )}
                   <span>حذف إجابتين</span>
                   <span className="font-mono text-[10px] opacity-80">(-50ن)</span>
                 </button>

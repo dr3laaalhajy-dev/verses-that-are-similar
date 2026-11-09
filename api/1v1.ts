@@ -44,6 +44,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     case 'play-again':
     case 'playAgain':
       return handleRematch(req, res)
+    case 'purchase-powerup':
+    case 'buy-powerup':
+    case 'purchasePowerup':
+    case 'buyPowerup':
+      return handlePurchasePowerup(req, res)
     default:
       return res.status(400).json({ message: 'Invalid action' })
   }
@@ -2524,5 +2529,88 @@ async function handleRematch(req: VercelRequest, res: VercelResponse) {
   } catch (err: any) {
     console.error('Error in handleRematch:', err);
     return res.status(500).json({ message: 'Internal Server Error', error: err.message });
+  }
+}
+
+async function handlePurchasePowerup(req: VercelRequest, res: VercelResponse) {
+  const { playerId, playerName, playerUsername, powerupType, roomId } = req.body;
+
+  if (!powerupType || (powerupType !== 'freeze' && powerupType !== 'fiftyFifty')) {
+    return res.status(400).json({ success: false, message: 'نوع وسيلة المساعدة غير صالح' });
+  }
+
+  // Authoritative server-side pricing
+  const cost = powerupType === 'freeze' ? 30 : 50;
+
+  try {
+    const player = await findPlayer(playerId || playerUsername, playerName);
+    if (!player) {
+      return res.status(404).json({ success: false, message: 'اللاعب غير مسجل (Player not found)' });
+    }
+
+    const currentPoints = Number(player.points) || 0;
+    if (currentPoints < cost) {
+      return res.status(400).json({
+        success: false,
+        message: `نقاطك غير كافية لإتمام الشراء! رصيدك الحالي ${currentPoints} نقطة وتكلفة الأداة ${cost} نقطة`,
+        currentPoints,
+        cost
+      });
+    }
+
+    const remainingPoints = Math.max(0, currentPoints - cost);
+
+    // 1. Immediate DB update to players table
+    const { data: updatedPlayer, error: updateErr } = await supabaseAdmin
+      .from('players')
+      .update({ points: remainingPoints })
+      .eq('id', player.id)
+      .select('id, name, points, cups')
+      .single();
+
+    if (updateErr) {
+      console.error('[PurchasePowerup] DB update error:', updateErr);
+      return res.status(500).json({
+        success: false,
+        message: 'فشل خصم النقاط من قاعدة البيانات',
+        error: updateErr.message
+      });
+    }
+
+    // 2. If roomId provided, record spentPoints in room progress
+    if (roomId) {
+      try {
+        const { data: room } = await supabaseAdmin
+          .from('rooms')
+          .select('id, playersProgress')
+          .eq('id', roomId)
+          .maybeSingle();
+
+        if (room && room.playersProgress) {
+          const pProg = room.playersProgress[player.id] || room.playersProgress[String(player.id)] || {};
+          pProg.spentPoints = (pProg.spentPoints || 0) + cost;
+          room.playersProgress[player.id] = pProg;
+          await supabaseAdmin.from('rooms').update({ playersProgress: room.playersProgress }).eq('id', room.id);
+        }
+      } catch (rErr) {
+        console.warn('[PurchasePowerup] Room spentPoints update warning:', rErr);
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'تم خصم النقاط بنجاح من قاعدة البيانات',
+      powerupType,
+      cost,
+      remainingPoints,
+      player: updatedPlayer || { ...player, points: remainingPoints }
+    });
+  } catch (err: any) {
+    console.error('Error in handlePurchasePowerup:', err);
+    return res.status(500).json({
+      success: false,
+      message: 'حدث خطأ في الخادم أثناء الشراء',
+      error: err.message
+    });
   }
 }

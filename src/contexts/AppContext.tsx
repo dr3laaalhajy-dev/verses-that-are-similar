@@ -827,6 +827,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [freezeSecondsLeft, setFreezeSecondsLeft] = useState(0);
   const [isPowerUpUsedThisQuestion, setIsPowerUpUsedThisQuestion] = useState(false);
   const [eliminatedOptionIndices, setEliminatedOptionIndices] = useState<number[]>([]);
+  const [isPurchasingPowerup, setIsPurchasingPowerup] = useState(false);
 
   useEffect(() => {
     setFreezeTimeCount(powerups.freeze);
@@ -4915,48 +4916,70 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setEliminatedOptionIndices([]);
   }, [currentChallengeIndex, currentChallenge?.id]);
 
-  const buyPowerup = (type: 'freeze' | 'fiftyFifty') => {
+  const buyPowerup = async (type: 'freeze' | 'fiftyFifty'): Promise<boolean> => {
     const cost = type === 'freeze' ? 30 : 50;
     if (totalPoints < cost) {
       toast.error(`نقاطك لا تكفي! تكلفة الأداة ${cost} نقطة (رصيدك الحالي: ${totalPoints})`);
       return false;
     }
 
-    const nextPoints = totalPoints - cost;
-    setTotalPoints(nextPoints);
-    localStorage.setItem('quran_total_points', nextPoints.toString());
+    if (isPurchasingPowerup) return false;
+    setIsPurchasingPowerup(true);
 
-    // Sync points deduction to DB
-    const cleanU = (playerUsername || '').trim();
-    const cleanN = (playerName || '').trim();
-    if (cleanU || cleanN) {
-      fetch('/api/player-score', {
+    try {
+      // 1. Authoritative DB deduction first via /api/1v1
+      const res = await fetch('/api/1v1', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          username: cleanU,
-          name: cleanN,
-          totalPoints: nextPoints,
-          score: nextPoints,
-          roomId: room?.id
+          action: 'purchase-powerup',
+          playerId: playerId || playerUsername || playerName,
+          playerName: playerName || playerUsername,
+          playerUsername: playerUsername || null,
+          powerupType: type,
+          cost,
+          roomId: room?.id || null
         })
-      }).catch(err => console.warn('[PowerUps] DB points sync error:', err));
-    }
+      });
 
-    // Add +1 to inventory in State and localStorage (Without activating!)
-    setPowerups(prev => {
-      const nextCount = (prev[type] || 0) + 1;
-      const key = type === 'freeze' ? 'quran_freeze_count' : 'quran_delete_two_count';
-      localStorage.setItem(key, nextCount.toString());
-      return { ...prev, [type]: nextCount };
-    });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        toast.error(data.message || 'فشلت عملية الشراء من قاعدة البيانات');
+        setIsPurchasingPowerup(false);
+        return false;
+      }
 
-    if (type === 'freeze') {
-      toast.success('تمت إضافة تجميد الوقت إلى مخزونك (+1) 🧊 (-30 نقطة)');
-    } else {
-      toast.success('تمت إضافة حذف إجابتين إلى مخزونك (+1) ✂️ (-50 نقطة)');
+      // 2. Only on successful DB update, update local state and inventory
+      const remainingPoints = typeof data.remainingPoints === 'number'
+        ? data.remainingPoints
+        : Math.max(0, totalPoints - cost);
+
+      setTotalPoints(remainingPoints);
+      localStorage.setItem('quran_total_points', remainingPoints.toString());
+      localStorage.setItem('quran_points', remainingPoints.toString());
+
+      // Add +1 to inventory in State and localStorage
+      setPowerups(prev => {
+        const nextCount = (prev[type] || 0) + 1;
+        const key = type === 'freeze' ? 'quran_freeze_count' : 'quran_delete_two_count';
+        localStorage.setItem(key, nextCount.toString());
+        return { ...prev, [type]: nextCount };
+      });
+
+      if (type === 'freeze') {
+        toast.success('تم خصم 30 نقطة وإضافة تجميد الوقت لمخزونك (+1) 🧊');
+      } else {
+        toast.success('تم خصم 50 نقطة وإضافة حذف إجابتين لمخزونك (+1) ✂️');
+      }
+
+      setIsPurchasingPowerup(false);
+      return true;
+    } catch (err: any) {
+      console.error('[PowerUps] DB points sync error:', err);
+      toast.error('تعذر إتمام عملية الشراء، يرجى التحقق من اتصالك بالإنترنت');
+      setIsPurchasingPowerup(false);
+      return false;
     }
-    return true;
   };
 
   const handleExecuteFreezeTime = () => {
@@ -7037,6 +7060,7 @@ ${versesList}
     // Power-ups
     powerups, setPowerups,
     buyPowerup,
+    isPurchasingPowerup,
     freezeTimeCount, setFreezeTimeCount,
     deleteTwoCount, setDeleteTwoCount,
     isFreezeActive, setIsFreezeActive,
