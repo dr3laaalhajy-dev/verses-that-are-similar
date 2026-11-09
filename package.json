@@ -57,6 +57,7 @@
     "@types/uuid": "^10.0.0",
     "@vercel/node": "^5.6.17",
     "autoprefixer": "^10.4.21",
+    "sharp": "^0.35.5",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
