@@ -208,8 +208,10 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
   // Track advancing question state to avoid race conditions or double requests
   const advancingQuestionRef = useRef<number | null>(null);
 
-  // Active online participants (excluding resigned/abandoned/left)
-  const activeOnlineParticipants = participants.filter((p: any) => {
+  // Active participants in room (only excluding those who explicitly resigned / left / abandoned)
+  // Window blur, tab switching, and temporary backgrounding NEVER disqualify or drop players.
+  // The countdown timer and speed metrics naturally handle pace without kicking users.
+  const activeParticipants = participants.filter((p: any) => {
     const pProg = room?.playersProgress ? room.playersProgress[String(p.id)] : null;
     const isWithdrawn = Boolean(
       p.hasLeft || (pProg && pProg.hasLeft) ||
@@ -217,12 +219,12 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
       p.isAbandoned || (pProg && pProg.isAbandoned) ||
       p.status === 'abandoned' || (pProg && pProg.status === 'abandoned')
     );
-    return !isWithdrawn && isParticipantOnlineFn(p);
+    return !isWithdrawn;
   });
 
-  const activeCount = activeOnlineParticipants.length;
+  const activeCount = activeParticipants.length;
   const currentAnswers = room?.currentAnswers || {};
-  const validAnswersCount = activeOnlineParticipants.filter((p: any) => {
+  const validAnswersCount = activeParticipants.filter((p: any) => {
     const pId = String(p.id);
     const ans = currentAnswers[pId] || currentAnswers[p.username] || currentAnswers[p.name];
     const hasCurrentAnswer = Boolean(ans && (ans.questionIndex === undefined || ans.questionIndex === currentQuestionIdx));
@@ -908,17 +910,23 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
               const isMe = p.name === playerName || p.username === playerUsername || pId === String(currentUserId);
               const hasAns = Boolean(ans && (ans.questionIndex === undefined || ans.questionIndex === currentQuestionIdx));
               const isAnsCorrect = hasAns && Boolean(ans.isCorrect);
-              const isOnline = isParticipantOnlineFn(p);
+              const pProg = room?.playersProgress ? (room.playersProgress[pId] || room.playersProgress[p.username] || room.playersProgress[p.name]) : null;
+              const isWithdrawn = Boolean(
+                p.hasLeft || (pProg && pProg.hasLeft) ||
+                p.isResigned || (pProg && pProg.isResigned) ||
+                p.isAbandoned || (pProg && pProg.isAbandoned) ||
+                p.status === 'abandoned' || (pProg && pProg.status === 'abandoned')
+              );
 
               const initial = (p.name || p.username || 'ل').trim().charAt(0);
 
               return (
-                <div key={pId} className="relative flex flex-col items-center shrink-0" title={`${p.name || p.username}${isMe ? ' (أنت)' : ''}`}>
+                <div key={pId} className="relative flex flex-col items-center shrink-0" title={`${p.name || p.username}${isMe ? ' (أنت)' : ''}${isWithdrawn ? ' (منسحب)' : ''}`}>
                   <div
                     className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center font-black text-xs border relative transition-all ${
                       isMe ? 'ring-2 ring-emerald-400 border-white' : 'border-white/20'
                     } ${
-                      !isOnline
+                      isWithdrawn
                         ? 'bg-slate-800 text-slate-500 opacity-60'
                         : isAnsCorrect
                         ? 'bg-emerald-600 text-white shadow-xs'
@@ -932,7 +940,7 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
                     {/* Status Badge in corner */}
                     <span
                       className={`absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full flex items-center justify-center text-[8px] font-black border border-slate-900 ${
-                        !isOnline
+                        isWithdrawn
                           ? 'bg-slate-600 text-white'
                           : isAnsCorrect
                           ? 'bg-emerald-400 text-slate-900'
@@ -941,7 +949,7 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
                           : 'bg-amber-400 text-slate-900 animate-pulse'
                       }`}
                     >
-                      {!isOnline ? '✕' : isAnsCorrect ? '✓' : hasAns ? '✕' : '⏳'}
+                      {isWithdrawn ? '✕' : isAnsCorrect ? '✓' : hasAns ? '✕' : '⏳'}
                     </span>
                   </div>
                   <span className="text-[9px] text-slate-300 max-w-[42px] truncate mt-0.5 leading-none">

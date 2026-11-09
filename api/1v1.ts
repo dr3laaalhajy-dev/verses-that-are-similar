@@ -662,13 +662,11 @@ function calculateResults(room: any, playersProgress: Record<string, any>) {
       ? pData.answersCount
       : (Array.isArray(pData.roundHistory) ? pData.roundHistory.length : (pData.progress === 100 ? totalQuestions : 0))
 
-    const completedAllQuestions = !isAbandoned && (answersCount >= totalQuestions || pData.progress === 100)
-
-    if (isAbandoned || !completedAllQuestions) {
-      // Disqualified from rankings: 0 cups and 0 points
+    if (isAbandoned) {
+      // Disqualified from rankings: 0 cups and 0 points ONLY for genuine explicit abandonment/resignation
       pData.isDisqualified = true
       pData.isAbandoned = true
-      pData.status = isAbandoned ? 'abandoned' : 'incomplete'
+      pData.status = 'abandoned'
       pData.score = 0
       pData.finalTotalScore = 0
       pData.basePoints = 0
@@ -1043,18 +1041,18 @@ async function handlePoll(req: VercelRequest, res: VercelResponse) {
         return a && (a.questionIndex === undefined || a.questionIndex === curQ)
       })
 
-      const onlinePlayers = Object.entries(playersProgress).filter(([_, p]: [string, any]) => {
-        return p && p.isOnline !== false
+      const activePlayers = Object.entries(playersProgress).filter(([_, p]: [string, any]) => {
+        return p && !p.hasLeft && !p.isResigned && !p.isAbandoned && p.status !== 'abandoned'
       })
 
       const isTimerExpired = room.timePerQuestion > 0 && room.questionStartTime &&
         ((Date.now() - Number(room.questionStartTime)) / 1000 >= (room.timePerQuestion + 1.5))
 
-      const allOnlineAnswered = onlinePlayers.length > 0 && validAnswers.length >= onlinePlayers.length
+      const allActiveAnswered = activePlayers.length > 0 && validAnswers.length >= activePlayers.length
       const totalQ = room.questionCount || 5
       const isLastQuestion = curQ >= totalQ - 1
 
-      if (isTimerExpired || allOnlineAnswered) {
+      if (isTimerExpired || allActiveAnswered) {
         try {
           const { data: freshRoom } = await supabaseAdmin.from('rooms').select('*').eq('id', room.id).maybeSingle()
           if (freshRoom && freshRoom.status === 'PLAYING' && freshRoom.currentQuestionIndex === curQ) {
@@ -1259,14 +1257,14 @@ async function handleSubmitAnswer(req: VercelRequest, res: VercelResponse) {
         return a && (a.questionIndex === undefined || a.questionIndex === curQ)
       })
 
-      const onlinePlayers = Object.entries(playersProgress).filter(([id, p]: [string, any]) => {
+      const activePlayers = Object.entries(playersProgress).filter(([id, p]: [string, any]) => {
         if (id === '__lastReaction' || id === '_firstCorrectUserId') return false
-        return p && p.isOnline !== false && !p.hasLeft && !p.isResigned && !p.isAbandoned && p.status !== 'abandoned'
+        return p && !p.hasLeft && !p.isResigned && !p.isAbandoned && p.status !== 'abandoned'
       })
 
-      const allOnlineAnswered = onlinePlayers.length > 0 && validAnswers.length >= onlinePlayers.length
+      const allActiveAnswered = activePlayers.length > 0 && validAnswers.length >= activePlayers.length
 
-      if (allOnlineAnswered) {
+      if (allActiveAnswered) {
         // Automatically advance to next question OR finalize room if it's the last question
         await advanceRoomToNextQuestionTx(
           null,
@@ -1630,42 +1628,8 @@ async function handlePresence(req: VercelRequest, res: VercelResponse) {
     // Note: Do NOT cancel WAITING rooms if the host goes offline!
     // Rooms are only cancelled when the host explicitly clicks "إلغاء الغرفة"
     // or when the 10-minute TTL expires while in WAITING status.
-
-    // Requirement 2 & 4: Disconnection Trigger in SYNC mode
-    // When any player disconnects (isOnline === false), immediately check whether all REMAINING
-    // online players have already submitted their answers. If so, advance question immediately!
-    // This forces timer cancellation and transitions the question without delay.
-    if (!onlineStatus && room.status === 'PLAYING' && (room as any).transitionMode !== 'ASYNC') {
-      const curQ = room.currentQuestionIndex || 0
-      const currentAnswers = (room.currentAnswers as any) || {}
-
-      // Remaining online players (excluding the player who just went offline)
-      const remainingOnlinePlayers = Object.entries(playersProgress).filter(([id, p]: [string, any]) => {
-        return id !== pIdStr && p && p.isOnline !== false
-      })
-
-      // Check if all remaining online players have answered current question
-      const totalQ = room.questionCount || 5
-      const isLastQuestion = curQ >= totalQ - 1
-      const allRemainingAnswered = remainingOnlinePlayers.length > 0 && remainingOnlinePlayers.every(([id]) => {
-        const a = currentAnswers[id]
-        return a && (a.questionIndex === undefined || a.questionIndex === curQ)
-      })
-
-      if (allRemainingAnswered) {
-        const { data: freshRoom } = await supabaseAdmin.from('rooms').select('*').eq('id', room.id).maybeSingle()
-        if (freshRoom && freshRoom.status === 'PLAYING' && freshRoom.currentQuestionIndex === curQ) {
-          const freshProgress = (freshRoom.playersProgress as any) || {}
-          if (freshProgress[pIdStr]) {
-            freshProgress[pIdStr].isOnline = false
-            freshProgress[pIdStr].lastSeen = Date.now()
-          }
-          await advanceRoomToNextQuestionTx(null, { ...freshRoom, playersProgress: freshProgress }, (freshRoom.currentAnswers as any) || {})
-        }
-        const fullRoom = await getFullRoom(room.id)
-        return res.status(200).json(fullRoom)
-      }
-    }
+    // Temporary window blur / tab switches / app pauses do NOT advance or forfeit the round.
+    // Progression is strictly governed by all active participants answering OR timer expiration.
 
     await supabaseAdmin.from('rooms').update({ playersProgress }).eq('id', room.id)
 

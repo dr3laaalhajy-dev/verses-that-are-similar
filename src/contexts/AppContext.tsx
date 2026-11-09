@@ -3806,7 +3806,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
             setView('challenge');
           } else if (view === 'challenge' && data.status === 'PLAYING') {
-            // Withdrawal Notification: Check if any participant has left/resigned and notify remaining players
+            // Withdrawal Notification: Check if any participant has explicitly left/resigned and notify remaining players
+            // Notice: Temporary window blur, tab switches, and mobile app pause are NOT treated as withdrawals.
             const participantsList = data.participants || [];
             participantsList.forEach((p: any) => {
               const pIdStr = String(p.id);
@@ -3815,8 +3816,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 p.hasLeft || (pProgress && pProgress.hasLeft) ||
                 p.isResigned || (pProgress && pProgress.isResigned) ||
                 p.isAbandoned || (pProgress && pProgress.isAbandoned) ||
-                p.status === 'abandoned' || (pProgress && pProgress.status === 'abandoned') ||
-                p.isOnline === false
+                p.status === 'abandoned' || (pProgress && pProgress.status === 'abandoned')
               );
 
               if (isWithdrawn && !notifiedWithdrawnPlayersRef.current.has(pIdStr)) {
