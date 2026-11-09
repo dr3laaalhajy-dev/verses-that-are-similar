@@ -19,9 +19,7 @@ const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.join(__dirname, '.env.local') });
 dotenv.config({ path: path.join(__dirname, '.env') });
 
-const NEON_DATABASE_URL =
-  process.env.DATABASE_URL ||
-  'postgresql://neondb_owner:npg_dZcw62PJbqhM@ep-green-salad-an54u1bs-pooler.c-6.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require';
+const NEON_DATABASE_URL = process.env.DATABASE_URL || '';
 
 const SUPABASE_URL =
   process.env.SUPABASE_URL ||

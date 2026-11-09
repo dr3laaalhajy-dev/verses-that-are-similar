@@ -1,3 +1,14 @@
+/**
+ * @file prisma.ts
+ * @description SUPABASE COMPATIBILITY SHIM ONLY.
+ * 
+ * Notice: This project exclusively uses Supabase for database operations.
+ * This proxy translates legacy Prisma syntax directly to Supabase PostgREST queries
+ * using `supabaseAdmin.from(...)`.
+ * 
+ * For all new features, read and write operations, use `supabaseAdmin.from('table')` directly!
+ */
+
 import { supabaseAdmin } from './supabaseAdmin.js';
 
 // Table mapping from Prisma model name to Supabase table name
