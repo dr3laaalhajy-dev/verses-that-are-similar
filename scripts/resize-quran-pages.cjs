@@ -6,9 +6,15 @@ const QURAN_DIR = path.resolve(__dirname, '../public/quran-pages');
 
 async function main() {
   console.log('====================================================');
-  console.log('  بدء تصغير وتحسين صور صفحات المصحف الشريف (WebP)  ');
+  console.log('  بدء الضغط الصارم (Aggressive Compression) للمصحف   ');
   console.log('====================================================');
-  console.log(`المجلد المستهدف: ${QURAN_DIR}\n`);
+  console.log(`المجلد المستهدف: ${QURAN_DIR}`);
+  console.log('الإعدادات المعتمدة:');
+  console.log('  • العرض (Width): 800px (مع auto height)');
+  console.log('  • جودة الضغط (Quality): 50%');
+  console.log('  • ضغط فَقْدِي (lossless: false)');
+  console.log('  • أقصى جهد خوارزمي (effort: 6)');
+  console.log('  • إزالة كامل البيانات الوصفية (Strip Metadata)\n');
 
   if (!fs.existsSync(QURAN_DIR)) {
     console.error(`خطأ: المجلد ${QURAN_DIR} غير موجود!`);
@@ -34,31 +40,32 @@ async function main() {
     const origSize = origStat.size;
     totalOriginalBytes += origSize;
 
-    // قراءة الصورة وضبط العرض إلى 1080 بكسل مع حساب الارتفاع تلقائياً للحفاظ على نسبة العرض للارتفاع
-    // وضغط WebP بجودة 70
+    // تطبيق إعدادات الضغط الصارم
     const buffer = await sharp(filePath)
       .resize({
-        width: 1080,
+        width: 800,
         withoutEnlargement: true,
       })
       .webp({
-        quality: 70,
-        alphaQuality: 0,
+        quality: 50,
+        lossless: false,
         effort: 6,
+        alphaQuality: 0,
       })
       .toBuffer();
 
     const newSize = buffer.length;
     totalNewBytes += newSize;
 
-    // استبدال الملف القديم بالملف الجديد المصغر
+    // استبدال الملف بالنسخة الجديدة المصغرة مع تجريد الميتاداتا
     fs.writeFileSync(filePath, buffer);
     processedCount++;
 
     if (processedCount % 50 === 0 || processedCount === allFiles.length) {
       const pct = ((processedCount / allFiles.length) * 100).toFixed(1);
       const runningSaved = (totalOriginalBytes - totalNewBytes) / (1024 * 1024);
-      console.log(`[${pct}%] تمت معالجة ${processedCount}/${allFiles.length} صفحة... (المساحة الموفرة حتى الآن: ${runningSaved.toFixed(2)} MB)`);
+      const currentAvgKB = (totalNewBytes / processedCount / 1024).toFixed(1);
+      console.log(`[${pct}%] تمت معالجة ${processedCount}/${allFiles.length} صفحة... (المتوسط الحالي: ${currentAvgKB} KB | الموفر: ${runningSaved.toFixed(2)} MB)`);
     }
   }
 
@@ -68,15 +75,19 @@ async function main() {
   const savedBytes = totalOriginalBytes - totalNewBytes;
   const savedMB = (savedBytes / (1024 * 1024)).toFixed(2);
   const savedPercent = ((savedBytes / totalOriginalBytes) * 100).toFixed(2);
+  const oldAvgKB = (totalOriginalBytes / processedCount / 1024).toFixed(1);
+  const newAvgKB = (totalNewBytes / processedCount / 1024).toFixed(1);
 
   console.log('\n====================================================');
   console.log('                اكتملت العملية بنجاح                ');
   console.log('====================================================');
-  console.log(`عدد الصور التي تمت معالجتها: ${processedCount} صورة`);
-  console.log(`وقت التنفيذ: ${durationSec} ثانية`);
-  console.log(`الحجم الإجمالي الأصلي:      ${origMB} MB`);
-  console.log(`الحجم الإجمالي الجديد:       ${newMB} MB`);
-  console.log(`إجمالي المساحة الموفرة (Total Space Saved): ${savedMB} MB (${savedPercent}%)`);
+  console.log(`عدد الصور التي تمت معالجتها:   ${processedCount} صورة`);
+  console.log(`وقت التنفيذ:                   ${durationSec} ثانية`);
+  console.log(`الحجم الإجمالي السابق:         ${origMB} MB`);
+  console.log(`الحجم الإجمالي الجديد:          ${newMB} MB`);
+  console.log(`إجمالي المساحة الموفرة:        ${savedMB} MB (${savedPercent}%)`);
+  console.log(`متوسط حجم الصورة السابق:      ${oldAvgKB} KB`);
+  console.log(`متوسط حجم الصورة الجديد:       ${newAvgKB} KB`);
   console.log('====================================================\n');
 }
 
