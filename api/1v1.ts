@@ -758,22 +758,25 @@ function calculateResults(room: any, playersProgress: Record<string, any>) {
 const finalizeRoomScores = calculateResults
 
 async function applyRoomTrophies(_tx: any, room: any, progress: Record<string, any>) {
-  const totalQuestions = room.questionCount || room.totalQuestions || 1
+  if (room && (room.rewardsDistributed || room.isRewardsApplied)) return;
+  if (room) room.rewardsDistributed = true;
+
+  const totalQuestions = room.questionCount || room.totalQuestions || 1;
   const ranked = Object.entries(progress)
     .filter(([id, p]: [string, any]) => {
-      if (id === '__lastReaction' || !p || typeof p !== 'object') return false
+      if (id === '__lastReaction' || !p || typeof p !== 'object') return false;
       const isAbandoned = Boolean(
         p.status === 'abandoned' ||
         p.isAbandoned === true ||
         p.isResigned === true ||
         p.hasLeft === true ||
         p.isDisqualified === true
-      )
-      if (isAbandoned) return false
+      );
+      if (isAbandoned) return false;
       const answersCount = typeof p.answersCount === 'number'
         ? p.answersCount
-        : (Array.isArray(p.roundHistory) ? p.roundHistory.length : (p.progress === 100 ? totalQuestions : 0))
-      return answersCount >= totalQuestions || p.progress === 100
+        : (Array.isArray(p.roundHistory) ? p.roundHistory.length : (p.progress === 100 ? totalQuestions : 0));
+      return answersCount >= totalQuestions || p.progress === 100;
     })
     .map(([id, p]: [string, any]) => ({
       id: parseInt(id),
@@ -781,21 +784,57 @@ async function applyRoomTrophies(_tx: any, room: any, progress: Record<string, a
       finishTime: p.finishTime || Infinity
     }))
     .filter(p => !isNaN(p.id) && p.id > 0)
-    .sort((a, b) => b.score - a.score || a.finishTime - b.finishTime)
+    .sort((a, b) => b.score - a.score || a.finishTime - b.finishTime);
 
-  // Exclusive group room cups distribution: 1st (4), 2nd (3), 3rd (2), 4th (1), 5th+ (0)
-  // Awarded exclusively to qualified finishers who completed all questions
-  const rewards = [4, 3, 2, 1]
-  for (let i = 0; i < Math.min(4, ranked.length); i++) {
-    const targetId = ranked[i].id
-    const cups = rewards[i]
+  // Rank-based Rewards Distribution:
+  // Rank 1 (Index 0): Trophy (+1) + Base Points + 50 Bonus Points
+  // Rank 2 (Index 1): Trophy (0)  + Base Points + 30 Bonus Points
+  // Rank 3 (Index 2): Trophy (0)  + Base Points + 15 Bonus Points
+  // Rank 4+ (Index 3+): Trophy (0) + Base Points only (0 Bonus Points)
+  for (let index = 0; index < ranked.length; index++) {
+    const player = ranked[index];
+    const targetId = player.id;
+    let earnedTrophy = 0;
+    let bonusPoints = 0;
+
+    if (index === 0) {
+      earnedTrophy = 1;
+      bonusPoints = 50; // مكافأة المركز الأول
+    } else if (index === 1) {
+      bonusPoints = 30; // مكافأة المركز الثاني
+    } else if (index === 2) {
+      bonusPoints = 15; // مكافأة المركز الثالث
+    }
+
+    const pKey = String(targetId);
+    if (progress[pKey]) {
+      progress[pKey].rank = index + 1;
+      progress[pKey].earnedTrophies = earnedTrophy;
+      progress[pKey].rankBonus = bonusPoints;
+      progress[pKey].finalTotalPoints = (player.score || 0) + bonusPoints;
+    }
+
     try {
-      const { data: p } = await supabaseAdmin.from('players').select('cups').eq('id', targetId).maybeSingle();
+      const { data: p } = await supabaseAdmin
+        .from('players')
+        .select('cups, points')
+        .eq('id', targetId)
+        .maybeSingle();
+
       if (p) {
-        await supabaseAdmin.from('players').update({ cups: (p.cups || 0) + cups }).eq('id', targetId);
+        const updateData: any = {};
+        if (earnedTrophy > 0) {
+          updateData.cups = (p.cups || 0) + earnedTrophy;
+        }
+        if (bonusPoints > 0) {
+          updateData.points = (p.points || 0) + bonusPoints;
+        }
+        if (Object.keys(updateData).length > 0) {
+          await supabaseAdmin.from('players').update(updateData).eq('id', targetId);
+        }
       }
     } catch (e) {
-      console.error(`Failed to award ${cups} trophies to player ${targetId}:`, e)
+      console.error(`Failed to update rank-based rewards for player ${targetId}:`, e);
     }
   }
 }

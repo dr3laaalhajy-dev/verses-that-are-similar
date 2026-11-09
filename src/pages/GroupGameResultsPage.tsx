@@ -27,12 +27,81 @@ export const GroupGameResultsPage: React.FC<GroupGameResultsPageProps> = ({
 }) => {
   const app = useApp();
 
-  // Smart Verification for Daily Mystery Gift: Record completed match when game finishes
+  // Smart Verification for Daily Mystery Gift & Rank-based Rewards sync
   useEffect(() => {
     if (room?.status === 'FINISHED' || room?.status === 'completed') {
       app?.recordDailyGiftRoomMatch?.();
+
+      if (room?.id) {
+        const sessionKey = `group_rewards_applied_${room.id}`;
+        if (!sessionStorage.getItem(sessionKey)) {
+          sessionStorage.setItem(sessionKey, 'true');
+
+          const ranked = (room.participants || [])
+            .map((p: any) => {
+              const prog = room.playersProgress?.[p.id] || {};
+              const isAbandoned = Boolean(
+                prog.isAbandoned ||
+                prog.status === 'abandoned' ||
+                prog.isResigned ||
+                prog.isDisqualified ||
+                prog.hasLeft
+              );
+              return {
+                id: p.id,
+                name: p.name,
+                username: p.username,
+                isAbandoned,
+                score: isAbandoned ? 0 : (prog.finalTotalScore ?? prog.score ?? 0),
+                finishTime: prog.finishTime || Infinity
+              };
+            })
+            .sort((a: any, b: any) => {
+              if (a.isAbandoned !== b.isAbandoned) return a.isAbandoned ? 1 : -1;
+              if (b.score !== a.score) return b.score - a.score;
+              return a.finishTime - b.finishTime;
+            });
+
+          const myIndex = ranked.findIndex((p: any) =>
+            (playerName && p.name === playerName) ||
+            (playerUsername && p.username === playerUsername) ||
+            (p.id && String(p.id) === String(app?.playerId))
+          );
+
+          if (myIndex !== -1 && !ranked[myIndex].isAbandoned) {
+            let earnedTrophy = 0;
+            let bonusPoints = 0;
+            if (myIndex === 0) {
+              earnedTrophy = 1;
+              bonusPoints = 50;
+            } else if (myIndex === 1) {
+              bonusPoints = 30;
+            } else if (myIndex === 2) {
+              bonusPoints = 15;
+            }
+
+            if (earnedTrophy > 0 && typeof app?.setCups === 'function') {
+              app.setCups((prev: number) => {
+                const updated = (prev || 0) + earnedTrophy;
+                localStorage.setItem('quran_total_cups', updated.toString());
+                localStorage.setItem('quran_cups', updated.toString());
+                return updated;
+              });
+            }
+            if (bonusPoints > 0 && typeof app?.setTotalPoints === 'function') {
+              app.setTotalPoints((prev: number) => {
+                const updated = (prev || 0) + bonusPoints;
+                localStorage.setItem('quran_points', updated.toString());
+                return updated;
+              });
+            }
+          }
+
+          app?.syncLeaderboard?.();
+        }
+      }
     }
-  }, [room?.status, app]);
+  }, [room?.status, room?.id, app, playerName, playerUsername]);
   if (room?.gameMode === 'WHO_AM_I') {
     return (
       <motion.div
@@ -133,79 +202,110 @@ export const GroupGameResultsPage: React.FC<GroupGameResultsPageProps> = ({
                     if (b.score !== a.score) return b.score - a.score;
                     return (a.finishTime || Infinity) - (b.finishTime || Infinity);
                   })
-                  .map((p: any, idx: number) => (
-                    <motion.div
-                      key={p.id}
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: idx * 0.1 }}
-                      className={`flex flex-col gap-2 p-3.5 md:p-4 rounded-2xl border ${
-                        p.isAbandoned
-                          ? 'bg-red-50/50 border-red-200/60 opacity-80'
-                          : idx === 0
-                            ? 'bg-gradient-to-r from-amber-50 to-orange-50/60 border-amber-300 shadow-md ring-2 ring-amber-400/20'
-                            : 'bg-white border-slate-200/80 shadow-xs'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2.5">
-                          <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-black text-sm ${
-                            p.isAbandoned
-                              ? 'bg-red-100 text-red-600 font-bold text-xs'
-                              : idx === 0 ? 'bg-amber-500 text-white shadow-xs' : idx === 1 ? 'bg-slate-300 text-slate-700' : idx === 2 ? 'bg-amber-700 text-white' : 'bg-slate-100 text-slate-500'
-                          }`}>
-                            {p.isAbandoned ? '✕' : idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : idx + 1}
-                          </div>
-                          <div className="flex flex-col items-start">
-                            <span className="font-black text-slate-800 text-sm">
-                              {p.name} {(p.name === playerName || (p.username && p.username === playerUsername)) && '(أنت)'}
-                            </span>
-                            <div className="flex items-center gap-2 text-[10px] text-slate-400 font-bold">
-                              {p.isAbandoned ? (
-                                <span className="text-red-500 font-black">مستبعد (انسحب من التحدي)</span>
-                              ) : (
-                                <>
-                                  <span>{p.correctCount}/{room?.questionCount || 0} صحيحة</span>
-                                  <span>•</span>
-                                  <span className={`font-black ${p.accuracy >= 90 ? 'text-emerald-600' : p.accuracy >= 70 ? 'text-amber-600' : 'text-slate-500'}`}>
-                                    دقة {p.accuracy}%
-                                  </span>
-                                </>
-                              )}
+                  .map((p: any, idx: number) => {
+                    const rankBonus = p.isAbandoned ? 0 : (idx === 0 ? 50 : idx === 1 ? 30 : idx === 2 ? 15 : 0);
+                    const finalTotalPoints = p.score + rankBonus;
+
+                    return (
+                      <motion.div
+                        key={p.id}
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: idx * 0.1 }}
+                        className={`flex flex-col gap-2 p-3.5 md:p-4 rounded-2xl border transition-all ${
+                          p.isAbandoned
+                            ? 'bg-red-50/50 border-red-200/60 opacity-80'
+                            : idx === 0
+                              ? 'bg-gradient-to-r from-amber-50 to-orange-50/60 border-amber-300 shadow-md ring-2 ring-amber-400/20'
+                              : 'bg-white border-slate-200/80 shadow-xs'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2.5">
+                            <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-black text-sm ${
+                              p.isAbandoned
+                                ? 'bg-red-100 text-red-600 font-bold text-xs'
+                                : idx === 0 ? 'bg-amber-500 text-white shadow-xs' : idx === 1 ? 'bg-slate-300 text-slate-700' : idx === 2 ? 'bg-amber-700 text-white' : 'bg-slate-100 text-slate-500'
+                            }`}>
+                              {p.isAbandoned ? '✕' : idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : idx + 1}
+                            </div>
+                            <div className="flex flex-col items-start">
+                              <span className="font-black text-slate-800 text-sm flex items-center gap-1.5">
+                                {p.name} {(p.name === playerName || (p.username && p.username === playerUsername)) && '(أنت)'}
+                                {idx === 0 && !p.isAbandoned && (
+                                  <span className="text-amber-500" title="الفائز بالمركز الأول">🏆</span>
+                                )}
+                              </span>
+                              <div className="flex items-center gap-2 text-[10px] text-slate-400 font-bold">
+                                {p.isAbandoned ? (
+                                  <span className="text-red-500 font-black">مستبعد (انسحب من التحدي)</span>
+                                ) : (
+                                  <>
+                                    <span>{p.correctCount}/{room?.questionCount || 0} صحيحة</span>
+                                    <span>•</span>
+                                    <span className={`font-black ${p.accuracy >= 90 ? 'text-emerald-600' : p.accuracy >= 70 ? 'text-amber-600' : 'text-slate-500'}`}>
+                                      دقة {p.accuracy}%
+                                    </span>
+                                  </>
+                                )}
+                              </div>
                             </div>
                           </div>
-                        </div>
 
-                        <div className="text-left flex flex-col items-end">
-                          <span className={`text-sm md:text-base font-black px-2.5 py-0.5 rounded-lg border ${
-                            p.isAbandoned
-                              ? 'text-red-500 bg-red-100/50 border-red-200'
-                              : 'text-brand-emerald bg-brand-emerald/10 border-brand-emerald/20'
-                          }`}>
-                            {p.score} نقطة
-                          </span>
-                          {!p.isAbandoned && (
-                            <span className="text-[10px] text-slate-400 font-bold mt-0.5">
-                              الأساسية: {p.basePoints} {p.bonusPoints > 0 && `• بونص: +${p.bonusPoints}`}
+                          <div className="text-left flex flex-col items-end">
+                            <span className={`text-sm md:text-base font-black px-2.5 py-0.5 rounded-lg border ${
+                              p.isAbandoned
+                                ? 'text-red-500 bg-red-100/50 border-red-200'
+                                : idx === 0
+                                  ? 'text-amber-800 bg-amber-100/80 border-amber-300 shadow-xs'
+                                  : idx === 1
+                                    ? 'text-slate-800 bg-slate-100 border-slate-300'
+                                    : idx === 2
+                                      ? 'text-amber-900 bg-amber-100/60 border-amber-200'
+                                      : 'text-brand-emerald bg-brand-emerald/10 border-brand-emerald/20'
+                            }`}>
+                              {finalTotalPoints} نقطة
                             </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Bonus Badges Breakdown / Disqualification Notice */}
-                      <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-slate-100 text-[10px] font-black">
-                        {p.isAbandoned ? (
-                          <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded-md flex items-center gap-1 border border-red-200 shadow-xs">
-                            <span>🚫 حرمان تام من الجوائز (0 كؤوس و 0 نقاط)</span>
-                          </span>
-                        ) : (
-                          <>
-                            {idx < 4 && (
-                              <span className="bg-amber-100 text-amber-900 px-2 py-0.5 rounded-md flex items-center gap-1 border border-amber-300 shadow-xs">
-                                <Trophy className="w-3 h-3 text-amber-600 fill-amber-600" />
-                                <span>+{4 - idx} {idx === 3 ? 'كأس' : idx === 2 ? 'كأسين' : 'كؤوس'}</span>
+                            {!p.isAbandoned && (
+                              <span className="text-[10px] text-slate-400 font-bold mt-0.5">
+                                الأساسية: {p.score} {rankBonus > 0 && <span className="text-amber-600 font-black"> • بونص المركز: +{rankBonus}</span>}
                               </span>
                             )}
+                          </div>
+                        </div>
+
+                        {/* Bonus Badges Breakdown / Disqualification Notice */}
+                        <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-slate-100 text-[10px] font-black">
+                          {p.isAbandoned ? (
+                            <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded-md flex items-center gap-1 border border-red-200 shadow-xs">
+                              <span>🚫 حرمان تام من الجوائز (0 كؤوس و 0 نقاط)</span>
+                            </span>
+                          ) : (
+                            <>
+                              {/* Trophy badge ONLY for 1st place */}
+                              {idx === 0 && (
+                                <span className="bg-amber-100 text-amber-900 px-2.5 py-0.5 rounded-md flex items-center gap-1 border border-amber-300 shadow-xs font-black">
+                                  <Trophy className="w-3.5 h-3.5 text-amber-600 fill-amber-600" />
+                                  <span>+1 كأس الفوز 🏆</span>
+                                </span>
+                              )}
+
+                              {/* Rank Bonus Badge for Top 3 */}
+                              {idx === 0 && (
+                                <span className="bg-amber-100 text-amber-900 px-2 py-0.5 rounded-md flex items-center gap-1 border border-amber-300 shadow-xs">
+                                  <span>🥇 +50 نقطة بونص المركز الأول</span>
+                                </span>
+                              )}
+                              {idx === 1 && (
+                                <span className="bg-slate-100 text-slate-800 px-2 py-0.5 rounded-md flex items-center gap-1 border border-slate-300 shadow-xs">
+                                  <span>🥈 +30 نقطة بونص المركز الثاني</span>
+                                </span>
+                              )}
+                              {idx === 2 && (
+                                <span className="bg-amber-50 text-amber-900 px-2 py-0.5 rounded-md flex items-center gap-1 border border-amber-200 shadow-xs">
+                                  <span>🥉 +15 نقطة بونص المركز الثالث</span>
+                                </span>
+                              )}
                             {p.bonusPoints > 0 && (
                               <span className="bg-amber-100 text-amber-900 px-2 py-0.5 rounded-md flex items-center gap-1 border border-amber-300 shadow-xs">
                                 <span>🎁 +{p.bonusPoints} بونص سور إضافية</span>
@@ -231,7 +331,8 @@ export const GroupGameResultsPage: React.FC<GroupGameResultsPageProps> = ({
                         )}
                       </div>
                     </motion.div>
-                  ))}
+                  );
+                })}
               </div>
 
               <button
