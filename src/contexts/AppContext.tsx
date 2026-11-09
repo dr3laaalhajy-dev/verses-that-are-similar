@@ -1372,6 +1372,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
 
         // Requirement 2: Sync completed challenges to certificates
+        const localCertsRawAuth = localStorage.getItem('quran_user_certificates');
+        let authHasSeerah = false;
+        let authHasGeneral = false;
+        try {
+          const parsed = JSON.parse(localCertsRawAuth || '[]');
+          if (Array.isArray(parsed)) {
+            authHasSeerah = parsed.some((c: any) => c.category === 'seerah');
+            authHasGeneral = parsed.some((c: any) => c.category === 'general');
+          }
+        } catch (_) {}
+
+        // Self-heal Supabase if local certs or active frame exist but DB flags are false
+        if ((!p.seerahCompleted && (authHasSeerah || p.activeFrame === 'seerah')) || (!p.generalCompleted && (authHasGeneral || p.activeFrame === 'general'))) {
+          const authHeal: any = {};
+          if (!p.seerahCompleted && (authHasSeerah || p.activeFrame === 'seerah')) {
+            authHeal.seerahCompleted = true;
+            p.seerahCompleted = true;
+          }
+          if (!p.generalCompleted && (authHasGeneral || p.activeFrame === 'general')) {
+            authHeal.generalCompleted = true;
+            p.generalCompleted = true;
+          }
+          supabase.from('players').update(authHeal).eq('id', p.id).then(() => {}).catch(() => {});
+        }
+
         if (p.seerahCompleted || p.generalCompleted) {
           setUserCertificates(prev => {
             const certs = [...prev];
@@ -6271,6 +6296,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setCompletedChallengeIds(new Set(user.completedChallengeIds));
         localStorage.setItem('quran_completed_ids', JSON.stringify(user.completedChallengeIds));
         localStorage.setItem('quran_completed_challenges', JSON.stringify(user.completedChallengeIds));
+      }
+
+      // CRITICAL: Self-healing synchronization for certificates
+      const localCertsRaw = localStorage.getItem('quran_user_certificates');
+      let localHasSeerah = false;
+      let localHasGeneral = false;
+      try {
+        const parsed = JSON.parse(localCertsRaw || '[]');
+        if (Array.isArray(parsed)) {
+          localHasSeerah = parsed.some((c: any) => c.category === 'seerah');
+          localHasGeneral = parsed.some((c: any) => c.category === 'general');
+        }
+      } catch (_) {}
+
+      const shouldHealSeerah = !user.seerahCompleted && (localHasSeerah || user.activeFrame === 'seerah' || localStorage.getItem('quran_active_frame') === 'seerah');
+      const shouldHealGeneral = !user.generalCompleted && (localHasGeneral || user.activeFrame === 'general' || localStorage.getItem('quran_active_frame') === 'general');
+
+      if (shouldHealSeerah || shouldHealGeneral) {
+        const healUpdates: any = {};
+        if (shouldHealSeerah) {
+          healUpdates.seerahCompleted = true;
+          user.seerahCompleted = true;
+        }
+        if (shouldHealGeneral) {
+          healUpdates.generalCompleted = true;
+          user.generalCompleted = true;
+        }
+        if (user.id) {
+          supabase.from('players').update(healUpdates).eq('id', user.id).then(() => {}).catch(() => {});
+        }
       }
 
       // CRITICAL: Synchronize certificates from Supabase into userCertificates
