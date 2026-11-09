@@ -458,7 +458,9 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          app.setPrivacyModalInitialTab('privacy');
+                          if (typeof app.setPrivacyModalInitialTab === 'function') {
+                            app.setPrivacyModalInitialTab('privacy');
+                          }
                           app.setShowPrivacyModal(true);
                         }}
                         className="text-brand-emerald hover:text-emerald-700 underline font-black inline cursor-pointer"
@@ -470,7 +472,9 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          app.setPrivacyModalInitialTab('terms');
+                          if (typeof app.setPrivacyModalInitialTab === 'function') {
+                            app.setPrivacyModalInitialTab('terms');
+                          }
                           app.setShowPrivacyModal(true);
                         }}
                         className="text-brand-emerald hover:text-emerald-700 underline font-black inline cursor-pointer"

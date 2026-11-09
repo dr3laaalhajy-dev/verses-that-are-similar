@@ -7254,6 +7254,7 @@ ${versesList}
     // Modals & Overlays
     showAboutModal, setShowAboutModal,
     showPrivacyModal, setShowPrivacyModal,
+    privacyModalInitialTab, setPrivacyModalInitialTab,
     showDownloadModal, setShowDownloadModal,
     showTesterModal: showGooglePlayModal, setShowTesterModal: setShowGooglePlayModal,
     showGooglePlayModal, setShowGooglePlayModal,

@@ -393,7 +393,9 @@ export const AppRouter: React.FC = () => {
           }}
           onOpenDownloadApp={() => app.setShowGooglePlayModal(true)}
           onOpenPrivacyPolicy={(tab) => {
-            app.setPrivacyModalInitialTab(tab || 'privacy');
+            if (typeof app.setPrivacyModalInitialTab === 'function') {
+              app.setPrivacyModalInitialTab(tab || 'privacy');
+            }
             app.setShowPrivacyModal(true);
           }}
           canAccessAdmin={
