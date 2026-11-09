@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Trophy, Zap, Sparkles, RotateCcw } from 'lucide-react';
 import { View } from '../types/challenges';
@@ -135,7 +135,13 @@ export const GroupGameResultsPage: React.FC<GroupGameResultsPageProps> = ({
   const [nextRoomId, setNextRoomId] = useState<string | null>(() => {
     return room?.nextRoomId || room?.playersProgress?.__rematch?.nextRoomId || null;
   });
-  const [isRematchLoading, setIsRematchLoading] = useState(false);
+  const [isWaitingForRematch, setIsWaitingForRematch] = useState(false);
+  const isWaitingForRematchRef = useRef(false);
+  const hasNavigatedRef = useRef(false);
+
+  useEffect(() => {
+    isWaitingForRematchRef.current = isWaitingForRematch;
+  }, [isWaitingForRematch]);
 
   // Sync state if room prop updates with rematch info
   useEffect(() => {
@@ -149,35 +155,87 @@ export const GroupGameResultsPage: React.FC<GroupGameResultsPageProps> = ({
     }
   }, [room?.playAgainUsers, room?.playersProgress, room?.nextRoomId]);
 
-  // Realtime Listener for Rematch and Play Again updates
+  // دالة موحدة للتوجيه والانضمام للغرفة الجديدة بأمان وبدون تكرار
+  const navigateToRematchRoom = async (targetRoomId: string) => {
+    if (!targetRoomId || hasNavigatedRef.current) return;
+    hasNavigatedRef.current = true;
+    setIsWaitingForRematch(true);
+
+    try {
+      if (app?.handleJoinV1) {
+        await app.handleJoinV1(targetRoomId);
+      } else {
+        const res = await fetch('/api/1v1', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'join',
+            roomId: targetRoomId,
+            player2Id: playerUsername || playerName
+          })
+        });
+        const data = await res.json();
+        if (res.ok && data) {
+          setRoom(data);
+          localStorage.setItem('activeRoomId', String(targetRoomId));
+          setView('group_waiting');
+        }
+      }
+    } catch (err) {
+      console.error('[Rematch] Error navigating to room:', err);
+      hasNavigatedRef.current = false;
+      setIsWaitingForRematch(false);
+    }
+  };
+
+  // 3. المستمع اللحظي (Realtime Listener - الحل السحري لمنع الـ Race Condition)
   useEffect(() => {
     if (!room?.id) return;
 
     const channelName = `room_sync_${room.id}`;
     const channel = supabase.channel(channelName);
 
-    const handleRematchEvent = (payload: any) => {
-      const data = payload?.payload || payload;
-      if (data?.playAgainUsers) {
-        setPlayAgainUsers(data.playAgainUsers);
+    const onRematchDiscovered = (incomingNextRoomId: string, users?: any[]) => {
+      if (!incomingNextRoomId) return;
+      setNextRoomId(incomingNextRoomId);
+      if (Array.isArray(users) && users.length > 0) {
+        setPlayAgainUsers(users);
       }
-      if (data?.nextRoomId) {
-        setNextRoomId(data.nextRoomId);
+
+      // إذا كان اللاعب الحالي قد ضغط مسبقاً على الزر (isWaitingForRematch === true) يتم نقله فوراً
+      if (isWaitingForRematchRef.current && !hasNavigatedRef.current) {
+        navigateToRematchRoom(incomingNextRoomId);
       }
     };
 
     channel
-      .on('broadcast', { event: 'play_again_updated' }, handleRematchEvent)
-      .on('broadcast', { event: 'rematch_created' }, handleRematchEvent)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${room.id}` }, (payload: any) => {
+      .on('broadcast', { event: 'play_again_updated' }, (payload: any) => {
+        const data = payload?.payload || payload;
+        if (data?.playAgainUsers) setPlayAgainUsers(data.playAgainUsers);
+        if (data?.nextRoomId) onRematchDiscovered(data.nextRoomId, data.playAgainUsers);
+      })
+      .on('broadcast', { event: 'rematch_created' }, (payload: any) => {
+        const data = payload?.payload || payload;
+        if (data?.playAgainUsers) setPlayAgainUsers(data.playAgainUsers);
+        if (data?.nextRoomId) onRematchDiscovered(data.nextRoomId, data.playAgainUsers);
+      })
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'rooms',
+        filter: `id=eq.${room.id}`
+      }, (payload: any) => {
         const newDoc = payload?.new;
         if (newDoc) {
           const rematchInfo = newDoc.playersProgress?.__rematch || {};
-          if (newDoc.playAgainUsers || rematchInfo.playAgainUsers) {
-            setPlayAgainUsers(newDoc.playAgainUsers || rematchInfo.playAgainUsers);
+          const incomingId = newDoc.nextRoomId || rematchInfo.nextRoomId;
+          const incomingUsers = newDoc.playAgainUsers || rematchInfo.playAgainUsers;
+
+          if (incomingUsers) {
+            setPlayAgainUsers(incomingUsers);
           }
-          if (newDoc.nextRoomId || rematchInfo.nextRoomId) {
-            setNextRoomId(newDoc.nextRoomId || rematchInfo.nextRoomId);
+          if (incomingId) {
+            onRematchDiscovered(incomingId, incomingUsers);
           }
         }
       })
@@ -197,11 +255,40 @@ export const GroupGameResultsPage: React.FC<GroupGameResultsPageProps> = ({
       (app?.playerId && String(u.id) === String(app.playerId))
   );
 
+  // دالة النقر على 'العب مرة أخرى'
   const handlePlayAgain = async () => {
-    if (isRematchLoading || !room?.id) return;
-    setIsRematchLoading(true);
+    if (isWaitingForRematch || hasNavigatedRef.current || !room?.id) return;
+
+    // 1. فصل النقر عن الانتقال (Decouple Click from Navigation)
+    // تغيير حالة الزر فوراً إلى loading ومنع أي نقرات أخرى
+    setIsWaitingForRematch(true);
 
     try {
+      // 2. التحقق المباشر من قاعدة البيانات (Live DB Check)
+      // استعلام مباشر للتأكد من عدم وجود غرفة أُنشئت في أجزاء الثانية الماضية
+      const { data: liveRoomData } = await supabase
+        .from('rooms')
+        .select('nextRoomId, playersProgress, playAgainUsers')
+        .eq('id', room.id)
+        .maybeSingle();
+
+      const liveNextRoomId =
+        liveRoomData?.nextRoomId ||
+        (liveRoomData?.playersProgress as any)?.__rematch?.nextRoomId ||
+        nextRoomId;
+
+      if (liveRoomData?.playAgainUsers) {
+        setPlayAgainUsers(liveRoomData.playAgainUsers);
+      }
+
+      // إذا وُجد nextRoomId: قم بإضافة اللاعب فوراً كمنضم (Joined) وانقله لهذه الغرفة
+      if (liveNextRoomId) {
+        setNextRoomId(liveNextRoomId);
+        await navigateToRematchRoom(liveNextRoomId);
+        return;
+      }
+
+      // إذا لم يُوجد: قم بطلب إنشاء الغرفة الجديدة من الخادم (والذي يضمن تحديث nextRoomId ذرّياً)
       const res = await fetch('/api/1v1', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -212,16 +299,28 @@ export const GroupGameResultsPage: React.FC<GroupGameResultsPageProps> = ({
           playerName: playerName || playerUsername
         })
       });
+
       const data = await res.json();
-      if (data && data.success && data.room) {
-        setRoom(data.room);
-        localStorage.setItem('activeRoomId', String(data.room.id));
-        setView('group_waiting');
+      if (data && data.success && data.nextRoomId) {
+        setNextRoomId(data.nextRoomId);
+        if (data.playAgainUsers) {
+          setPlayAgainUsers(data.playAgainUsers);
+        }
+
+        if (data.room) {
+          hasNavigatedRef.current = true;
+          setRoom(data.room);
+          localStorage.setItem('activeRoomId', String(data.room.id));
+          setView('group_waiting');
+        } else {
+          await navigateToRematchRoom(data.nextRoomId);
+        }
+      } else {
+        setIsWaitingForRematch(false);
       }
     } catch (err) {
-      console.error('Error starting rematch:', err);
-    } finally {
-      setIsRematchLoading(false);
+      console.error('[Rematch] Error initiating rematch:', err);
+      setIsWaitingForRematch(false);
     }
   };
 
@@ -439,18 +538,18 @@ export const GroupGameResultsPage: React.FC<GroupGameResultsPageProps> = ({
                   {/* Rematch / Play Again Button */}
                   <button
                     onClick={handlePlayAgain}
-                    disabled={isRematchLoading}
+                    disabled={isWaitingForRematch}
                     className={`w-full sm:w-auto flex-1 px-6 py-3.5 rounded-2xl font-black text-sm md:text-base flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95 cursor-pointer ${
-                      isRematchLoading
+                      isWaitingForRematch
                         ? 'bg-emerald-700/60 text-white cursor-wait opacity-80'
                         : nextRoomId && !isCurrentUserInPlayAgain
                           ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:brightness-105 text-white ring-2 ring-amber-300 animate-pulse'
                           : 'bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:brightness-105 text-white'
                     }`}
                   >
-                    <RotateCcw className={`w-4 h-4 md:w-5 md:h-5 ${isRematchLoading ? 'animate-spin' : ''}`} />
+                    <RotateCcw className={`w-4 h-4 md:w-5 md:h-5 ${isWaitingForRematch ? 'animate-spin' : ''}`} />
                     <span>
-                      {isRematchLoading
+                      {isWaitingForRematch
                         ? 'جاري تجهيز الغرفة...'
                         : nextRoomId && !isCurrentUserInPlayAgain
                           ? 'انضم للتحدي الجديد 🚀'

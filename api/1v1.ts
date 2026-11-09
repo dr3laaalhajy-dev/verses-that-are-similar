@@ -2310,85 +2310,19 @@ async function handleRematch(req: VercelRequest, res: VercelResponse) {
     // CASE A: Next Room Already Exists (Join Next Room)
     // ─────────────────────────────────────────────────────────────────
     if (nextRoomId) {
-      const { data: existingNextRoom } = await supabaseAdmin
-        .from('rooms')
-        .select('*')
-        .eq('id', nextRoomId)
-        .maybeSingle();
+      return await joinExistingRematchRoom(nextRoomId, room, player, userInfo, res);
+    }
 
-      if (existingNextRoom && existingNextRoom.status !== 'CANCELLED') {
-        const alreadyInList = playAgainUsers.some(
-          (u: any) => String(u.id) === String(player.id) || u.name === player.name
-        );
-        if (!alreadyInList) {
-          playAgainUsers.push(userInfo);
-          const updatedOldProgress = {
-            ...roomProgress,
-            __rematch: { nextRoomId, playAgainUsers }
-          };
-          try {
-            await supabaseAdmin.from('rooms').update({
-              nextRoomId,
-              playAgainUsers,
-              playersProgress: updatedOldProgress
-            }).eq('id', room.id);
-          } catch (_) {
-            await supabaseAdmin.from('rooms').update({
-              playersProgress: updatedOldProgress
-            }).eq('id', room.id);
-          }
+    // Double check DB before creating to catch concurrent requests in flight
+    const { data: freshRoom } = await supabaseAdmin
+      .from('rooms')
+      .select('*')
+      .eq('id', room.id)
+      .maybeSingle();
 
-          try {
-            supabaseAdmin.channel(`room_sync_${room.id}`).send({
-              type: 'broadcast',
-              event: 'play_again_updated',
-              payload: {
-                roomId: room.id,
-                nextRoomId,
-                playAgainUsers,
-                player: userInfo
-              }
-            }).catch(() => {});
-          } catch (_) {}
-        }
-
-        const nextProg = (existingNextRoom.playersProgress as any) || {};
-        if (!nextProg[player.id]) {
-          nextProg[player.id] = {
-            progress: 0,
-            name: player.name,
-            joinedAt: Date.now(),
-            status: 'joined',
-            isOnline: true
-          };
-          await supabaseAdmin.from('rooms').update({
-            playersProgress: nextProg,
-            player2Id: existingNextRoom.player2Id || (existingNextRoom.player1Id !== player.id ? player.id : existingNextRoom.player2Id)
-          }).eq('id', existingNextRoom.id);
-
-          try {
-            supabaseAdmin.channel(`room_sync_${existingNextRoom.id}`).send({
-              type: 'broadcast',
-              event: 'player_joined',
-              payload: {
-                playerId: player.id,
-                playerName: player.name,
-                playerUsername: player.username || null,
-                roomId: existingNextRoom.id
-              }
-            }).catch(() => {});
-          } catch (_) {}
-        }
-
-        const fullNextRoom = await getFullRoom(existingNextRoom.id);
-        return res.status(200).json({
-          success: true,
-          isCreator: false,
-          nextRoomId: existingNextRoom.id,
-          room: fullNextRoom,
-          playAgainUsers
-        });
-      }
+    const freshNextRoomId = (freshRoom as any)?.nextRoomId || (freshRoom?.playersProgress as any)?.__rematch?.nextRoomId;
+    if (freshNextRoomId) {
+      return await joinExistingRematchRoom(freshNextRoomId, freshRoom || room, player, userInfo, res);
     }
 
     // ─────────────────────────────────────────────────────────────────
@@ -2486,6 +2420,22 @@ async function handleRematch(req: VercelRequest, res: VercelResponse) {
       return res.status(500).json({ message: 'Failed to create rematch room', error: createError?.message });
     }
 
+    // Atomic race recovery: check if another request set nextRoomId in the meantime
+    const { data: postCheckRoom } = await supabaseAdmin
+      .from('rooms')
+      .select('nextRoomId, playersProgress, playAgainUsers')
+      .eq('id', room.id)
+      .maybeSingle();
+
+    const postNextId = postCheckRoom?.nextRoomId || (postCheckRoom?.playersProgress as any)?.__rematch?.nextRoomId;
+    if (postNextId && postNextId !== newRoom.id) {
+      // Clean up duplicate room and join the winner's room
+      try {
+        await supabaseAdmin.from('rooms').delete().eq('id', newRoom.id);
+      } catch (_) {}
+      return await joinExistingRematchRoom(postNextId, postCheckRoom, player, userInfo, res);
+    }
+
     playAgainUsers = [userInfo];
     nextRoomId = newRoom.id;
     const updatedOldProgress = {
@@ -2530,6 +2480,101 @@ async function handleRematch(req: VercelRequest, res: VercelResponse) {
     console.error('Error in handleRematch:', err);
     return res.status(500).json({ message: 'Internal Server Error', error: err.message });
   }
+}
+
+async function joinExistingRematchRoom(
+  targetNextRoomId: string,
+  oldRoom: any,
+  player: any,
+  userInfo: any,
+  res: VercelResponse
+) {
+  const { data: existingNextRoom } = await supabaseAdmin
+    .from('rooms')
+    .select('*')
+    .eq('id', targetNextRoomId)
+    .maybeSingle();
+
+  if (!existingNextRoom || existingNextRoom.status === 'CANCELLED') {
+    return res.status(404).json({ success: false, message: 'غرفة إعادة اللعب غير متاحة' });
+  }
+
+  const roomProgress = (oldRoom.playersProgress as any) || {};
+  let playAgainUsers: any[] = Array.isArray((oldRoom as any).playAgainUsers)
+    ? (oldRoom as any).playAgainUsers
+    : (Array.isArray(roomProgress.__rematch?.playAgainUsers) ? roomProgress.__rematch.playAgainUsers : []);
+
+  const alreadyInList = playAgainUsers.some(
+    (u: any) => String(u.id) === String(player.id) || u.name === player.name
+  );
+  if (!alreadyInList) {
+    playAgainUsers.push(userInfo);
+    const updatedOldProgress = {
+      ...roomProgress,
+      __rematch: { nextRoomId: targetNextRoomId, playAgainUsers }
+    };
+    try {
+      await supabaseAdmin.from('rooms').update({
+        nextRoomId: targetNextRoomId,
+        playAgainUsers,
+        playersProgress: updatedOldProgress
+      }).eq('id', oldRoom.id);
+    } catch (_) {
+      await supabaseAdmin.from('rooms').update({
+        playersProgress: updatedOldProgress
+      }).eq('id', oldRoom.id);
+    }
+
+    try {
+      supabaseAdmin.channel(`room_sync_${oldRoom.id}`).send({
+        type: 'broadcast',
+        event: 'play_again_updated',
+        payload: {
+          roomId: oldRoom.id,
+          nextRoomId: targetNextRoomId,
+          playAgainUsers,
+          player: userInfo
+        }
+      }).catch(() => {});
+    } catch (_) {}
+  }
+
+  const nextProg = (existingNextRoom.playersProgress as any) || {};
+  if (!nextProg[player.id]) {
+    nextProg[player.id] = {
+      progress: 0,
+      name: player.name,
+      joinedAt: Date.now(),
+      status: 'joined',
+      isOnline: true
+    };
+    await supabaseAdmin.from('rooms').update({
+      playersProgress: nextProg,
+      player2Id: existingNextRoom.player2Id || (existingNextRoom.player1Id !== player.id ? player.id : existingNextRoom.player2Id)
+    }).eq('id', existingNextRoom.id);
+
+    try {
+      supabaseAdmin.channel(`room_sync_${existingNextRoom.id}`).send({
+        type: 'broadcast',
+        event: 'player_joined',
+        payload: {
+          playerId: player.id,
+          playerName: player.name,
+          playerUsername: player.username || null,
+          roomId: existingNextRoom.id
+        }
+      }).catch(() => {});
+    } catch (_) {}
+  }
+
+  const fullNextRoom = await getFullRoom(existingNextRoom.id);
+  return res.status(200).json({
+    success: true,
+    isCreator: false,
+    nextRoomId: existingNextRoom.id,
+    room: fullNextRoom,
+    playAgainUsers
+  });
 }
 
 async function handlePurchasePowerup(req: VercelRequest, res: VercelResponse) {
