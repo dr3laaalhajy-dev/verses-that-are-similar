@@ -731,7 +731,7 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
       >
         {/* Islamic Pattern Background with 7% Opacity */}
         <div
-          className="absolute inset-0 bg-[url('/islamic_pattern.png')] bg-repeat opacity-[0.07] pointer-events-none mix-blend-overlay z-0"
+          className="absolute inset-0 bg-[url('/islamic_pattern.webp')] bg-repeat opacity-[0.07] pointer-events-none mix-blend-overlay z-0"
           aria-hidden="true"
         />
 

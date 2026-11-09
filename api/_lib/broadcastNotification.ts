@@ -248,8 +248,8 @@ export async function broadcastNotification({
             notification: {
               title: cleanTitle,
               body: cleanBody,
-              icon: '/logo.png',
-              badge: '/logo-mark.png',
+              icon: '/logo.webp',
+              badge: '/logo-mark.webp',
               dir: 'rtl',
               lang: 'ar',
               tag: notificationTag

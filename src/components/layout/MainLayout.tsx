@@ -164,12 +164,12 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
               title="تطبيق متين"
             >
               <div className="bg-white dark:bg-obsidian-900 p-1 sm:p-1.5 rounded-xl md:rounded-2xl shadow-lg border border-white/60 dark:border-regalGold-500/30 flex items-center justify-center shrink-0 transition-transform group-hover:scale-105">
-                <img src="/logo.png" className="w-8 h-8 sm:w-10 sm:h-10 md:w-11 md:h-11 object-contain" alt="شعار متين" />
+                <img src="/logo.webp" className="w-8 h-8 sm:w-10 sm:h-10 md:w-11 md:h-11 object-contain" alt="شعار متين" />
               </div>
               <div className="flex flex-col justify-center select-none">
                 <div className="flex items-center">
                   <img
-                    src="/matin-title-light.png"
+                    src="/matin-title-light.webp"
                     className="h-6 sm:h-7 md:h-8 w-auto object-contain drop-shadow-md"
                     alt="متين"
                   />
@@ -253,9 +253,9 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
                     </div>
                     {app.isElite && (
                       app.safeAchievement === 'seerah' ? (
-                        <div className="absolute -inset-1.5 rounded-full pointer-events-none z-20 bg-[url('/golden_seerah_achievement_frame.png')] bg-center bg-no-repeat bg-contain scale-110" />
+                        <div className="absolute -inset-1.5 rounded-full pointer-events-none z-20 bg-[url('/golden_seerah_achievement_frame.webp')] bg-center bg-no-repeat bg-contain scale-110" />
                       ) : app.safeAchievement === 'general' ? (
-                        <div className="absolute -inset-1.5 rounded-full pointer-events-none z-20 bg-[url('/golden_general_achievement_frame.png')] bg-center bg-no-repeat bg-contain scale-110" />
+                        <div className="absolute -inset-1.5 rounded-full pointer-events-none z-20 bg-[url('/golden_general_achievement_frame.webp')] bg-center bg-no-repeat bg-contain scale-110" />
                       ) : (
                         <div className={`absolute -inset-1 rounded-full pointer-events-none z-0 ${app.currentStyle.className}`} />
                       )

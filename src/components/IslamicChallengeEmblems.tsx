@@ -7,7 +7,7 @@ import React from 'react';
 // Group Challenge (التحدي الجماعي) - اللوغو الجديد
 export const GroupChallengeEmblem: React.FC<{ className?: string }> = ({ className = 'w-10 h-10' }) => (
   <img
-    src="/icons/challenge-group.png"
+    src="/icons/challenge-group.webp"
     alt="التحدي الجماعي"
     className={`${className} object-contain drop-shadow-xs select-none`}
     draggable={false}
@@ -17,7 +17,7 @@ export const GroupChallengeEmblem: React.FC<{ className?: string }> = ({ classNa
 // Daily Challenge (التحدي اليومي) - اللوغو الجديد
 export const DailyChallengeEmblem: React.FC<{ className?: string }> = ({ className = 'w-10 h-10' }) => (
   <img
-    src="/icons/challenge-daily.png"
+    src="/icons/challenge-daily.webp"
     alt="التحدي اليومي"
     className={`${className} object-contain drop-shadow-xs select-none`}
     draggable={false}
@@ -27,7 +27,7 @@ export const DailyChallengeEmblem: React.FC<{ className?: string }> = ({ classNa
 // Skills Challenge (تحدي المهارات) - اللوغو الجديد
 export const SkillsChallengeEmblem: React.FC<{ className?: string }> = ({ className = 'w-10 h-10' }) => (
   <img
-    src="/icons/challenge-skills.png"
+    src="/icons/challenge-skills.webp"
     alt="تحدي المهارات"
     className={`${className} object-contain drop-shadow-xs select-none`}
     draggable={false}
@@ -37,7 +37,7 @@ export const SkillsChallengeEmblem: React.FC<{ className?: string }> = ({ classN
 // Speed Challenge (تحدي السرعة) - اللوغو الجديد
 export const SpeedChallengeEmblem: React.FC<{ className?: string }> = ({ className = 'w-10 h-10' }) => (
   <img
-    src="/icons/challenge-speed.png"
+    src="/icons/challenge-speed.webp"
     alt="تحدي السرعة"
     className={`${className} object-contain drop-shadow-xs select-none`}
     draggable={false}
@@ -47,7 +47,7 @@ export const SpeedChallengeEmblem: React.FC<{ className?: string }> = ({ classNa
 // Islamic Quiz (تحدي معلومات إسلامية) - اللوغو الجديد
 export const IslamicQuizEmblem: React.FC<{ className?: string }> = ({ className = 'w-10 h-10' }) => (
   <img
-    src="/icons/challenge-quiz.png"
+    src="/icons/challenge-quiz.webp"
     alt="تحدي معلومات إسلامية"
     className={`${className} object-contain drop-shadow-xs select-none`}
     draggable={false}
@@ -61,7 +61,7 @@ export const IslamicQuizEmblem: React.FC<{ className?: string }> = ({ className 
 // Mushaf (المصحف الشريف) - أيقونة المصحف الشريف المعتمدة
 export const MushafLibraryIcon: React.FC<{ className?: string }> = ({ className = 'w-10 h-10' }) => (
   <img
-    src="/icons/mushaf-icon.png"
+    src="/icons/mushaf-icon.webp"
     alt="المصحف الشريف"
     className={`${className} object-contain drop-shadow-xs select-none`}
     draggable={false}
@@ -117,7 +117,7 @@ export const AdhkarLibraryIcon: React.FC<{ className?: string }> = ({ className 
 // Hadith (الأربعون النووية) - اللوغو الجديد
 export const HadithLibraryIcon: React.FC<{ className?: string }> = ({ className = 'w-10 h-10' }) => (
   <img
-    src="/icons/library-hadith.png"
+    src="/icons/library-hadith.webp"
     alt="الأربعون النووية"
     className={`${className} object-contain drop-shadow-xs select-none`}
     draggable={false}
@@ -127,7 +127,7 @@ export const HadithLibraryIcon: React.FC<{ className?: string }> = ({ className 
 // Book (كتاب المتشابهات) - اللوغو الجديد
 export const BookLibraryIcon: React.FC<{ className?: string }> = ({ className = 'w-10 h-10' }) => (
   <img
-    src="/icons/library-book.png"
+    src="/icons/library-book.webp"
     alt="كتاب المتشابهات"
     className={`${className} object-contain drop-shadow-xs select-none`}
     draggable={false}
@@ -137,7 +137,7 @@ export const BookLibraryIcon: React.FC<{ className?: string }> = ({ className = 
 // Encyclopedia (الموسوعة وتفسير القرآن) - اللوغو الجديد
 export const EncyclopediaLibraryIcon: React.FC<{ className?: string }> = ({ className = 'w-10 h-10' }) => (
   <img
-    src="/icons/library-encyclopedia.png"
+    src="/icons/library-encyclopedia.webp"
     alt="الموسوعة"
     className={`${className} object-contain drop-shadow-xs select-none`}
     draggable={false}

@@ -134,8 +134,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               notification: {
                 title: notificationTitle,
                 body: notificationBody,
-                icon: '/logo.png',
-                badge: '/logo-mark.png',
+                icon: '/logo.webp',
+                badge: '/logo-mark.webp',
                 dir: 'rtl',
                 lang: 'ar',
                 tag: `mateen_wird_${user.user_id}`

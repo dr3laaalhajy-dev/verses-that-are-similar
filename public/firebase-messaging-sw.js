@@ -55,8 +55,8 @@ messaging.onBackgroundMessage((payload) => {
   const notificationTag = payload.data?.tag || 'mateen-notification';
   const notificationOptions = {
     body: payload.data?.body || 'لديك تنبيه جديد من تطبيق متين',
-    icon: '/logo.png',
-    badge: '/logo-mark.png',
+    icon: '/logo.webp',
+    badge: '/logo-mark.webp',
     dir: 'rtl',
     lang: 'ar',
     tag: notificationTag,

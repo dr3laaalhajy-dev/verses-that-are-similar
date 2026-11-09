@@ -228,7 +228,7 @@
 /* Islamic Geometric Patterns & Arabesque Overlays */
 .bg-islamic-pattern,
 .arabesque-overlay {
-  background-image: url('/islamic_pattern.png');
+  background-image: url('/islamic_pattern.webp');
   background-repeat: repeat;
   background-size: 400px;
 }
@@ -240,7 +240,7 @@
 .dark .arabesque-overlay,
 .lib-dark .arabesque-overlay {
   background-color: #151518;
-  background-image: url('/islamic_pattern_dark.png');
+  background-image: url('/islamic_pattern_dark.webp');
   background-repeat: repeat;
   background-size: 400px;
   opacity: 0.12 !important;
@@ -249,7 +249,7 @@
 /* Girih Geometric Patterns */
 .bg-girih-pattern,
 .girih-overlay {
-  background-image: url('/islamic_pattern_dark.png');
+  background-image: url('/islamic_pattern_dark.webp');
   background-repeat: repeat;
   background-size: 400px;
   opacity: 0.12 !important;

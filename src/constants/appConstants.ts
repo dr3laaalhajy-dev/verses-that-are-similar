@@ -6,13 +6,13 @@ export interface AchievementStyle {
 
 export const achievementStyles: Record<string, AchievementStyle> = {
   seerah: {
-    className: 'rounded-full bg-[url("/golden_seerah_achievement_frame.png")] bg-center bg-no-repeat bg-contain scale-110',
-    icon: '/icons/seerah.png',
+    className: 'rounded-full bg-[url("/golden_seerah_achievement_frame.webp")] bg-center bg-no-repeat bg-contain scale-110',
+    icon: '/icons/seerah.webp',
     textColor: 'from-amber-600 via-yellow-600 to-amber-700'
   },
   general: {
-    className: 'rounded-full bg-[url("/golden_general_achievement_frame.png")] bg-center bg-no-repeat bg-contain scale-110',
-    icon: '/icons/general.png',
+    className: 'rounded-full bg-[url("/golden_general_achievement_frame.webp")] bg-center bg-no-repeat bg-contain scale-110',
+    icon: '/icons/general.webp',
     textColor: 'from-blue-600 via-sky-500 to-indigo-700'
   },
   none: {

@@ -3,18 +3,18 @@
   "name": "تطبيق متين - لعلوم ومتشابهات القرآن الكريم",
   "icons": [
     {
-      "src": "logo.png",
+      "src": "logo.webp",
       "sizes": "64x64 32x32 24x24 16x16",
-      "type": "image/png"
+      "type": "image/webp"
     },
     {
-      "src": "logo.png",
-      "type": "image/png",
+      "src": "logo.webp",
+      "type": "image/webp",
       "sizes": "192x192"
     },
     {
-      "src": "logo.png",
-      "type": "image/png",
+      "src": "logo.webp",
+      "type": "image/webp",
       "sizes": "512x512"
     }
   ],

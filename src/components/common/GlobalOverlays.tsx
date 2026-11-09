@@ -156,11 +156,11 @@ export const GlobalOverlays: React.FC = () => {
               </button>
 
               <div className="w-20 h-20 bg-gradient-to-br from-emerald-50 to-teal-50 rounded-3xl flex items-center justify-center mx-auto mb-3 shadow-md border border-brand-gold/30 p-2">
-                <img src="/logo.png" className="w-full h-full object-contain drop-shadow-sm" alt="شعار متين" />
+                <img src="/logo.webp" className="w-full h-full object-contain drop-shadow-sm" alt="شعار متين" />
               </div>
 
               <div className="flex items-center justify-center mb-1">
-                <img src="/matin-title.png" className="h-9 md:h-10 object-contain drop-shadow-xs" alt="متين" />
+                <img src="/matin-title.webp" className="h-9 md:h-10 object-contain drop-shadow-xs" alt="متين" />
               </div>
               <h3 className="text-xs md:text-sm font-bold text-slate-500 mb-4">
                 عن تطبيق متين لعلوم ومتشابهات القرآن الكريم

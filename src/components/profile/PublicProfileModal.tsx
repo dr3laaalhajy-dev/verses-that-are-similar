@@ -302,9 +302,9 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
 
               {/* Achievement Frame Overlay (Scaled to fit without clipping) */}
               {activeFrame === 'seerah' ? (
-                <div className="absolute inset-0 rounded-full pointer-events-none bg-[url('/golden_seerah_achievement_frame.png')] bg-center bg-no-repeat bg-contain scale-110 drop-shadow-md" />
+                <div className="absolute inset-0 rounded-full pointer-events-none bg-[url('/golden_seerah_achievement_frame.webp')] bg-center bg-no-repeat bg-contain scale-110 drop-shadow-md" />
               ) : activeFrame === 'general' ? (
-                <div className="absolute inset-0 rounded-full pointer-events-none bg-[url('/golden_general_achievement_frame.png')] bg-center bg-no-repeat bg-contain scale-110 drop-shadow-md" />
+                <div className="absolute inset-0 rounded-full pointer-events-none bg-[url('/golden_general_achievement_frame.webp')] bg-center bg-no-repeat bg-contain scale-110 drop-shadow-md" />
               ) : null}
             </div>
 

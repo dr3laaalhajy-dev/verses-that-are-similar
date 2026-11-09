@@ -131,7 +131,7 @@ function AppContent() {
       <div
         className={`absolute inset-0 z-0 pointer-events-none transition-opacity duration-700 ${app.librarySettings?.darkMode ? 'dark-arabesque-overlay opacity-100' : 'bg-islamic-pattern mix-blend-multiply opacity-10'}`}
         style={{
-          backgroundImage: `url('${app.librarySettings?.darkMode ? '/islamic_pattern_dark.png' : '/islamic_pattern.png'}')`,
+          backgroundImage: `url('${app.librarySettings?.darkMode ? '/islamic_pattern_dark.webp' : '/islamic_pattern.webp'}')`,
           backgroundSize: '400px',
         }}
       />

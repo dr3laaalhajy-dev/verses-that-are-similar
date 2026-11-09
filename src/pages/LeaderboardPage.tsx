@@ -220,9 +220,9 @@ export const LeaderboardPage: React.FC<LeaderboardPageProps> = ({
                                   {/* Frame / Achievement Decoration */}
                                   {isPlayerElite && (
                                     achievement === 'seerah' ? (
-                                      <div className="absolute -inset-1 rounded-full pointer-events-none z-20 bg-[url('/golden_seerah_achievement_frame.png')] bg-center bg-no-repeat bg-contain scale-110" />
+                                      <div className="absolute -inset-1 rounded-full pointer-events-none z-20 bg-[url('/golden_seerah_achievement_frame.webp')] bg-center bg-no-repeat bg-contain scale-110" />
                                     ) : achievement === 'general' ? (
-                                      <div className="absolute -inset-1 rounded-full pointer-events-none z-20 bg-[url('/golden_general_achievement_frame.png')] bg-center bg-no-repeat bg-contain scale-110" />
+                                      <div className="absolute -inset-1 rounded-full pointer-events-none z-20 bg-[url('/golden_general_achievement_frame.webp')] bg-center bg-no-repeat bg-contain scale-110" />
                                     ) : (
                                       <div className={`absolute -inset-0.5 rounded-full pointer-events-none z-0 ${style?.className || ''}`} />
                                     )

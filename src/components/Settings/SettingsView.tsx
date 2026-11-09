@@ -818,11 +818,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   </div>
 
                   {/* Frame Image */}
-                  <div className="absolute -inset-1 rounded-full pointer-events-none z-10 bg-[url('/golden_seerah_achievement_frame.png')] bg-center bg-no-repeat bg-contain scale-110" />
+                  <div className="absolute -inset-1 rounded-full pointer-events-none z-10 bg-[url('/golden_seerah_achievement_frame.webp')] bg-center bg-no-repeat bg-contain scale-110" />
 
                   {/* Badge */}
                   <div className="absolute -bottom-1 -left-1 z-20 w-6 h-6 flex items-center justify-center drop-shadow-md">
-                    <img src="/icons/seerah.png" className="w-full h-full object-contain" alt="Badge" />
+                    <img src="/icons/seerah.webp" className="w-full h-full object-contain" alt="Badge" />
                   </div>
 
                   {/* Lock Overlay if Locked */}
@@ -912,11 +912,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   </div>
 
                   {/* Frame Image */}
-                  <div className="absolute -inset-1 rounded-full pointer-events-none z-10 bg-[url('/golden_general_achievement_frame.png')] bg-center bg-no-repeat bg-contain scale-110" />
+                  <div className="absolute -inset-1 rounded-full pointer-events-none z-10 bg-[url('/golden_general_achievement_frame.webp')] bg-center bg-no-repeat bg-contain scale-110" />
 
                   {/* Badge */}
                   <div className="absolute -bottom-1 -left-1 z-20 w-6 h-6 flex items-center justify-center drop-shadow-md">
-                    <img src="/icons/general.png" className="w-full h-full object-contain" alt="Badge" />
+                    <img src="/icons/general.webp" className="w-full h-full object-contain" alt="Badge" />
                   </div>
 
                   {/* Lock Overlay if Locked */}

@@ -54,7 +54,7 @@ export const islamicCategoriesList: CategoryMeta[] = [
   {
     id: 'general',
     title: 'أسئلة عامة',
-    icon: '/icons/general.png',
+    icon: '/icons/general.webp',
     description: 'بنك أسئلة منوعة في مختلف جوانب الثقافة والمعارف الإسلامية',
     topicsCount: 5,
     type: 'general',
@@ -62,7 +62,7 @@ export const islamicCategoriesList: CategoryMeta[] = [
   {
     id: 'seerah',
     title: 'السيرة النبوية',
-    icon: '/icons/seerah.png',
+    icon: '/icons/seerah.webp',
     description: 'محطات مضيئة من حياة الحبيب المصطفى ﷺ وغزواته وأصحابه',
     topicsCount: 3,
     type: 'seerah',

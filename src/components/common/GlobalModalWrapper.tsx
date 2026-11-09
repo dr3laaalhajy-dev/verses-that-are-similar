@@ -188,7 +188,7 @@ export const GlobalModalWrapper: React.FC<GlobalModalWrapperProps> = ({
             >
               {/* Islamic Geometric Pattern Watermark (opacity-10) */}
               <div
-                className="absolute inset-0 bg-[url('/islamic_pattern.png')] dark:bg-[url('/islamic_pattern_dark.png')] bg-repeat opacity-10 pointer-events-none mix-blend-overlay"
+                className="absolute inset-0 bg-[url('/islamic_pattern.webp')] dark:bg-[url('/islamic_pattern_dark.webp')] bg-repeat opacity-10 pointer-events-none mix-blend-overlay"
                 style={{ backgroundSize: '180px 180px' }}
               />
 
