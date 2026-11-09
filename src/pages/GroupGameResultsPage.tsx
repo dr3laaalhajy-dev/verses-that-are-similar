@@ -415,7 +415,11 @@ export const GroupGameResultsPage: React.FC<GroupGameResultsPageProps> = ({
                             }`}>
                               {p.isAbandoned ? '✕' : idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : idx + 1}
                             </div>
-                            <div className="flex flex-col items-start">
+                            <div
+                              onClick={() => app.handleOpenPlayerProfile(p)}
+                              className="flex flex-col items-start cursor-pointer hover:opacity-80 transition-opacity"
+                              title="عرض الملف الشخصي"
+                            >
                               <span className="font-black text-slate-800 text-sm flex items-center gap-1.5">
                                 {p.name} {(p.name === playerName || (p.username && p.username === playerUsername)) && '(أنت)'}
                                 {idx === 0 && !p.isAbandoned && (

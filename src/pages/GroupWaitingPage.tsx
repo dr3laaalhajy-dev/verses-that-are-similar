@@ -890,7 +890,11 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
                   key={p?.id || i}
                   className="flex items-center justify-between gap-2 p-2.5 sm:p-3 bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 shadow-xs min-w-0"
                 >
-                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <div
+                    onClick={() => app.handleOpenPlayerProfile(p)}
+                    className="flex items-center gap-2 min-w-0 flex-1 cursor-pointer hover:opacity-80 transition-opacity"
+                    title="عرض الملف الشخصي"
+                  >
                     <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-orange-100 dark:bg-orange-950/60 text-orange-600 dark:text-orange-400 flex items-center justify-center font-black text-xs shrink-0">
                       {i + 1}
                     </div>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   X, UserPlus, UserCheck, Award, BookOpen, Flame, Trophy,
@@ -7,6 +7,7 @@ import {
 import { CertificateModal } from '../CertificateModal';
 import { CompletedAchievement } from '../../services/milestoneProgressService';
 import { useAchievements } from '../../hooks/useAchievements';
+import { supabase } from '../../services/supabase';
 
 export interface PublicProfileModalProps {
   isOpen: boolean;
@@ -90,33 +91,87 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
         throw new Error('بيانات اللاعب غير متوفرة');
       }
 
-      const res = await fetch(`/api/friends?action=profile&targetId=${encodeURIComponent(String(targetParam))}&viewerId=${encodeURIComponent(String(viewerParam))}`);
-      if (res.ok) {
-        const data = await res.json();
-        setProfileData(data);
-      } else {
-        console.warn('[PublicProfileModal] Profile API returned non-OK status, falling back to basic player data.');
-        setProfileData({
-          player: {
-            id: targetPlayer.id,
-            name: targetPlayer.name || 'لاعب',
-            username: targetPlayer.username || null,
-            uniquePlayerId: targetPlayer.uniquePlayerId || null,
-            points: (targetPlayer as any).points || 0,
-            cups: (targetPlayer as any).cups || 0,
-            streak: (targetPlayer as any).streak || 0,
-            activeFrame: (targetPlayer as any).activeFrame || null,
-            equippedNameColor: (targetPlayer as any).equippedNameColor || null,
-            seerahCompleted: (targetPlayer as any).seerahCompleted || false,
-            generalCompleted: (targetPlayer as any).generalCompleted || false,
-            quranCompleted: (targetPlayer as any).quranCompleted || false,
-            createdAt: (targetPlayer as any).createdAt || (targetPlayer as any).since || new Date().toISOString()
-          },
-          wird: null,
-          friendshipStatus: (targetPlayer as any).status || 'ACCEPTED',
-          isSelf: false
-        });
+      let fetchedPlayer: any = null;
+      let fetchedCertificates: any[] = [];
+      let fetchedWird: any = null;
+      let friendshipStatus = (targetPlayer as any).status || 'NONE';
+      let friendshipId = null;
+
+      // 1. Direct Supabase Query (Reliable everywhere: Android WebView, iOS, and Web)
+      try {
+        const orParts: string[] = [];
+        if (targetPlayer.id && /^\d+$/.test(String(targetPlayer.id))) orParts.push(`id.eq.${targetPlayer.id}`);
+        if (targetPlayer.uniquePlayerId) orParts.push(`uniquePlayerId.eq.${targetPlayer.uniquePlayerId}`);
+        if (targetPlayer.username) orParts.push(`username.eq.${targetPlayer.username}`);
+        if (targetPlayer.name) orParts.push(`name.eq.${targetPlayer.name}`);
+
+        if (orParts.length > 0) {
+          const { data: dbData, error: dbErr } = await supabase
+            .from('players')
+            .select('id, name, username, uniquePlayerId, points, cups, streak, activeFrame, equippedNameColor, seerahCompleted, generalCompleted, quranCompleted, completedChallengeIds, createdAt')
+            .or(orParts.join(','))
+            .limit(1)
+            .maybeSingle();
+
+          if (!dbErr && dbData) {
+            fetchedPlayer = dbData;
+          }
+        }
+      } catch (sbErr) {
+        console.warn('[PublicProfileModal] Supabase direct query notice:', sbErr);
       }
+
+      // 2. Fetch friendship status & API profile if reachable
+      try {
+        const res = await fetch(`/api/friends?action=profile&targetId=${encodeURIComponent(String(targetParam))}&viewerId=${encodeURIComponent(String(viewerParam))}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.player) {
+            fetchedPlayer = { ...fetchedPlayer, ...data.player };
+          }
+          if (data?.earnedCertificates) {
+            fetchedCertificates = data.earnedCertificates;
+          }
+          if (data?.wird) {
+            fetchedWird = data.wird;
+          }
+          if (data?.friendshipStatus) {
+            friendshipStatus = data.friendshipStatus;
+          }
+          if (data?.friendshipId) {
+            friendshipId = data.friendshipId;
+          }
+        }
+      } catch (apiErr) {
+        console.warn('[PublicProfileModal] Profile API fallback to direct data:', apiErr);
+      }
+
+      // Merge and set profile data
+      const finalPlayer = fetchedPlayer || {
+        id: targetPlayer.id,
+        name: targetPlayer.name || 'لاعب',
+        username: targetPlayer.username || null,
+        uniquePlayerId: targetPlayer.uniquePlayerId || null,
+        points: (targetPlayer as any).points || (targetPlayer as any).totalPoints || 0,
+        cups: (targetPlayer as any).cups || (targetPlayer as any).trophiesCount || 0,
+        streak: (targetPlayer as any).streak || (targetPlayer as any).streakCount || 0,
+        activeFrame: (targetPlayer as any).activeFrame || null,
+        equippedNameColor: (targetPlayer as any).equippedNameColor || null,
+        seerahCompleted: (targetPlayer as any).seerahCompleted || false,
+        generalCompleted: (targetPlayer as any).generalCompleted || false,
+        quranCompleted: (targetPlayer as any).quranCompleted || false,
+        completedChallengeIds: (targetPlayer as any).completedChallengeIds || [],
+        createdAt: (targetPlayer as any).createdAt || (targetPlayer as any).since || new Date().toISOString()
+      };
+
+      setProfileData({
+        player: finalPlayer,
+        wird: fetchedWird,
+        earnedCertificates: fetchedCertificates,
+        friendshipStatus,
+        friendshipId,
+        isSelf
+      });
     } catch (err: any) {
       console.warn('Error fetching public profile, utilizing targetPlayer fallback:', err);
       // Fallback gracefully to targetPlayer data so modal never breaks
@@ -126,14 +181,15 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
           name: targetPlayer.name || 'لاعب',
           username: targetPlayer.username || null,
           uniquePlayerId: targetPlayer.uniquePlayerId || null,
-          points: (targetPlayer as any).points || 0,
-          cups: (targetPlayer as any).cups || 0,
-          streak: (targetPlayer as any).streak || 0,
+          points: (targetPlayer as any).points || (targetPlayer as any).totalPoints || 0,
+          cups: (targetPlayer as any).cups || (targetPlayer as any).trophiesCount || 0,
+          streak: (targetPlayer as any).streak || (targetPlayer as any).streakCount || 0,
           activeFrame: (targetPlayer as any).activeFrame || null,
           equippedNameColor: (targetPlayer as any).equippedNameColor || null,
           seerahCompleted: (targetPlayer as any).seerahCompleted || false,
           generalCompleted: (targetPlayer as any).generalCompleted || false,
           quranCompleted: (targetPlayer as any).quranCompleted || false,
+          completedChallengeIds: (targetPlayer as any).completedChallengeIds || [],
           createdAt: (targetPlayer as any).createdAt || (targetPlayer as any).since || new Date().toISOString()
         },
         wird: null,
@@ -253,6 +309,117 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
       setActionLoading(false);
     }
   };
+
+  // Derive all certificates earned by the target player
+  const displayedCertificates: CompletedAchievement[] = useMemo(() => {
+    const list: CompletedAchievement[] = [];
+    const seenIds = new Set<string>();
+
+    const addCert = (c: any) => {
+      if (!c || !c.id || seenIds.has(c.id)) return;
+      seenIds.add(c.id);
+      list.push(c);
+    };
+
+    const p = profileData?.player || targetPlayer;
+    if (p) {
+      const serialSuffix = p.uniquePlayerId || p.username || (p.id ? String(p.id) : 'CERT');
+
+      // 1. Seerah Quiz Certificate (100% completed or activeFrame is seerah)
+      if (p.seerahCompleted || p.activeFrame === 'seerah') {
+        addCert({
+          id: 'seerah_60',
+          title: 'إتمام 60 سؤالاً في السيرة النبوية الشريفة',
+          category: 'السيرة النبوية',
+          scope: 'العهد المكي والمدني والغزوات',
+          score: '100%',
+          icon: '📜',
+          rank: 'عالم بالسيرة النبوية',
+          target: 60,
+          userProgress: 60,
+          targetGoal: 60,
+          serial: `MTN-SEERAH_60-${serialSuffix}`
+        });
+      }
+
+      // 2. Fiqh & General Islamic Knowledge Certificate (100% completed or activeFrame is general)
+      if (p.generalCompleted || p.activeFrame === 'general') {
+        addCert({
+          id: 'figh_quiz',
+          title: 'ختم مسابقة الفقه والمعلومات الإسلامية',
+          category: 'الفقه الإسلامي',
+          scope: 'العبادات والمعاملات',
+          score: '100%',
+          icon: '⚖️',
+          rank: 'فقيه متقن ومتميز',
+          target: 100,
+          userProgress: 100,
+          targetGoal: 100,
+          serial: `MTN-FIGH_QUIZ-${serialSuffix}`
+        });
+      }
+
+      // 3. Quran Challenges Certificate (100 questions completed)
+      const completedIds = Array.isArray(p.completedChallengeIds) ? p.completedChallengeIds : [];
+      if (p.quranCompleted || completedIds.length >= 100) {
+        addCert({
+          id: 'ayah_100',
+          title: 'إتمام 100 سؤال في تحدي إكمال الآية',
+          category: 'علوم القرآن',
+          scope: 'كامل القرآن الكريم',
+          score: '100%',
+          icon: '📖',
+          rank: 'حافظ متقن',
+          target: 100,
+          userProgress: Math.max(100, completedIds.length),
+          targetGoal: 100,
+          serial: `MTN-AYAH_100-${serialSuffix}`
+        });
+      }
+
+      // 4. Daily Streak (30 days)
+      if ((p.streak || 0) >= 30) {
+        addCert({
+          id: 'daily_streak_30',
+          title: 'سلسلة 30 يوماً متتالية في التحدي اليومي',
+          category: 'المثابرة والهمة',
+          scope: 'الشهر القرآني المبارك',
+          score: `${p.streak} يوماً`,
+          icon: '🔥',
+          rank: 'فارس المداومة',
+          target: 30,
+          userProgress: p.streak,
+          targetGoal: 30,
+          serial: `MTN-DAILY_STREAK_30-${serialSuffix}`
+        });
+      }
+
+      // 5. Speed Challenge (1000 points)
+      if ((p.points || 0) >= 1000) {
+        addCert({
+          id: 'speed_1000',
+          title: 'المركز الأول و1000 نقطة في تحدي السرعة',
+          category: 'تحديات الصدارة',
+          scope: 'سرعة البديهة في المتشابهات',
+          score: `${p.points} نقطة`,
+          icon: '⚡',
+          rank: 'سريع البديهة المتقن',
+          target: 1000,
+          userProgress: p.points,
+          targetGoal: 1000,
+          serial: `MTN-SPEED_1000-${serialSuffix}`
+        });
+      }
+    }
+
+    // Include any certificates derived from useAchievements hook
+    (earnedCertificates || []).forEach(addCert);
+
+    // Include any certificates returned by profileData
+    (profileData?.earnedCertificates || []).forEach(addCert);
+
+    return list;
+  }, [earnedCertificates, profileData, targetPlayer]);
 
   if (!isOpen) return null;
 
@@ -391,16 +558,16 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
                       <Award className="w-4 h-4 text-amber-500" />
                       <span>شهادات وإنجازات اللاعب</span>
                     </div>
-                    {earnedCertificates.length > 0 && (
+                    {displayedCertificates.length > 0 && (
                       <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-                        {earnedCertificates.length} معتمدة 🏆
+                        {displayedCertificates.length} معتمدة 🏆
                       </span>
                     )}
                   </div>
 
-                  {earnedCertificates.length > 0 ? (
+                  {displayedCertificates.length > 0 ? (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                      {earnedCertificates.map((cert) => (
+                      {displayedCertificates.map((cert) => (
                         <button
                           key={cert.id}
                           type="button"

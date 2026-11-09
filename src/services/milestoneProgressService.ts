@@ -340,7 +340,7 @@ export async function fetchUserMilestones(params?: {
 
       const { data } = await supabase
         .from('players')
-        .select('id, uniquePlayerId, username, name, completedChallengeIds, points, streak, seerahCompleted, generalCompleted, quranCompleted')
+        .select('id, uniquePlayerId, username, name, completedChallengeIds, points, streak, seerahCompleted, generalCompleted, quranCompleted, activeFrame')
         .or(orParts.join(','))
         .limit(1)
         .maybeSingle();
@@ -371,13 +371,13 @@ export async function fetchUserMilestones(params?: {
       }
 
       // اعتماد الشهادات المكتملة الموثقة في قاعدة البيانات (100% Completion Flags)
-      if (dbPlayer.seerahCompleted) {
+      if (dbPlayer.seerahCompleted || dbPlayer.activeFrame === 'seerah') {
         stats.seerah_60 = Math.max(stats.seerah_60, 60);
       }
-      if (dbPlayer.generalCompleted) {
+      if (dbPlayer.generalCompleted || dbPlayer.activeFrame === 'general') {
         stats.figh_quiz = Math.max(stats.figh_quiz, 100);
       }
-      if (dbPlayer.quranCompleted && completedChallengeIds.length >= 100) {
+      if (dbPlayer.quranCompleted || completedChallengeIds.length >= 100) {
         stats.ayah_100 = Math.max(stats.ayah_100, 100);
       }
 
