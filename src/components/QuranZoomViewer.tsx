@@ -111,7 +111,7 @@ export const QuranZoomViewer: React.FC<QuranZoomViewerProps> = ({
     );
     pages.forEach((p) => {
       const img = new Image();
-      img.src = `/quran-pages/${p.toString().padStart(3, '0')}.png`;
+      img.src = `/quran-pages/${p.toString().padStart(3, '0')}.webp`;
     });
   }, [pageNumber]);
 
@@ -366,7 +366,7 @@ export const QuranZoomViewer: React.FC<QuranZoomViewerProps> = ({
             }}
           >
             <img
-              src={`/quran-pages/${pageNumber.toString().padStart(3, '0')}.png`}
+              src={`/quran-pages/${pageNumber.toString().padStart(3, '0')}.webp`}
               alt={`صفحة ${pageNumber}`}
               draggable={false}
               className={`block pointer-events-none select-none transition-filter duration-300 ${isFullscreen

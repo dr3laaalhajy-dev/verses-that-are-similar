@@ -360,7 +360,7 @@ export const MushafPage: React.FC<MushafPageProps> = ({
     );
     pages.forEach((p) => {
       const img = new Image();
-      img.src = `/quran-pages/${p.toString().padStart(3, '0')}.png`;
+      img.src = `/quran-pages/${p.toString().padStart(3, '0')}.webp`;
     });
   }, [currentPage]);
 
@@ -897,7 +897,7 @@ export const MushafPage: React.FC<MushafPageProps> = ({
                             key={currentPage}
                             initial={{ opacity: 0, scale: 0.95 }}
                             animate={{ opacity: 1, scale: 1 }}
-                            src={`/quran-pages/${currentPage.toString().padStart(3, '0')}.png`}
+                            src={`/quran-pages/${currentPage.toString().padStart(3, '0')}.webp`}
                             alt={`صفحة ${currentPage}`}
                             className="w-full h-auto max-h-[200vh] object-contain shadow-premium rounded-2xl border border-white/60"
                           />
@@ -998,7 +998,7 @@ export const MushafPage: React.FC<MushafPageProps> = ({
                               key={currentPage}
                               initial={{ opacity: 0, scale: 0.95 }}
                               animate={{ opacity: 1, scale: 1 }}
-                              src={`/quran-pages/${currentPage.toString().padStart(3, '0')}.png`}
+                              src={`/quran-pages/${currentPage.toString().padStart(3, '0')}.webp`}
                               alt={`صفحة ${currentPage}`}
                               className="w-full h-auto max-h-[200vh] object-contain shadow-premium rounded-2xl border border-white/60"
                             />
