@@ -648,7 +648,7 @@ export default function AdminDashboard({
     isForceUpdate: false,
     isUpdateActive: true,
     playStoreLink: 'https://play.google.com/store/apps/details?id=com.mateen.game',
-    apkLink: 'https://github.com/dr3laaalhajy-dev/verses-that-are-similar/releases/download/v1.0.0/Mutashabihat.apk'
+    apkLink: ''
   });
   const [isPublishingUpdate, setIsPublishingUpdate] = useState(false);
   const [publishSuccessMessage, setPublishSuccessMessage] = useState<string | null>(null);
@@ -669,7 +669,7 @@ export default function AdminDashboard({
             isForceUpdate: Boolean(data.isForceUpdate),
             isUpdateActive: data.isUpdateActive !== false,
             playStoreLink: data.playStoreLink || 'https://play.google.com/store/apps/details?id=com.mateen.game',
-            apkLink: data.apkLink || 'https://github.com/dr3laaalhajy-dev/verses-that-are-similar/releases/download/v1.0.0/Mutashabihat.apk',
+            apkLink: data.apkLink || '',
             updatedAt: data.updatedAt
           });
         }
@@ -3452,35 +3452,21 @@ export default function AdminDashboard({
                   </p>
                 </div>
 
-                {/* Google Play & APK Links */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Google Play Link */}
-                  <div className="space-y-2">
-                    <label className="block text-xs md:text-sm font-black text-slate-800">
-                      رابط التطبيق على متجر Google Play
-                    </label>
-                    <input
-                      type="url"
-                      value={versionControlData.playStoreLink}
-                      onChange={(e) => setVersionControlData({ ...versionControlData, playStoreLink: e.target.value })}
-                      className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:border-brand-emerald focus:ring-2 focus:ring-brand-emerald/10 outline-hidden font-bold text-slate-800 text-sm transition-all"
-                      placeholder="https://play.google.com/store/apps/details?id=..."
-                    />
-                  </div>
-
-                  {/* External APK Link */}
-                  <div className="space-y-2">
-                    <label className="block text-xs md:text-sm font-black text-slate-800">
-                      رابط التحميل المباشر لملف الـ APK (الخارجي)
-                    </label>
-                    <input
-                      type="url"
-                      value={versionControlData.apkLink}
-                      onChange={(e) => setVersionControlData({ ...versionControlData, apkLink: e.target.value })}
-                      className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:border-brand-emerald focus:ring-2 focus:ring-brand-emerald/10 outline-hidden font-bold text-slate-800 text-sm transition-all"
-                      placeholder="https://github.com/.../Mutashabihat.apk"
-                    />
-                  </div>
+                {/* Google Play Link */}
+                <div className="space-y-2">
+                  <label className="block text-xs md:text-sm font-black text-slate-800">
+                    رابط التطبيق الرسمي على متجر Google Play
+                  </label>
+                  <input
+                    type="url"
+                    value={versionControlData.playStoreLink}
+                    onChange={(e) => setVersionControlData({ ...versionControlData, playStoreLink: e.target.value })}
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 focus:border-brand-emerald focus:ring-2 focus:ring-brand-emerald/10 outline-hidden font-bold text-slate-800 text-sm transition-all"
+                    placeholder="https://play.google.com/store/apps/details?id=com.mateen.game"
+                  />
+                  <p className="text-[11px] text-slate-400 font-bold">
+                    رابط التحميل والتحديث الرسمي الوحيد المعتمد للمستخدمين.
+                  </p>
                 </div>
 
                 {/* Actions */}
@@ -3601,26 +3587,6 @@ export default function AdminDashboard({
                             <span className="text-[10px] text-slate-400 font-bold">تحديث رسمي عبر</span>
                             <span className="text-sm font-black text-white">متجر Google Play</span>
                           </div>
-                        </button>
-                      )}
-
-                      {/* Secondary Button: Direct APK Download */}
-                      {versionControlData.apkLink && (
-                        <button
-                          type="button"
-                          onClick={() => window.open(versionControlData.apkLink, '_blank')}
-                          className="w-full py-3 px-4 bg-white hover:bg-slate-50 text-slate-800 rounded-2xl font-black text-xs sm:text-sm border-2 border-slate-200 hover:border-emerald-500/50 transition-all flex items-center justify-center gap-2.5 cursor-pointer active:scale-98 shadow-xs group"
-                        >
-                          {/* Android Icon */}
-                          <svg className="w-5 h-5 shrink-0 text-emerald-600 transition-transform group-hover:scale-110" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M17.523 15.3414c-.5511 0-.9993-.4486-.9993-1.0001 0-.5516.4482-.9993.9993-.9993.5516 0 1 .4477 1 .9993 0 .5515-.4484 1.0001-1 1.0001m-11.046 0c-.5511 0-.9993-.4486-.9993-1.0001 0-.5516.4482-.9993.9993-.9993.5516 0 1 .4477 1 .9993 0 .5515-.4484 1.0001-1 1.0001m11.4045-6.02l1.997-3.4586a.416.416 0 00-.152-.5669.416.416 0 00-.568.1522L17.137 8.9416C15.6025 8.2435 13.864 7.848 12 7.848c-1.864 0-3.6025.3955-5.137 1.0936L4.8415 5.4481a.416.416 0 00-.568-.1522.416.416 0 00-.152.5669l1.997 3.4586C2.688 10.669 0 13.921 0 17.761h24c0-3.84-2.688-7.092-6.1185-8.4396"/>
-                          </svg>
-                          <span>تحميل ملف APK مباشر</span>
-                          <svg className="w-4 h-4 text-slate-400 mr-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                            <polyline points="7 10 12 15 17 10"/>
-                            <line x1="12" y1="15" x2="12" y2="3"/>
-                          </svg>
                         </button>
                       )}
 

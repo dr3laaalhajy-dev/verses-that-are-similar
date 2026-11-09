@@ -158,7 +158,7 @@ interface GooglePlayTesterModalProps {
   internalTestLink: string;
   onRegister: (e: React.FormEvent) => Promise<void>;
   onReset: () => void;
-  onOpenDirectApk: () => void;
+  onOpenDirectApk?: () => void;
   onShareApp: () => void;
   shareCopied: boolean;
   isCheckingSavedStatus?: boolean;
@@ -506,27 +506,12 @@ export const GooglePlayTesterModal: React.FC<GooglePlayTesterModalProps> = ({
                 </motion.div>
               )}
 
-              {/* Secondary Actions / Fallback APK */}
-              <div className="mt-3 pt-4 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-400">
-                <div className="flex items-center gap-2">
-                  <span>أو يمكنك أيضاً:</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onClose();
-                      onOpenDirectApk();
-                    }}
-                    className="text-brand-gold hover:text-amber-300 font-bold flex items-center gap-1 cursor-pointer transition-colors"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    <span>تحميل ملف APK المباشر</span>
-                  </button>
-                </div>
-
+              {/* Secondary Actions: Share App */}
+              <div className="mt-3 pt-4 border-t border-white/10 flex items-center justify-center text-xs text-slate-400">
                 <button
                   type="button"
                   onClick={onShareApp}
-                  className="hover:text-white flex items-center gap-1.5 transition-colors cursor-pointer"
+                  className="hover:text-white flex items-center gap-1.5 transition-colors cursor-pointer py-1.5 px-3 rounded-xl hover:bg-white/5"
                   title="مشاركة رابط التطبيق"
                 >
                   {shareCopied ? (
@@ -537,7 +522,7 @@ export const GooglePlayTesterModal: React.FC<GooglePlayTesterModalProps> = ({
                   ) : (
                     <>
                       <Share2 className="w-3.5 h-3.5" />
-                      <span>مشاركة التطبيق</span>
+                      <span>مشاركة رابط تطبيق متين</span>
                     </>
                   )}
                 </button>

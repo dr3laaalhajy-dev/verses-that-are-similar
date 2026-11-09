@@ -252,11 +252,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [showDownloadModal, setShowDownloadModal] = useState(false);
 
   const handleShareApp = useCallback(async () => {
-    const downloadUrl = 'https://github.com/dr3laaalhajy-dev/verses-that-are-similar/releases/download/v1.0.0/Mutashabihat.apk';
+    const playStoreUrl = 'https://play.google.com/store/apps/details?id=com.mateen.game';
+    const webUrl = typeof window !== 'undefined' ? window.location.origin : 'https://mateen.me';
+    const shareUrl = playStoreUrl;
     const shareData = {
-      title: 'تطبيق متين للقرآن الكريم للأندرويد',
-      text: 'حمّل تطبيق متين للأندرويد الآن واستمتع بكافة التحديات والمتشابهات والقرآن كاملاً بدون إنترنت!\nرابط تحميل التطبيق المباشر:',
-      url: downloadUrl
+      title: 'تطبيق متين للقرآن الكريم',
+      text: 'تطبيق متين لمراجعة وحفظ القرآن الكريم والمتشابهات اللفظية والتحديات القرآنية! متاح على متجر Google Play وعبر الويب:\n' + playStoreUrl + '\n' + webUrl,
+      url: shareUrl
     };
 
     if (navigator.share) {
@@ -269,8 +271,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     try {
-      if (downloadUrl) {
-        await navigator.clipboard.writeText(downloadUrl);
+      if (shareUrl) {
+        await navigator.clipboard.writeText(`${shareData.text}`);
         setShareCopied(true);
         setTimeout(() => setShareCopied(false), 2500);
       }

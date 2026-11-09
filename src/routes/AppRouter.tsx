@@ -391,7 +391,7 @@ export const AppRouter: React.FC = () => {
           onStartQuizCategory={(_cat) => {
             app.setView('islamic_quiz');
           }}
-          onOpenDownloadApp={() => app.setShowDownloadModal(true)}
+          onOpenDownloadApp={() => app.setShowGooglePlayModal(true)}
           onOpenPrivacyPolicy={(tab) => {
             app.setPrivacyModalInitialTab(tab || 'privacy');
             app.setShowPrivacyModal(true);

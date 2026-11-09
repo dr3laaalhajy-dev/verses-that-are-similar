@@ -10,7 +10,6 @@ import ConfirmModal from '../ConfirmModal';
 import { LibrarySettingsModal } from '../LibrarySettingsModal';
 import { StreakModal } from '../StreakModal';
 import IslamicOccasionsModal from '../IslamicOccasionsModal';
-import { AppDownloadModal } from '../AppDownloadModal';
 import { GooglePlayTesterModal, GooglePlayLogo } from '../GooglePlayTesterModal';
 import AyahActionSheet from '../AyahActionSheet';
 import { PrivacyModal } from '../PrivacyModal';
@@ -216,30 +215,22 @@ export const GlobalOverlays: React.FC = () => {
                       </span>
                     )}
                   </button>
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    <button
-                      type="button"
-                      onClick={() => app.setShowDownloadModal(true)}
-                      className="flex-1 py-3 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-2xl font-black text-sm shadow-md flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-95 cursor-pointer"
-                    >
-                      <Smartphone className="w-5 h-5 text-emerald-200" />
-                      <span>تحميل التطبيق (APK)</span>
-                    </button>
+                  <div className="flex items-center gap-2">
                     <button
                       type="button"
                       onClick={app.handleShareApp}
-                      className="py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl font-black text-sm border border-slate-200 flex items-center justify-center gap-2 transition-all hover:scale-[1.02] active:scale-95 cursor-pointer"
-                      title="مشاركة رابط تحميل تطبيق الأندرويد"
+                      className="w-full py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl font-black text-xs md:text-sm border border-slate-200 flex items-center justify-center gap-2 transition-all hover:scale-[1.01] active:scale-95 cursor-pointer"
+                      title="مشاركة رابط التطبيق"
                     >
                       {app.shareCopied ? (
                         <>
                           <Check className="w-4 h-4 text-emerald-600" />
-                          <span>تم النسخ</span>
+                          <span>تم نسخ الرابط بنجاح</span>
                         </>
                       ) : (
                         <>
                           <Share2 className="w-4 h-4 text-slate-600" />
-                          <span>مشاركة</span>
+                          <span>مشاركة رابط تطبيق متين</span>
                         </>
                       )}
                     </button>
@@ -419,11 +410,6 @@ export const GlobalOverlays: React.FC = () => {
         initialSelectedId={app.nearestOccasion?.id}
       />
 
-      <AppDownloadModal
-        isOpen={app.showDownloadModal}
-        onClose={() => app.setShowDownloadModal(false)}
-      />
-
       <GooglePlayTesterModal
         isOpen={app.showGooglePlayModal}
         onClose={() => app.setShowGooglePlayModal(false)}
@@ -434,7 +420,6 @@ export const GlobalOverlays: React.FC = () => {
         internalTestLink={app.internalTestLink}
         onRegister={app.handleRegisterTester}
         onReset={app.handleResetTesterForm}
-        onOpenDirectApk={() => app.setShowDownloadModal(true)}
         onShareApp={app.handleShareApp}
         shareCopied={app.shareCopied}
         isCheckingSavedStatus={app.isCheckingSavedStatus}

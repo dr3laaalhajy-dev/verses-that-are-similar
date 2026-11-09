@@ -23,7 +23,7 @@ let memoryVersionControl: VersionControlData = {
   isForceUpdate: false,
   isUpdateActive: true,
   playStoreLink: 'https://play.google.com/store/apps/details?id=com.mateen.game',
-  apkLink: 'https://github.com/dr3laaalhajy-dev/verses-that-are-similar/releases/download/v1.0.0/Mutashabihat.apk',
+  apkLink: '',
   updatedAt: Date.now()
 }
 
