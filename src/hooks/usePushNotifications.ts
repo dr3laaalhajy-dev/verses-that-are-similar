@@ -39,11 +39,11 @@ export function usePushNotifications(userId?: string | null, onNotificationRecei
   /**
    * Save or update FCM token in database
    */
-  const saveTokenToDatabase = useCallback(async (token: string, uId: string) => {
+  const saveTokenToDatabase = useCallback(async (token: string, uId: string, overridePlatform?: string) => {
     const cleanToken = (token || '').trim();
     if (!cleanToken) return;
 
-    const platform = typeof navigator !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ? 'mobile' : 'web';
+    const platform = overridePlatform || (typeof navigator !== 'undefined' && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ? 'mobile' : 'web');
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(uId || '');
     const safeUserId = isUuid ? uId : null;
 
@@ -105,24 +105,12 @@ export function usePushNotifications(userId?: string | null, onNotificationRecei
    */
   const requestPermissionAndRegister = useCallback(async (): Promise<string | null> => {
     // 1. فحص بيئة تطبيق الأندرويد واستدعاء الجسر البرمجي إذا كان متاحاً
-    if (typeof window !== 'undefined' && window.AndroidBridge?.requestNotificationPermission) {
-      window.AndroidBridge.requestNotificationPermission();
-
-      // إذا كانت الصلاحية ممنوحة بالفعل في النظام، جلب وحفظ التوكن
-      if (window.AndroidBridge.isNotificationPermissionGranted?.()) {
-        setPermission('granted');
-        try {
-          const token = await requestFCMToken();
-          if (token) {
-            setFcmToken(token);
-            try { localStorage.setItem('fcm_device_token', token); } catch {}
-            const activeUserId = userId || localStorage.getItem('player_name') || 'guest_user';
-            await saveTokenToDatabase(token, activeUserId);
-            return token;
-          }
-        } catch (tokenErr) {
-          console.warn('[PushNotifications] Token retrieval warning in WebView:', tokenErr);
-        }
+    if (typeof window !== 'undefined' && window.AndroidBridge) {
+      if (window.AndroidBridge.requestNotificationPermission) {
+        window.AndroidBridge.requestNotificationPermission();
+      }
+      if (window.AndroidBridge.getFcmToken) {
+        window.AndroidBridge.getFcmToken();
       }
       return null;
     }
@@ -170,16 +158,9 @@ export function usePushNotifications(userId?: string | null, onNotificationRecei
       const granted = Boolean(event?.detail?.granted);
       if (granted) {
         setPermission('granted');
-        try {
-          const token = await requestFCMToken();
-          if (token) {
-            setFcmToken(token);
-            try { localStorage.setItem('fcm_device_token', token); } catch {}
-            const activeUserId = userId || localStorage.getItem('player_name') || 'guest_user';
-            await saveTokenToDatabase(token, activeUserId);
-          }
-        } catch (e) {
-          console.warn('[PushNotifications] Token registration failed after Android permission granted:', e);
+        // جلب التوكن الأصلي فور منح الصلاحية
+        if (window.AndroidBridge?.getFcmToken) {
+          window.AndroidBridge.getFcmToken();
         }
       } else {
         setPermission('denied');
@@ -189,6 +170,38 @@ export function usePushNotifications(userId?: string | null, onNotificationRecei
     window.addEventListener('androidNotificationPermissionResult', handleAndroidPermission);
     return () => {
       window.removeEventListener('androidNotificationPermissionResult', handleAndroidPermission);
+    };
+  }, []);
+
+  // استماع للتوكن الأصلي القادم من نظام أندرويد (Native Android FCM Token)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleAndroidToken = async (event: any) => {
+      const nativeToken = event?.detail?.token;
+      if (nativeToken && typeof nativeToken === 'string' && nativeToken.trim().length > 10) {
+        const cleanToken = nativeToken.trim();
+        console.log('[PushNotifications] Native FCM Token received from Android:', cleanToken.substring(0, 15) + '...');
+        setFcmToken(cleanToken);
+        setPermission('granted');
+        try {
+          localStorage.setItem('fcm_device_token', cleanToken);
+        } catch {}
+
+        const activeUserId = userId || localStorage.getItem('player_name') || 'guest_user';
+        await saveTokenToDatabase(cleanToken, activeUserId, 'android');
+      }
+    };
+
+    window.addEventListener('androidFcmTokenReceived', handleAndroidToken);
+
+    // إذا كنا داخل تطبيق الأندرويد، اطلب التوكن الأصلي فور تحميل الصفحة
+    if (window.AndroidBridge?.getFcmToken) {
+      window.AndroidBridge.getFcmToken();
+    }
+
+    return () => {
+      window.removeEventListener('androidFcmTokenReceived', handleAndroidToken);
     };
   }, [userId, saveTokenToDatabase]);
 

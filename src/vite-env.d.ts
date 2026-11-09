@@ -14,6 +14,7 @@ interface ImportMeta {
 
 interface AndroidBridgeInterface {
   requestNotificationPermission: () => void;
+  getFcmToken?: () => void;
   isNotificationPermissionGranted?: () => boolean;
 }
 

@@ -2,6 +2,7 @@ package com.mateen.game;
 
 import android.Manifest;
 import android.app.Activity;
+import android.content.Context;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
@@ -18,11 +19,13 @@ import androidx.core.content.ContextCompat;
 
 import com.getcapacitor.BridgeActivity;
 import com.google.firebase.FirebaseApp;
+import com.google.firebase.FirebaseOptions;
 import com.google.firebase.database.DataSnapshot;
 import com.google.firebase.database.DatabaseError;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.database.ValueEventListener;
+import com.google.firebase.messaging.FirebaseMessaging;
 import com.mateen.game.controllers.AppUpdateManager;
 import com.mateen.game.models.AppVersionControl;
 
@@ -40,6 +43,8 @@ public class MainActivity extends BridgeActivity {
     private static final String VERSION_CONTROL_API_URL = "https://mateen-quran.vercel.app/api/version-control";
     private static final long UPDATE_POLL_INTERVAL_MS = 30000; // 30 seconds real-time poll
 
+    private static MainActivity activeInstance;
+
     private ValueEventListener updateListener;
     private DatabaseReference versionRef;
 
@@ -52,9 +57,19 @@ public class MainActivity extends BridgeActivity {
         }
     };
 
+    public static void broadcastTokenToWeb(String token) {
+        if (activeInstance != null && token != null && !token.trim().isEmpty()) {
+            activeInstance.sendNativeFcmTokenToWeb(token);
+        }
+    }
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        activeInstance = this;
+
+        // تهيئة الفايربيس مسبقاً لضمان عمل الـ FCM
+        ensureFirebaseInitialized(this);
 
         // ربط الجسر البرمجي للـ WebView لتمكين صلاحيات النظام (مثل الإشعارات)
         setupAndroidBridge();
@@ -87,6 +102,9 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onDestroy() {
         super.onDestroy();
+        if (activeInstance == this) {
+            activeInstance = null;
+        }
         updatePollHandler.removeCallbacks(updatePollRunnable);
         try {
             if (versionRef != null && updateListener != null) {
@@ -278,6 +296,28 @@ public class MainActivity extends BridgeActivity {
         }
     }
 
+    /**
+     * ضمان تهيئة الفايربيس برمجياً إن لم تكن مهيأة بعد
+     */
+    public static void ensureFirebaseInitialized(Context context) {
+        try {
+            if (FirebaseApp.getApps(context).isEmpty()) {
+                FirebaseOptions options = new FirebaseOptions.Builder()
+                        .setApplicationId("1:454602577030:android:551f014003683a63e92d07")
+                        .setApiKey("AIzaSyAux6Fg_GonGCh0OBoyGG7GAFNjXBc8NEk")
+                        .setProjectId("mateen-229f8")
+                        .setGcmSenderId("454602577030")
+                        .setStorageBucket("mateen-229f8.firebasestorage.app")
+                        .setDatabaseUrl("https://mateen-229f8-default-rtdb.firebaseio.com")
+                        .build();
+                FirebaseApp.initializeApp(context, options);
+                Log.i(TAG, "Firebase initialized programmatically");
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to initialize Firebase programmatically: " + e.getMessage(), e);
+        }
+    }
+
     @Override
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
@@ -285,6 +325,9 @@ public class MainActivity extends BridgeActivity {
             boolean granted = grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED;
             Log.i(TAG, "onRequestPermissionsResult for POST_NOTIFICATIONS: " + granted);
             notifyWebPermissionResult(granted);
+            if (granted) {
+                fetchAndSendNativeFcmToken();
+            }
         }
     }
 
@@ -300,6 +343,61 @@ public class MainActivity extends BridgeActivity {
                 }
             } catch (Exception e) {
                 Log.w(TAG, "Error notifying WebView of permission result: " + e.getMessage());
+            }
+        });
+    }
+
+    /**
+     * جلب الـ Native FCM Token وإرساله للويب
+     */
+    public void fetchAndSendNativeFcmToken() {
+        try {
+            ensureFirebaseInitialized(this);
+
+            // فحص التوكن المحفوظ محلياً أولاً
+            String cachedToken = getSharedPreferences("mateen_fcm_prefs", Context.MODE_PRIVATE)
+                    .getString("native_fcm_token", null);
+            if (cachedToken != null && !cachedToken.trim().isEmpty()) {
+                Log.i(TAG, "Dispatched cached native FCM token to web");
+                sendNativeFcmTokenToWeb(cachedToken);
+            }
+
+            // طلب التوكن من FirebaseMessaging Native مباشرة
+            FirebaseMessaging.getInstance().getToken()
+                    .addOnCompleteListener(task -> {
+                        if (!task.isSuccessful()) {
+                            Log.w(TAG, "Fetching Native FCM registration token failed: ", task.getException());
+                            return;
+                        }
+                        String token = task.getResult();
+                        if (token != null && !token.trim().isEmpty()) {
+                            Log.i(TAG, "Fetched new Native FCM Token: " + token);
+                            getSharedPreferences("mateen_fcm_prefs", Context.MODE_PRIVATE)
+                                    .edit()
+                                    .putString("native_fcm_token", token)
+                                    .apply();
+                            sendNativeFcmTokenToWeb(token);
+                        }
+                    });
+        } catch (Exception e) {
+            Log.e(TAG, "Error in fetchAndSendNativeFcmToken: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * إرسال التوكن الأصلي للـ WebView عبر Event مخصص
+     */
+    public void sendNativeFcmTokenToWeb(String token) {
+        if (token == null || token.trim().isEmpty()) return;
+        runOnUiThread(() -> {
+            try {
+                if (getBridge() != null && getBridge().getWebView() != null) {
+                    String script = "window.dispatchEvent(new CustomEvent('androidFcmTokenReceived', { detail: { token: '" + token.trim() + "' } }));";
+                    getBridge().getWebView().evaluateJavascript(script, null);
+                    Log.i(TAG, "Native FCM token sent to WebView via androidFcmTokenReceived");
+                }
+            } catch (Exception e) {
+                Log.w(TAG, "Error sending native token to WebView: " + e.getMessage());
             }
         });
     }
@@ -329,13 +427,23 @@ public class MainActivity extends BridgeActivity {
                     } else {
                         Log.i(TAG, "POST_NOTIFICATIONS permission already granted");
                         notifyWebPermissionResult(true);
+                        fetchAndSendNativeFcmToken();
                     }
                 } else {
                     boolean enabled = NotificationManagerCompat.from(activity).areNotificationsEnabled();
                     Log.i(TAG, "Android < 13 notifications enabled: " + enabled);
                     notifyWebPermissionResult(enabled);
+                    if (enabled) {
+                        fetchAndSendNativeFcmToken();
+                    }
                 }
             });
+        }
+
+        @JavascriptInterface
+        public void getFcmToken() {
+            Log.i(TAG, "AndroidBridge.getFcmToken invoked from JavaScript");
+            activity.runOnUiThread(() -> fetchAndSendNativeFcmToken());
         }
 
         @JavascriptInterface
