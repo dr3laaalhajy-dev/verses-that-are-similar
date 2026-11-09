@@ -275,6 +275,7 @@ export async function fetchUserMilestones(params?: {
   const localUsername = typeof window !== 'undefined' ? localStorage.getItem('quran_player_username') : null;
   const localName = typeof window !== 'undefined' ? (localStorage.getItem('quran_player_name') || localStorage.getItem('quran_user_name')) : null;
   const localId = typeof window !== 'undefined' ? localStorage.getItem('quran_player_id') : null;
+  const localUniquePlayerId = typeof window !== 'undefined' ? localStorage.getItem('quran_unique_player_id') : null;
 
   // التحقق إن كان المستخدم المطلوب هو نفس المستخدم المحلي المتصل حالياً
   const isLocalUser = Boolean(
@@ -282,6 +283,7 @@ export async function fetchUserMilestones(params?: {
     params.isSelf === true ||
     (params.username && localUsername && params.username.toLowerCase() === localUsername.toLowerCase()) ||
     (params.playerName && localName && params.playerName.toLowerCase() === localName.toLowerCase()) ||
+    (params.uniquePlayerId && localUniquePlayerId && params.uniquePlayerId.toLowerCase() === localUniquePlayerId.toLowerCase()) ||
     (params.uniquePlayerId && localId && params.uniquePlayerId.toLowerCase() === localId.toLowerCase()) ||
     (params.userId && localId && String(params.userId).toLowerCase() === localId.toLowerCase())
   );
@@ -320,7 +322,7 @@ export async function fetchUserMilestones(params?: {
       params?.username,
       params?.playerName,
       params?.userId,
-      isLocalUser ? (localUsername || localName || localId) : null
+      isLocalUser ? (localUniquePlayerId || localUsername || localName || localId) : null
     ].filter(Boolean).map(v => String(v).trim());
 
     let dbPlayer: any = null;
@@ -377,6 +379,26 @@ export async function fetchUserMilestones(params?: {
       }
       if (dbPlayer.quranCompleted && completedChallengeIds.length >= 100) {
         stats.ayah_100 = Math.max(stats.ayah_100, 100);
+      }
+
+      // مزامنة الشهادات المحلية في المتصفح تلقائياً عند تأكيد اكتمالها في قاعدة البيانات
+      if (isLocalUser && typeof window !== 'undefined') {
+        try {
+          const savedCerts = JSON.parse(localStorage.getItem('quran_user_certificates') || '[]');
+          let modified = false;
+          const playerName = dbPlayer.name || localName || 'البطل القرآني';
+          if (dbPlayer.seerahCompleted && !savedCerts.some((c: any) => c.category === 'seerah')) {
+            savedCerts.push({ category: 'seerah', date: 'مُعتمدة', name: playerName });
+            modified = true;
+          }
+          if (dbPlayer.generalCompleted && !savedCerts.some((c: any) => c.category === 'general')) {
+            savedCerts.push({ category: 'general', date: 'مُعتمدة', name: playerName });
+            modified = true;
+          }
+          if (modified) {
+            localStorage.setItem('quran_user_certificates', JSON.stringify(savedCerts));
+          }
+        } catch (_) {}
       }
     }
 

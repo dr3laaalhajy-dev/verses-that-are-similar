@@ -60,6 +60,20 @@ export function useAchievements(options?: UseAchievementsOptions | null) {
 
   useEffect(() => {
     fetchProgress();
+
+    const handleInvalidation = () => {
+      fetchProgress();
+    };
+
+    window.addEventListener('milestones_updated', handleInvalidation);
+    window.addEventListener('quran_certificates_updated', handleInvalidation);
+    window.addEventListener('focus', handleInvalidation);
+
+    return () => {
+      window.removeEventListener('milestones_updated', handleInvalidation);
+      window.removeEventListener('quran_certificates_updated', handleInvalidation);
+      window.removeEventListener('focus', handleInvalidation);
+    };
   }, [fetchProgress]);
 
   const serialSuffix =

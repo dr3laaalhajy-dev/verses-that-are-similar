@@ -5991,6 +5991,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           : null;
 
         try {
+          const pUnique = uniquePlayerId || localStorage.getItem('quran_unique_player_id');
+          const pUser = playerUsername || localStorage.getItem('quran_player_username');
+          const pName = playerName || localStorage.getItem('quran_player_name');
+          const pId = localStorage.getItem('quran_player_id');
+          if (pUnique || pUser || pName || pId) {
+            const upData: any = {
+              seerahCompleted: hasSeerah,
+              generalCompleted: hasGeneral,
+              activeFrame: effectiveFrame,
+              updatedAt: new Date().toISOString()
+            };
+            let q = supabase.from('players').update(upData);
+            if (pUnique) q = q.eq('uniquePlayerId', pUnique);
+            else if (pUser) q = q.eq('username', pUser);
+            else if (pName) q = q.eq('name', pName);
+            else if (pId && /^\d+$/.test(pId)) q = q.eq('id', Number(pId));
+            q.then(() => {}).catch(() => {});
+          }
+        } catch (_) {}
+
+        try {
           const scoreRes = await fetch('/api/player-score', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -6139,7 +6160,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [playerName, playerUsername, cups, totalPoints, streak, completedChallengeIds, activeFrame, userCertificates]);
 
-  // Requirement 1 & 2: Refresh User Profile / Session from server (/api/users/me)
+  // Requirement 1 & 2: Refresh User Profile / Session directly from Supabase & server
   const refreshUserProfile = useCallback(async () => {
     const pUnique = uniquePlayerId || localStorage.getItem('quran_unique_player_id');
     const pUser = playerUsername || localStorage.getItem('quran_player_username');
@@ -6148,84 +6169,149 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     if (!pUnique && !pUser && !pName && !pId) return null;
 
+    let user: any = null;
+
+    // 1. Direct Supabase Query (Reliable for Web & Capacitor Native Android / iOS WebView)
     try {
-      const params = new URLSearchParams({ t: Date.now().toString() });
-      if (pId) params.append('id', pId);
-      if (pUnique) params.append('uniquePlayerId', pUnique);
-      if (pUser) params.append('username', pUser);
-      if (pName) params.append('name', pName);
+      const orParts: string[] = [];
+      if (pUnique) orParts.push(`uniquePlayerId.eq.${pUnique}`);
+      if (pUser) orParts.push(`username.eq.${pUser}`);
+      if (pName) orParts.push(`name.eq.${pName}`);
+      if (pId && /^\d+$/.test(pId)) orParts.push(`id.eq.${pId}`);
 
-      const res = await fetch(`/api/users/me?${params.toString()}`, {
-        cache: 'no-store',
-        headers: {
-          'Pragma': 'no-cache',
-          'Cache-Control': 'no-cache'
-        }
-      });
+      if (orParts.length > 0) {
+        const { data, error } = await supabase
+          .from('players')
+          .select('id, name, username, uniquePlayerId, points, cups, streak, seerahCompleted, generalCompleted, quranCompleted, completedChallengeIds, activeFrame, equippedNameColor')
+          .or(orParts.join(','))
+          .limit(1)
+          .maybeSingle();
 
-      if (!res.ok) return null;
-      const data = await res.json();
-      const user = data.user || data.player;
-
-      if (user) {
-        if (user.name) {
-          setPlayerName(user.name);
-          localStorage.setItem('quran_player_name', user.name);
+        if (!error && data) {
+          user = data;
         }
-        if (user.username) {
-          setPlayerUsername(user.username);
-          localStorage.setItem('quran_player_username', user.username);
-        }
-        if (user.uniquePlayerId) {
-          setUniquePlayerId(user.uniquePlayerId);
-          localStorage.setItem('quran_unique_player_id', user.uniquePlayerId);
-        }
-        if (user.id) {
-          setPlayerId(user.id);
-          localStorage.setItem('quran_player_id', String(user.id));
-        }
-        if (typeof user.points === 'number') {
-          setTotalPoints(user.points);
-          localStorage.setItem('quran_total_points', String(user.points));
-        }
-        if (typeof user.cups === 'number') {
-          setCups(user.cups);
-          localStorage.setItem('quran_total_cups', String(user.cups));
-          localStorage.setItem('quran_cups', String(user.cups));
-        }
-        if (typeof user.streak === 'number') {
-          setStreak(user.streak);
-          localStorage.setItem('quran_streak', String(user.streak));
-        }
-        if (user.activeFrame !== undefined) {
-          const frame = (user.activeFrame === 'seerah' || user.activeFrame === 'general') ? user.activeFrame : null;
-          setActiveFrame(frame);
-          if (frame) {
-            localStorage.setItem('quran_active_frame', frame);
-          } else {
-            localStorage.removeItem('quran_active_frame');
-          }
-        }
-        return user;
       }
     } catch (e) {
-      console.warn('Failed to refresh user profile from server:', e);
+      console.warn('Direct Supabase fetch in refreshUserProfile failed, falling back to API:', e);
+    }
+
+    // 2. Fallback to API if Supabase didn't return data
+    if (!user) {
+      try {
+        const params = new URLSearchParams({ t: Date.now().toString() });
+        if (pId) params.append('id', pId);
+        if (pUnique) params.append('uniquePlayerId', pUnique);
+        if (pUser) params.append('username', pUser);
+        if (pName) params.append('name', pName);
+
+        const res = await fetch(`/api/users/me?${params.toString()}`, {
+          cache: 'no-store',
+          headers: {
+            'Pragma': 'no-cache',
+            'Cache-Control': 'no-cache'
+          }
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          user = data.user || data.player;
+        }
+      } catch (e) {
+        console.warn('Failed to refresh user profile from server:', e);
+      }
+    }
+
+    if (user) {
+      if (user.name) {
+        setPlayerName(user.name);
+        localStorage.setItem('quran_player_name', user.name);
+      }
+      if (user.username) {
+        setPlayerUsername(user.username);
+        localStorage.setItem('quran_player_username', user.username);
+      }
+      if (user.uniquePlayerId) {
+        setUniquePlayerId(user.uniquePlayerId);
+        localStorage.setItem('quran_unique_player_id', user.uniquePlayerId);
+      }
+      if (user.id) {
+        setPlayerId(user.id);
+        localStorage.setItem('quran_player_id', String(user.id));
+      }
+      if (typeof user.points === 'number') {
+        setTotalPoints(user.points);
+        localStorage.setItem('quran_total_points', String(user.points));
+      }
+      if (typeof user.cups === 'number') {
+        setCups(user.cups);
+        localStorage.setItem('quran_total_cups', String(user.cups));
+        localStorage.setItem('quran_cups', String(user.cups));
+      }
+      if (typeof user.streak === 'number') {
+        setStreak(user.streak);
+        localStorage.setItem('quran_streak', String(user.streak));
+      }
+      if (user.activeFrame !== undefined) {
+        const frame = (user.activeFrame === 'seerah' || user.activeFrame === 'general') ? user.activeFrame : null;
+        setActiveFrame(frame);
+        if (frame) {
+          localStorage.setItem('quran_active_frame', frame);
+        } else {
+          localStorage.removeItem('quran_active_frame');
+        }
+      }
+
+      // CRITICAL: Synchronize completed challenges into state and localStorage
+      if (Array.isArray(user.completedChallengeIds)) {
+        setCompletedChallengeIds(new Set(user.completedChallengeIds));
+        localStorage.setItem('quran_completed_ids', JSON.stringify(user.completedChallengeIds));
+        localStorage.setItem('quran_completed_challenges', JSON.stringify(user.completedChallengeIds));
+      }
+
+      // CRITICAL: Synchronize certificates from Supabase into userCertificates
+      if (user.seerahCompleted || user.generalCompleted) {
+        setUserCertificates(prev => {
+          const certs = [...prev];
+          let updated = false;
+          if (user.seerahCompleted && !certs.some(c => c.category === 'seerah')) {
+            certs.push({ category: 'seerah', date: 'مُعتمدة', name: user.name || 'البطل القرآني' });
+            updated = true;
+          }
+          if (user.generalCompleted && !certs.some(c => c.category === 'general')) {
+            certs.push({ category: 'general', date: 'مُعتمدة', name: user.name || 'البطل القرآني' });
+            updated = true;
+          }
+          if (updated) {
+            localStorage.setItem('quran_user_certificates', JSON.stringify(certs));
+          }
+          return certs;
+        });
+      }
+
+      return user;
     }
     return null;
   }, [uniquePlayerId, playerUsername, playerName]);
 
-  // Live session refresh on mount and window focus
+  // Live session refresh on mount, window focus, and milestone invalidation events
   useEffect(() => {
     refreshUserProfile();
     const onFocus = () => refreshUserProfile();
     const onVisibility = () => {
       if (document.visibilityState === 'visible') refreshUserProfile();
     };
+    const onMilestonesUpdated = () => refreshUserProfile();
+
     window.addEventListener('focus', onFocus);
     document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('milestones_updated', onMilestonesUpdated);
+    window.addEventListener('quran_certificates_updated', onMilestonesUpdated);
+
     return () => {
       window.removeEventListener('focus', onFocus);
       document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('milestones_updated', onMilestonesUpdated);
+      window.removeEventListener('quran_certificates_updated', onMilestonesUpdated);
     };
   }, [refreshUserProfile]);
 

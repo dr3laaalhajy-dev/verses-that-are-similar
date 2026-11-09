@@ -5,6 +5,7 @@ import {
   Flame, X, Quote, AlertCircle, Lock, Loader2, BookOpen, RefreshCw, Smartphone, Share2, Check
 } from 'lucide-react';
 import { useApp } from '../../contexts/AppContext';
+import { supabase } from '../../services/supabase';
 
 import ConfirmModal from '../ConfirmModal';
 import { LibrarySettingsModal } from '../LibrarySettingsModal';
@@ -564,6 +565,32 @@ export const GlobalOverlays: React.FC = () => {
               app.setIsNameDecorated(true);
               localStorage.setItem('quran_active_frame', category);
               localStorage.setItem('quran_name_decorated', 'true');
+
+              // Direct Supabase Update
+              const pUnique = app.uniquePlayerId || localStorage.getItem('quran_unique_player_id');
+              const pUser = app.playerUsername || localStorage.getItem('quran_player_username');
+              const pName = app.playerName || localStorage.getItem('quran_player_name');
+              const pId = app.playerId || localStorage.getItem('quran_player_id');
+
+              if (pUnique || pUser || pName || pId) {
+                const upFields: any = {
+                  activeFrame: category,
+                  updatedAt: new Date().toISOString()
+                };
+                if (category === 'seerah') upFields.seerahCompleted = true;
+                if (category === 'general') upFields.generalCompleted = true;
+
+                let q = supabase.from('players').update(upFields);
+                if (pUnique) q = q.eq('uniquePlayerId', pUnique);
+                else if (pUser) q = q.eq('username', pUser);
+                else if (pName) q = q.eq('name', pName);
+                else if (pId && /^\d+$/.test(String(pId))) q = q.eq('id', Number(pId));
+
+                q.then(() => {
+                  window.dispatchEvent(new CustomEvent('milestones_updated'));
+                  window.dispatchEvent(new CustomEvent('quran_certificates_updated'));
+                }).catch(err => console.error('Failed to update Supabase in GlobalOverlays:', err));
+              }
 
               if (app.playerUsername || app.playerName) {
                 fetch('/api/player-score', {

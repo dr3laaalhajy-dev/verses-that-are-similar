@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trophy, RotateCcw, ChevronLeft, CheckCircle2, XCircle, Award, Sparkles, Lock, Play, ChevronRight, Eye, ExternalLink, ArrowRight } from 'lucide-react';
+import { Trophy, RotateCcw, ChevronLeft, CheckCircle2, XCircle, Award, Sparkles, Lock, Play, ChevronRight, Eye, ExternalLink, ArrowRight, Loader2 } from 'lucide-react';
 import { quizQuestions } from '../data/quizQuestionsData';
 import { islamicCategoriesData, islamicCategoriesList, CategoryQuestion } from '../data/islamicCategories';
 import CertificateGenerator from './CertificateGenerator';
 import { recordMilestoneAnswer } from '../services/milestoneProgressService';
+import { supabase } from '../services/supabase';
 
 const getStorageKey = (category: string | null) => `quran_quiz_progress_${category || 'general'}`;
 
@@ -27,6 +28,9 @@ const IslamicQuiz: React.FC<{
   const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
   const [isAnimating, setIsAnimating] = useState(false);
   const [showCertificate, setShowCertificate] = useState(false);
+  const [isSavingProgress, setIsSavingProgress] = useState(false);
+  const [certSaveSuccess, setCertSaveSuccess] = useState<boolean>(false);
+  const [certSaveError, setCertSaveError] = useState<string | null>(null);
 
   // Check if selected category is one of the new Islamic categories from IslamicQuizAPI
   const isCustomCategory = !!(selectedCategory && selectedCategory in islamicCategoriesData);
@@ -38,6 +42,119 @@ const IslamicQuiz: React.FC<{
   const totalGroups = isCustomCategory && customCatData
     ? customCatData.topics.length
     : (isSeerah ? 3 : 5);
+
+  const isCertAlreadySaved = (category: string) => {
+    try {
+      const savedCerts = JSON.parse(localStorage.getItem('quran_user_certificates') || '[]');
+      return savedCerts.some((c: any) => c.category === category);
+    } catch {
+      return false;
+    }
+  };
+
+  const handleSaveChallengeCompletion = async (categoryToSave: 'seerah' | 'general'): Promise<boolean> => {
+    setIsSavingProgress(true);
+    setCertSaveError(null);
+
+    const pUnique = localStorage.getItem('quran_unique_player_id');
+    const pUser = localStorage.getItem('quran_player_username');
+    const pName = localStorage.getItem('quran_player_name');
+    const pId = localStorage.getItem('quran_player_id');
+
+    let writeSucceeded = false;
+    let writeError: any = null;
+
+    try {
+      const updateData: Record<string, any> = {
+        updatedAt: new Date().toISOString()
+      };
+      if (categoryToSave === 'seerah') updateData.seerahCompleted = true;
+      if (categoryToSave === 'general') updateData.generalCompleted = true;
+
+      if (pUnique || pUser || pName || pId) {
+        let q = supabase.from('players').update(updateData);
+        if (pUnique) q = q.eq('uniquePlayerId', pUnique);
+        else if (pUser) q = q.eq('username', pUser);
+        else if (pName) q = q.eq('name', pName);
+        else if (pId && /^\d+$/.test(pId)) q = q.eq('id', Number(pId));
+
+        const { data, error } = await q.select('id, seerahCompleted, generalCompleted');
+        if (error) {
+          writeError = error;
+          console.error('[IslamicQuiz] Supabase save error:', error);
+        } else if (data && data.length > 0) {
+          writeSucceeded = true;
+        } else {
+          // If no rows updated with primary filter, fallback to .or()
+          const orFilter = [
+            pUnique ? `uniquePlayerId.eq.${pUnique}` : null,
+            pUser ? `username.eq.${pUser}` : null,
+            pName ? `name.eq.${pName}` : null,
+            (pId && /^\d+$/.test(pId)) ? `id.eq.${pId}` : null
+          ].filter(Boolean).join(',');
+
+          if (orFilter) {
+            const fallbackRes = await supabase.from('players').update(updateData).or(orFilter).select('id');
+            if (!fallbackRes.error && fallbackRes.data && fallbackRes.data.length > 0) {
+              writeSucceeded = true;
+            } else {
+              writeError = fallbackRes.error || new Error('Player row not found in database');
+            }
+          }
+        }
+      } else {
+        // Guest user without account in database
+        writeSucceeded = true;
+      }
+
+      if (writeSucceeded) {
+        // 1. Update localStorage certificates
+        const savedCerts = JSON.parse(localStorage.getItem('quran_user_certificates') || '[]');
+        if (!savedCerts.some((c: any) => c.category === categoryToSave)) {
+          savedCerts.push({
+            category: categoryToSave,
+            date: new Date().toLocaleDateString('ar-SA'),
+            name: pName || 'البطل القرآني'
+          });
+          localStorage.setItem('quran_user_certificates', JSON.stringify(savedCerts));
+        }
+
+        // 2. Dispatch events for instant reactivity & cache invalidation across the app
+        window.dispatchEvent(new CustomEvent('milestones_updated'));
+        window.dispatchEvent(new CustomEvent('quran_certificates_updated'));
+
+        setCertSaveSuccess(true);
+        return true;
+      } else {
+        setCertSaveSuccess(false);
+        setCertSaveError(writeError?.message || 'تعذر تأكيد حفظ التحدي في قاعدة البيانات');
+        return false;
+      }
+    } catch (e: any) {
+      console.error('[IslamicQuiz] Error saving certificate to DB:', e);
+      setCertSaveSuccess(false);
+      setCertSaveError(e?.message || 'حدث خطأ أثناء الاتصال بالخادم لحفظ الإنجاز');
+      return false;
+    } finally {
+      setIsSavingProgress(false);
+
+      // Secondary background push to API if reachable
+      if (pName || pUser) {
+        try {
+          fetch('/api/player-score', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: pName,
+              username: pUser,
+              seerahCompleted: categoryToSave === 'seerah' ? true : undefined,
+              generalCompleted: categoryToSave === 'general' ? true : undefined
+            })
+          }).catch(() => {});
+        } catch (_) {}
+      }
+    }
+  };
 
   // Load progress when category changes
   useEffect(() => {
@@ -189,7 +306,7 @@ const IslamicQuiz: React.FC<{
     }
 
     setIsAnimating(true);
-    setTimeout(() => {
+    setTimeout(async () => {
       const isLastQuestion = currentIndex >= questions.length - 1;
 
       if (!isLastQuestion) {
@@ -225,37 +342,9 @@ const IslamicQuiz: React.FC<{
             setUnlockedLevels(updatedProgress);
             syncProgress(updatedProgress);
 
-            // Requirement 2: Unlock and sync certificate with database
+            // Await rigorous Supabase upsert/update and verify before unlocking certificate
             const certCategory = isSeerah ? 'seerah' : 'general';
-            try {
-              const savedCerts = JSON.parse(localStorage.getItem('quran_user_certificates') || '[]');
-              if (!savedCerts.some((c: any) => c.category === certCategory)) {
-                const newCert = {
-                  category: certCategory,
-                  date: new Date().toLocaleDateString('ar-SA'),
-                  name: localStorage.getItem('quran_player_name') || 'البطل القرآني'
-                };
-                savedCerts.push(newCert);
-                localStorage.setItem('quran_user_certificates', JSON.stringify(savedCerts));
-              }
-
-              const pName = localStorage.getItem('quran_player_name');
-              const pUsername = localStorage.getItem('quran_player_username');
-              if (pName || pUsername) {
-                fetch('/api/player-score', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    name: pName,
-                    username: pUsername,
-                    seerahCompleted: isSeerah ? true : undefined,
-                    generalCompleted: isGeneral ? true : undefined
-                  })
-                }).catch(err => console.error('Failed to sync certificate status to DB:', err));
-              }
-            } catch (e) {
-              console.error('Error unlocking certificate:', e);
-            }
+            await handleSaveChallengeCompletion(certCategory);
           } else if (selectedGroup === currentMaxUnlocked && currentMaxUnlocked < maxGroups) {
             const updatedProgress = {
               ...unlockedLevels,
@@ -921,17 +1010,37 @@ const IslamicQuiz: React.FC<{
 
           <div className="flex flex-col gap-3 mt-4">
             {isPassed && selectedGroup === (isSeerah ? 3 : 5) && (
-              <button
-                onClick={() => {
-                  if (onShowCertificate) {
-                    onShowCertificate(isSeerah ? 'seerah' : 'general');
-                  }
-                }}
-                className="flex items-center justify-center gap-2 py-3.5 bg-gradient-to-r from-amber-500 to-amber-600 text-white rounded-2xl font-black text-base hover:from-amber-600 hover:to-amber-700 transition-all shadow-xl shadow-amber-200"
-              >
-                <Award className="w-5 h-5 text-yellow-200" />
-                <span>🎉 عرض وتحميل وسام الشهادة المعتمد</span>
-              </button>
+              (certSaveSuccess || isCertAlreadySaved(isSeerah ? 'seerah' : 'general')) ? (
+                <button
+                  onClick={() => {
+                    if (onShowCertificate) {
+                      onShowCertificate(isSeerah ? 'seerah' : 'general');
+                    }
+                  }}
+                  className="flex items-center justify-center gap-2 py-3.5 bg-gradient-to-r from-amber-500 to-amber-600 text-white rounded-2xl font-black text-base hover:from-amber-600 hover:to-amber-700 transition-all shadow-xl shadow-amber-200"
+                >
+                  <Award className="w-5 h-5 text-yellow-200" />
+                  <span>🎉 عرض وتحميل وسام الشهادة المعتمد</span>
+                </button>
+              ) : isSavingProgress ? (
+                <div className="flex items-center justify-center gap-2 py-3.5 bg-amber-50 text-amber-800 rounded-2xl font-bold text-sm border border-amber-200">
+                  <Loader2 className="w-4 h-4 animate-spin text-amber-600" />
+                  <span>جارٍ توثيق واعتماد الشهادة في السيرفر...</span>
+                </div>
+              ) : (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl text-center space-y-2">
+                  <p className="text-xs font-bold text-rose-700">
+                    {certSaveError || 'تعذر تأكيد حفظ الشهادة في الخادم. تأكد من اتصال الإنترنت ثم أعد المحاولة.'}
+                  </p>
+                  <button
+                    onClick={() => handleSaveChallengeCompletion(isSeerah ? 'seerah' : 'general')}
+                    className="w-full py-2 px-4 bg-rose-600 text-white rounded-xl font-bold text-xs hover:bg-rose-700 transition-all flex items-center justify-center gap-1.5 shadow-md shadow-rose-200"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>إعادة محاولة توثيق الشهادة</span>
+                  </button>
+                </div>
+              )
             )}
 
             {isPassed && (

@@ -67,7 +67,7 @@ export const AchievementsMilestoneTracker: React.FC<AchievementsMilestoneTracker
   } = useAchievements({
     username: playerUsername,
     playerName: playerName,
-    uniquePlayerId: typeof window !== 'undefined' ? localStorage.getItem('quran_player_id') : null,
+    uniquePlayerId: typeof window !== 'undefined' ? (localStorage.getItem('quran_unique_player_id') || localStorage.getItem('quran_player_id')) : null,
     isSelf: true
   });
 
