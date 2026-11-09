@@ -21,15 +21,20 @@ export function usePushNotifications(userId?: string | null, onNotificationRecei
   });
 
   const [permission, setPermission] = useState<NotificationPermission>(() => {
-    if (typeof window !== 'undefined' && 'Notification' in window) {
-      return Notification.permission;
+    if (typeof window !== 'undefined') {
+      if (window.AndroidBridge?.isNotificationPermissionGranted?.()) {
+        return 'granted';
+      }
+      if ('Notification' in window) {
+        return Notification.permission;
+      }
     }
     return 'default';
   });
 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const isSupported = typeof window !== 'undefined' && 'Notification' in window && 'serviceWorker' in navigator;
+  const isSupported = typeof window !== 'undefined' && (Boolean(window.AndroidBridge) || ('Notification' in window && 'serviceWorker' in navigator));
 
   /**
    * Save or update FCM token in database
@@ -96,9 +101,32 @@ export function usePushNotifications(userId?: string | null, onNotificationRecei
   }, []);
 
   /**
-   * Request permission from browser and register device token
+   * Request permission from browser or native Android bridge and register device token
    */
   const requestPermissionAndRegister = useCallback(async (): Promise<string | null> => {
+    // 1. فحص بيئة تطبيق الأندرويد واستدعاء الجسر البرمجي إذا كان متاحاً
+    if (typeof window !== 'undefined' && window.AndroidBridge?.requestNotificationPermission) {
+      window.AndroidBridge.requestNotificationPermission();
+
+      // إذا كانت الصلاحية ممنوحة بالفعل في النظام، جلب وحفظ التوكن
+      if (window.AndroidBridge.isNotificationPermissionGranted?.()) {
+        setPermission('granted');
+        try {
+          const token = await requestFCMToken();
+          if (token) {
+            setFcmToken(token);
+            try { localStorage.setItem('fcm_device_token', token); } catch {}
+            const activeUserId = userId || localStorage.getItem('player_name') || 'guest_user';
+            await saveTokenToDatabase(token, activeUserId);
+            return token;
+          }
+        } catch (tokenErr) {
+          console.warn('[PushNotifications] Token retrieval warning in WebView:', tokenErr);
+        }
+      }
+      return null;
+    }
+
     if (!isSupported) {
       setError('المتصفح الحالي لا يدعم التنبيهات المباشرة');
       return null;
@@ -133,6 +161,36 @@ export function usePushNotifications(userId?: string | null, onNotificationRecei
       setIsLoading(false);
     }
   }, [isSupported, userId, saveTokenToDatabase]);
+
+  // استماع لنتيجة صلاحيات الإشعارات القادمة من جسر الأندرويد (AndroidBridge)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleAndroidPermission = async (event: any) => {
+      const granted = Boolean(event?.detail?.granted);
+      if (granted) {
+        setPermission('granted');
+        try {
+          const token = await requestFCMToken();
+          if (token) {
+            setFcmToken(token);
+            try { localStorage.setItem('fcm_device_token', token); } catch {}
+            const activeUserId = userId || localStorage.getItem('player_name') || 'guest_user';
+            await saveTokenToDatabase(token, activeUserId);
+          }
+        } catch (e) {
+          console.warn('[PushNotifications] Token registration failed after Android permission granted:', e);
+        }
+      } else {
+        setPermission('denied');
+      }
+    };
+
+    window.addEventListener('androidNotificationPermissionResult', handleAndroidPermission);
+    return () => {
+      window.removeEventListener('androidNotificationPermissionResult', handleAndroidPermission);
+    };
+  }, [userId, saveTokenToDatabase]);
 
   // Listen for foreground FCM notifications
   useEffect(() => {

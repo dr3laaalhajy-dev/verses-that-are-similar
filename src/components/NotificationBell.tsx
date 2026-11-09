@@ -812,7 +812,13 @@ export const NotificationBell: React.FC<NotificationBellProps> = ({ darkMode, us
                 </div>
                 <button
                   type="button"
-                  onClick={requestPermissionAndRegister}
+                  onClick={() => {
+                    if (typeof window !== 'undefined' && window.AndroidBridge?.requestNotificationPermission) {
+                      window.AndroidBridge.requestNotificationPermission();
+                    } else {
+                      requestPermissionAndRegister();
+                    }
+                  }}
                   disabled={isFCMRegistering}
                   className="px-2.5 py-1 text-[10px] font-bold bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-all shadow-xs cursor-pointer shrink-0 disabled:opacity-50"
                 >

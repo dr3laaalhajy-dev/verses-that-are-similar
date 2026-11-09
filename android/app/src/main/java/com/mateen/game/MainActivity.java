@@ -1,11 +1,20 @@
 package com.mateen.game;
 
+import android.Manifest;
+import android.app.Activity;
+import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
+import android.webkit.JavascriptInterface;
+import android.webkit.WebView;
 
 import androidx.annotation.NonNull;
+import androidx.core.app.ActivityCompat;
+import androidx.core.app.NotificationManagerCompat;
+import androidx.core.content.ContextCompat;
 
 import com.getcapacitor.BridgeActivity;
 import com.google.firebase.FirebaseApp;
@@ -27,6 +36,7 @@ import java.net.URL;
 public class MainActivity extends BridgeActivity {
 
     private static final String TAG = "MainActivity";
+    private static final int NOTIFICATION_PERMISSION_REQUEST_CODE = 1002;
     private static final String VERSION_CONTROL_API_URL = "https://mateen-quran.vercel.app/api/version-control";
     private static final long UPDATE_POLL_INTERVAL_MS = 30000; // 30 seconds real-time poll
 
@@ -46,6 +56,9 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        // ربط الجسر البرمجي للـ WebView لتمكين صلاحيات النظام (مثل الإشعارات)
+        setupAndroidBridge();
+
         // الاستماع الحصري لعميل الأندرويد (Java Client Only)
         listenForAndroidAppUpdates();
     }
@@ -53,6 +66,9 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onResume() {
         super.onResume();
+
+        // التأكد من توفر الجسر البرمجي
+        setupAndroidBridge();
 
         // فحص التحديثات فور عودة المستخدم للتطبيق
         listenForAndroidAppUpdates();
@@ -244,6 +260,91 @@ public class MainActivity extends BridgeActivity {
             versionRef.addValueEventListener(updateListener);
         } catch (Exception e) {
             Log.e(TAG, "Failed to initialize Firebase version listener: " + e.getMessage());
+        }
+    }
+
+    /**
+     * إعداد وربط الجسر البرمجي بين WebView و كود الأندرويد
+     */
+    private void setupAndroidBridge() {
+        try {
+            if (getBridge() != null && getBridge().getWebView() != null) {
+                WebView webView = getBridge().getWebView();
+                webView.addJavascriptInterface(new AndroidBridge(this), "AndroidBridge");
+                Log.i(TAG, "AndroidBridge successfully registered with WebView");
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to setup AndroidBridge: " + e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == NOTIFICATION_PERMISSION_REQUEST_CODE) {
+            boolean granted = grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED;
+            Log.i(TAG, "onRequestPermissionsResult for POST_NOTIFICATIONS: " + granted);
+            notifyWebPermissionResult(granted);
+        }
+    }
+
+    /**
+     * إشعار صفحة الويب بنتيجة منح الصلاحية عبر Event مخصص في Javascript
+     */
+    private void notifyWebPermissionResult(boolean granted) {
+        runOnUiThread(() -> {
+            try {
+                if (getBridge() != null && getBridge().getWebView() != null) {
+                    String script = "window.dispatchEvent(new CustomEvent('androidNotificationPermissionResult', { detail: { granted: " + granted + " } }));";
+                    getBridge().getWebView().evaluateJavascript(script, null);
+                }
+            } catch (Exception e) {
+                Log.w(TAG, "Error notifying WebView of permission result: " + e.getMessage());
+            }
+        });
+    }
+
+    /**
+     * كائن الجسر البرمجي المتاح لـ Javascript عبر window.AndroidBridge
+     */
+    public class AndroidBridge {
+        private final Activity activity;
+
+        public AndroidBridge(Activity activity) {
+            this.activity = activity;
+        }
+
+        @JavascriptInterface
+        public void requestNotificationPermission() {
+            Log.i(TAG, "AndroidBridge.requestNotificationPermission invoked from JavaScript");
+            activity.runOnUiThread(() -> {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    if (ContextCompat.checkSelfPermission(activity, Manifest.permission.POST_NOTIFICATIONS)
+                            != PackageManager.PERMISSION_GRANTED) {
+                        ActivityCompat.requestPermissions(
+                                activity,
+                                new String[]{Manifest.permission.POST_NOTIFICATIONS},
+                                NOTIFICATION_PERMISSION_REQUEST_CODE
+                        );
+                    } else {
+                        Log.i(TAG, "POST_NOTIFICATIONS permission already granted");
+                        notifyWebPermissionResult(true);
+                    }
+                } else {
+                    boolean enabled = NotificationManagerCompat.from(activity).areNotificationsEnabled();
+                    Log.i(TAG, "Android < 13 notifications enabled: " + enabled);
+                    notifyWebPermissionResult(enabled);
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public boolean isNotificationPermissionGranted() {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                return ContextCompat.checkSelfPermission(activity, Manifest.permission.POST_NOTIFICATIONS)
+                        == PackageManager.PERMISSION_GRANTED;
+            }
+            return NotificationManagerCompat.from(activity).areNotificationsEnabled();
         }
     }
 }

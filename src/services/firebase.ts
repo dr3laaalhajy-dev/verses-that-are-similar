@@ -62,18 +62,29 @@ export async function getFCMMessaging(): Promise<Messaging | null> {
  * Strictly follows Web Push standard & iOS Safari PWA requirements
  */
 export async function requestFCMToken(customVapidKey?: string): Promise<string | null> {
-  if (typeof window === 'undefined' || !('Notification' in window) || !('serviceWorker' in navigator)) {
+  if (typeof window === 'undefined' || (!('Notification' in window) && !window.AndroidBridge) || !('serviceWorker' in navigator)) {
     console.warn('[FCM] Notifications or Service Worker not supported.');
     return null;
   }
 
   try {
-    // Only prompt for permission if not already granted (critical for iOS User Gesture policy)
-    let permission = Notification.permission;
-    if (permission !== 'granted') {
-      permission = await Notification.requestPermission();
+    // Check permission via AndroidBridge or Web Notification API
+    let permission: NotificationPermission = 'default';
+    if (window.AndroidBridge?.isNotificationPermissionGranted?.()) {
+      permission = 'granted';
+    } else if ('Notification' in window) {
+      permission = Notification.permission;
     }
+
     if (permission !== 'granted') {
+      if (window.AndroidBridge?.requestNotificationPermission) {
+        window.AndroidBridge.requestNotificationPermission();
+      } else if ('Notification' in window) {
+        permission = await Notification.requestPermission();
+      }
+    }
+
+    if (permission !== 'granted' && !window.AndroidBridge?.isNotificationPermissionGranted?.()) {
       console.warn('[FCM] Notification permission not granted by user.');
       return null;
     }

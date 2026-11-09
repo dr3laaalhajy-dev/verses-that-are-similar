@@ -12,3 +12,12 @@ interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
 
+interface AndroidBridgeInterface {
+  requestNotificationPermission: () => void;
+  isNotificationPermissionGranted?: () => boolean;
+}
+
+interface Window {
+  AndroidBridge?: AndroidBridgeInterface;
+}
+

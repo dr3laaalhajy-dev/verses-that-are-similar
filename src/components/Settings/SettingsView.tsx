@@ -1189,7 +1189,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             {pushPermission !== 'granted' && (
               <button
                 type="button"
-                onClick={requestPushPermission}
+                onClick={() => {
+                  if (typeof window !== 'undefined' && window.AndroidBridge?.requestNotificationPermission) {
+                    window.AndroidBridge.requestNotificationPermission();
+                  } else {
+                    requestPushPermission();
+                  }
+                }}
                 disabled={isPushLoading}
                 className="w-full sm:w-auto px-5 py-2.5 bg-brand-emerald hover:bg-brand-emerald/90 text-white rounded-xl font-black text-xs transition-all shadow-md flex items-center justify-center gap-2 shrink-0 cursor-pointer active:scale-95 disabled:opacity-50"
               >

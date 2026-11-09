@@ -485,7 +485,13 @@ export const UserWirdModal: React.FC<UserWirdModalProps> = ({
                   </div>
                   <button
                     type="button"
-                    onClick={requestPermissionAndRegister}
+                    onClick={() => {
+                      if (typeof window !== 'undefined' && window.AndroidBridge?.requestNotificationPermission) {
+                        window.AndroidBridge.requestNotificationPermission();
+                      } else {
+                        requestPermissionAndRegister();
+                      }
+                    }}
                     className="px-3 py-1.5 bg-blue-600 text-white rounded-xl font-black text-[11px] hover:bg-blue-700 transition-all shrink-0 cursor-pointer"
                   >
                     تفعيل الآن
