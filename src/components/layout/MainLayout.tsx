@@ -146,7 +146,7 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
   return (
     <>
       {/* Top Header */}
-      {(!app.isMushafFullscreen && app.view !== 'mushaf') && (
+      {(!app.isMushafFullscreen && app.view !== 'mushaf' && !(app.room && app.view === 'challenge')) && (
         <header className="w-full sticky top-0 z-50 bg-[#064e3b]/90 dark:bg-obsidian-950/90 text-white dark:text-regalGold-100 shadow-xl border-b border-white/10 dark:border-regalGold-500/20 backdrop-blur-xl transition-colors duration-500 pt-[env(safe-area-inset-top,0px)]">
           <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 dark:bg-regalGold-500/5 rounded-full -mr-32 -mt-32 blur-3xl pointer-events-none" />
           <div className="w-full max-w-full box-border px-3.5 sm:px-6 md:px-8 pl-[max(0.875rem,env(safe-area-inset-left))] pr-[max(0.875rem,env(safe-area-inset-right))] py-2 flex items-center justify-between gap-1.5 sm:gap-4 relative z-10">
@@ -290,8 +290,8 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
         </header>
       )}
 
-      {/* Multiplayer Cancel / Resign Button if in a room */}
-      {app.room && (app.view === 'challenge' || app.view === 'group_waiting' || app.view === 'group_game') && (
+      {/* Multiplayer Cancel / Resign Button if in a room (excluded during active in-game challenge where it is integrated into the header dropdown) */}
+      {app.room && (app.view === 'group_waiting' || app.view === 'group_game') && (
         <div className="w-full max-w-6xl mx-auto px-4 sm:px-8 pt-3 pb-1 flex justify-end items-center gap-2">
           {app.isRoomLeader ? (
             <>
@@ -549,18 +549,20 @@ export const MainLayout: React.FC<MainLayoutProps> = ({ children }) => {
 
       {/* Main Content with PullToRefresh */}
       <PullToRefresh onRefresh={app.handlePullToRefresh}>
-        <main className={`overflow-y-auto w-full ${app.view === 'mushaf'
-          ? (app.isPageModeActive ? 'max-w-[96rem] px-0 sm:px-2 md:px-4 pt-1 sm:pt-2 md:pt-3 min-h-screen' : 'max-w-6xl px-3 sm:px-6 pt-1 sm:pt-2 md:pt-3 min-h-screen')
+        <main className={`w-full ${(app.room && app.view === 'challenge')
+          ? 'h-[100dvh] max-h-[100dvh] overflow-hidden p-0 m-0'
+          : app.view === 'mushaf'
+          ? (app.isPageModeActive ? 'max-w-[96rem] px-0 sm:px-2 md:px-4 pt-1 sm:pt-2 md:pt-3 min-h-screen overflow-y-auto' : 'max-w-6xl px-3 sm:px-6 pt-1 sm:pt-2 md:pt-3 min-h-screen overflow-y-auto')
           : (app.view === 'challenge' || app.view === 'speed_challenge' || app.view === 'islamic_quiz' || app.view === 'group_game' || app.view === 'skills_count_selection' || app.view === 'skills_menu' || app.view === 'speed_menu')
-            ? 'max-w-4xl px-3 sm:px-4 pt-1 sm:pt-2 md:pt-3 pb-8 md:pb-12 min-h-screen'
-            : 'max-w-6xl px-3 sm:px-6 pt-4 sm:pt-6 md:pt-10 pb-20 min-h-screen'
+            ? 'max-w-4xl px-3 sm:px-4 pt-1 sm:pt-2 md:pt-3 pb-8 md:pb-12 min-h-screen overflow-y-auto'
+            : 'max-w-6xl px-3 sm:px-6 pt-4 sm:pt-6 md:pt-10 pb-20 min-h-screen overflow-y-auto'
         } mx-auto relative z-10`}>
           {children}
         </main>
       </PullToRefresh>
 
-      {/* Fixed Bottom Navigation Bar - High Priority z-50 Layer */}
-      {app.view !== 'mushaf' && (
+      {/* Fixed Bottom Navigation Bar - High Priority z-50 Layer (hidden during active multiplayer room match) */}
+      {app.view !== 'mushaf' && !(app.room && app.view === 'challenge') && (
         <nav className="fixed bottom-0 left-0 right-0 w-full z-50 bg-[#064e3b]/95 dark:bg-obsidian-950/95 border-t border-white/15 dark:border-regalGold-500/20 shadow-2xl backdrop-blur-2xl py-2 px-2 sm:px-6 transition-colors duration-500 select-none">
           <div className="max-w-lg mx-auto flex items-center justify-around">
             {/* 1. الرئيسية */}

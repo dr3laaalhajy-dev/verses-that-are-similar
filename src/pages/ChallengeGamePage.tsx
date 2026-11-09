@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Zap, Loader2, Users, AlertCircle, Trophy, CheckCircle2, XCircle, Plus, ShoppingBag } from 'lucide-react';
+import { Zap, Loader2, Users, AlertCircle, Trophy, CheckCircle2, XCircle, Plus, ShoppingBag, Settings, LogOut, Trash2, X } from 'lucide-react';
 import { View } from '../types/challenges';
 import { SkillsChallengeHeader } from '../components/challenge/SkillsChallengeHeader';
 import { AudioChallengeUI } from '../components/challenge/AudioChallengeUI';
@@ -136,6 +136,8 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
     appRef.current = app;
   });
   const [isEndingRoom, setIsEndingRoom] = useState(false);
+  const [isStoreModalOpen, setIsStoreModalOpen] = useState(false);
+  const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false);
   const isMultiplayer = Boolean(room?.id || (room as any)?.room_code || room?.host_id || (room as any)?.participants?.length);
 
   const currentUserId = playerUsername || playerName;
@@ -497,6 +499,557 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
 
   const showPowerUpsStore = hasActiveTimer || hasMultipleChoiceOptions;
 
+  const renderChallengeMainContent = (isMultiplayerLayout = false) => {
+    if (isRoomLoading) {
+      return (
+        <div className={`flex flex-col items-center justify-center ${isMultiplayerLayout ? 'py-10 bg-white/5 border-white/10 text-white' : 'py-28 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-100'} rounded-3xl p-6 border shadow-xs text-center w-full max-w-md`}>
+          <div className="w-10 h-10 border-4 border-brand-emerald border-t-transparent rounded-full animate-spin mb-3" />
+          <h3 className="text-sm md:text-base font-black mb-1">
+            جاري استعادة بيانات الغرفة ونوع التحدي...
+          </h3>
+          <p className="text-xs text-slate-400 font-bold">
+            يرجى الانتظار لحظات لمزامنة الجولة الحالية
+          </p>
+        </div>
+      );
+    }
+
+    if (skillsType === 'audio' && !systemSettings.hideAudioChallenge && challengeMode !== 'daily') {
+      return (
+        <AudioChallengeUI
+          targetVerses={targetVerses}
+          matchedIds={matchedIds}
+          isListening={isListening}
+          onToggleListening={isListening ? stopListening : startListening}
+          keyword={KEYWORD}
+          keywordWordCount={keywordWordCount}
+          wordStates={wordStates}
+          onSkip={handleSkip}
+          isComplete={isComplete}
+          challengeMode={challengeMode}
+          saveScore={saveScore}
+          KEYWORD={KEYWORD}
+          score={score}
+          setDailyCompleted={setDailyCompleted}
+          updateStatsAfterWin={updateStatsAfterWin}
+          handlePromptNextChallenge={handlePromptNextChallenge}
+          onViewTafsir={handleOpenTafsir}
+          isRoom={!!room}
+          isHost={isEffectiveHost}
+          isLastQuestion={isLastQuestion}
+          onEndRoom={handleEndRoom}
+          isEndingRoom={isEndingRoom}
+        />
+      );
+    }
+
+    if (skillsType === 'surah' && !systemSettings.hideSurahChallenge && challengeMode !== 'daily') {
+      return (
+        <SurahChallengeUI
+          verseText={KEYWORD}
+          inputs={surahInputs}
+          onInputChange={(idx: number, val: string) => {
+            if (isMultiplayer) {
+              if (app?.handleSurahInputChangeBonus) {
+                app.handleSurahInputChangeBonus(idx, val);
+              } else if (handleSurahInputChange) {
+                handleSurahInputChange(idx, val);
+              } else if (app?.handleSurahInputChange) {
+                app.handleSurahInputChange(idx, val);
+              }
+            } else {
+              if (app?.handleSurahInputChangeSingle) {
+                app.handleSurahInputChangeSingle(idx, val);
+              } else if (handleSurahInputChange) {
+                handleSurahInputChange(idx, val);
+              } else {
+                const newInputs = [...surahInputs];
+                newInputs[idx] = val;
+                setSurahInputs(newInputs);
+              }
+            }
+          }}
+          onSubmit={handleSubmitSurah}
+          feedback={skillsFeedback}
+          onSkip={handleSkip}
+          isComplete={isComplete}
+          challengeMode={challengeMode}
+          saveScore={saveScore}
+          KEYWORD={KEYWORD}
+          score={score}
+          setDailyCompleted={setDailyCompleted}
+          updateStatsAfterWin={updateStatsAfterWin}
+          handlePromptNextChallenge={handlePromptNextChallenge}
+          onViewTafsir={handleOpenTafsir}
+          currentChallenge={currentChallenge}
+          surahFeedbackData={surahFeedbackData}
+          isRoom={isMultiplayer}
+          isMultiplayer={isMultiplayer}
+          isHost={isEffectiveHost}
+          isLastQuestion={isLastQuestion}
+          onEndRoom={handleEndRoom}
+          isEndingRoom={isEndingRoom}
+          hasBonusField={app?.hasBonusField}
+          bonusInput={app?.surahBonusInput}
+          onBonusInputChange={app?.handleSurahBonusInputChange}
+        />
+      );
+    }
+
+    if ((skillsType === 'complete' && !systemSettings.hideCompletionChallenge) || challengeMode === 'daily') {
+      return (
+        <CompleteChallengeUI
+          verseText={KEYWORD}
+          options={skillsOptions || []}
+          selectedOption={selectedOption}
+          onOptionSelect={handleOptionSelect}
+          onConfirm={handleConfirmAnswer}
+          feedback={skillsFeedback}
+          correctText={skillsCorrectAnswer || currentChallenge?.correctText}
+          onSkip={challengeMode !== 'daily' ? handleSkip : undefined}
+          isComplete={isComplete}
+          challengeMode={challengeMode}
+          saveScore={saveScore}
+          KEYWORD={KEYWORD}
+          score={score}
+          setDailyCompleted={setDailyCompleted}
+          updateStatsAfterWin={updateStatsAfterWin}
+          handlePromptNextChallenge={handlePromptNextChallenge}
+          onViewTafsir={handleOpenTafsir}
+          currentChallenge={currentChallenge}
+          eliminatedIndices={eliminatedOptionIndices}
+          isRoom={!!room}
+          isHost={isEffectiveHost}
+          isLastQuestion={isLastQuestion}
+          onEndRoom={handleEndRoom}
+          isEndingRoom={isEndingRoom}
+          onFinishDaily={() => {
+            setChallengeMode('normal');
+            setView('home');
+          }}
+        />
+      );
+    }
+
+    return (
+      <div className={`flex flex-col items-center justify-center py-12 text-center rounded-3xl p-6 border shadow-sm max-w-md mx-auto ${isMultiplayerLayout ? 'bg-white/5 border-white/10 text-white' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-100'}`}>
+        <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-500 flex items-center justify-center mb-3">
+          <AlertCircle className="w-6 h-6" />
+        </div>
+        <h3 className="text-base font-black mb-1">حدث خطأ في مزامنة الغرفة</h3>
+        <p className="text-xs text-slate-400 font-bold mb-5 leading-relaxed">
+          تعذر تحديد نوع التحدي للغرفة أو تم تعطيل هذا التحدي في إعدادات التطبيق.
+        </p>
+        <button
+          type="button"
+          onClick={() => {
+            setRoom(null);
+            setSkillsType(null);
+            localStorage.removeItem('activeRoomId');
+            setView('group_join');
+          }}
+          className="px-6 py-2.5 rounded-2xl bg-brand-emerald text-white text-xs font-black shadow-md hover:bg-brand-emerald/90 transition-all cursor-pointer"
+        >
+          العودة لقائمة الغرف
+        </button>
+      </div>
+    );
+  };
+
+  // ═══════════════════════════════════════════════════════════════════
+  // 1. DEDICATED MULTIPLAYER VIEW: Mobile-First, Scroll-Free, Compact
+  // ═══════════════════════════════════════════════════════════════════
+  if (isMultiplayer) {
+    return (
+      <div
+        key="group_challenge_game"
+        className="fixed inset-0 z-40 bg-gradient-to-b from-slate-900 via-slate-950 to-slate-900 text-white flex flex-col h-[100dvh] max-h-[100dvh] overflow-hidden select-none"
+        dir="rtl"
+      >
+        {/* 1. Compact Top Header */}
+        <header className="shrink-0 h-11 sm:h-12 px-3 sm:px-4 flex items-center justify-between border-b border-white/10 bg-slate-900/80 backdrop-blur-md relative z-30 pt-[env(safe-area-inset-top,0px)]">
+          {/* Right: Settings/More Menu + Question Counter */}
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setIsSettingsMenuOpen(prev => !prev)}
+                className="w-8 h-8 rounded-xl bg-white/10 hover:bg-white/20 active:scale-95 flex items-center justify-center text-slate-300 border border-white/10 transition-all cursor-pointer"
+                title="خيارات وإعدادات الغرفة"
+                aria-label="خيارات وإعدادات الغرفة"
+              >
+                <Settings className="w-4 h-4 text-slate-200" />
+              </button>
+
+              {/* Settings Dropdown Popover */}
+              <AnimatePresence>
+                {isSettingsMenuOpen && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-40"
+                      onClick={() => setIsSettingsMenuOpen(false)}
+                    />
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.9, y: -5 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.9, y: -5 }}
+                      className="absolute right-0 top-10 z-50 w-52 p-2 rounded-2xl bg-slate-900/95 backdrop-blur-xl border border-white/20 shadow-2xl flex flex-col gap-1.5"
+                    >
+                      <div className="flex items-center justify-between px-2 py-1 border-b border-white/10 text-xs font-black text-slate-300">
+                        <span>خيارات التحدي</span>
+                        <button
+                          type="button"
+                          onClick={() => setIsSettingsMenuOpen(false)}
+                          className="text-slate-400 hover:text-white"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      {/* Resign Option */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsSettingsMenuOpen(false);
+                          app.setIsResignModalOpen(true);
+                        }}
+                        className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-rose-300 hover:bg-rose-500/20 active:scale-95 transition-all text-right cursor-pointer"
+                      >
+                        <LogOut className="w-4 h-4 text-rose-400" />
+                        <span>الانسحاب من التحدي</span>
+                      </button>
+
+                      {/* Cancel Room Option (Leader/Host only) */}
+                      {isHost && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsSettingsMenuOpen(false);
+                            app.setIsCancelRoomModalOpen(true);
+                          }}
+                          className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold text-red-400 hover:bg-red-500/20 active:scale-95 transition-all text-right cursor-pointer"
+                        >
+                          <Trash2 className="w-4 h-4 text-red-500" />
+                          <span>إلغاء الغرفة وإنهاؤها</span>
+                        </button>
+                      )}
+                    </motion.div>
+                  </>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Question Number */}
+            <span className="text-xs sm:text-sm font-black text-white tabular-nums">
+              سؤال {currentQuestionIdx + 1}
+              <span className="text-slate-400 font-bold text-[10px] sm:text-xs">/{totalQuestions}</span>
+            </span>
+          </div>
+
+          {/* Center: Timer Pill */}
+          {hasActiveTimer && (
+            <div className="flex items-center">
+              <div
+                className={`px-3 py-0.5 rounded-full border flex items-center gap-1.5 text-xs font-black tabular-nums transition-all ${
+                  isFreezeActive
+                    ? 'bg-cyan-500/20 border-cyan-400/60 text-cyan-300 ring-1 ring-cyan-400/40 animate-pulse'
+                    : speedTimeLeft <= 5
+                    ? 'bg-rose-500/20 border-rose-400 text-rose-300 ring-1 ring-rose-400/50 animate-bounce'
+                    : 'bg-white/10 border-white/20 text-white'
+                }`}
+              >
+                <span className="text-xs">{isFreezeActive ? '🧊' : '⚡'}</span>
+                <span>{isFreezeActive ? `مجمّد (${freezeSecondsLeft}ث)` : `${speedTimeLeft}ث`}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Left: Deduplicated Answered Indicator & Points Balance */}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 bg-amber-500/15 border border-amber-400/30 px-2 py-0.5 rounded-full text-xs font-black text-amber-300">
+              <span>🪙</span>
+              <span className="tabular-nums">{totalPoints}</span>
+            </div>
+
+            <div className="flex items-center gap-1 text-[11px] font-bold text-slate-300 bg-white/10 px-2 py-0.5 rounded-full border border-white/10">
+              <Users className="w-3 h-3 text-slate-400" />
+              <span className="tabular-nums">{validAnswersCount}/{activeCount || 1}</span>
+            </div>
+          </div>
+        </header>
+
+        {/* Thin Animated Time / Progress Bar */}
+        {hasActiveTimer && (
+          <div className="w-full h-1 bg-white/10 relative overflow-hidden shrink-0">
+            <motion.div
+              className={`h-full transition-all duration-300 ${
+                isFreezeActive
+                  ? 'bg-cyan-400'
+                  : speedTimeLeft <= 5
+                  ? 'bg-rose-500'
+                  : 'bg-gradient-to-r from-emerald-400 to-teal-400'
+              }`}
+              style={{
+                width: `${Math.min(100, Math.max(0, (speedTimeLeft / (room.timePerQuestion || 15)) * 100))}%`
+              }}
+            />
+          </div>
+        )}
+
+        {/* Discreet Waiting Indicator after answer */}
+        {room && room.transitionMode !== 'ASYNC' && hasAnsweredCurrentQuestion && (
+          <div className="shrink-0 text-center py-1">
+            <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 text-[11px] font-black animate-pulse">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+              <span>تم تسجيل إجابتك • بانتظار باقي اللاعبين...</span>
+            </span>
+          </div>
+        )}
+
+        {/* Quick Inventory HUD & Store FAB Trigger */}
+        {showPowerUpsStore && (
+          <div className="flex items-center justify-center gap-2 py-1 shrink-0">
+            {hasActiveTimer && (
+              <button
+                type="button"
+                onClick={handleExecuteFreezeTime}
+                disabled={isPowerUpUsedThisQuestion || isFreezeActive || hasAnsweredCurrentQuestion || (powerups.freeze || 0) <= 0}
+                title="تجميد الوقت لمدة 10 ثوانٍ"
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl border text-xs font-black shadow-xs transition-all active:scale-95 cursor-pointer ${
+                  isFreezeActive
+                    ? 'bg-cyan-500/30 text-cyan-200 border-cyan-400 ring-2 ring-cyan-300 animate-pulse'
+                    : (powerups.freeze || 0) > 0
+                    ? 'bg-cyan-950/80 hover:bg-cyan-900/90 text-cyan-300 border-cyan-500/50'
+                    : 'bg-slate-800/50 text-slate-500 border-slate-700 opacity-50 cursor-not-allowed'
+                }`}
+              >
+                <span className="text-sm">🧊</span>
+                <span>تجميد</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                  (powerups.freeze || 0) > 0 ? 'bg-cyan-500 text-white' : 'bg-slate-700 text-slate-400'
+                }`}>
+                  {powerups.freeze || 0}
+                </span>
+              </button>
+            )}
+
+            {hasMultipleChoiceOptions && (
+              <button
+                type="button"
+                onClick={handleExecuteDeleteTwo}
+                disabled={isPowerUpUsedThisQuestion || hasAnsweredCurrentQuestion || eliminatedOptionIndices.length > 0 || (powerups.fiftyFifty || 0) <= 0}
+                title="حذف إجابتين (50/50)"
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl border text-xs font-black shadow-xs transition-all active:scale-95 cursor-pointer ${
+                  eliminatedOptionIndices.length > 0
+                    ? 'bg-amber-500/30 text-amber-200 border-amber-400 ring-2 ring-amber-300'
+                    : (powerups.fiftyFifty || 0) > 0
+                    ? 'bg-amber-950/80 hover:bg-amber-900/90 text-amber-300 border-amber-500/50'
+                    : 'bg-slate-800/50 text-slate-500 border-slate-700 opacity-50 cursor-not-allowed'
+                }`}
+              >
+                <span className="text-sm">✂️</span>
+                <span>حذف 2</span>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                  (powerups.fiftyFifty || 0) > 0 ? 'bg-amber-500 text-white' : 'bg-slate-700 text-slate-400'
+                }`}>
+                  {powerups.fiftyFifty || 0}
+                </span>
+              </button>
+            )}
+
+            {/* Store Modal Button 🛒 */}
+            <button
+              type="button"
+              onClick={() => setIsStoreModalOpen(true)}
+              title="متجر وسائل المساعدة"
+              className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-400/30 text-xs font-black transition-all active:scale-95 cursor-pointer"
+            >
+              <ShoppingBag className="w-3.5 h-3.5 text-amber-400" />
+              <span>المتجر</span>
+            </button>
+          </div>
+        )}
+
+        {/* 2. Middle Content Area: Question & Options (Flex-1, Scroll-Free) */}
+        <div className="flex-1 flex flex-col justify-center items-center px-2 sm:px-4 py-1 overflow-hidden w-full max-w-2xl mx-auto">
+          {renderChallengeMainContent(true)}
+        </div>
+
+        {/* 3. Bottom Area: Compact Player Status Row + Reactions FAB */}
+        <footer className="shrink-0 w-full px-3 py-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] flex items-center justify-between border-t border-white/10 bg-slate-900/90 backdrop-blur-md relative z-30">
+          {/* Horizontal Avatars Row for Players */}
+          <div className="flex items-center gap-2 overflow-x-auto py-1 px-1 no-scrollbar max-w-[calc(100%-3.5rem)]">
+            {(room.participants || []).map((p: any) => {
+              const pId = String(p.id);
+              const ans = room.currentAnswers?.[pId] || room.currentAnswers?.[p.username] || room.currentAnswers?.[p.name];
+              const isMe = p.name === playerName || p.username === playerUsername || pId === String(currentUserId);
+              const hasAns = Boolean(ans && (ans.questionIndex === undefined || ans.questionIndex === currentQuestionIdx));
+              const isAnsCorrect = hasAns && Boolean(ans.isCorrect);
+              const isOnline = isParticipantOnlineFn(p);
+
+              const initial = (p.name || p.username || 'ل').trim().charAt(0);
+
+              return (
+                <div key={pId} className="relative flex flex-col items-center shrink-0" title={`${p.name || p.username}${isMe ? ' (أنت)' : ''}`}>
+                  <div
+                    className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center font-black text-xs border relative transition-all ${
+                      isMe ? 'ring-2 ring-emerald-400 border-white' : 'border-white/20'
+                    } ${
+                      !isOnline
+                        ? 'bg-slate-800 text-slate-500 opacity-60'
+                        : isAnsCorrect
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : hasAns
+                        ? 'bg-rose-600 text-white shadow-xs'
+                        : 'bg-slate-700 text-slate-200'
+                    }`}
+                  >
+                    <span>{initial}</span>
+
+                    {/* Status Badge in corner */}
+                    <span
+                      className={`absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full flex items-center justify-center text-[8px] font-black border border-slate-900 ${
+                        !isOnline
+                          ? 'bg-slate-600 text-white'
+                          : isAnsCorrect
+                          ? 'bg-emerald-400 text-slate-900'
+                          : hasAns
+                          ? 'bg-rose-500 text-white'
+                          : 'bg-amber-400 text-slate-900 animate-pulse'
+                      }`}
+                    >
+                      {!isOnline ? '✕' : isAnsCorrect ? '✓' : hasAns ? '✕' : '⏳'}
+                    </span>
+                  </div>
+                  <span className="text-[9px] text-slate-300 max-w-[42px] truncate mt-0.5 leading-none">
+                    {p.name || p.username || 'لاعب'}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Reactions FAB Button */}
+          <LiveReactionsOverlay
+            roomId={room.id}
+            playerId={playerUsername || playerName || undefined}
+            playerName={playerName || undefined}
+            incomingReaction={room.lastReaction || room.playersProgress?.__lastReaction}
+            variant="fab"
+            showBar={true}
+          />
+        </footer>
+
+        {/* Store Modal */}
+        <AnimatePresence>
+          {isStoreModalOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-md">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9, y: 15 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.9, y: 15 }}
+                className="bg-slate-900 border border-white/15 rounded-3xl p-5 max-w-sm w-full shadow-2xl relative space-y-4"
+                dir="rtl"
+              >
+                <div className="flex items-center justify-between pb-2 border-b border-white/10">
+                  <div className="flex items-center gap-2 text-sm font-black text-amber-300">
+                    <ShoppingBag className="w-4 h-4 text-amber-400" />
+                    <span>متجر وسائل المساعدة</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsStoreModalOpen(false)}
+                    className="w-7 h-7 rounded-full bg-white/10 text-slate-300 hover:text-white flex items-center justify-center cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between bg-amber-500/10 border border-amber-400/20 px-3 py-2 rounded-xl text-xs font-bold text-amber-200">
+                  <span>رصيدك الحالي:</span>
+                  <span className="font-black text-sm">🪙 {totalPoints} نقطة</span>
+                </div>
+
+                <div className="space-y-2.5">
+                  {hasActiveTimer && (
+                    <div className="flex items-center justify-between p-3 rounded-2xl bg-white/5 border border-white/10">
+                      <div className="flex items-center gap-2.5">
+                        <span className="text-2xl">🧊</span>
+                        <div className="text-right">
+                          <div className="text-xs font-black text-white">تجميد الوقت (10ث)</div>
+                          <div className="text-[10px] text-cyan-300 font-bold">مخزونك: {powerups.freeze || 0}</div>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => buyPowerup('freeze')}
+                        disabled={totalPoints < 30}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1 transition-all cursor-pointer ${
+                          totalPoints >= 30
+                            ? 'bg-cyan-500 text-white hover:bg-cyan-400 active:scale-95 shadow-md'
+                            : 'bg-slate-800 text-slate-500 opacity-50 cursor-not-allowed'
+                        }`}
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>30ن</span>
+                      </button>
+                    </div>
+                  )}
+
+                  {hasMultipleChoiceOptions && (
+                    <div className="flex items-center justify-between p-3 rounded-2xl bg-white/5 border border-white/10">
+                      <div className="flex items-center gap-2.5">
+                        <span className="text-2xl">✂️</span>
+                        <div className="text-right">
+                          <div className="text-xs font-black text-white">حذف إجابتين (50/50)</div>
+                          <div className="text-[10px] text-amber-300 font-bold">مخزونك: {powerups.fiftyFifty || 0}</div>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => buyPowerup('fiftyFifty')}
+                        disabled={totalPoints < 50}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-black flex items-center gap-1 transition-all cursor-pointer ${
+                          totalPoints >= 50
+                            ? 'bg-amber-500 text-white hover:bg-amber-400 active:scale-95 shadow-md'
+                            : 'bg-slate-800 text-slate-500 opacity-50 cursor-not-allowed'
+                        }`}
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>50ن</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <p className="text-[10px] text-slate-400 text-center leading-relaxed">
+                  جميع الأدوات المشتراة تُحفظ في رصيدك ويمكنك استخدامها فوراً من الأزرار السريعة.
+                </p>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* Transcript Debug */}
+        <AnimatePresence>
+          {isListening && transcript && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className="p-4 glass bg-brand-gold/5 border-brand-gold/10 rounded-2xl text-slate-200 text-center quran-text text-base italic absolute bottom-14 inset-x-4 z-40"
+            >
+              "{transcript}"
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    );
+  }
+
+  // ═══════════════════════════════════════════════════════════════════
+  // 2. SOLO / DAILY CHALLENGE VIEW
+  // ═══════════════════════════════════════════════════════════════════
   return (
     <div key="game" className="space-y-2 md:space-y-4 max-w-xl md:max-w-3xl lg:max-w-4xl mx-auto w-full px-2 md:px-4 pt-1 md:pt-4">
       {/* Floating Timer UI for Speed Mode or Multiplayer Room with Timer */}
@@ -760,296 +1313,7 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
         }}
       />
 
-      {isRoomLoading ? (
-        <div className="flex flex-col items-center justify-center py-28 text-center bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-xs">
-          <div className="w-12 h-12 border-4 border-brand-emerald border-t-transparent rounded-full animate-spin mb-4" />
-          <h3 className="text-sm md:text-base font-black text-slate-800 dark:text-slate-100 mb-1">
-            جاري استعادة بيانات الغرفة ونوع التحدي...
-          </h3>
-          <p className="text-xs text-slate-400 font-bold">
-            يرجى الانتظار لحظات لمزامنة الجولة الحالية
-          </p>
-        </div>
-      ) : skillsType === 'audio' && !systemSettings.hideAudioChallenge && challengeMode !== 'daily' ? (
-        <AudioChallengeUI
-          targetVerses={targetVerses}
-          matchedIds={matchedIds}
-          isListening={isListening}
-          onToggleListening={isListening ? stopListening : startListening}
-          keyword={KEYWORD}
-          keywordWordCount={keywordWordCount}
-          wordStates={wordStates}
-          onSkip={handleSkip}
-          isComplete={isComplete}
-          challengeMode={challengeMode}
-          saveScore={saveScore}
-          KEYWORD={KEYWORD}
-          score={score}
-          setDailyCompleted={setDailyCompleted}
-          updateStatsAfterWin={updateStatsAfterWin}
-          handlePromptNextChallenge={handlePromptNextChallenge}
-          onViewTafsir={handleOpenTafsir}
-          isRoom={!!room}
-          isHost={isEffectiveHost}
-          isLastQuestion={isLastQuestion}
-          onEndRoom={handleEndRoom}
-          isEndingRoom={isEndingRoom}
-        />
-      ) : skillsType === 'surah' && !systemSettings.hideSurahChallenge && challengeMode !== 'daily' ? (
-        <SurahChallengeUI
-          verseText={KEYWORD}
-          inputs={surahInputs}
-          onInputChange={(idx: number, val: string) => {
-            // توجيه برمجي حسب نمط اللعب (جماعي مع بونص مقابل فردي بدون بونص)
-            if (isMultiplayer) {
-              if (app?.handleSurahInputChangeBonus) {
-                app.handleSurahInputChangeBonus(idx, val);
-              } else if (handleSurahInputChange) {
-                handleSurahInputChange(idx, val);
-              } else if (app?.handleSurahInputChange) {
-                app.handleSurahInputChange(idx, val);
-              }
-            } else {
-              if (app?.handleSurahInputChangeSingle) {
-                app.handleSurahInputChangeSingle(idx, val);
-              } else if (handleSurahInputChange) {
-                handleSurahInputChange(idx, val);
-              } else {
-                const newInputs = [...surahInputs];
-                newInputs[idx] = val;
-                setSurahInputs(newInputs);
-              }
-            }
-          }}
-          onSubmit={handleSubmitSurah}
-          feedback={skillsFeedback}
-          onSkip={handleSkip}
-          isComplete={isComplete}
-          challengeMode={challengeMode}
-          saveScore={saveScore}
-          KEYWORD={KEYWORD}
-          score={score}
-          setDailyCompleted={setDailyCompleted}
-          updateStatsAfterWin={updateStatsAfterWin}
-          handlePromptNextChallenge={handlePromptNextChallenge}
-          onViewTafsir={handleOpenTafsir}
-          currentChallenge={currentChallenge}
-          surahFeedbackData={surahFeedbackData}
-          isRoom={isMultiplayer}
-          isMultiplayer={isMultiplayer}
-          isHost={isEffectiveHost}
-          isLastQuestion={isLastQuestion}
-          onEndRoom={handleEndRoom}
-          isEndingRoom={isEndingRoom}
-          hasBonusField={app?.hasBonusField}
-          bonusInput={app?.surahBonusInput}
-          onBonusInputChange={app?.handleSurahBonusInputChange}
-        />
-      ) : ((skillsType === 'complete' && !systemSettings.hideCompletionChallenge) || challengeMode === 'daily') ? (
-        <CompleteChallengeUI
-          verseText={KEYWORD}
-          options={skillsOptions || []}
-          selectedOption={selectedOption}
-          onOptionSelect={handleOptionSelect}
-          onConfirm={handleConfirmAnswer}
-          feedback={skillsFeedback}
-          correctText={skillsCorrectAnswer || currentChallenge?.correctText}
-          onSkip={challengeMode !== 'daily' ? handleSkip : undefined}
-          isComplete={isComplete}
-          challengeMode={challengeMode}
-          saveScore={saveScore}
-          KEYWORD={KEYWORD}
-          score={score}
-          setDailyCompleted={setDailyCompleted}
-          updateStatsAfterWin={updateStatsAfterWin}
-          handlePromptNextChallenge={handlePromptNextChallenge}
-          onViewTafsir={handleOpenTafsir}
-          currentChallenge={currentChallenge}
-          eliminatedIndices={eliminatedOptionIndices}
-          isRoom={!!room}
-          isHost={isEffectiveHost}
-          isLastQuestion={isLastQuestion}
-          onEndRoom={handleEndRoom}
-          isEndingRoom={isEndingRoom}
-          onFinishDaily={() => {
-            setChallengeMode('normal');
-            setView('home');
-          }}
-        />
-      ) : (
-        <div className="flex flex-col items-center justify-center py-20 text-center bg-white dark:bg-slate-900 rounded-3xl p-6 border border-slate-200 dark:border-slate-800 shadow-sm max-w-md mx-auto">
-          <div className="w-12 h-12 rounded-2xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 flex items-center justify-center mb-3">
-            <AlertCircle className="w-6 h-6" />
-          </div>
-          <h3 className="text-base font-black text-slate-800 dark:text-slate-100 mb-1">حدث خطأ في مزامنة الغرفة</h3>
-          <p className="text-xs text-slate-500 dark:text-slate-400 font-bold mb-5 leading-relaxed">
-            تعذر تحديد نوع التحدي للغرفة أو تم تعطيل هذا التحدي في إعدادات التطبيق.
-          </p>
-          <button
-            type="button"
-            onClick={() => {
-              setRoom(null);
-              setSkillsType(null);
-              localStorage.removeItem('activeRoomId');
-              setView('group_join');
-            }}
-            className="px-6 py-2.5 rounded-2xl bg-brand-emerald text-white text-xs font-black shadow-md shadow-brand-emerald/20 hover:bg-brand-emerald/90 transition-all cursor-pointer"
-          >
-            العودة لقائمة الغرف
-          </button>
-        </div>
-      )}
-
-      {/* Participants Answer Status for the active question in room mode */}
-      {room && (hasAnsweredCurrentQuestion || skillsFeedback || (room.transitionMode !== 'ASYNC' && speedTimeLeft <= 0)) && (
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="p-3.5 sm:p-4 rounded-2xl bg-white/95 dark:bg-slate-900/95 border border-slate-200 dark:border-slate-800 shadow-sm space-y-2.5 my-3"
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs sm:text-sm font-black text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
-              <Users className="w-4 h-4 text-brand-emerald" />
-              <span>إجابات اللاعبين {isLastQuestion ? '(السؤال الأخير 🏁)' : ''}</span>
-            </span>
-            <span className="text-[11px] font-bold text-slate-500">
-              {validAnswersCount} من {activeCount || 1} أجابوا
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-            {(room.participants || []).map((p: any) => {
-              const pId = String(p.id);
-              const ans = room.currentAnswers?.[pId] || room.currentAnswers?.[p.username] || room.currentAnswers?.[p.name];
-              const isMe = p.name === playerName || p.username === playerUsername || pId === String(currentUserId);
-              const hasAns = Boolean(ans && (ans.questionIndex === undefined || ans.questionIndex === currentQuestionIdx));
-              const isAnsCorrect = hasAns && Boolean(ans.isCorrect);
-              const isOnline = isParticipantOnlineFn(p);
-
-              return (
-                <div
-                  key={pId}
-                  className={`flex items-center justify-between p-2.5 rounded-xl border text-xs transition-all ${
-                    !isOnline
-                      ? 'bg-slate-100/60 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800 text-slate-400 opacity-70'
-                      : !hasAns
-                      ? 'bg-slate-50/70 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 text-slate-400'
-                      : isAnsCorrect
-                      ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 font-bold'
-                      : 'bg-rose-50 dark:bg-rose-950/40 border-rose-300 dark:border-rose-800 text-rose-800 dark:text-rose-200 font-bold'
-                  }`}
-                >
-                  <span className="flex items-center gap-1.5 truncate">
-                    {!isOnline && (
-                      <span className="text-[10px] font-bold text-rose-500 bg-rose-50 dark:bg-rose-950/50 px-1.5 py-0.5 rounded border border-rose-200 dark:border-rose-800 shrink-0">
-                        (خارج اللعبة)
-                      </span>
-                    )}
-                    <span className="truncate">{p.name || p.username || 'لاعب'}</span>
-                    {isMe && <span className="text-[10px] opacity-75">(أنت)</span>}
-                  </span>
-                  <span className="shrink-0 flex items-center gap-1 text-[11px]">
-                    {!isOnline ? (
-                      <span className="text-slate-400 font-semibold text-[11px]">خارج اللعبة</span>
-                    ) : !hasAns ? (
-                      <span className="text-slate-400 font-normal">بانتظار الإجابة...</span>
-                    ) : isAnsCorrect ? (
-                      <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        <span>أصاب (+1)</span>
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-1 text-rose-600 dark:text-rose-400">
-                        <XCircle className="w-3.5 h-3.5" />
-                        <span>أخطأ</span>
-                      </span>
-                    )}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </motion.div>
-      )}
-
-      {/* End Room Action: Manual for 'who_am_i' / Auto-Finish indicator for other challenges */}
-      {room && isLastQuestion && (
-        isWhoAmI ? (
-          (hasAnsweredCurrentQuestion || skillsFeedback || (room.transitionMode !== 'ASYNC' && speedTimeLeft <= 0)) && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.98, y: 10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-amber-500/10 via-brand-emerald/10 to-teal-500/10 border-2 border-brand-emerald/30 shadow-md text-center space-y-3 mt-4"
-            >
-              <div className="flex items-center justify-center gap-2">
-                <Trophy className="w-5 h-5 text-amber-500" />
-                <h4 className="text-sm sm:text-base font-black text-slate-800 dark:text-slate-100">
-                  اكتملت جميع أسئلة التحدي! 🏁
-                </h4>
-              </div>
-
-              {isEffectiveHost ? (
-                <div className="space-y-2">
-                  {!isHost && hostIsOffline && (
-                    <div className="inline-flex items-center gap-1.5 py-1 px-3 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 text-xs font-black">
-                      <span>👑</span>
-                      <span>أنت تدير الغرفة حالياً لأن المنشئ غير متصل</span>
-                    </div>
-                  )}
-                  <button
-                    type="button"
-                    onClick={handleEndRoom}
-                    disabled={isEndingRoom}
-                    className="w-full py-3.5 px-6 rounded-2xl bg-gradient-to-r from-brand-emerald to-teal-600 hover:from-brand-emerald/90 hover:to-teal-700 text-white font-black text-sm sm:text-base shadow-lg shadow-brand-emerald/30 active:scale-98 transition-all flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    {isEndingRoom ? (
-                      <>
-                        <Loader2 className="w-5 h-5 animate-spin" />
-                        <span>جاري إنهاء التحدي والانتقال للنتائج...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Trophy className="w-5 h-5 text-amber-300" />
-                        <span>إنهاء الغرفة وإظهار النتائج</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              ) : (
-                <div className="flex items-center justify-center gap-2.5 py-2.5 px-4 rounded-xl bg-white/80 dark:bg-slate-800/80 border border-amber-200 dark:border-amber-700/40 text-amber-800 dark:text-amber-200 text-xs sm:text-sm font-black">
-                  <Loader2 className="w-4 h-4 animate-spin text-amber-600" />
-                  <span>في انتظار القائد لإنهاء التحدي</span>
-                </div>
-              )}
-            </motion.div>
-          )
-        ) : (
-          hasAllAnswered && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.98, y: 10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              className="p-3.5 sm:p-4 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-brand-emerald/10 border-2 border-brand-emerald/30 shadow-md text-center space-y-2 mt-4"
-            >
-              <div className="flex items-center justify-center gap-2 text-brand-emerald dark:text-emerald-300">
-                <Loader2 className="w-5 h-5 animate-spin text-brand-emerald" />
-                <h4 className="text-sm sm:text-base font-black">
-                  اكتملت جميع الإجابات! جاري إظهار النتائج النهائية تلقائياً... 🏁
-                </h4>
-              </div>
-            </motion.div>
-          )
-        )
-      )}
-
-      {/* Live Reactions in Challenge / Room Game */}
-      {room && (
-        <LiveReactionsOverlay
-          roomId={room.id}
-          playerId={playerUsername || playerName || undefined}
-          playerName={playerName || undefined}
-          incomingReaction={room.lastReaction || room.playersProgress?.__lastReaction}
-        />
-      )}
+      {renderChallengeMainContent(false)}
 
       {/* Transcript Debug */}
       <AnimatePresence>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { MessageCircle } from 'lucide-react';
 import { supabase } from '../services/supabase';
 
 export type ReactionType = 'hurry' | 'forgive' | 'knowledge' | 'royal' | 'crescent' | 'spirit';
@@ -169,6 +170,7 @@ interface LiveReactionsOverlayProps {
   } | null;
   onSendReaction?: (payload: any) => void;
   showBar?: boolean;
+  variant?: 'bar' | 'fab';
 }
 
 export const LiveReactionsOverlay: React.FC<LiveReactionsOverlayProps> = ({
@@ -177,10 +179,12 @@ export const LiveReactionsOverlay: React.FC<LiveReactionsOverlayProps> = ({
   playerName,
   incomingReaction,
   onSendReaction,
-  showBar = true
+  showBar = true,
+  variant = 'bar'
 }) => {
   const [floatingReactions, setFloatingReactions] = useState<FloatingReactionInstance[]>([]);
   const [cooldownSeconds, setCooldownSeconds] = useState<number>(0);
+  const [isPopoverOpen, setIsPopoverOpen] = useState<boolean>(false);
 
   // 2. تعديل مكون الاستماع: Realtime Channels الخاصة بـ Supabase
   useEffect(() => {
@@ -582,8 +586,81 @@ export const LiveReactionsOverlay: React.FC<LiveReactionsOverlayProps> = ({
       {/* Portal: Floating Animated Emojis Overlay on document.body */}
       {portalContent}
 
-      {/* Bottom Horizontal Reactions Bar */}
-      {showBar && (
+      {/* 1. Mobile FAB Popover Variant */}
+      {showBar && variant === 'fab' && (
+        <div className="relative inline-block pointer-events-auto select-none">
+          <AnimatePresence>
+            {isPopoverOpen && (
+              <>
+                {/* Backdrop to close on tap outside */}
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setIsPopoverOpen(false)}
+                />
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.85, y: 8 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.85, y: 8 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute bottom-12 left-0 sm:left-auto sm:right-0 z-50 p-2 rounded-2xl bg-slate-900/95 dark:bg-slate-950/95 backdrop-blur-xl border border-white/20 shadow-2xl flex flex-col gap-1 w-52 sm:w-56"
+                >
+                  <div className="flex items-center justify-between pb-1 mb-1 border-b border-white/10 px-2 text-[11px] font-black text-slate-300">
+                    <span>التفاعلات السريعة 💬</span>
+                    {cooldownSeconds > 0 && (
+                      <span className="text-amber-400 font-mono text-[10px]">⏳ {cooldownSeconds}ث</span>
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    {REACTION_ACTIONS.map(action => (
+                      <button
+                        key={action.id}
+                        type="button"
+                        disabled={cooldownSeconds > 0}
+                        onClick={() => {
+                          handleSendAction(action);
+                          setIsPopoverOpen(false);
+                        }}
+                        className={`flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all text-right ${
+                          cooldownSeconds > 0
+                            ? 'opacity-40 cursor-not-allowed bg-slate-800/60 text-slate-400'
+                            : 'hover:bg-white/10 text-white active:scale-95 cursor-pointer'
+                        }`}
+                      >
+                        <span className="text-sm shrink-0">{action.icon}</span>
+                        <span className="truncate" style={{ fontFamily: "'Aref Ruqaa', 'Amiri', serif" }}>
+                          {action.title}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>
+
+          <button
+            type="button"
+            onClick={() => setIsPopoverOpen(prev => !prev)}
+            aria-label="تفاعلات سريعة"
+            title="إرسال تفاعل سريع للمتسابقين"
+            className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full shadow-lg flex items-center justify-center transition-all cursor-pointer relative active:scale-95 border ${
+              isPopoverOpen
+                ? 'bg-amber-500 text-white border-amber-300 ring-2 ring-amber-400/50'
+                : 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-400/40 shadow-emerald-950/40'
+            }`}
+          >
+            <MessageCircle className="w-4 h-4 sm:w-5 sm:h-5" />
+            {cooldownSeconds > 0 && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-amber-500 text-white text-[9px] font-black flex items-center justify-center border border-white">
+                {cooldownSeconds}
+              </span>
+            )}
+          </button>
+        </div>
+      )}
+
+      {/* 2. Traditional Bottom Horizontal Reactions Bar */}
+      {showBar && variant === 'bar' && (
         <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2 px-3 py-2 rounded-2xl sm:rounded-full bg-slate-900/90 dark:bg-slate-950/95 backdrop-blur-md border border-slate-700/80 shadow-2xl pointer-events-auto max-w-full mx-auto my-2.5 transition-all">
           {/* 10-Second Cooldown Indicator Pill */}
           {cooldownSeconds > 0 && (
