@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MessageCircle } from 'lucide-react';
@@ -171,6 +171,7 @@ interface LiveReactionsOverlayProps {
   onSendReaction?: (payload: any) => void;
   showBar?: boolean;
   variant?: 'bar' | 'fab';
+  align?: 'left' | 'right';
 }
 
 export const LiveReactionsOverlay: React.FC<LiveReactionsOverlayProps> = ({
@@ -180,11 +181,27 @@ export const LiveReactionsOverlay: React.FC<LiveReactionsOverlayProps> = ({
   incomingReaction,
   onSendReaction,
   showBar = true,
-  variant = 'bar'
+  variant = 'bar',
+  align
 }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
   const [floatingReactions, setFloatingReactions] = useState<FloatingReactionInstance[]>([]);
   const [cooldownSeconds, setCooldownSeconds] = useState<number>(0);
   const [isPopoverOpen, setIsPopoverOpen] = useState<boolean>(false);
+  const [computedAlign, setComputedAlign] = useState<'left' | 'right'>(align || 'left');
+
+  useEffect(() => {
+    if (align) {
+      setComputedAlign(align);
+      return;
+    }
+    if (containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      setComputedAlign(rect.left < window.innerWidth / 2 ? 'left' : 'right');
+    }
+  }, [align, isPopoverOpen]);
+
+  const effectiveAlign = align || computedAlign;
 
   // 2. تعديل مكون الاستماع: Realtime Channels الخاصة بـ Supabase
   useEffect(() => {
@@ -588,7 +605,7 @@ export const LiveReactionsOverlay: React.FC<LiveReactionsOverlayProps> = ({
 
       {/* 1. Mobile FAB Popover Variant */}
       {showBar && variant === 'fab' && (
-        <div className="relative inline-block pointer-events-auto select-none">
+        <div ref={containerRef} className="relative inline-block pointer-events-auto select-none">
           <AnimatePresence>
             {isPopoverOpen && (
               <>
@@ -602,7 +619,9 @@ export const LiveReactionsOverlay: React.FC<LiveReactionsOverlayProps> = ({
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.85, y: 8 }}
                   transition={{ duration: 0.15 }}
-                  className="absolute bottom-12 left-0 sm:left-auto sm:right-0 z-50 p-2 rounded-2xl bg-slate-900/95 dark:bg-slate-950/95 backdrop-blur-xl border border-white/20 shadow-2xl flex flex-col gap-1 w-52 sm:w-56"
+                  className={`absolute bottom-16 ${
+                    effectiveAlign === 'right' ? 'right-0' : 'left-0'
+                  } z-50 p-2.5 rounded-2xl bg-slate-900/95 dark:bg-slate-950/95 backdrop-blur-xl border border-white/20 shadow-2xl flex flex-col gap-1 w-52 sm:w-56 max-w-[90vw] overflow-hidden`}
                 >
                   <div className="flex items-center justify-between pb-1 mb-1 border-b border-white/10 px-2 text-[11px] font-black text-slate-300">
                     <span>التفاعلات السريعة 💬</span>

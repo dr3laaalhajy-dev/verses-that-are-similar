@@ -937,6 +937,7 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
             incomingReaction={room.lastReaction || room.playersProgress?.__lastReaction}
             variant="fab"
             showBar={true}
+            align="left"
           />
         </footer>
 
