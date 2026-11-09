@@ -2,22 +2,33 @@ package com.mateen.game;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Context;
+import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.Message;
 import android.util.Log;
 import android.webkit.JavascriptInterface;
+import android.webkit.JsResult;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebSettings;
 import android.webkit.WebView;
+import android.webkit.WebViewClient;
 
 import androidx.annotation.NonNull;
 import androidx.core.app.ActivityCompat;
 import androidx.core.app.NotificationManagerCompat;
 import androidx.core.content.ContextCompat;
 
+import com.getcapacitor.Bridge;
 import com.getcapacitor.BridgeActivity;
+import com.getcapacitor.BridgeWebChromeClient;
+import com.getcapacitor.BridgeWebViewClient;
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.FirebaseOptions;
 import com.google.firebase.database.DataSnapshot;
@@ -71,8 +82,8 @@ public class MainActivity extends BridgeActivity {
         // تهيئة الفايربيس مسبقاً لضمان عمل الـ FCM
         ensureFirebaseInitialized(this);
 
-        // ربط الجسر البرمجي للـ WebView لتمكين صلاحيات النظام (مثل الإشعارات)
-        setupAndroidBridge();
+        // تهيئة الـ WebView الشاملة (DOM Storage، النوافذ المتعددة، الجسر البرمجي، الروابط الخارجية)
+        setupWebView();
 
         // الاستماع الحصري لعميل الأندرويد (Java Client Only)
         listenForAndroidAppUpdates();
@@ -82,8 +93,8 @@ public class MainActivity extends BridgeActivity {
     public void onResume() {
         super.onResume();
 
-        // التأكد من توفر الجسر البرمجي
-        setupAndroidBridge();
+        // التأكد من توفر إعدادات الـ WebView والجسر البرمجي
+        setupWebView();
 
         // فحص التحديثات فور عودة المستخدم للتطبيق
         listenForAndroidAppUpdates();
@@ -282,17 +293,208 @@ public class MainActivity extends BridgeActivity {
     }
 
     /**
-     * إعداد وربط الجسر البرمجي بين WebView و كود الأندرويد
+     * إعداد وتهيئة الـ WebView: تفعيل DOM Storage، الجسر البرمجي، والنوافذ المتعددة والروابط الخارجية
      */
-    private void setupAndroidBridge() {
+    private void setupWebView() {
         try {
             if (getBridge() != null && getBridge().getWebView() != null) {
                 WebView webView = getBridge().getWebView();
+
+                // 1. تفعيل التخزين المحلي (DOM Storage) وقواعد البيانات
+                WebSettings settings = webView.getSettings();
+                settings.setJavaScriptEnabled(true);
+                settings.setDomStorageEnabled(true);
+                settings.setDatabaseEnabled(true);
+
+                // 2. تفعيل دعم النوافذ المتعددة والروابط المنبثقة (target="_blank")
+                settings.setSupportMultipleWindows(true);
+                settings.setJavaScriptCanOpenWindowsAutomatically(true);
+
+                // 3. ربط الجسر البرمجي AndroidBridge
                 webView.addJavascriptInterface(new AndroidBridge(this), "AndroidBridge");
-                Log.i(TAG, "AndroidBridge successfully registered with WebView");
+
+                // 4. تعيين Custom Clients لمعالجة الروابط الخارجية والنوافذ المنبثقة
+                webView.setWebViewClient(new CustomWebViewClient(getBridge()));
+                webView.setWebChromeClient(new CustomWebChromeClient(getBridge()));
+
+                Log.i(TAG, "WebView configured with DOM storage, multiple windows, and custom clients");
             }
         } catch (Exception e) {
-            Log.e(TAG, "Failed to setup AndroidBridge: " + e.getMessage(), e);
+            Log.e(TAG, "Failed to setup WebView: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * فحص ما إذا كان الرابط خارجياً (مثل سياسة الخصوصية، شبكات التواصل، أو أي رابط خارج نطاق التطبيق)
+     */
+    private boolean isExternalUri(Uri uri) {
+        if (uri == null) return false;
+        String scheme = uri.getScheme();
+        if (scheme == null) return false;
+
+        if (scheme.equalsIgnoreCase("mailto") ||
+            scheme.equalsIgnoreCase("tel") ||
+            scheme.equalsIgnoreCase("sms") ||
+            scheme.equalsIgnoreCase("whatsapp") ||
+            scheme.equalsIgnoreCase("market")) {
+            return true;
+        }
+
+        if (scheme.equalsIgnoreCase("http") || scheme.equalsIgnoreCase("https")) {
+            String host = uri.getHost();
+            if (host == null) return false;
+
+            if (host.equalsIgnoreCase("localhost") || host.equalsIgnoreCase("127.0.0.1")) {
+                String path = uri.getPath();
+                if (path != null && (path.endsWith("privacy.html") || path.contains("privacy") || path.contains("terms"))) {
+                    return true;
+                }
+                return false;
+            }
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * فتح الرابط الخارجي عبر متصفح النظام الأساسي
+     */
+    public void openInSystemBrowser(Uri uri) {
+        if (uri == null) return;
+        try {
+            String urlStr = uri.toString();
+            if (uri.getHost() != null && (uri.getHost().equalsIgnoreCase("localhost") || uri.getHost().equalsIgnoreCase("127.0.0.1"))) {
+                String path = uri.getPath();
+                if (path != null && !path.startsWith("/")) path = "/" + path;
+                urlStr = "https://mateen-quran.vercel.app" + (path != null ? path : "");
+            }
+
+            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(urlStr));
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(intent);
+            Log.i(TAG, "Opened external url in system browser: " + urlStr);
+        } catch (Exception e) {
+            Log.w(TAG, "Failed to open external url in browser: " + e.getMessage());
+        }
+    }
+
+    /**
+     * عميل الـ WebView المخصص لمعالجة الروابط الخارجية وفتحها في متصفح النظام
+     */
+    public class CustomWebViewClient extends BridgeWebViewClient {
+
+        public CustomWebViewClient(Bridge bridge) {
+            super(bridge);
+        }
+
+        @Override
+        public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+            if (request != null && request.getUrl() != null) {
+                Uri uri = request.getUrl();
+                if (isExternalUri(uri)) {
+                    openInSystemBrowser(uri);
+                    return true;
+                }
+            }
+            return super.shouldOverrideUrlLoading(view, request);
+        }
+
+        @Override
+        public boolean shouldOverrideUrlLoading(WebView view, String url) {
+            if (url != null) {
+                Uri uri = Uri.parse(url);
+                if (isExternalUri(uri)) {
+                    openInSystemBrowser(uri);
+                    return true;
+                }
+            }
+            return super.shouldOverrideUrlLoading(view, url);
+        }
+    }
+
+    /**
+     * عميل WebChromeClient المخصص لدعم target="_blank" ومعالجة رسائل التنبيه والتأكيد
+     */
+    public class CustomWebChromeClient extends BridgeWebChromeClient {
+
+        public CustomWebChromeClient(Bridge bridge) {
+            super(bridge);
+        }
+
+        @Override
+        public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, Message resultMsg) {
+            WebView tempWebView = new WebView(view.getContext());
+            tempWebView.setWebViewClient(new WebViewClient() {
+                @Override
+                public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                    if (request != null && request.getUrl() != null) {
+                        openInSystemBrowser(request.getUrl());
+                    }
+                    return true;
+                }
+
+                @Override
+                public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                    if (url != null) {
+                        openInSystemBrowser(Uri.parse(url));
+                    }
+                    return true;
+                }
+            });
+
+            WebView.WebViewTransport transport = (WebView.WebViewTransport) resultMsg.obj;
+            transport.setWebView(tempWebView);
+            resultMsg.sendToTarget();
+            return true;
+        }
+
+        @Override
+        public boolean onJsAlert(WebView view, String url, String message, final JsResult result) {
+            if (isFinishing() || isDestroyed()) {
+                result.cancel();
+                return true;
+            }
+            new AlertDialog.Builder(view.getContext())
+                    .setTitle(R.string.app_name)
+                    .setMessage(message)
+                    .setPositiveButton(android.R.string.ok, (dialog, which) -> {
+                        dialog.dismiss();
+                        result.confirm();
+                    })
+                    .setOnCancelListener(dialog -> {
+                        dialog.dismiss();
+                        result.cancel();
+                    })
+                    .setCancelable(false)
+                    .show();
+            return true;
+        }
+
+        @Override
+        public boolean onJsConfirm(WebView view, String url, String message, final JsResult result) {
+            if (isFinishing() || isDestroyed()) {
+                result.cancel();
+                return true;
+            }
+            new AlertDialog.Builder(view.getContext())
+                    .setTitle(R.string.app_name)
+                    .setMessage(message)
+                    .setPositiveButton(android.R.string.ok, (dialog, which) -> {
+                        dialog.dismiss();
+                        result.confirm();
+                    })
+                    .setNegativeButton(android.R.string.cancel, (dialog, which) -> {
+                        dialog.dismiss();
+                        result.cancel();
+                    })
+                    .setOnCancelListener(dialog -> {
+                        dialog.dismiss();
+                        result.cancel();
+                    })
+                    .setCancelable(false)
+                    .show();
+            return true;
         }
     }
 
