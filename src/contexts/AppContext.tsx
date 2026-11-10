@@ -752,7 +752,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     syncAladhanHijri().catch(() => { });
   }, []);
   const [showProfileDecoration, setShowProfileDecoration] = useState(() => localStorage.getItem('quran_show_decoration') !== 'false');
-  const [userCertificates, setUserCertificates] = useState<{ category: string, date: string, name: string }[]>(() => JSON.parse(localStorage.getItem('quran_user_certificates') || '[]'));
+  const [userCertificates, setUserCertificates] = useState<{ category: string, date: string, name: string, score?: string }[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('quran_user_certificates') || '[]');
+    } catch {
+      return [];
+    }
+  });
   const [showCertificate, setShowCertificate] = useState(false);
   const [showAboutModal, setShowAboutModal] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<'seerah' | 'general'>('seerah');

@@ -89,6 +89,21 @@ export function useAchievements(options?: UseAchievementsOptions | null) {
       );
       const isCompleted = currentProgress >= m.target;
 
+      let dynamicScore = '100%';
+      if (typeof window !== 'undefined') {
+        try {
+          const rawCerts = JSON.parse(localStorage.getItem('quran_user_certificates') || '[]');
+          const matchingCert = rawCerts.find((c: any) =>
+            (m.id === 'seerah_60' && c.category === 'seerah') ||
+            (m.id === 'figh_quiz' && c.category === 'general') ||
+            c.id === m.id || c.category === m.category
+          );
+          if (matchingCert?.score) {
+            dynamicScore = matchingCert.score;
+          }
+        } catch (_) {}
+      }
+
       const certificate: CompletedAchievement | null = isCompleted
         ? {
             id: m.id,
@@ -103,7 +118,7 @@ export function useAchievements(options?: UseAchievementsOptions | null) {
                 ? `${currentProgress} نقطة`
                 : m.id === 'daily_streak_30'
                 ? `${currentProgress} يوماً`
-                : '100%',
+                : dynamicScore,
             serial: `MTN-${m.id.toUpperCase()}-${serialSuffix}`,
             userProgress: currentProgress,
             targetGoal: m.target

@@ -116,6 +116,18 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
           if (!dbErr && dbData) {
             fetchedPlayer = dbData;
           }
+
+          // Fetch dynamic certificates from certificates table
+          try {
+            const { data: certRows } = await supabase
+              .from('certificates')
+              .select('category, score, title, serial, total_correct, total_questions')
+              .or(orParts.join(','));
+
+            if (certRows && certRows.length > 0) {
+              fetchedCertificates = certRows;
+            }
+          } catch (_) {}
         }
       } catch (sbErr) {
         console.warn('[PublicProfileModal] Supabase direct query notice:', sbErr);
@@ -325,14 +337,23 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
     if (p) {
       const serialSuffix = p.uniquePlayerId || p.username || (p.id ? String(p.id) : 'CERT');
 
-      // 1. Seerah Quiz Certificate (100% completed or activeFrame is seerah)
+      // 1. Seerah Quiz Certificate (completed or activeFrame is seerah)
       if (p.seerahCompleted || p.activeFrame === 'seerah') {
+        const foundSeerah = (profileData?.earnedCertificates || []).find((c: any) => c.category === 'seerah' || c.id === 'seerah_60');
+        let seerahScore = foundSeerah?.score;
+        if (!seerahScore && isSelf && typeof window !== 'undefined') {
+          try {
+            const localCerts = JSON.parse(localStorage.getItem('quran_user_certificates') || '[]');
+            seerahScore = localCerts.find((c: any) => c.category === 'seerah')?.score;
+          } catch (_) {}
+        }
+
         addCert({
           id: 'seerah_60',
           title: 'إتمام 60 سؤالاً في السيرة النبوية الشريفة',
           category: 'السيرة النبوية',
           scope: 'العهد المكي والمدني والغزوات',
-          score: '100%',
+          score: seerahScore || '100%',
           icon: '📜',
           rank: 'عالم بالسيرة النبوية',
           target: 60,
@@ -342,14 +363,23 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
         });
       }
 
-      // 2. Fiqh & General Islamic Knowledge Certificate (100% completed or activeFrame is general)
+      // 2. Fiqh & General Islamic Knowledge Certificate (completed or activeFrame is general)
       if (p.generalCompleted || p.activeFrame === 'general') {
+        const foundGeneral = (profileData?.earnedCertificates || []).find((c: any) => c.category === 'general' || c.id === 'figh_quiz');
+        let generalScore = foundGeneral?.score;
+        if (!generalScore && isSelf && typeof window !== 'undefined') {
+          try {
+            const localCerts = JSON.parse(localStorage.getItem('quran_user_certificates') || '[]');
+            generalScore = localCerts.find((c: any) => c.category === 'general')?.score;
+          } catch (_) {}
+        }
+
         addCert({
           id: 'figh_quiz',
           title: 'ختم مسابقة الفقه والمعلومات الإسلامية',
           category: 'الفقه الإسلامي',
           scope: 'العبادات والمعاملات',
-          score: '100%',
+          score: generalScore || '100%',
           icon: '⚖️',
           rank: 'فقيه متقن ومتميز',
           target: 100,

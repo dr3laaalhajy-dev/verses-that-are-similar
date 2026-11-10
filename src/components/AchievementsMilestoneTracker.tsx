@@ -248,17 +248,27 @@ export const AchievementsMilestoneTracker: React.FC<AchievementsMilestoneTracker
       {/* ========================================================= */}
       {/* نافذة معاينة وتحميل الشهادة المعتمدة (CertificateModal) */}
       {/* ========================================================= */}
-      {activeCertMilestone && (
-        <CertificateModal
-          isOpen={Boolean(activeCertMilestone)}
-          onClose={() => setActiveCertMilestone(null)}
-          playerName={verifiedPlayerName}
-          challengeName={activeCertMilestone.title}
-          score={`${activeCertMilestone.target} / ${activeCertMilestone.target} (100%)`}
-          surahOrJuz={activeCertMilestone.scope}
-          certificateId={`MTN-${activeCertMilestone.id.toUpperCase()}-${Math.floor(100000 + Math.random() * 900000)}`}
-        />
-      )}
+      {activeCertMilestone && (() => {
+        const matchingCert = userCertificates.find((c: any) =>
+          (activeCertMilestone.id === 'seerah_60' && c.category === 'seerah') ||
+          (activeCertMilestone.id === 'figh_quiz' && c.category === 'general') ||
+          c.category === activeCertMilestone.category ||
+          (c as any).id === activeCertMilestone.id
+        );
+        const modalScore = (matchingCert as any)?.score || (activeCertMilestone as any).score || '100%';
+
+        return (
+          <CertificateModal
+            isOpen={Boolean(activeCertMilestone)}
+            onClose={() => setActiveCertMilestone(null)}
+            playerName={verifiedPlayerName}
+            challengeName={activeCertMilestone.title}
+            score={modalScore}
+            surahOrJuz={activeCertMilestone.scope}
+            certificateId={`MTN-${activeCertMilestone.id.toUpperCase()}-${Math.floor(100000 + Math.random() * 900000)}`}
+          />
+        );
+      })()}
     </div>
   );
 };

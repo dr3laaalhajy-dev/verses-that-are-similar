@@ -52,7 +52,52 @@ const IslamicQuiz: React.FC<{
     }
   };
 
-  const handleSaveChallengeCompletion = async (categoryToSave: 'seerah' | 'general'): Promise<boolean> => {
+  const saveGroupProgressToDB = async (
+    cat: string,
+    groupNum: number,
+    correct: number,
+    wrong: number,
+    levelNum: number = 1
+  ) => {
+    // 1. التخزين المحلي لدرجات المجموعات
+    try {
+      const scoreKey = `quran_group_scores_${cat}`;
+      const existing = JSON.parse(localStorage.getItem(scoreKey) || '{}');
+      existing[groupNum] = { correct, wrong };
+      localStorage.setItem(scoreKey, JSON.stringify(existing));
+    } catch (_) {}
+
+    // 2. إرسال طلب الحفظ (Upsert) إلى جدول user_challenge_progress في Supabase
+    const pUnique = localStorage.getItem('quran_unique_player_id');
+    const pUser = localStorage.getItem('quran_player_username');
+    const pName = localStorage.getItem('quran_player_name');
+    const pId = localStorage.getItem('quran_player_id');
+    const canonicalUserId = pUnique || (pId && /^\d+$/.test(pId) ? pId : null) || pUser || pName;
+
+    if (!canonicalUserId) return;
+
+    try {
+      await supabase.from('user_challenge_progress').upsert({
+        user_id: canonicalUserId,
+        category: cat,
+        group_num: groupNum,
+        level_num: levelNum,
+        correct_answers: correct,
+        wrong_answers: wrong,
+        is_passed: true,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'user_id,category,group_num,level_num' });
+    } catch (err) {
+      console.warn('[IslamicQuiz] user_challenge_progress upsert notice:', err);
+    }
+  };
+
+  const handleSaveChallengeCompletion = async (
+    categoryToSave: string,
+    realScore: string = '100%',
+    totalCorrect: number = 0,
+    totalQuestions: number = 0
+  ): Promise<boolean> => {
     setIsSavingProgress(true);
     setCertSaveError(null);
 
@@ -60,6 +105,7 @@ const IslamicQuiz: React.FC<{
     const pUser = localStorage.getItem('quran_player_username');
     const pName = localStorage.getItem('quran_player_name');
     const pId = localStorage.getItem('quran_player_id');
+    const canonicalUserId = pUnique || (pId && /^\d+$/.test(pId) ? pId : null) || pUser || pName;
 
     let writeSucceeded = false;
     let writeError: any = null;
@@ -107,17 +153,44 @@ const IslamicQuiz: React.FC<{
         writeSucceeded = true;
       }
 
-      if (writeSucceeded) {
-        // 1. Update localStorage certificates
-        const savedCerts = JSON.parse(localStorage.getItem('quran_user_certificates') || '[]');
-        if (!savedCerts.some((c: any) => c.category === categoryToSave)) {
-          savedCerts.push({
+      // حفظ النسبة المئوية الحقيقية في جدول الشهادات (certificates) في Supabase
+      if (canonicalUserId) {
+        try {
+          const serialNum = `${parseInt(realScore) || 100}-${pId || 'USR'}`;
+          await supabase.from('certificates').upsert({
+            user_id: canonicalUserId,
             category: categoryToSave,
-            date: new Date().toLocaleDateString('ar-SA'),
-            name: pName || 'البطل القرآني'
-          });
-          localStorage.setItem('quran_user_certificates', JSON.stringify(savedCerts));
+            title: categoryToSave === 'seerah' ? 'ختم مسابقة السيرة النبوية الشريفة' : 'ختم مسابقة الفقه والمعلومات الإسلامية',
+            score: realScore,
+            total_correct: totalCorrect,
+            total_questions: totalQuestions,
+            serial: `MTN-${categoryToSave.toUpperCase()}-${serialNum}`,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'user_id,category' });
+        } catch (certErr) {
+          console.warn('[IslamicQuiz] certificates table upsert notice:', certErr);
         }
+      }
+
+      if (writeSucceeded) {
+        // 1. Update localStorage certificates with dynamic real score
+        const savedCerts = JSON.parse(localStorage.getItem('quran_user_certificates') || '[]');
+        const existingIdx = savedCerts.findIndex((c: any) => c.category === categoryToSave);
+        const certItem = {
+          category: categoryToSave,
+          date: new Date().toLocaleDateString('ar-SA'),
+          name: pName || 'البطل القرآني',
+          score: realScore,
+          totalCorrect,
+          totalQuestions
+        };
+        if (existingIdx >= 0) {
+          savedCerts[existingIdx] = { ...savedCerts[existingIdx], ...certItem };
+        } else {
+          savedCerts.push(certItem);
+        }
+        localStorage.setItem('quran_user_certificates', JSON.stringify(savedCerts));
 
         // 2. Dispatch events for instant reactivity & cache invalidation across the app
         window.dispatchEvent(new CustomEvent('milestones_updated'));
@@ -431,8 +504,28 @@ const IslamicQuiz: React.FC<{
       } else {
         const finalScore = isCorrect ? score + 1 : score;
         const isPassed = finalScore >= 12;
+        const correctAnswers = finalScore;
+        const wrongAnswers = Math.max(0, 20 - finalScore);
 
-        if (isCustomCategory && isPassed) {
+        // شرط 2: إذا كان عدد الإجابات الصحيحة أقل من 12: لا تقم بإرسال أي طلب (No API Call) لحفظ النتيجة في Supabase.
+        // فقط اعرض للمستخدم أنه رسب وعليه إعادة المحاولة.
+        if (!isPassed) {
+          setGameStatus('result');
+          setIsAnimating(false);
+          return;
+        }
+
+        // شرط 2: إذا كان عدد الإجابات الصحيحة 12 فما فوق: قم بإرسال طلب الحفظ (Upsert) إلى Supabase،
+        // وتخزين الـ correct_answers والـ wrong_answers الخاصة بهذه المجموعة تحديداً
+        saveGroupProgressToDB(
+          selectedCategory,
+          selectedGroup,
+          correctAnswers,
+          wrongAnswers,
+          isCustomCategory ? selectedLevelNum : (difficulty === 'hard' ? 2 : 1)
+        );
+
+        if (isCustomCategory) {
           const currentList = completedTopics[selectedLevelNum] || [];
           if (!currentList.includes(selectedGroup)) {
             const updatedList = [...currentList, selectedGroup];
@@ -444,7 +537,7 @@ const IslamicQuiz: React.FC<{
             syncCustomTopics(updatedTopics);
           }
           if (onWin) onWin();
-        } else if ((isGeneral || isSeerah) && isPassed) {
+        } else if (isGeneral || isSeerah) {
           const progressKey = isSeerah ? 'easy' : (difficulty as 'easy' | 'hard');
           const maxGroups = isSeerah ? 3 : 5;
           const currentMaxUnlocked = unlockedLevels[progressKey] || 1;
@@ -457,9 +550,29 @@ const IslamicQuiz: React.FC<{
             setUnlockedLevels(updatedProgress);
             syncProgress(updatedProgress);
 
+            // شرط 3: حساب النسبة المئوية الحقيقية للشهادة بجمع correct_answers من كافة المجموعات
+            const scoreKey = `quran_group_scores_${selectedCategory}`;
+            let savedScores: Record<number, { correct: number, wrong: number }> = {};
+            try {
+              savedScores = JSON.parse(localStorage.getItem(scoreKey) || '{}');
+            } catch (_) {}
+            savedScores[selectedGroup] = { correct: correctAnswers, wrong: wrongAnswers };
+
+            let totalCorrectAnswers = 0;
+            for (let g = 1; g <= maxGroups; g++) {
+              if (savedScores[g]?.correct !== undefined) {
+                totalCorrectAnswers += savedScores[g].correct;
+              } else {
+                totalCorrectAnswers += (g === selectedGroup ? correctAnswers : 12);
+              }
+            }
+            const totalQuestions = maxGroups * 20;
+            const realPercentage = Math.min(100, Math.round((totalCorrectAnswers / totalQuestions) * 100));
+            const realScoreStr = `${realPercentage}%`;
+
             // Await rigorous Supabase upsert/update and verify before unlocking certificate
             const certCategory = isSeerah ? 'seerah' : 'general';
-            await handleSaveChallengeCompletion(certCategory);
+            await handleSaveChallengeCompletion(certCategory, realScoreStr, totalCorrectAnswers, totalQuestions);
           } else if (selectedGroup === currentMaxUnlocked && currentMaxUnlocked < maxGroups) {
             const updatedProgress = {
               ...unlockedLevels,
