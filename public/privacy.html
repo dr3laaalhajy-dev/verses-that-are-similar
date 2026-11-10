@@ -103,6 +103,7 @@
       border-radius: 16px;
       margin-bottom: 24px;
       box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+      overflow-x: auto;
     }
 
     .nav-btn {
@@ -117,6 +118,7 @@
       cursor: pointer;
       transition: all 0.2s ease;
       text-align: center;
+      white-space: nowrap;
     }
 
     .nav-btn.active {
@@ -144,12 +146,6 @@
       margin-bottom: 16px;
       border-bottom: 2px solid #ecfdf5;
       padding-bottom: 8px;
-    }
-
-    .section-title svg {
-      width: 24px;
-      height: 24px;
-      color: var(--primary-light);
     }
 
     p, li {
@@ -180,6 +176,11 @@
       border-color: #fde68a;
     }
 
+    .highlight-box.danger {
+      background: #fef2f2;
+      border-color: #fecaca;
+    }
+
     .highlight-box strong {
       color: var(--primary);
       display: block;
@@ -191,40 +192,51 @@
       color: #b45309;
     }
 
+    .highlight-box.danger strong {
+      color: #b91c1c;
+    }
+
     .contact-card {
-      background: linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%);
-      border: 1px solid #a7f3d0;
+      background: linear-gradient(135deg, #064e3b 0%, #0f172a 100%);
+      color: white;
       border-radius: 20px;
-      padding: 24px;
+      padding: 28px;
       text-align: center;
       margin-top: 24px;
+      box-shadow: 0 10px 25px -5px rgba(6, 78, 59, 0.25);
     }
 
     .contact-card h3 {
-      font-size: 18px;
+      font-size: 20px;
       font-weight: 800;
-      color: var(--primary);
-      margin-bottom: 8px;
+      color: white;
+      margin-bottom: 10px;
+    }
+
+    .contact-card p {
+      color: #a7f3d0;
+      font-size: 15px;
     }
 
     .contact-link {
       display: inline-block;
       direction: ltr;
-      color: var(--primary-light);
+      color: var(--primary);
       font-weight: 800;
       text-decoration: none;
       font-size: 16px;
-      padding: 8px 18px;
+      padding: 10px 22px;
       background: white;
-      border-radius: 12px;
-      border: 1px solid #a7f3d0;
-      margin-top: 8px;
+      border-radius: 14px;
+      margin: 12px 0 16px;
       transition: all 0.2s ease;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.15);
     }
 
     .contact-link:hover {
-      background: var(--primary);
-      color: white;
+      background: #fef3c7;
+      color: #92400e;
+      transform: translateY(-2px);
     }
 
     .footer {
@@ -257,7 +269,7 @@
   <header class="header">
     <div class="header-content">
       <img src="/logo.webp" alt="شعار تطبيق متين" class="logo-img">
-      <h1>تطبيق متين للقرآن الكريم</h1>
+      <h1>تطبيق متين للقرآن الكريم (Mateen)</h1>
       <p>سياسة الخصوصية وشروط الاستخدام الرسمية | Privacy Policy & Terms of Service</p>
       <div class="badge">تطبيق آمن 100% وخالٍ تماماً من الإعلانات | معتمد لجميع الأعمار</div>
     </div>
@@ -279,10 +291,10 @@
           <span>١. مقدمة ونبذة عن التطبيق</span>
         </h2>
         <p>
-          أهلاً بكم في <strong>تطبيق متين (Mateen)</strong> المخصص لضبط وإتقان المتشابهات القرآنية وتلاوة القرآن الكريم واختبارات السيرة النبوية والعلوم الإسلامية. نحن نحترم خصوصيتكم التامة ونلتزم بأعلى معايير حماية البيانات الشخصية.
+          أهلاً بكم في تطبيق <strong>"متين"</strong> المخصص لضبط وإتقان المتشابهات القرآنية، تلاوة القرآن الكريم، واختبارات السيرة النبوية والعلوم الإسلامية. نحن نحترم خصوصيتكم التامة ونلتزم بأعلى معايير حماية البيانات الشخصية وفقاً لسياسات (Google Play).
         </p>
         <p>
-          تم تطوير هذا التطبيق كعمل دعوي وتعليمي هادف بواسطة <strong>د. علاء الدين الحجي (Dr. Alaa Alhajy)</strong>، وهو مجاني بالكامل وبدون أي إعلانات تجارية.
+          تم تطوير هذا التطبيق كعمل دعوي وتعليمي هادف بواسطة <strong>د. علاء الدين الحجي</strong>، وهو مجاني بالكامل وخالٍ تماماً من أي إعلانات تجارية.
         </p>
       </div>
 
@@ -291,25 +303,44 @@
           <span>٢. المعلومات والبيانات التي نجمعها</span>
         </h2>
         <ul>
-          <li><strong>الاسم واسم المستخدم (Display Name & Username):</strong> لحفظ حسابك وسجل إنجازاتك ونقاطك والتنافس الشريف في لوحة المتصدرين.</li>
-          <li><strong>كلمة المرور (Password):</strong> لحماية حسابك وتمكينك من تسجيل الدخول إلى تقدمك وإنجازاتك من أي جهاز.</li>
+          <li><strong>الاسم واسم المستخدم:</strong> لحفظ حسابك، سجل إنجازاتك، نقاطك، والتنافس الشريف في لوحة المتصدرين.</li>
+          <li><strong>كلمة المرور:</strong> مشفرة بالكامل لحماية حسابك وتمكينك من تسجيل الدخول والمتابعة من أجهزتك المختلفة.</li>
           <li><strong>بيانات التحديات والإنجازات:</strong> عدد النقاط، الكؤوس المكتسبة، الاختبارات المكتملة، وشهادات الإنجاز الصادرة باسمك.</li>
         </ul>
+      </div>
+
+      <div class="card">
+        <h2 class="section-title">
+          <span>٣. أذونات الجهاز المطلوبة</span>
+        </h2>
+        <p>
+          لتقديم أفضل تجربة للمستخدم، قد يطلب التطبيق الأذونات التالية وقت الحاجة فقط:
+        </p>
         <div class="highlight-box">
-          <strong>أذونات الجهاز والميكروفون (Device Permissions):</strong>
-          <ul style="margin-top: 8px; margin-bottom: 0;">
-            <li><strong>الميكروفون (Microphone):</strong> يُطلب إذن الميكروفون فقط وبشكل اختياري عندما تبدأ <em>"التحدي الصوتي"</em> لمطابقة تلاوتك القرآنية عبر تقنية التعرف على الكلام (Speech-to-Text). الصوت يُعالج لحظياً ومحلياً ولا يتم تسجيله أو تخزينه في خوادمنا ولا مشاركته أبداً.</li>
-            <li><strong>ما لا نطلبه ولا نصل إليه مطلقاً:</strong> نحن <strong>لا نطلب ولا نصل</strong> إلى موقعك الجغرافي (GPS)، ولا الكاميرا، ولا جهات الاتصال، ولا الصور والملفات الشخصية، ولا أي بيانات مالية.</li>
+          <ul>
+            <li><strong>الميكروفون (Microphone):</strong> يُطلب بشكل اختياري فقط عند خوض "التحدي الصوتي" لمطابقة تلاوتك للآيات الكريمة عبر تقنية التعرف على الكلام (Speech-to-Text). تتم معالجة الصوت لحظياً ومحلياً، ولا يتم تسجيله، أو تخزينه، أو إرساله إلى أي خوادم خارجية أبداً.</li>
+            <li><strong>الإشعارات (Notifications):</strong> يُطلب هذا الإذن لتذكيرك بالورد القرآني، وتنبيهك بالتحديات الجديدة، ودعوات غرف التنافس الجماعي، ومتابعة تقدمك التعليمي.</li>
           </ul>
         </div>
       </div>
 
       <div class="card">
         <h2 class="section-title">
-          <span>٣. كيف نستخدم المعلومات؟</span>
+          <span>٤. ما لا نطلبه ولا نصل إليه مطلقاً</span>
+        </h2>
+        <div class="highlight-box warning">
+          <p style="margin: 0; color: #92400e; font-weight: 600;">
+            التطبيق آمن تماماً؛ فنحن لا نطلب ولا نصل بأي شكل من الأشكال إلى موقعك الجغرافي (GPS)، الكاميرا، جهات الاتصال، الصور والملفات الشخصية، أو أي بيانات مالية وبنكية.
+          </p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 class="section-title">
+          <span>٥. كيف نستخدم المعلومات؟</span>
         </h2>
         <ul>
-          <li>تمكين المستخدم من متابعة تقدمه ومستويات حفظه ومصحفه الإلكتروني.</li>
+          <li>تمكين المستخدم من متابعة تقدمه ومستويات حفظه في مصحفه الإلكتروني.</li>
           <li>مزامنة النتائج وعرض قائمة المتصدرين في التحديات الفردية والجماعية.</li>
           <li>إصدار شهادات الإنجاز في مسابقات السيرة والقرآن الكريم.</li>
           <li>تحسين أداء واستقرار التطبيق التقني وحل أي أعطال.</li>
@@ -318,47 +349,60 @@
 
       <div class="card">
         <h2 class="section-title">
-          <span>٤. مشاركة البيانات مع أطراف ثالثة</span>
+          <span>٦. مشاركة البيانات والإعلانات</span>
         </h2>
         <p>
-          <strong>نحن لا نبيع أو نؤجر أو نشارك بيانات المستخدمين مع أي شركات إعلانية أو جهات تسويقية على الإطلاق.</strong>
+          <strong>التطبيق خالٍ تماماً من الإعلانات.</strong> نحن لا نبيع، أو نؤجر، أو نشارك بيانات المستخدمين مع أي أطراف ثالثة أو جهات تسويقية على الإطلاق.
         </p>
         <p>
-          تتم معالجة البيانات فقط عبر بنية تحتية سحابية مشفرة وموثوقة عالمياً:
+          تتم معالجة البيانات فقط عبر بنية تحتية سحابية مشفرة وموثوقة عالمياً لضمان عمل التطبيق:
         </p>
         <ul>
-          <li><strong>Vercel Cloud:</strong> لاستضافة الخوادم وواجهات البرمجة بواجهات آمنة (HTTPS/SSL).</li>
-          <li><strong>Supabase PostgreSQL:</strong> لقاعدة البيانات المشفرة والآمنة وفقاً لمعايير الأمان العالمية.</li>
+          <li><strong>Vercel Cloud:</strong> لاستضافة الخوادم بواجهات آمنة (HTTPS/SSL).</li>
+          <li><strong>Supabase PostgreSQL:</strong> كقاعدة بيانات مشفرة وآمنة وفقاً لمعايير الأمان العالمية.</li>
         </ul>
       </div>
 
       <div class="card">
         <h2 class="section-title">
-          <span>٥. أمان وحماية البيانات (Data Security)</span>
+          <span>٧. حذف الحساب والبيانات</span>
+        </h2>
+        <div class="highlight-box danger">
+          <p style="margin: 0; color: #991b1b; font-weight: 600;">
+            يحق لك التحكم الكامل في بياناتك. يوفر التطبيق ميزة "حذف الحساب" مباشرة من داخل إعدادات التطبيق. عند طلبك حذف الحساب، يقوم النظام فوراً وبشكل تلقائي بمسح كافة بياناتك، نقاطك، وإنجازاتك من قواعد بياناتنا بشكل نهائي، ولا يمكن استرجاعها.
+          </p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 class="section-title">
+          <span>٨. أمان وحماية البيانات</span>
         </h2>
         <p>
-          نطبق أحدث تقنيات التشفير لضمان سرية البيانات أثناء النقل عبر بروتوكول <code>HTTPS / TLS</code> وأثناء التخزين بقاعدة بيانات آمنة. ونبذل قصارى جهدنا لمنع أي وصول غير مصرح به.
+          نطبق أحدث تقنيات التشفير لضمان سرية البيانات أثناء النقل عبر بروتوكول (HTTPS / TLS) وأثناء التخزين، ونبذل قصارى جهدنا لمنع أي وصول غير مصرح به.
         </p>
       </div>
 
       <div class="card">
         <h2 class="section-title">
-          <span>٦. خصوصية الأطفال وسياسة العائلة</span>
+          <span>٩. خصوصية الأطفال وسياسة العائلة</span>
         </h2>
         <p>
-          تطبيق "متين" هو تطبيق قرآني موجه لجميع أفراد الأسرة ولجميع الفئات العمرية. لا يحتوي التطبيق على أي محتوى غير لائق أو إعلانات، ويتوافق تماماً مع إرشادات عائلات Google Play وقانون حماية خصوصية الأطفال على الإنترنت (COPPA).
+          تطبيق "متين" موجه لجميع أفراد الأسرة ولجميع الفئات العمرية. التطبيق لا يحتوي على أي محتوى غير لائق أو إعلانات، ويتوافق تماماً مع إرشادات عائلات (Google Play) وقانون حماية خصوصية الأطفال على الإنترنت (COPPA).
         </p>
       </div>
 
       <div class="card">
         <h2 class="section-title">
-          <span>٧. التواصل مع المطور</span>
+          <span>١٠. التواصل مع المطور</span>
         </h2>
         <div class="contact-card">
-          <h3>لأي استفسارات أو ملاحظات حول الخصوصية</h3>
-          <p>يمكنكم التواصل المباشر مع مطور التطبيق:</p>
+          <h3>لأي استفسارات أو ملاحظات، يمكنكم التواصل المباشر مع مطور التطبيق:</h3>
+          <p>البريد الإلكتروني:</p>
           <a href="mailto:dr3laaalhajy@gmail.com" class="contact-link">dr3laaalhajy@gmail.com</a>
-          <p style="margin-top: 10px; font-size: 13px;">د. علاء الدين الحجي | Dr. Alaa Alhajy</p>
+          <p style="margin-top: 8px;"><strong>المطور:</strong> د. علاء الدين الحجي</p>
+          <p><strong>فكرة:</strong> عمر سمير طبش</p>
+          <p style="margin-top: 14px; font-size: 13px; color: #cbd5e1;">جميع الحقوق محفوظة © تطبيق متين للقرآن الكريم (صدقة جارية).</p>
         </div>
       </div>
     </div>
@@ -367,18 +411,72 @@
     <div id="tab-ar-terms" class="tab-pane hidden">
       <div class="card">
         <h2 class="section-title">
-          <span>شروط وأحكام استخدام تطبيق متين</span>
+          <span>شروط وأحكام استخدام تطبيق متين (Mateen)</span>
         </h2>
         <p>
-          باستخدامك لتطبيق "متين"، فإنك توافق على الالتزام بالشروط والأحكام التالية:
+          تطبيق "متين" هو عمل دعوي ووقف رقمي (صدقة جارية) يهدف إلى خدمة كتاب الله تعالى وسنة نبيه ﷺ. باستخدامك لهذا التطبيق، فإنك توافق تماماً على الالتزام بالشروط والأحكام التالية:
         </p>
+      </div>
+
+      <div class="card">
+        <h2 class="section-title">
+          <span>١. قدسية المحتوى</span>
+        </h2>
+        <p>
+          يجب التعامل مع نصوص وآيات القرآن الكريم بوقار وتدبر. يُرجى استخدام التطبيق بنية صالحة وبما يليق بقدسية الآيات القرآنية الكريمة، ويُمنع استخدامه في أي سياق لا يليق بكتاب الله.
+        </p>
+      </div>
+
+      <div class="card">
+        <h2 class="section-title">
+          <span>٢. الحسابات والأسماء اللائقة</span>
+        </h2>
         <ul>
-          <li><strong>قدسية المحتوى:</strong> يهدف التطبيق إلى خدمة كتاب الله تعالى وسنة نبيه ﷺ، لذا يُرجى استخدامه بنية صالحة وبما يليق بقدسية الآيات القرآنية الكريمة.</li>
-          <li><strong>الاسم المعروض واسم المستخدم:</strong> يلتزم المستخدم باختيار اسم محترم ولائق، ويُحظر تماماً استخدام أسماء غير لائقة أو خادشة للحياء أو مسيئة. يحق للإدارة حظر أي حساب يخالف ذلك فوراً.</li>
-          <li><strong>اللعب النزيه (Fair Play):</strong> يلتزم اللاعب بالمنافسة الشريفة في غرف التحدي وعدم استغلال أي ثغرات أو أدوات آلية للتأثير على لوحة المتصدرين.</li>
-          <li><strong>حقوق الملكية الفكرية:</strong> جميع النصوص والتحديات والبرمجيات الخاصة بتطبيق متين محفوظة للمطور وفريق العمل، وتُقدَم مجاناً كصدقة جارية ونفع للمسلمين.</li>
-          <li><strong>تحديث الشروط:</strong> نحتفظ بحق تعديل أو تحديث هذه الشروط عند الضرورة، وسيتم إشعار المستخدمين بأي تغييرات جوهرية داخل التطبيق.</li>
+          <li><strong>الاسم المعروض:</strong> يلتزم المستخدم باختيار اسم محترم ولائق. يُحظر تماماً استخدام أسماء مستخدمين تحمل إساءات دينية، أو أخلاقية، أو خادشة للحياء.</li>
+          <li><strong>أمان الحساب:</strong> أنت مسؤول عن الحفاظ على سرية كلمة المرور الخاصة بك، والتطبيق غير مسؤول عن أي اختراق ينتج عن مشاركتك لبياناتك مع الآخرين.</li>
         </ul>
+        <div class="highlight-box danger">
+          <p style="margin: 0; color: #991b1b; font-weight: bold;">
+            يحق لإدارة التطبيق تعديل الأسماء المسيئة أو حظر أي حساب يخالف هذه الشروط فوراً وبدون إشعار مسبق.
+          </p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 class="section-title">
+          <span>٣. اللعب النزيه وقواعد التنافس (Fair Play)</span>
+        </h2>
+        <ul>
+          <li>يلتزم اللاعب بالمنافسة الشريفة في غرف التحدي الفردية والجماعية.</li>
+          <li>يُحظر قطعياً استخدام أي برامج خارجية، ثغرات، أو أدوات آلية للغش أو التلاعب بنتائج التحديات والتأثير على لوحة المتصدرين. اكتشاف أي تلاعب يؤدي إلى الإغلاق النهائي للحساب ومسح الإنجازات.</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h2 class="section-title">
+          <span>٤. حقوق الملكية الفكرية</span>
+        </h2>
+        <p>
+          كافة محتويات التطبيق، نصوص التحديات، قواعد بيانات المتشابهات، والبرمجيات الخاصة بتطبيق "متين" محفوظة للمطور <strong>د. علاء الدين الحجي</strong> وفريق العمل. تُتاح هذه المحتويات مجاناً كوقف رقمي لنفع أمة الإسلام، ويُمنع نسخها أو إعادة استخدامها لأغراض تجارية.
+        </p>
+      </div>
+
+      <div class="card">
+        <h2 class="section-title">
+          <span>٥. إخلاء المسؤولية وتوافر الخدمة</span>
+        </h2>
+        <p>
+          يُقدم التطبيق مجاناً لوجه الله. رغم سعينا الدائم لضمان استقرار التطبيق وحفظ بياناتك السحابية، إلا أننا لا نضمن خلوه التام من الانقطاعات أو الأخطاء التقنية الخارجة عن إرادتنا، ولا نتحمل أي مسؤولية قانونية عن أي فقدان مؤقت أو دائم للبيانات.
+        </p>
+      </div>
+
+      <div class="card">
+        <h2 class="section-title">
+          <span>٦. تحديث الشروط</span>
+        </h2>
+        <p>
+          نحتفظ بحق تعديل أو تحديث هذه الشروط عند الضرورة لمواكبة التطورات التقنية أو قوانين المتاجر. سيتم إشعار المستخدمين بأي تغييرات جوهرية داخل التطبيق، واستمرارك في الاستخدام يعني موافقتك على هذه التحديثات.
+        </p>
       </div>
     </div>
 
@@ -389,24 +487,24 @@
           <span>آلية حذف الحساب والبيانات (Data Deletion Policy)</span>
         </h2>
         <p>
-          وفقاً لسياسات Google Play وحق المستخدم الكامل في التحكم ببياناته، يمكنك طلب حذف حسابك وكافة البيانات المرتبطة بك في أي وقت باتباع إحدى الطرق التالية:
+          وفقاً لسياسات Google Play وحق المستخدم الكامل في التحكم ببياناته، يمكنك حذف حسابك وكافة البيانات المرتبطة بك في أي وقت باتباع إحدى الطرق التالية:
         </p>
 
         <div class="highlight-box">
-          <strong>الطريقة الأولى: من داخل التطبيق</strong>
-          يمكنك الانتقال إلى شاشة "الإعدادات" ثم النقر على "تسجيل الخروج / تبديل الحساب" ومسح البيانات المحفوظة محلياً على جهازك.
+          <strong>الطريقة الأولى: من داخل التطبيق (مباشرة وفورياً)</strong>
+          يمكنك الانتقال إلى شاشة "الإعدادات" ثم النقر على زر <strong>"حذف الحساب نهائياً"</strong>. عند تأكيد الحذف، يقوم النظام فوراً وبشكل تلقائي بمسح كافة بياناتك، نقاطك، وإنجازاتك من خوادم وقواعد بيانات التطبيق بشكل نهائي.
         </div>
 
         <div class="highlight-box warning">
-          <strong>الطريقة الثانية: طلب حذف نهائي من خوادم التطبيق</strong>
-          لحذف حسابك، اسم المستخدم، النقاط، الإنجازات، وكافة سجلاتك نهائياً من قاعدة البيانات السحابية، يرجى إرسال رسالة إلى البريد الإلكتروني:
+          <strong>الطريقة الثانية: طلب حذف عبر البريد الإلكتروني للمطور</strong>
+          لحذف حسابك وسجلاتك نهائياً، يمكنك إرسال رسالة إلى البريد الإلكتروني:
           <div style="text-align: center; margin-top: 10px;">
             <a href="mailto:dr3laaalhajy@gmail.com?subject=طلب%20حذف%20حساب%20تطبيق%20متين" class="contact-link">
               dr3laaalhajy@gmail.com
             </a>
           </div>
           <p style="margin-top: 10px; font-size: 13px;">
-            * يرجى كتابة اسم المستخدم الخاص بك في نص الرسالة. سيتم معالجة الطلب وحذف كافة البيانات المرتبطة بك نهائياً خلال مدة أقصاها <strong>48 ساعة</strong> من تاريخ استلام الطلب.
+            * يرجى تزويدنا باسم المستخدم الخاص بك. سيتم مسح كافة البيانات بشكل دائم خلال مدة أقصاها <strong>48 ساعة</strong>.
           </p>
         </div>
       </div>
@@ -415,8 +513,8 @@
     <!-- Tab 4: English Policy (Google Play Console Compliance) -->
     <div id="tab-en-policy" class="tab-pane en-section hidden">
       <div class="card">
-        <h2 class="section-title">Mateen App - Privacy Policy (Google Play Policy Compliant)</h2>
-        <p><strong>Last Updated:</strong> October 2026</p>
+        <h2 class="section-title">Mateen App - Privacy Policy (Google Play Compliant)</h2>
+        <p><strong>Last Updated:</strong> November 2026</p>
         <p>
           This Privacy Policy applies to the <strong>"Mateen" (متين)</strong> mobile and web application (Package ID: <code>com.mateen.game</code>), created and maintained by developer <strong>Dr. Alaa Alhajy</strong>.
         </p>
@@ -425,46 +523,49 @@
         <p>We only collect the minimal information necessary to deliver core features and leaderboard competition:</p>
         <ul>
           <li><strong>Display Name & Username:</strong> Provided by the user during registration to track quiz progress and leaderboard rankings.</li>
-          <li><strong>Password:</strong> Securely stored to allow users to sign in and protect their progress across devices.</li>
-          <li><strong>Gameplay Statistics:</strong> Points earned, cups, completed quizzes, and certificates awarded.</li>
+          <li><strong>Password:</strong> Encrypted securely to protect your account and sync progress across devices.</li>
+          <li><strong>Gameplay & Challenge Statistics:</strong> Points earned, cups, completed quizzes, and certificates awarded.</li>
         </ul>
 
         <h3 style="margin: 18px 0 8px; color: var(--primary);">2. Device Permissions</h3>
         <ul>
-          <li><strong>Microphone Permission:</strong> Requested only when you use the interactive <em>"Voice Challenge"</em> feature for real-time speech-to-text recitation recognition. Audio is processed on-the-fly, is never recorded, never stored on our servers, and never shared with any third party.</li>
+          <li><strong>Microphone Permission:</strong> Requested optionally only when you use the interactive <em>"Voice Challenge"</em> feature for real-time speech-to-text recitation recognition. Audio is processed on-the-fly and locally, is never recorded, never stored on our servers, and never shared with any third party.</li>
+          <li><strong>Notifications:</strong> Used optionally to remind you of Quranic wird, new challenges, and multiplayer rooms.</li>
           <li><strong>Information We DO NOT Access:</strong> Mateen does <strong>NOT</strong> request or access your Camera, precise GPS location, contacts, media files, or financial details.</li>
         </ul>
 
         <h3 style="margin: 18px 0 8px; color: var(--primary);">3. How We Use Information</h3>
         <ul>
-          <li>Save learning and Quranic similarity quiz progress.</li>
-          <li>Display competitive leaderboards and multiplayer rooms.</li>
+          <li>Enable users to track their Quran recitation and memorization progress.</li>
+          <li>Sync competitive leaderboards and multiplayer challenges.</li>
           <li>Generate achievement certificates in Islamic Studies and Seerah.</li>
+          <li>Improve technical app performance and fix bugs.</li>
         </ul>
 
-        <h3 style="margin: 18px 0 8px; color: var(--primary);">4. Third-Party Sharing</h3>
+        <h3 style="margin: 18px 0 8px; color: var(--primary);">4. Third-Party Sharing & No Ads</h3>
         <p>
-          We do not sell, rent, or trade your personal data with third-party advertisers or data brokers. Data is processed exclusively via secure cloud infrastructure:
+          <strong>Mateen is 100% ad-free.</strong> We do not sell, rent, or trade your personal data with third-party advertisers or data brokers. Data is processed exclusively via secure cloud infrastructure:
         </p>
         <ul>
-          <li><strong>Vercel Cloud:</strong> Hosting API endpoints via secure HTTPS.</li>
+          <li><strong>Vercel Cloud:</strong> Hosting API endpoints via secure HTTPS/SSL.</li>
           <li><strong>Supabase PostgreSQL:</strong> Encrypted relational database for secure storage.</li>
         </ul>
 
         <h3 style="margin: 18px 0 8px; color: var(--primary);">5. Children and Families Policy</h3>
         <p>
-          Mateen is an educational Quranic app suitable for users of all ages, including children and families. We comply strictly with the Google Play Families Policy and COPPA. No ads or inappropriate content are present.
+          Mateen is an educational Quranic app suitable for users of all ages, including children and families. We comply strictly with Google Play Families Policy and COPPA.
         </p>
 
         <h3 style="margin: 18px 0 8px; color: var(--primary);">6. Account and Data Deletion</h3>
         <p>
-          Users may request full deletion of their account and all associated data at any time by emailing us at <a href="mailto:dr3laaalhajy@gmail.com" style="color: var(--primary-light); font-weight: bold;">dr3laaalhajy@gmail.com</a> with their username. All records will be permanently expunged within 48 hours.
+          Users may delete their account directly within the app settings or by emailing <a href="mailto:dr3laaalhajy@gmail.com" style="color: var(--primary-light); font-weight: bold;">dr3laaalhajy@gmail.com</a> with their username. All records are permanently and automatically deleted.
         </p>
 
         <h3 style="margin: 18px 0 8px; color: var(--primary);">7. Developer Contact</h3>
         <p>
           <strong>Developer:</strong> Dr. Alaa Alhajy<br>
           <strong>Email:</strong> dr3laaalhajy@gmail.com<br>
+          <strong>Concept:</strong> Omar Samir Tabash<br>
           <strong>App Package:</strong> com.mateen.game
         </p>
       </div>
