@@ -1,68 +1,71 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { prisma } from './_lib/prisma.js'
-import { supabaseAdmin } from './_lib/supabaseAdmin.js'
-import bcrypt from 'bcryptjs'
-import jwt from 'jsonwebtoken'
-import { v4 as uuidv4 } from 'uuid'
+import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { supabaseAdmin } from './_lib/supabaseAdmin.js';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import { v4 as uuidv4 } from 'uuid';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const action = (req.query.action as string) || (req.body && req.body.action)
+  const action = (req.query.action as string) || (req.body && req.body.action);
 
   // Actions that DON'T require auth
   if (req.method === 'POST' && action === 'login') {
-    return handleLogin(req, res)
+    return handleLogin(req, res);
   }
   if (req.method === 'POST' && action === 'register') {
-    return handleRegister(req, res)
+    return handleRegister(req, res);
   }
 
   // Authorization check for all other actions
-  const authHeader = req.headers.authorization
+  const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ message: 'Unauthorized' })
+    return res.status(401).json({ message: 'Unauthorized' });
   }
 
-  const token = authHeader.split(' ')[1]
+  const token = authHeader.split(' ')[1];
   let decoded: any;
   try {
-    decoded = jwt.verify(token, JWT_SECRET)
+    decoded = jwt.verify(token, JWT_SECRET);
   } catch (err) {
-    return res.status(401).json({ message: 'Invalid token' })
+    return res.status(401).json({ message: 'Invalid token' });
   }
 
-  // Fetch current admin directly from DB for verified and authoritative role
-  const currentAdmin = await prisma.admin.findUnique({ where: { id: decoded.adminId } })
-  if (!currentAdmin) {
-    return res.status(401).json({ message: 'حساب المشرف غير موجود' })
+  // Fetch current admin directly from Supabase
+  const { data: currentAdmin, error: adminErr } = await supabaseAdmin
+    .from('admins')
+    .select('*')
+    .eq('id', decoded.adminId)
+    .maybeSingle();
+
+  if (adminErr || !currentAdmin) {
+    return res.status(401).json({ message: 'حساب المشرف غير موجود' });
   }
 
   // Auto-protect and ensure alaa is FOUNDER
   if ((currentAdmin.username.toLowerCase() === 'alaa' || currentAdmin.username === 'علاء') && currentAdmin.role !== 'FOUNDER') {
-    currentAdmin.role = 'FOUNDER'
-    currentAdmin.isSuperAdmin = true
-    await prisma.admin.update({
-      where: { id: currentAdmin.id },
-      data: { role: 'FOUNDER', isSuperAdmin: true }
-    })
+    currentAdmin.role = 'FOUNDER';
+    currentAdmin.isSuperAdmin = true;
+    await supabaseAdmin
+      .from('admins')
+      .update({ role: 'FOUNDER', isSuperAdmin: true })
+      .eq('id', currentAdmin.id);
   }
 
-  // General permission check: only FOUNDER or CO_FOUNDER can manage/invite/manage testers
-  const isPrivileged = currentAdmin.role === 'FOUNDER' || currentAdmin.role === 'CO_FOUNDER'
+  const isPrivileged = currentAdmin.role === 'FOUNDER' || currentAdmin.role === 'CO_FOUNDER';
   if ((action === 'invite' || action === 'manage' || action === 'change-password' || action === 'testers') && !isPrivileged) {
-    return res.status(403).json({ message: 'هذا الإجراء مسموح للمؤسس ومساعدي المؤسس فقط' })
+    return res.status(403).json({ message: 'هذا الإجراء مسموح للمؤسس ومساعدي المؤسس فقط' });
   }
 
-  const isFounder = currentAdmin.role === 'FOUNDER' || currentAdmin.username.toLowerCase() === 'alaa' || currentAdmin.username === 'علاء'
-  const canManageUsers = isFounder || (currentAdmin.role === 'CO_FOUNDER' && currentAdmin.canManageUsers)
+  const isFounder = currentAdmin.role === 'FOUNDER' || currentAdmin.username.toLowerCase() === 'alaa' || currentAdmin.username === 'علاء';
+  const canManageUsers = isFounder || (currentAdmin.role === 'CO_FOUNDER' && currentAdmin.canManageUsers);
 
   if (action === 'users' && !canManageUsers) {
-    return res.status(403).json({ message: 'ليس لديك صلاحية لإدارة المستخدمين' })
+    return res.status(403).json({ message: 'ليس لديك صلاحية لإدارة المستخدمين' });
   }
 
   if (action === 'toggle-user-permission' && !isFounder) {
-    return res.status(403).json({ message: 'تعديل صلاحيات إدارة المستخدمين متاح للمؤسس فقط' })
+    return res.status(403).json({ message: 'تعديل صلاحيات إدارة المستخدمين متاح للمؤسس فقط' });
   }
 
   switch (action) {
@@ -74,68 +77,71 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         role: (currentAdmin.username.toLowerCase() === 'alaa' || currentAdmin.username === 'علاء') ? 'FOUNDER' : (currentAdmin.role || 'ADMIN'),
         isSuperAdmin: currentAdmin.isSuperAdmin,
         canManageUsers: !!canManageUsers
-      })
+      });
     case 'invite':
-      return handleInvite(req, res, currentAdmin)
+      return handleInvite(req, res, currentAdmin);
     case 'manage':
-      return handleManage(req, res, currentAdmin)
+      return handleManage(req, res, currentAdmin);
     case 'change-password':
-      return handleChangePassword(req, res, currentAdmin)
+      return handleChangePassword(req, res, currentAdmin);
     case 'users':
-      return handleUsers(req, res, currentAdmin)
+      return handleUsers(req, res, currentAdmin);
     case 'toggle-user-permission':
-      return handleToggleUserPermission(req, res, currentAdmin)
+      return handleToggleUserPermission(req, res, currentAdmin);
     case 'testers':
-      return handleTesters(req, res, currentAdmin)
+      return handleTesters(req, res, currentAdmin);
     default:
-      return res.status(400).json({ message: 'Invalid action' })
+      return res.status(400).json({ message: 'Invalid action' });
   }
 }
 
 async function handleLogin(req: VercelRequest, res: VercelResponse) {
-  const { username, password } = req.body
-  if (!username || !password) return res.status(400).json({ message: 'اسم المستخدم وكلمة المرور مطلوبة' })
+  const { username, password } = req.body;
+  if (!username || !password) return res.status(400).json({ message: 'اسم المستخدم وكلمة المرور مطلوبة' });
 
-  const rawUsername = (username || '').trim()
-  const cleanUsername = rawUsername.replace(/^@+/, '')
+  const rawUsername = (username || '').trim();
+  const cleanUsername = rawUsername.replace(/^@+/, '');
 
   try {
-    let admin = await prisma.admin.findFirst({
-      where: {
-        OR: [
-          { username: cleanUsername },
-          { username: `@${cleanUsername}` },
-          { username: rawUsername }
-        ]
-      }
-    })
-    const adminCount = await prisma.admin.count()
+    let { data: admin } = await supabaseAdmin
+      .from('admins')
+      .select('*')
+      .or(`username.eq.${cleanUsername},username.eq.@${cleanUsername},username.eq.${rawUsername}`)
+      .limit(1)
+      .maybeSingle();
+
+    const { count: adminCount } = await supabaseAdmin
+      .from('admins')
+      .select('*', { count: 'exact', head: true });
+
     if (adminCount === 0) {
-      const hashedPassword = await bcrypt.hash(password, 10)
-      admin = await prisma.admin.create({
-        data: { username: cleanUsername, name: cleanUsername, password: hashedPassword, isSuperAdmin: true, role: 'FOUNDER' }
-      })
+      const hashedPassword = await bcrypt.hash(password, 10);
+      const { data: newAdmin } = await supabaseAdmin
+        .from('admins')
+        .insert({ username: cleanUsername, name: cleanUsername, password: hashedPassword, isSuperAdmin: true, role: 'FOUNDER' })
+        .select()
+        .single();
+      admin = newAdmin;
     }
 
     if (!admin || !(await bcrypt.compare(password, admin.password))) {
-      return res.status(401).json({ message: 'بيانات الدخول غير صحيحة' })
+      return res.status(401).json({ message: 'بيانات الدخول غير صحيحة' });
     }
 
-    // Ensure 'alaa' / 'علاء' is always FOUNDER
-    const isAlaa = admin.username.toLowerCase() === 'alaa' || admin.username === 'علاء' || cleanUsername.toLowerCase() === 'alaa' || cleanUsername === 'علاء'
-    const effectiveRole = isAlaa ? 'FOUNDER' : (admin.role || 'ADMIN')
-    const isSuper = effectiveRole === 'FOUNDER' || effectiveRole === 'CO_FOUNDER'
+    const isAlaa = admin.username.toLowerCase() === 'alaa' || admin.username === 'علاء' || cleanUsername.toLowerCase() === 'alaa' || cleanUsername === 'علاء';
+    const effectiveRole = isAlaa ? 'FOUNDER' : (admin.role || 'ADMIN');
+    const isSuper = effectiveRole === 'FOUNDER' || effectiveRole === 'CO_FOUNDER';
 
     if (isAlaa && admin.role !== 'FOUNDER') {
-      await prisma.admin.update({ where: { id: admin.id }, data: { role: 'FOUNDER', isSuperAdmin: true } })
-      admin.role = 'FOUNDER'
+      await supabaseAdmin.from('admins').update({ role: 'FOUNDER', isSuperAdmin: true }).eq('id', admin.id);
+      admin.role = 'FOUNDER';
     }
 
     const token = jwt.sign(
       { adminId: admin.id, username: admin.username, isSuperAdmin: isSuper, role: effectiveRole },
       JWT_SECRET,
       { expiresIn: '7d' }
-    )
+    );
 
     return res.status(200).json({
       token,
@@ -145,223 +151,246 @@ async function handleLogin(req: VercelRequest, res: VercelResponse) {
       isSuperAdmin: isSuper,
       role: effectiveRole,
       canManageUsers: isAlaa || effectiveRole === 'FOUNDER' || !!admin.canManageUsers
-    })
+    });
   } catch (error) {
-    console.error('Login error:', error)
-    return res.status(500).json({ message: 'حدث خطأ في تسجيل الدخول' })
+    console.error('Login error:', error);
+    return res.status(500).json({ message: 'حدث خطأ في تسجيل الدخول' });
   }
 }
 
 async function handleRegister(req: VercelRequest, res: VercelResponse) {
-  const { username, password, code, name } = req.body
-  if (!username || !password || !code) return res.status(400).json({ message: 'جميع الحقول مطلوبة' })
+  const { username, password, code, name } = req.body;
+  if (!username || !password || !code) return res.status(400).json({ message: 'جميع الحقول مطلوبة' });
 
-  const rawUsername = (username || '').trim()
-  const cleanUsername = rawUsername.replace(/^@+/, '')
+  const rawUsername = (username || '').trim();
+  const cleanUsername = rawUsername.replace(/^@+/, '');
 
   try {
-    const adminCode = await prisma.adminCode.findUnique({ where: { code: code.toUpperCase() } })
-    if (!adminCode || adminCode.isUsed) return res.status(400).json({ message: 'كود التسجيل غير صحيح أو مستخدم' })
+    const { data: adminCode } = await supabaseAdmin
+      .from('admin_codes')
+      .select('*')
+      .eq('code', code.toUpperCase())
+      .maybeSingle();
 
-    const existing = await prisma.admin.findFirst({
-      where: {
-        OR: [
-          { username: cleanUsername },
-          { username: `@${cleanUsername}` },
-          { username: rawUsername }
-        ]
-      }
-    })
-    if (existing) return res.status(409).json({ message: 'اسم المستخدم موجود مسبقاً' })
+    if (!adminCode || adminCode.isUsed) return res.status(400).json({ message: 'كود التسجيل غير صحيح أو مستخدم' });
 
-    const hashedPassword = await bcrypt.hash(password, 10)
-    const assignedRole = adminCode.role === 'CO_FOUNDER' || adminCode.role === 'SUPERADMIN' ? 'CO_FOUNDER' : 'ADMIN'
+    const { data: existing } = await supabaseAdmin
+      .from('admins')
+      .select('id')
+      .or(`username.eq.${cleanUsername},username.eq.@${cleanUsername},username.eq.${rawUsername}`)
+      .limit(1)
+      .maybeSingle();
 
-    const admin = await prisma.admin.create({
-      data: {
+    if (existing) return res.status(409).json({ message: 'اسم المستخدم موجود مسبقاً' });
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const assignedRole = adminCode.role === 'CO_FOUNDER' || adminCode.role === 'SUPERADMIN' ? 'CO_FOUNDER' : 'ADMIN';
+
+    const { data: admin, error: createErr } = await supabaseAdmin
+      .from('admins')
+      .insert({
         username: cleanUsername,
         name: name?.trim() || cleanUsername,
         password: hashedPassword,
         isSuperAdmin: assignedRole === 'CO_FOUNDER',
         role: assignedRole
-      }
-    })
-    await prisma.adminCode.update({ where: { id: adminCode.id }, data: { isUsed: true } })
+      })
+      .select()
+      .single();
 
-    return res.status(201).json({ message: 'تم التسجيل بنجاح!', username: admin.username, name: admin.name, role: admin.role })
+    if (createErr) throw createErr;
+
+    await supabaseAdmin
+      .from('admin_codes')
+      .update({ isUsed: true, usedAt: new Date().toISOString() })
+      .eq('id', adminCode.id);
+
+    return res.status(201).json({ message: 'تم التسجيل بنجاح!', username: admin.username, name: admin.name, role: admin.role });
   } catch (error) {
-    console.error('Register error:', error)
-    return res.status(500).json({ message: 'حدث خطأ أثناء التسجيل' })
+    console.error('Register error:', error);
+    return res.status(500).json({ message: 'حدث خطأ أثناء التسجيل' });
   }
 }
 
 async function handleInvite(req: VercelRequest, res: VercelResponse, currentAdmin: any) {
   if (req.method === 'GET') {
-    const codes = await prisma.adminCode.findMany({ orderBy: { createdAt: 'desc' } })
-    return res.status(200).json(codes)
+    const { data: codes } = await supabaseAdmin
+      .from('admin_codes')
+      .select('*')
+      .order('createdAt', { ascending: false });
+    return res.status(200).json(codes || []);
   }
+
   if (req.method === 'POST') {
-    const { role } = req.body
+    const { role } = req.body;
     
-    // Only FOUNDER can create CO_FOUNDER invite codes
     if (role === 'CO_FOUNDER' && currentAdmin.role !== 'FOUNDER') {
-      return res.status(403).json({ message: 'فقط المؤسس يمكنه توليد كود دعوة لمساعد مؤسس' })
+      return res.status(403).json({ message: 'فقط المؤسس يمكنه توليد كود دعوة لمساعد مؤسس' });
     }
 
-    const code = uuidv4().substring(0, 8).toUpperCase()
-    const newCode = await prisma.adminCode.create({
-      data: {
+    const code = uuidv4().substring(0, 8).toUpperCase();
+    const { data: newCode, error } = await supabaseAdmin
+      .from('admin_codes')
+      .insert({
         code,
-        role: role === 'CO_FOUNDER' ? 'CO_FOUNDER' : 'ADMIN'
-      }
-    })
-    return res.status(201).json(newCode)
+        role: role === 'CO_FOUNDER' ? 'CO_FOUNDER' : 'ADMIN',
+        createdBy: currentAdmin.username
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return res.status(201).json(newCode);
   }
+
   if (req.method === 'DELETE') {
-    const { id } = req.query
-    await prisma.adminCode.delete({ where: { id: parseInt(id as string) } })
-    return res.status(200).json({ message: 'Deleted' })
+    const { id } = req.query;
+    await supabaseAdmin.from('admin_codes').delete().eq('id', parseInt(id as string));
+    return res.status(200).json({ message: 'Deleted' });
   }
 }
 
 async function handleManage(req: VercelRequest, res: VercelResponse, currentAdmin: any) {
   if (req.method === 'GET') {
-    const admins = await prisma.admin.findMany({
-      select: { id: true, username: true, name: true, isSuperAdmin: true, role: true, canManageUsers: true },
-      orderBy: { id: 'asc' }
-    })
-    // Ensure alaa is always shown as FOUNDER
-    let mapped = admins.map(a => ({
+    const { data: admins } = await supabaseAdmin
+      .from('admins')
+      .select('id, username, name, isSuperAdmin, role, canManageUsers')
+      .order('id', { ascending: true });
+
+    let mapped = (admins || []).map(a => ({
       ...a,
       role: (a.username.toLowerCase() === 'alaa' || a.username === 'علاء') ? 'FOUNDER' : (a.role || 'ADMIN'),
       canManageUsers: (a.username.toLowerCase() === 'alaa' || a.username === 'علاء' || a.role === 'FOUNDER') ? true : !!a.canManageUsers
-    }))
+    }));
 
-    // Only the Founder himself can see the Founder card
-    const isCallerFounder = currentAdmin.role === 'FOUNDER' || currentAdmin.username.toLowerCase() === 'alaa' || currentAdmin.username === 'علاء'
+    const isCallerFounder = currentAdmin.role === 'FOUNDER' || currentAdmin.username.toLowerCase() === 'alaa' || currentAdmin.username === 'علاء';
     if (!isCallerFounder) {
-      mapped = mapped.filter(a => a.role !== 'FOUNDER' && a.username.toLowerCase() !== 'alaa' && a.username !== 'علاء')
+      mapped = mapped.filter(a => a.role !== 'FOUNDER' && a.username.toLowerCase() !== 'alaa' && a.username !== 'علاء');
     }
 
-    return res.status(200).json(mapped)
+    return res.status(200).json(mapped);
   }
 
   if (req.method === 'POST') {
-    const { username, password, role: targetRole, isSuperAdmin, name } = req.body
-    if (!username || !password) return res.status(400).json({ message: 'اسم المستخدم وكلمة المرور مطلوبة' })
+    const { username, password, role: targetRole, isSuperAdmin, name } = req.body;
+    if (!username || !password) return res.status(400).json({ message: 'اسم المستخدم وكلمة المرور مطلوبة' });
 
-    const rawUsername = (username || '').trim()
-    const cleanUsername = rawUsername.replace(/^@+/, '')
+    const rawUsername = (username || '').trim();
+    const cleanUsername = rawUsername.replace(/^@+/, '');
 
-    const existing = await prisma.admin.findFirst({
-      where: {
-        OR: [
-          { username: cleanUsername },
-          { username: `@${cleanUsername}` },
-          { username: rawUsername }
-        ]
-      }
-    })
-    if (existing) return res.status(409).json({ message: 'اسم المستخدم موجود مسبقاً' })
+    const { data: existing } = await supabaseAdmin
+      .from('admins')
+      .select('id')
+      .or(`username.eq.${cleanUsername},username.eq.@${cleanUsername},username.eq.${rawUsername}`)
+      .limit(1)
+      .maybeSingle();
 
-    // Role appointment permissions
-    let assignedRole = 'ADMIN'
+    if (existing) return res.status(409).json({ message: 'اسم المستخدم موجود مسبقاً' });
+
+    let assignedRole = 'ADMIN';
     if (targetRole === 'CO_FOUNDER') {
       if (currentAdmin.role !== 'FOUNDER') {
-        return res.status(403).json({ message: 'فقط المؤسس (علاء) يمكنه تعيين مساعد مؤسس' })
+        return res.status(403).json({ message: 'فقط المؤسس (علاء) يمكنه تعيين مساعد مؤسس' });
       }
-      assignedRole = 'CO_FOUNDER'
+      assignedRole = 'CO_FOUNDER';
     } else if (targetRole === 'FOUNDER') {
-      return res.status(403).json({ message: 'لا يمكن تعيين مؤسس إضافي' })
+      return res.status(403).json({ message: 'لا يمكن تعيين مؤسس إضافي' });
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10)
-    const admin = await prisma.admin.create({
-      data: {
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const { data: admin, error } = await supabaseAdmin
+      .from('admins')
+      .insert({
         username: cleanUsername,
         name: name?.trim() || cleanUsername,
         password: hashedPassword,
         isSuperAdmin: assignedRole === 'CO_FOUNDER' || !!isSuperAdmin,
         role: assignedRole
-      }
-    })
-    return res.status(201).json({ id: admin.id, username: admin.username, name: admin.name, role: admin.role, isSuperAdmin: admin.isSuperAdmin })
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return res.status(201).json({ id: admin.id, username: admin.username, name: admin.name, role: admin.role, isSuperAdmin: admin.isSuperAdmin });
   }
 
   if (req.method === 'DELETE') {
-    const { id } = req.query
-    const targetId = parseInt(id as string)
-    const targetAdmin = await prisma.admin.findUnique({ where: { id: targetId } })
-    if (!targetAdmin) return res.status(404).json({ message: 'المشرف غير موجود' })
+    const { id } = req.query;
+    const targetId = parseInt(id as string);
 
-    // 1. ABSOLUTE PROTECTION FOR FOUNDER: NOBODY CAN DELETE ALAA
-    const isTargetFounder = targetAdmin.role === 'FOUNDER' || targetAdmin.username.toLowerCase() === 'alaa' || targetAdmin.username === 'علاء'
+    const { data: targetAdmin } = await supabaseAdmin
+      .from('admins')
+      .select('*')
+      .eq('id', targetId)
+      .maybeSingle();
+
+    if (!targetAdmin) return res.status(404).json({ message: 'المشرف غير موجود' });
+
+    const isTargetFounder = targetAdmin.role === 'FOUNDER' || targetAdmin.username.toLowerCase() === 'alaa' || targetAdmin.username === 'علاء';
     if (isTargetFounder) {
-      return res.status(403).json({ message: 'خط أحمر: لا يمكن حذف حساب المؤسس (علاء) نهائياً' })
+      return res.status(403).json({ message: 'خط أحمر: لا يمكن حذف حساب المؤسس (علاء) نهائياً' });
     }
 
-    // 2. Co-Founder cannot delete other Co-Founders or Founder
-    if (targetAdmin.role === 'CO_FOUNDER') {
-      if (currentAdmin.role !== 'FOUNDER') {
-        return res.status(403).json({ message: 'فقط المؤسس يمكنه حذف مساعد المؤسس' })
-      }
+    if (targetAdmin.role === 'CO_FOUNDER' && currentAdmin.role !== 'FOUNDER') {
+      return res.status(403).json({ message: 'فقط المؤسس يمكنه حذف مساعد المؤسس' });
     }
 
-    // 3. Regular admin cannot delete anyone
     if (currentAdmin.role !== 'FOUNDER' && currentAdmin.role !== 'CO_FOUNDER') {
-      return res.status(403).json({ message: 'ليس لديك صلاحية لحذف المشرفين' })
+      return res.status(403).json({ message: 'ليس لديك صلاحية لحذف المشرفين' });
     }
 
-    await prisma.admin.delete({ where: { id: targetId } })
-    return res.status(200).json({ message: 'تم حذف المشرف بنجاح' })
+    await supabaseAdmin.from('admins').delete().eq('id', targetId);
+    return res.status(200).json({ message: 'تم حذف المشرف بنجاح' });
   }
 
   if (req.method === 'PATCH') {
-    return handleChangePassword(req, res, currentAdmin)
+    return handleChangePassword(req, res, currentAdmin);
   }
 }
 
 async function handleChangePassword(req: VercelRequest, res: VercelResponse, currentAdmin: any) {
-  const { id, newPassword } = req.body
+  const { id, newPassword } = req.body;
   if (!id || !newPassword) {
-    return res.status(400).json({ message: 'معرف المشرف وكلمة المرور الجديدة مطلوبة' })
+    return res.status(400).json({ message: 'معرف المشرف وكلمة المرور الجديدة مطلوبة' });
   }
   if (newPassword.length < 4) {
-    return res.status(400).json({ message: 'كلمة المرور يجب أن لا تقل عن 4 خانات' })
+    return res.status(400).json({ message: 'كلمة المرور يجب أن لا تقل عن 4 خانات' });
   }
 
-  const targetId = parseInt(id.toString())
-  const targetAdmin = await prisma.admin.findUnique({ where: { id: targetId } })
-  if (!targetAdmin) return res.status(404).json({ message: 'المشرف غير موجود' })
+  const targetId = parseInt(id.toString());
+  const { data: targetAdmin } = await supabaseAdmin
+    .from('admins')
+    .select('*')
+    .eq('id', targetId)
+    .maybeSingle();
 
-  const isTargetFounder = targetAdmin.role === 'FOUNDER' || targetAdmin.username.toLowerCase() === 'alaa' || targetAdmin.username === 'علاء'
+  if (!targetAdmin) return res.status(404).json({ message: 'المشرف غير موجود' });
 
-  // Founder password can ONLY be changed by Founder themselves
+  const isTargetFounder = targetAdmin.role === 'FOUNDER' || targetAdmin.username.toLowerCase() === 'alaa' || targetAdmin.username === 'علاء';
+
   if (isTargetFounder && currentAdmin.id !== targetAdmin.id) {
-    return res.status(403).json({ message: 'لا يمكن تعديل كلمة مرور المؤسس إلا من قبل المؤسس نفسه' })
+    return res.status(403).json({ message: 'لا يمكن تعديل كلمة مرور المؤسس إلا من قبل المؤسس نفسه' });
   }
 
-  // Co-Founder password can only be changed by Founder or by the Co-Founder themselves
   if (targetAdmin.role === 'CO_FOUNDER' && currentAdmin.role !== 'FOUNDER' && currentAdmin.id !== targetAdmin.id) {
-    return res.status(403).json({ message: 'فقط المؤسس يمكنه تعديل كلمة مرور مساعد المؤسس' })
+    return res.status(403).json({ message: 'فقط المؤسس يمكنه تعديل كلمة مرور مساعد المؤسس' });
   }
 
-  // Co-Founder can change regular ADMIN passwords
   if (currentAdmin.role === 'CO_FOUNDER') {
     if (targetAdmin.role !== 'ADMIN' && currentAdmin.id !== targetAdmin.id) {
-      return res.status(403).json({ message: 'مساعد المؤسس يمكنه تعديل كلمات مرور المشرفين العاديين فقط' })
+      return res.status(403).json({ message: 'مساعد المؤسس يمكنه تعديل كلمات مرور المشرفين العاديين فقط' });
     }
   } else if (currentAdmin.role !== 'FOUNDER' && currentAdmin.id !== targetAdmin.id) {
-    return res.status(403).json({ message: 'ليس لديك صلاحية لتعديل كلمة مرور هذا المشرف' })
+    return res.status(403).json({ message: 'ليس لديك صلاحية لتعديل كلمة مرور هذا المشرف' });
   }
 
-  const hashedPassword = await bcrypt.hash(newPassword, 10)
-  await prisma.admin.update({
-    where: { id: targetId },
-    data: { password: hashedPassword }
-  })
+  const hashedPassword = await bcrypt.hash(newPassword, 10);
+  await supabaseAdmin
+    .from('admins')
+    .update({ password: hashedPassword, updatedAt: new Date().toISOString() })
+    .eq('id', targetId);
 
-  return res.status(200).json({ message: `تم تغيير كلمة المرور للمشرف (${targetAdmin.username}) بنجاح` })
+  return res.status(200).json({ message: `تم تغيير كلمة المرور للمشرف (${targetAdmin.username}) بنجاح` });
 }
 
 async function handleUsers(req: VercelRequest, res: VercelResponse, currentAdmin: any) {
@@ -427,7 +456,6 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, currentAdmin
       if (parsedPoints !== undefined) updateData.points = parsedPoints;
       if (parsedCups !== undefined) updateData.cups = parsedCups;
 
-      // Absolute Direct Override: Update target player directly via Supabase
       const { data: updated, error: updateErr } = await supabaseAdmin
         .from('players')
         .update(updateData)
@@ -440,36 +468,6 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, currentAdmin
         return res.status(500).json({ message: 'فشل تحديث بيانات المستخدم', error: updateErr.message });
       }
 
-      // Synchronize any duplicate records matching this username or name to prevent stale cache resurrection
-      if (cleanN || cleanU) {
-        const orConditions: string[] = [];
-        if (cleanN) orConditions.push(`name.ilike.${cleanN}`);
-        if (cleanU) orConditions.push(`username.eq.${cleanU}`, `username.eq.@${cleanU}`);
-
-        if (orConditions.length > 0) {
-          try {
-            await supabaseAdmin
-              .from('players')
-              .update({
-                ...(parsedPoints !== undefined ? { points: parsedPoints } : {}),
-                ...(parsedCups !== undefined ? { cups: parsedCups } : {})
-              })
-              .or(orConditions.join(','))
-              .neq('id', player.id);
-          } catch (_) {}
-        }
-      }
-
-      // Next.js ISR path revalidation fallback if run in a Next.js environment
-      try {
-        if (typeof (globalThis as any).revalidatePath === 'function') {
-          (globalThis as any).revalidatePath('/');
-          (globalThis as any).revalidatePath('/leaderboard');
-        }
-      } catch (err) {
-        // Safe to ignore if not in Next.js environment
-      }
-
       res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
       return res.status(200).json({ success: true, message: 'تم تحديث بيانات المستخدم بنجاح', player: updated });
     }
@@ -480,7 +478,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, currentAdmin
       }
       const { error: resetErr } = await supabaseAdmin
         .from('players')
-        .update({ password: String(newPassword).trim() })
+        .update({ password: String(newPassword).trim(), updatedAt: new Date().toISOString() })
         .eq('id', player.id);
 
       if (resetErr) {
@@ -492,7 +490,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, currentAdmin
     if (subAction === 'toggle-block') {
       const { data: updated, error: blockErr } = await supabaseAdmin
         .from('players')
-        .update({ isBlocked: Boolean(isBlocked) })
+        .update({ isBlocked: Boolean(isBlocked), updatedAt: new Date().toISOString() })
         .eq('id', player.id)
         .select()
         .single();
@@ -514,7 +512,6 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, currentAdmin
     const id = Number(req.query.id);
     if (!id) return res.status(400).json({ message: 'معرف المستخدم مطلوب' });
 
-    // Safely delete associated rooms
     try {
       await supabaseAdmin
         .from('rooms')
@@ -541,13 +538,22 @@ async function handleToggleUserPermission(req: VercelRequest, res: VercelRespons
   const { adminId, canManageUsers } = req.body;
   if (!adminId) return res.status(400).json({ message: 'معرف المشرف مطلوب' });
 
-  const targetAdmin = await prisma.admin.findUnique({ where: { id: Number(adminId) } });
+  const { data: targetAdmin } = await supabaseAdmin
+    .from('admins')
+    .select('*')
+    .eq('id', Number(adminId))
+    .maybeSingle();
+
   if (!targetAdmin) return res.status(404).json({ message: 'المشرف غير موجود' });
 
-  const updated = await prisma.admin.update({
-    where: { id: targetAdmin.id },
-    data: { canManageUsers: Boolean(canManageUsers) }
-  });
+  const { data: updated, error } = await supabaseAdmin
+    .from('admins')
+    .update({ canManageUsers: Boolean(canManageUsers), updatedAt: new Date().toISOString() })
+    .eq('id', targetAdmin.id)
+    .select()
+    .single();
+
+  if (error) throw error;
 
   return res.status(200).json({
     success: true,
@@ -559,19 +565,22 @@ async function handleToggleUserPermission(req: VercelRequest, res: VercelRespons
 async function handleTesters(req: VercelRequest, res: VercelResponse, currentAdmin: any) {
   if (req.method === 'GET') {
     try {
-      const testers = await (prisma as any).appTester.findMany({
-        orderBy: { createdAt: 'desc' }
-      });
-      const approvedTesters = testers.filter((t: any) => t.status === 'APPROVED');
-      const pendingTesters = testers.filter((t: any) => t.status === 'PENDING' || !t.status);
-      const rejectedTesters = testers.filter((t: any) => t.status === 'REJECTED');
+      const { data: testers } = await supabaseAdmin
+        .from('app_testers')
+        .select('*')
+        .order('createdAt', { ascending: false });
+
+      const allTesters = testers || [];
+      const approvedTesters = allTesters.filter((t: any) => t.status === 'APPROVED');
+      const pendingTesters = allTesters.filter((t: any) => t.status === 'PENDING' || !t.status);
+      const rejectedTesters = allTesters.filter((t: any) => t.status === 'REJECTED');
       const approvedEmails = approvedTesters.map((t: any) => t.email);
 
       return res.status(200).json({
         success: true,
-        testers,
+        testers: allTesters,
         stats: {
-          total: testers.length,
+          total: allTesters.length,
           pending: pendingTesters.length,
           approved: approvedTesters.length,
           rejected: rejectedTesters.length
@@ -591,93 +600,95 @@ async function handleTesters(req: VercelRequest, res: VercelResponse, currentAdm
       if (subAction === 'approve') {
         const id = Number(testerId);
         if (!id) return res.status(400).json({ message: 'معرّف الطلب غير صالح' });
-        const updated = await (prisma as any).appTester.update({
-          where: { id },
-          data: { status: 'APPROVED', approvedAt: new Date() }
-        });
+        const { data: updated, error } = await supabaseAdmin
+          .from('app_testers')
+          .update({ status: 'APPROVED', updatedAt: new Date().toISOString() })
+          .eq('id', id)
+          .select()
+          .single();
+        if (error) throw error;
         return res.status(200).json({ success: true, message: 'تم قبول طلب المختبر بنجاح', tester: updated });
       }
 
       if (subAction === 'reject') {
         const id = Number(testerId);
         if (!id) return res.status(400).json({ message: 'معرّف الطلب غير صالح' });
-        const updated = await (prisma as any).appTester.update({
-          where: { id },
-          data: { status: 'REJECTED' }
-        });
+        const { data: updated, error } = await supabaseAdmin
+          .from('app_testers')
+          .update({ status: 'REJECTED', updatedAt: new Date().toISOString() })
+          .eq('id', id)
+          .select()
+          .single();
+        if (error) throw error;
         return res.status(200).json({ success: true, message: 'تم رفض الطلب', tester: updated });
       }
 
       if (subAction === 'reset-status') {
         const id = Number(testerId);
         if (!id) return res.status(400).json({ message: 'معرّف الطلب غير صالح' });
-        const updated = await (prisma as any).appTester.update({
-          where: { id },
-          data: { status: 'PENDING' }
-        });
+        const { data: updated, error } = await supabaseAdmin
+          .from('app_testers')
+          .update({ status: 'PENDING', updatedAt: new Date().toISOString() })
+          .eq('id', id)
+          .select()
+          .single();
+        if (error) throw error;
         return res.status(200).json({ success: true, message: 'تم إعادة حالة الطلب إلى قيد الانتظار', tester: updated });
       }
 
       if (subAction === 'delete') {
         const id = Number(testerId);
         if (!id) return res.status(400).json({ message: 'معرّف الطلب غير صالح' });
-        await (prisma as any).appTester.delete({
-          where: { id }
-        });
+        await supabaseAdmin.from('app_testers').delete().eq('id', id);
         return res.status(200).json({ success: true, message: 'تم حذف الطلب بنجاح' });
       }
 
       if (subAction === 'approve-all') {
-        await (prisma as any).appTester.updateMany({
-          where: {
-            OR: [
-              { status: 'PENDING' },
-              { status: null as any }
-            ]
-          },
-          data: { status: 'APPROVED', approvedAt: new Date() }
-        });
+        await supabaseAdmin
+          .from('app_testers')
+          .update({ status: 'APPROVED', updatedAt: new Date().toISOString() })
+          .or('status.eq.PENDING,status.is.null');
         return res.status(200).json({ success: true, message: 'تم قبول جميع الطلبات المعلقة بنجاح' });
       }
 
       if (subAction === 'clear-approved' || subAction === 'mark-copied') {
-        // Marks all currently APPROVED testers as EXPORTED so they are cleared from the copy queue and won't be copied twice into Google Play Console
-        const result = await (prisma as any).appTester.updateMany({
-          where: { status: 'APPROVED' },
-          data: { status: 'EXPORTED' }
-        });
+        const { data: resData } = await supabaseAdmin
+          .from('app_testers')
+          .update({ status: 'EXPORTED', updatedAt: new Date().toISOString() })
+          .eq('status', 'APPROVED')
+          .select();
+        const count = resData?.length || 0;
         return res.status(200).json({
           success: true,
-          message: `تم نسخ وإزالة ${result.count} إيميل من قائمة المقبولين بنجاح حتى لا تتكرر في Google Play`,
-          count: result.count
+          message: `تم نسخ وإزالة ${count} إيميل من قائمة المقبولين بنجاح حتى لا تتكرر في Google Play`,
+          count
         });
       }
 
       if (subAction === 'delete-approved') {
-        // Permanently deletes all approved/exported testers from the database
-        const result = await (prisma as any).appTester.deleteMany({
-          where: {
-            OR: [
-              { status: 'APPROVED' },
-              { status: 'EXPORTED' },
-              { status: 'ADDED' }
-            ]
-          }
-        });
+        const { data: resData } = await supabaseAdmin
+          .from('app_testers')
+          .delete()
+          .or('status.eq.APPROVED,status.eq.EXPORTED,status.eq.ADDED')
+          .select();
+        const count = resData?.length || 0;
         return res.status(200).json({
           success: true,
-          message: `تم حذف ${result.count} مختبر نهائياً من قاعدة البيانات`,
-          count: result.count
+          message: `تم حذف ${count} مختبر نهائياً من قاعدة البيانات`,
+          count
         });
       }
 
       if (subAction === 'reset-to-approved') {
         const id = Number(testerId);
         if (!id) return res.status(400).json({ message: 'معرّف الطلب غير صالح' });
-        const updated = await (prisma as any).appTester.update({
-          where: { id },
-          data: { status: 'APPROVED' }
-        });
+        const { data: updated, error } = await supabaseAdmin
+          .from('app_testers')
+          .update({ status: 'APPROVED', updatedAt: new Date().toISOString() })
+          .eq('id', id)
+          .select()
+          .single();
+        if (error) throw error;
         return res.status(200).json({ success: true, message: 'تمت إعادة الطلب إلى قائمة المقبولين للنسخ', tester: updated });
       }
 
@@ -686,11 +697,12 @@ async function handleTesters(req: VercelRequest, res: VercelResponse, currentAdm
         if (!clean || !clean.includes('@') || !clean.includes('.')) {
           return res.status(400).json({ message: 'يرجى إدخال بريد إلكتروني صحيح' });
         }
-        const tester = await (prisma as any).appTester.upsert({
-          where: { email: clean },
-          update: { status: 'APPROVED', approvedAt: new Date() },
-          create: { email: clean, status: 'APPROVED', approvedAt: new Date() }
-        });
+        const { data: tester, error } = await supabaseAdmin
+          .from('app_testers')
+          .upsert({ email: clean, name: clean.split('@')[0], status: 'APPROVED', updatedAt: new Date().toISOString() }, { onConflict: 'email' })
+          .select()
+          .single();
+        if (error) throw error;
         return res.status(200).json({ success: true, message: 'تمت إضافة البريد واعتماده بنجاح', tester });
       }
 
@@ -703,4 +715,3 @@ async function handleTesters(req: VercelRequest, res: VercelResponse, currentAdm
 
   return res.status(405).json({ message: 'Method not allowed' });
 }
-

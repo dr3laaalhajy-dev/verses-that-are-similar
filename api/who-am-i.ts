@@ -1,5 +1,4 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { prisma } from './_lib/prisma.js';
 import { supabaseAdmin as supabase } from './_lib/supabaseAdmin.js';
 
 // Fisher-Yates Shuffle
@@ -30,42 +29,46 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // 1. Get Categories with Counts
       if (action === 'categories' || !action) {
-        let dbCategories = await prisma.whoAmICategory.findMany({
-          orderBy: { created_at: 'asc' }
-        });
+        let { data: dbCategories, error: catErr } = await supabase
+          .from('who_am_i_categories')
+          .select('*')
+          .order('created_at', { ascending: true });
 
         // Ensure defaults if table was empty
-        if (dbCategories.length === 0) {
+        if (!dbCategories || dbCategories.length === 0) {
           const defaults = [
             { name: 'الصحابة', description: 'أسئلة وتلميحات عن صحابة رسول الله ﷺ', icon: 'Users' },
             { name: 'الأنبياء', description: 'أسئلة وتلميحات عن أنبياء ورسل الله عليهم السلام', icon: 'Sparkles' },
             { name: 'العلماء', description: 'أسئلة وتلميحات عن أئمة الإسلام والفقهاء والمحدثين', icon: 'BookOpen' },
             { name: 'الغزوات', description: 'أسئلة وتلميحات عن غزوات ومعارك التاريخ الإسلامي', icon: 'Shield' }
           ];
+
           for (const d of defaults) {
-            await prisma.whoAmICategory.upsert({
-              where: { name: d.name },
-              update: {},
-              create: d
-            });
+            await supabase
+              .from('who_am_i_categories')
+              .upsert(d, { onConflict: 'name' });
           }
-          dbCategories = await prisma.whoAmICategory.findMany({
-            orderBy: { created_at: 'asc' }
-          });
+
+          const refetch = await supabase
+            .from('who_am_i_categories')
+            .select('*')
+            .order('created_at', { ascending: true });
+          dbCategories = refetch.data || [];
         }
 
-        // Get question counts per category from Prisma
-        const counts = await prisma.whoAmIQuestion.groupBy({
-          by: ['category'],
-          _count: { id: true }
-        });
+        // Get question counts per category from Supabase
+        const { data: questions } = await supabase
+          .from('who_am_i_questions')
+          .select('category');
 
         const countMap = new Map<string, number>();
-        counts.forEach(c => {
-          countMap.set(c.category, c._count.id);
+        (questions || []).forEach((q: any) => {
+          if (q.category) {
+            countMap.set(q.category, (countMap.get(q.category) || 0) + 1);
+          }
         });
 
-        const categoriesWithCount = dbCategories.map(cat => ({
+        const categoriesWithCount = (dbCategories || []).map((cat: any) => ({
           ...cat,
           count: countMap.get(cat.name) || 0
         }));
@@ -78,24 +81,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const category = req.query.category as string | undefined;
         const search = (req.query.search as string || '').trim();
 
-        const where: any = {};
+        let query = supabase
+          .from('who_am_i_questions')
+          .select('*')
+          .order('created_at', { ascending: false });
+
         if (category && category !== 'ALL') {
-          where.category = category;
+          query = query.eq('category', category);
         }
+
         if (search) {
-          where.OR = [
-            { hint_1: { contains: search, mode: 'insensitive' } },
-            { hint_2: { contains: search, mode: 'insensitive' } },
-            { answer: { contains: search, mode: 'insensitive' } }
-          ];
+          query = query.or(`hint_1.ilike.%${search}%,hint_2.ilike.%${search}%,answer.ilike.%${search}%`);
         }
 
-        const questions = await prisma.whoAmIQuestion.findMany({
-          where,
-          orderBy: { created_at: 'desc' }
-        });
+        const { data: questions, error } = await query;
+        if (error) throw error;
 
-        return res.status(200).json({ questions });
+        return res.status(200).json({ questions: questions || [] });
       }
 
       return res.status(400).json({ error: 'Action غير معروف' });
@@ -115,24 +117,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
 
         const trimmedName = name.trim();
-        const category = await prisma.whoAmICategory.create({
-          data: {
+        const { data: category, error } = await supabase
+          .from('who_am_i_categories')
+          .insert({
             name: trimmedName,
             description: description?.trim() || null,
             icon: icon?.trim() || 'HelpCircle'
-          }
-        });
+          })
+          .select()
+          .single();
 
-        // Sync to Supabase if table exists
-        try {
-          await supabase.from('who_am_i_categories').upsert({
-            name: trimmedName,
-            description: description?.trim() || null,
-            icon: icon?.trim() || 'HelpCircle'
-          });
-        } catch (e) {
-          // ignore error if Supabase table not present yet
-        }
+        if (error) throw error;
 
         return res.status(200).json({ success: true, category });
       }
@@ -144,31 +139,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return res.status(400).json({ error: 'المعرف واسم الفئة مطلوبان' });
         }
 
-        const oldCategory = await prisma.whoAmICategory.findUnique({ where: { id } });
+        const { data: oldCategory } = await supabase
+          .from('who_am_i_categories')
+          .select('*')
+          .eq('id', id)
+          .maybeSingle();
+
         const trimmedName = name.trim();
 
-        const updated = await prisma.whoAmICategory.update({
-          where: { id },
-          data: {
+        const { data: updated, error } = await supabase
+          .from('who_am_i_categories')
+          .update({
             name: trimmedName,
             description: description !== undefined ? description?.trim() || null : undefined,
             icon: icon !== undefined ? icon?.trim() || null : undefined
-          }
-        });
+          })
+          .eq('id', id)
+          .select()
+          .single();
+
+        if (error) throw error;
 
         // If name changed, update questions in that category
         if (oldCategory && oldCategory.name !== trimmedName) {
-          await prisma.whoAmIQuestion.updateMany({
-            where: { category: oldCategory.name },
-            data: { category: trimmedName }
-          });
-
-          try {
-            await supabase
-              .from('who_am_i_questions')
-              .update({ category: trimmedName })
-              .eq('category', oldCategory.name);
-          } catch (e) {}
+          await supabase
+            .from('who_am_i_questions')
+            .update({ category: trimmedName })
+            .eq('category', oldCategory.name);
         }
 
         return res.status(200).json({ success: true, category: updated });
@@ -181,14 +178,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return res.status(400).json({ error: 'المعرف أو اسم الفئة مطلوب' });
         }
 
-        const where = id ? { id } : { name };
-        const cat = await prisma.whoAmICategory.findUnique({ where });
-        if (cat) {
-          await prisma.whoAmICategory.delete({ where: { id: cat.id } });
-          try {
-            await supabase.from('who_am_i_categories').delete().eq('name', cat.name);
-          } catch (e) {}
+        let q = supabase.from('who_am_i_categories').delete();
+        if (id) {
+          q = q.eq('id', id);
+        } else {
+          q = q.eq('name', name);
         }
+        const { error } = await q;
+        if (error) throw error;
 
         return res.status(200).json({ success: true });
       }
@@ -200,27 +197,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return res.status(400).json({ error: 'جميع حقول السؤال (التلميح الأول، الثاني، والإجابة) مطلوبة' });
         }
 
-        const question = await prisma.whoAmIQuestion.create({
-          data: {
+        const { data: question, error } = await supabase
+          .from('who_am_i_questions')
+          .insert({
             category: (category || 'الصحابة').trim(),
             hint_1: hint_1.trim(),
             hint_2: hint_2.trim(),
             answer: answer.trim()
-          }
-        });
+          })
+          .select()
+          .single();
 
-        // Sync to Supabase
-        try {
-          await supabase.from('who_am_i_questions').insert({
-            id: question.id,
-            category: question.category,
-            hint_1: question.hint_1,
-            hint_2: question.hint_2,
-            answer: question.answer
-          });
-        } catch (e) {
-          console.warn('[Sync to Supabase warning]:', e);
-        }
+        if (error) throw error;
 
         return res.status(200).json({ success: true, question });
       }
@@ -232,24 +220,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return res.status(400).json({ error: 'معرف السؤال مطلوب' });
         }
 
-        const updated = await prisma.whoAmIQuestion.update({
-          where: { id },
-          data: {
+        const { data: updated, error } = await supabase
+          .from('who_am_i_questions')
+          .update({
             category: category ? category.trim() : undefined,
             hint_1: hint_1 ? hint_1.trim() : undefined,
             hint_2: hint_2 ? hint_2.trim() : undefined,
             answer: answer ? answer.trim() : undefined
-          }
-        });
+          })
+          .eq('id', id)
+          .select()
+          .single();
 
-        try {
-          await supabase.from('who_am_i_questions').update({
-            category: updated.category,
-            hint_1: updated.hint_1,
-            hint_2: updated.hint_2,
-            answer: updated.answer
-          }).eq('id', id);
-        } catch (e) {}
+        if (error) throw error;
 
         return res.status(200).json({ success: true, question: updated });
       }
@@ -261,53 +244,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return res.status(400).json({ error: 'معرف السؤال مطلوب' });
         }
 
-        await prisma.whoAmIQuestion.delete({ where: { id } });
-        try {
-          await supabase.from('who_am_i_questions').delete().eq('id', id);
-        } catch (e) {}
+        const { error } = await supabase
+          .from('who_am_i_questions')
+          .delete()
+          .eq('id', id);
+
+        if (error) throw error;
 
         return res.status(200).json({ success: true });
       }
 
       // 7. Get Mixed Questions based on categories_config
-      // Example payload: { action: 'get-mixed-questions', categories_config: [{ category: 'الصحابة', count: 3 }, { category: 'الأنبياء', count: 2 }] }
       if (action === 'get-mixed-questions') {
         const categories_config: Array<{ category: string; count: number }> = req.body.categories_config || [];
-        
         let allPickedQuestions: any[] = [];
 
         for (const conf of categories_config) {
           const reqCount = Math.max(1, Number(conf.count) || 1);
-          
-          // 1. Try Supabase first so IDs match Supabase who_am_i_rounds FK constraint
-          let available: any[] = [];
-          try {
-            const { data } = await supabase
-              .from('who_am_i_questions')
-              .select('*')
-              .eq('category', conf.category);
-            if (data && data.length > 0) {
-              available = data;
-            }
-          } catch (e) {}
+          const { data } = await supabase
+            .from('who_am_i_questions')
+            .select('*')
+            .eq('category', conf.category);
 
-          // 2. Fallback to Prisma
-          if (available.length === 0) {
-            available = await prisma.whoAmIQuestion.findMany({
-              where: { category: conf.category }
-            });
-          }
-
-          if (available.length > 0) {
-            const shuffled = shuffleArray(available);
+          if (data && data.length > 0) {
+            const shuffled = shuffleArray(data);
             const picked = shuffled.slice(0, reqCount);
             allPickedQuestions.push(...picked);
           }
         }
 
-        // Shuffle all collected questions so they are not grouped by category
+        // Shuffle all collected questions
         const finalQuestions = shuffleArray(allPickedQuestions);
-
         return res.status(200).json({ questions: finalQuestions });
       }
 
@@ -320,4 +287,3 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ error: error.message || 'حدث خطأ في الخادم' });
   }
 }
-

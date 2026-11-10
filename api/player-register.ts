@@ -1,13 +1,12 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { prisma } from './_lib/prisma.js'
-import { supabaseAdmin } from './_lib/supabaseAdmin.js'
-import { handleCors } from './_lib/cors.js'
-import { getOrGenerateUniquePlayerId } from './_lib/uniquePlayerId.js'
+import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { supabaseAdmin } from './_lib/supabaseAdmin.js';
+import { handleCors } from './_lib/cors.js';
+import { getOrGenerateUniquePlayerId } from './_lib/uniquePlayerId.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (handleCors(req, res)) return;
 
-  // Handle GET request: Consolidated from /api/users/me to minimize Serverless Functions
+  // Handle GET request: retrieve player by id, username, uniquePlayerId, or name
   if (req.method === 'GET') {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     res.setHeader('Pragma', 'no-cache');
@@ -24,35 +23,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     try {
-      const player = await prisma.player.findFirst({
-        where: {
-          OR: [
-            ...(Number.isInteger(targetId) && targetId > 0 ? [{ id: targetId }] : []),
-            ...(cleanUnique ? [{ uniquePlayerId: cleanUnique }] : []),
-            ...(cleanU ? [{ username: cleanU }, { username: '@' + cleanU }] : []),
-            ...(cleanN ? [{ name: { equals: cleanN, mode: 'insensitive' as const } }] : [])
-          ]
-        },
-        select: {
-          id: true,
-          name: true,
-          username: true,
-          uniquePlayerId: true,
-          points: true,
-          cups: true,
-          streak: true,
-          isBlocked: true,
-          activeFrame: true,
-          equippedNameColor: true,
-          seerahCompleted: true,
-          generalCompleted: true,
-          quranCompleted: true,
-          createdAt: true,
-          updatedAt: true
-        }
-      });
+      const orParts: string[] = [];
+      if (Number.isInteger(targetId) && targetId > 0) orParts.push(`id.eq.${targetId}`);
+      if (cleanUnique) orParts.push(`uniquePlayerId.eq.${cleanUnique}`);
+      if (cleanU) {
+        orParts.push(`username.eq.${cleanU}`);
+        orParts.push(`username.eq.@${cleanU}`);
+      }
+      if (cleanN) orParts.push(`name.ilike.${cleanN}`);
 
-      if (!player) {
+      const { data: player, error } = await supabaseAdmin
+        .from('players')
+        .select('*')
+        .or(orParts.join(','))
+        .limit(1)
+        .maybeSingle();
+
+      if (error || !player) {
         return res.status(404).json({ error: 'User not found' });
       }
 
@@ -106,19 +93,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       }
 
-      // Find player by username (with or without @) or display name
-      const player = await prisma.player.findFirst({
-        where: {
-          OR: [
-            { username: cleanIdentifier },
-            { username: '@' + cleanIdentifier },
-            { username: rawIdentifier },
-            { name: { equals: rawIdentifier, mode: 'insensitive' } }
-          ]
-        }
-      });
+      const { data: player, error } = await supabaseAdmin
+        .from('players')
+        .select('*')
+        .or(`username.eq.${cleanIdentifier},username.eq.@${cleanIdentifier},username.eq.${rawIdentifier},name.ilike.${rawIdentifier}`)
+        .limit(1)
+        .maybeSingle();
 
-      if (!player) {
+      if (error || !player) {
         return res.status(401).json({
           error: 'لم يتم العثور على حساب بهذا الاسم أو اسم المستخدم'
         });
@@ -130,7 +112,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       }
 
-      // Check password (default password for legacy users without password is '1234')
       const effectivePassword = player.password || '1234';
       if (effectivePassword !== inputPass) {
         return res.status(401).json({
@@ -174,17 +155,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({ error: 'كلمة المرور الجديدة يجب أن تتكون من 4 خانات على الأقل' });
       }
 
-      const player = await prisma.player.findFirst({
-        where: {
-          OR: [
-            { username: cleanUser },
-            { username: '@' + cleanUser },
-            { name: { equals: targetUser, mode: 'insensitive' } }
-          ]
-        }
-      });
+      const { data: player, error } = await supabaseAdmin
+        .from('players')
+        .select('*')
+        .or(`username.eq.${cleanUser},username.eq.@${cleanUser},name.ilike.${targetUser}`)
+        .limit(1)
+        .maybeSingle();
 
-      if (!player) {
+      if (error || !player) {
         return res.status(404).json({ error: 'لم يتم العثور على حساب اللاعب' });
       }
 
@@ -193,10 +171,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({ error: 'كلمة المرور الحالية غير صحيحة' });
       }
 
-      const updated = await prisma.player.update({
-        where: { id: player.id },
-        data: { password: newPass }
-      });
+      const { data: updated, error: updateErr } = await supabaseAdmin
+        .from('players')
+        .update({ password: newPass, updatedAt: new Date().toISOString() })
+        .eq('id', player.id)
+        .select()
+        .single();
+
+      if (updateErr) throw updateErr;
 
       return res.status(200).json({
         success: true,
@@ -216,17 +198,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({ error: 'بيانات الحساب الحالي مطلوبة' });
       }
 
-      const player = await prisma.player.findFirst({
-        where: {
-          OR: [
-            { username: cleanTarget },
-            { username: '@' + cleanTarget },
-            { name: { equals: targetUser, mode: 'insensitive' } }
-          ]
-        }
-      });
+      const { data: player, error } = await supabaseAdmin
+        .from('players')
+        .select('*')
+        .or(`username.eq.${cleanTarget},username.eq.@${cleanTarget},name.ilike.${targetUser}`)
+        .limit(1)
+        .maybeSingle();
 
-      if (!player) {
+      if (error || !player) {
         return res.status(404).json({ error: 'لم يتم العثور على حساب اللاعب' });
       }
 
@@ -252,7 +231,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // 2. Check Username
       if (cleanNewUsername && cleanNewUsername !== player.username) {
-        // Enforce 30-day rule for username changes
         const changedAt = (player as any).usernameChangedAt;
         if (changedAt) {
           const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
@@ -266,7 +244,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }
         }
 
-        // Check if username taken by another player
         const { data: existingUsername } = await supabaseAdmin
           .from('players')
           .select('id')
@@ -290,10 +267,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       }
 
-      const updated = await prisma.player.update({
-        where: { id: player.id },
-        data: updateData
-      });
+      updateData.updatedAt = new Date().toISOString();
+      const { data: updated, error: updateErr } = await supabaseAdmin
+        .from('players')
+        .update(updateData)
+        .eq('id', player.id)
+        .select()
+        .single();
+
+      if (updateErr) throw updateErr;
 
       return res.status(200).json({
         success: true,
@@ -318,43 +300,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({ error: 'يرجى إدخال كلمة المرور لتأكيد الحذف' });
       }
 
-      // Find player
-      const player = await prisma.player.findFirst({
-        where: {
-          OR: [
-            { username: cleanIdentifier },
-            { username: '@' + cleanIdentifier },
-            { username: rawIdentifier },
-            { name: { equals: rawIdentifier, mode: 'insensitive' } }
-          ]
-        }
-      });
+      const { data: player, error } = await supabaseAdmin
+        .from('players')
+        .select('*')
+        .or(`username.eq.${cleanIdentifier},username.eq.@${cleanIdentifier},username.eq.${rawIdentifier},name.ilike.${rawIdentifier}`)
+        .limit(1)
+        .maybeSingle();
 
-      if (!player) {
+      if (error || !player) {
         return res.status(404).json({ error: 'لم يتم العثور على حساب بهذا الاسم أو اسم المستخدم' });
       }
 
-      // Verify password
       const effectivePassword = player.password || '1234';
       if (effectivePassword !== inputPass) {
         return res.status(401).json({ error: 'كلمة المرور غير صحيحة' });
       }
 
-      // Delete associated rooms first to satisfy foreign key constraints
-      await prisma.room.deleteMany({
-        where: {
-          OR: [
-            { player1Id: player.id },
-            { player2Id: player.id },
-            { winnerId: player.id }
-          ]
-        }
-      });
+      // Delete associated rooms first
+      await supabaseAdmin
+        .from('rooms')
+        .delete()
+        .or(`player1Id.eq.${player.id},player2Id.eq.${player.id},winnerId.eq.${player.id}`);
 
-      // Delete the player
-      await prisma.player.delete({
-        where: { id: player.id }
-      });
+      // Delete player
+      const { error: delErr } = await supabaseAdmin
+        .from('players')
+        .delete()
+        .eq('id', player.id);
+
+      if (delErr) throw delErr;
 
       return res.status(200).json({
         success: true,
@@ -387,15 +361,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    // Check if the username is already taken
-    const existingPlayerWithUsername = await prisma.player.findFirst({
-      where: {
-        OR: [
-          { username: cleanUsername },
-          { username: '@' + cleanUsername }
-        ]
-      }
-    });
+    // 1. Check if the username is already taken
+    const { data: existingPlayerWithUsername } = await supabaseAdmin
+      .from('players')
+      .select('id')
+      .or(`username.eq.${cleanUsername},username.eq.@${cleanUsername}`)
+      .limit(1)
+      .maybeSingle();
 
     if (existingPlayerWithUsername) {
       return res.status(400).json({
@@ -404,12 +376,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    // Check if the display name is already taken
-    const existingPlayerWithName = await prisma.player.findFirst({
-      where: {
-        name: { equals: trimmedName, mode: 'insensitive' }
-      }
-    });
+    // 2. Check if the display name is already taken
+    const { data: existingPlayerWithName } = await supabaseAdmin
+      .from('players')
+      .select('id')
+      .ilike('name', trimmedName)
+      .limit(1)
+      .maybeSingle();
 
     if (existingPlayerWithName) {
       return res.status(400).json({
@@ -425,18 +398,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.error('Failed to generate uniquePlayerId:', e);
     }
 
-    const player = await prisma.player.create({
-      data: {
+    const { data: newPlayer, error: insertError } = await supabaseAdmin
+      .from('players')
+      .insert({
         name: trimmedName,
         username: cleanUsername,
         password: userPass,
-        uniquePlayerId: newUniqueId
-      }
-    });
+        uniquePlayerId: newUniqueId,
+        points: 0,
+        cups: 0,
+        streak: 0,
+        completedChallengeIds: [],
+        seerahCompleted: false,
+        generalCompleted: false,
+        quranCompleted: false
+      })
+      .select()
+      .single();
+
+    if (insertError) {
+      console.error('Player insert error in Supabase:', insertError);
+      throw insertError;
+    }
 
     return res.status(200).json({
       success: true,
-      player
+      player: newPlayer
     });
   } catch (error: any) {
     console.error('Player Auth Database Error:', error);

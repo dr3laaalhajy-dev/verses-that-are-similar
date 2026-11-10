@@ -1,5 +1,4 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { prisma } from '../_lib/prisma.js';
 import { supabaseAdmin } from '../_lib/supabaseAdmin.js';
 import { handleCors } from '../_lib/cors.js';
 
@@ -22,39 +21,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     let player: any = null;
 
-    if (cleanUnique || cleanU || cleanN || (Number.isInteger(numId) && numId > 0)) {
-      const orParts: string[] = [];
-      if (cleanUnique) orParts.push(`uniquePlayerId.eq.${cleanUnique}`);
-      if (cleanU) {
-        orParts.push(`username.eq.${cleanU}`);
-        orParts.push(`username.eq.@${cleanU}`);
-      }
-      if (cleanN) orParts.push(`name.eq.${cleanN}`);
-      if (Number.isInteger(numId) && numId > 0) orParts.push(`id.eq.${numId}`);
-
-      const { data, error } = await supabaseAdmin
-        .from('players')
-        .select('*')
-        .or(orParts.join(','))
-        .limit(1)
-        .maybeSingle();
-
-      if (!error && data) {
-        player = data;
-      }
+    const orParts: string[] = [];
+    if (cleanUnique) orParts.push(`uniquePlayerId.eq.${cleanUnique}`);
+    if (cleanU) {
+      orParts.push(`username.eq.${cleanU}`);
+      orParts.push(`username.eq.@${cleanU}`);
     }
+    if (cleanN) orParts.push(`name.ilike.${cleanN}`);
+    if (Number.isInteger(numId) && numId > 0) orParts.push(`id.eq.${numId}`);
 
-    if (!player) {
-      player = await prisma.player.findFirst({
-        where: {
-          OR: [
-            ...(cleanUnique ? [{ uniquePlayerId: cleanUnique }] : []),
-            ...(cleanU ? [{ username: cleanU }, { username: '@' + cleanU }] : []),
-            ...(cleanN ? [{ name: { equals: cleanN, mode: 'insensitive' as const } }] : []),
-            ...(Number.isInteger(numId) && numId > 0 ? [{ id: numId }] : [])
-          ] as any
-        }
-      });
+    const { data, error } = await supabaseAdmin
+      .from('players')
+      .select('*')
+      .or(orParts.join(','))
+      .limit(1)
+      .maybeSingle();
+
+    if (!error && data) {
+      player = data;
     }
 
     if (!player) {
@@ -67,4 +51,3 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ error: 'Internal server error', message: error.message });
   }
 }
-
