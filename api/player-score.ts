@@ -1,9 +1,8 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { prisma } from './_lib/prisma.js'
-import { supabaseAdmin } from './_lib/supabaseAdmin.js'
-import { handleCors } from './_lib/cors.js'
-import { getOrGenerateUniquePlayerId } from './_lib/uniquePlayerId.js'
-import { compareLeaderboardUsers, LeaderboardUser } from './_lib/ranking.js'
+import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { supabaseAdmin } from './_lib/supabaseAdmin.js';
+import { handleCors } from './_lib/cors.js';
+import { getOrGenerateUniquePlayerId } from './_lib/uniquePlayerId.js';
+import { compareLeaderboardUsers, LeaderboardUser } from './_lib/ranking.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (handleCors(req, res)) return;
@@ -14,34 +13,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'GET') {
     const { action, leaderboard, playerId, username, name, uniquePlayerId } = req.query;
 
-    // 1. Leaderboard handler consolidated from /api/leaderboard
+    // 1. Leaderboard handler
     if (action === 'leaderboard' || leaderboard !== undefined) {
       try {
         res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
         res.setHeader('Pragma', 'no-cache');
         res.setHeader('Expires', '0');
 
-        const players: any[] = await prisma.player.findMany({
-          orderBy: { updatedAt: 'desc' },
-          select: {
-            id: true,
-            name: true,
-            username: true,
-            uniquePlayerId: true,
-            points: true,
-            cups: true,
-            streak: true,
-            seerahCompleted: true,
-            generalCompleted: true,
-            quranCompleted: true,
-            activeFrame: true,
-            equippedNameColor: true
-          } as any
-        });
+        const { data: players, error } = await supabaseAdmin
+          .from('players')
+          .select('id, name, username, uniquePlayerId, points, cups, streak, seerahCompleted, generalCompleted, quranCompleted, activeFrame, equippedNameColor, isBlocked')
+          .order('updatedAt', { ascending: false });
+
+        if (error) throw error;
 
         const playerMap = new Map<string, LeaderboardUser>();
 
-        for (const player of players) {
+        for (const player of (players || [])) {
+          if (player.isBlocked) continue;
           const normalized = (player.name || '').trim().toLowerCase();
           if (!normalized) continue;
 
@@ -119,30 +108,39 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         console.error('Leaderboard Error in /api/player-score:', error);
         return res.status(500).json({ 
           message: 'Internal server error',
-          error: error.message,
-          code: error.code
+          error: error.message
         });
       }
     }
 
+    // 2. Fetch single player
     const cleanU = String(username || '').trim().replace(/^@+/, '');
     const cleanN = String(name || '').trim();
     const cleanUnique = String(uniquePlayerId || '').trim().toUpperCase();
     const numId = Number(playerId);
 
     try {
-      let player = await prisma.player.findFirst({
-        where: {
-          OR: [
-            ...(cleanUnique ? [{ uniquePlayerId: cleanUnique }] : []),
-            ...(cleanU ? [{ username: cleanU }, { username: '@' + cleanU }] : []),
-            ...(cleanN ? [{ name: { equals: cleanN, mode: 'insensitive' as const } }] : []),
-            ...(Number.isInteger(numId) && numId > 0 ? [{ id: numId }] : [])
-          ] as any
-        }
-      });
+      const orConditions: string[] = [];
+      if (cleanUnique) orConditions.push(`uniquePlayerId.eq.${cleanUnique}`);
+      if (cleanU) {
+        orConditions.push(`username.eq.${cleanU}`);
+        orConditions.push(`username.eq.@${cleanU}`);
+      }
+      if (cleanN) orConditions.push(`name.ilike.${cleanN}`);
+      if (Number.isInteger(numId) && numId > 0) orConditions.push(`id.eq.${numId}`);
 
-      if (!player) {
+      if (orConditions.length === 0) {
+        return res.status(400).json({ message: 'Missing search parameter' });
+      }
+
+      const { data: player, error: fetchErr } = await supabaseAdmin
+        .from('players')
+        .select('*')
+        .or(orConditions.join(','))
+        .limit(1)
+        .maybeSingle();
+
+      if (fetchErr || !player) {
         return res.status(404).json({ message: 'Player not found' });
       }
 
@@ -166,7 +164,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ message: 'Method not allowed' });
   }
 
-  const { roomId, playerId, score, points, challengeId, seerahCompleted, generalCompleted, quranCompleted, activeFrame, name, username } = req.body
+  const { roomId, playerId, score, points, challengeId, seerahCompleted, generalCompleted, quranCompleted, activeFrame, name, username } = req.body;
 
   // 1. Handle Room-based Score Update
   if (roomId) {
@@ -175,37 +173,48 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     try {
-      const room = await prisma.room.findUnique({ where: { id: roomId } });
-      if (!room) return res.status(404).json({ error: 'Room not found' });
+      const { data: room, error: roomErr } = await supabaseAdmin
+        .from('rooms')
+        .select('*')
+        .eq('id', roomId)
+        .maybeSingle();
+
+      if (roomErr || !room) return res.status(404).json({ error: 'Room not found' });
 
       const cleanP = String(playerId).trim().replace(/^@+/, '');
       const numId = Number(playerId);
 
-      const player = await prisma.player.findFirst({
-        where: {
-          OR: [
-            { username: cleanP },
-            { username: '@' + cleanP },
-            { name: { equals: String(playerId), mode: 'insensitive' as const } },
-            ...(Number.isInteger(numId) && numId > 0 ? [{ id: numId }] : [])
-          ] as any
-        }
-      });
+      const orParts: string[] = [
+        `username.eq.${cleanP}`,
+        `username.eq.@${cleanP}`,
+        `name.ilike.${String(playerId).trim()}`
+      ];
+      if (Number.isInteger(numId) && numId > 0) orParts.push(`id.eq.${numId}`);
 
-      if (!player) return res.status(404).json({ error: 'Player not found' });
+      const { data: player, error: playerErr } = await supabaseAdmin
+        .from('players')
+        .select('*')
+        .or(orParts.join(','))
+        .limit(1)
+        .maybeSingle();
 
-      let playersProgress = room.playersProgress as any || {};
+      if (playerErr || !player) return res.status(404).json({ error: 'Player not found' });
+
+      let playersProgress = (room.playersProgress as any) || {};
       if (!playersProgress[player.id]) {
         playersProgress[player.id] = { name: player.name, joinedAt: Date.now() };
       }
       
       playersProgress[player.id].score = score;
       
-      const updatedRoom = await prisma.room.update({
-        where: { id: roomId },
-        data: { playersProgress },
-        include: { player1: true, player2: true }
-      });
+      const { data: updatedRoom, error: updateRoomErr } = await supabaseAdmin
+        .from('rooms')
+        .update({ playersProgress })
+        .eq('id', roomId)
+        .select()
+        .single();
+
+      if (updateRoomErr) throw updateRoomErr;
 
       return res.status(200).json({ 
         success: true, 
@@ -224,32 +233,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const numId = Number(playerId);
 
   if (!cleanU && !cleanN && (!numId || isNaN(numId))) {
-    return res.status(400).json({ message: 'Missing username or name' })
+    return res.status(400).json({ message: 'Missing username or name' });
   }
 
   try {
-    let player = await prisma.player.findFirst({
-      where: {
-        OR: [
-          ...(cleanU ? [{ username: cleanU }, { username: '@' + cleanU }] : []),
-          ...(cleanN ? [{ name: { equals: cleanN, mode: 'insensitive' as const } }] : []),
-          ...(Number.isInteger(numId) && numId > 0 ? [{ id: numId }] : [])
-        ] as any
-      }
-    });
+    const orConditions: string[] = [];
+    if (cleanU) {
+      orConditions.push(`username.eq.${cleanU}`);
+      orConditions.push(`username.eq.@${cleanU}`);
+    }
+    if (cleanN) orConditions.push(`name.ilike.${cleanN}`);
+    if (Number.isInteger(numId) && numId > 0) orConditions.push(`id.eq.${numId}`);
 
-    if (!player) {
-      return res.status(404).json({ message: 'Player not found' })
+    const { data: player, error: fetchErr } = await supabaseAdmin
+      .from('players')
+      .select('*')
+      .or(orConditions.join(','))
+      .limit(1)
+      .maybeSingle();
+
+    if (fetchErr || !player) {
+      return res.status(404).json({ message: 'Player not found' });
     }
 
-    if ((player as any).isBlocked) {
-      return res.status(403).json({ error: 'تم حظر هذا الحساب من قِبل إدارة التطبيق' })
+    if (player.isBlocked) {
+      return res.status(403).json({ error: 'تم حظر هذا الحساب من قِبل إدارة التطبيق' });
     }
 
-    // Ensure we handle the Json field correctly
-    let completedIds: number[] = []
+    let completedIds: number[] = [];
     if (Array.isArray(player.completedChallengeIds)) {
-      completedIds = player.completedChallengeIds as number[]
+      completedIds = player.completedChallengeIds as number[];
     }
 
     const updateData: any = {};
@@ -269,7 +282,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const currentPts = Number(player.points || 0);
 
     if (addedPoints > 0) {
-      // Direct point increment: rewards (e.g. daily gift) get full points, questions capped to 5
       const pointsToAward = isReward ? addedPoints : Math.max(1, Math.min(addedPoints, 5));
       const nextTotal = explicitTotalPoints !== null && !isNaN(explicitTotalPoints)
         ? Math.max(currentPts + pointsToAward, explicitTotalPoints)
@@ -281,7 +293,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       updateData.points = Math.max(currentPts, clientScore);
     }
 
-    // 2. Cups handling:
+    // 2. Cups handling
     const addedCups = req.body.cups !== undefined ? Number(req.body.cups) : 0;
     const explicitTotalCups = req.body.totalCups !== undefined ? Number(req.body.totalCups) : (req.body.trophiesCount !== undefined ? Number(req.body.trophiesCount) : null);
 
@@ -294,15 +306,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
+    const currentCups = Number(player.cups || 0);
     if (addedCups > 0) {
-      updateData.cups = { increment: addedCups };
+      updateData.cups = currentCups + addedCups;
     } else if (isNewChallenge) {
-      updateData.cups = { increment: 1 };
+      updateData.cups = currentCups + 1;
     } else if (explicitTotalCups !== null && !isNaN(explicitTotalCups)) {
       updateData.cups = explicitTotalCups;
     }
 
-    // 3. Streak handling:
+    // 3. Streak handling
     const explicitStreak = req.body.streakCount !== undefined ? Number(req.body.streakCount) : (req.body.streak !== undefined ? Number(req.body.streak) : null);
     if (explicitStreak !== null && !isNaN(explicitStreak)) {
       updateData.streak = explicitStreak;
@@ -317,6 +330,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.body.powerUps !== undefined && typeof req.body.powerUps === 'object') updateData.powerUps = req.body.powerUps;
 
     if (Object.keys(updateData).length > 0) {
+      updateData.updatedAt = new Date().toISOString();
       const { data: updatedPlayer, error: updateErr } = await supabaseAdmin
         .from('players')
         .update(updateData)
@@ -325,23 +339,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .single();
 
       if (updateErr) {
-        console.warn('Supabase update player score fallback to Prisma:', updateErr.message);
-        const fallbackPlayer = await prisma.player.update({
-          where: { id: player.id },
-          data: updateData
-        });
-        return res.status(200).json(fallbackPlayer);
+        console.error('Supabase update player score error:', updateErr.message);
+        return res.status(500).json({ error: 'Failed to update score', message: updateErr.message });
       }
       return res.status(200).json(updatedPlayer);
     }
 
-    // If no updates needed, just return current player
-    return res.status(200).json(player)
+    // If no updates needed, return current player
+    return res.status(200).json(player);
   } catch (error: any) {
-    console.error('Score Update Error:', error)
+    console.error('Score Update Error:', error);
     return res.status(500).json({ 
       message: 'Internal server error',
       error: error.message
-    })
+    });
   }
 }
