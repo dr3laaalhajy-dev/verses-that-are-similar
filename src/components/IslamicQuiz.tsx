@@ -82,7 +82,7 @@ const IslamicQuiz: React.FC<{
       localStorage.setItem(scoreKey, JSON.stringify(existing));
     } catch (_) {}
 
-    // 2. إرسال طلب الحفظ (Upsert) إلى جدول user_challenge_progress في Supabase أو وضعه في طابور الأوفلاين
+    // 2. إرسال طلب الحفظ (Upsert) إلى جدول challenge_progress في Supabase أو وضعه في طابور الأوفلاين
     const pUnique = localStorage.getItem('quran_unique_player_id');
     const pUser = localStorage.getItem('quran_player_username');
     const pName = localStorage.getItem('quran_player_name');
@@ -110,11 +110,11 @@ const IslamicQuiz: React.FC<{
     }
 
     try {
-      const { error } = await supabase.from('user_challenge_progress').upsert(progressPayload, {
+      const { error } = await supabase.from('challenge_progress').upsert(progressPayload, {
         onConflict: 'user_id,category,group_num,level_num'
       });
       if (error) {
-        console.warn('[IslamicQuiz] user_challenge_progress upsert error, queueing offline:', error);
+        console.warn('[IslamicQuiz] challenge_progress upsert error, queueing offline:', error);
         enqueueSyncItem('GROUP_PROGRESS', progressPayload);
         setSyncNotice('تم حفظ النتيجة محلياً وستتم مزامنتها عند عودة الاتصال');
       } else {
@@ -418,12 +418,12 @@ const IslamicQuiz: React.FC<{
           }
         }
 
-        // استعادة تقدم المجموعات من جدول user_challenge_progress في Supabase
+        // استعادة تقدم المجموعات من جدول challenge_progress في Supabase
         const canonicalUserId = pUnique || (pId && /^\d+$/.test(pId) ? pId : null) || pUser || pName;
         if (canonicalUserId && selectedCategory) {
           try {
             const { data: progressRows } = await supabase
-              .from('user_challenge_progress')
+              .from('challenge_progress')
               .select('group_num, correct_answers, wrong_answers, is_passed')
               .eq('user_id', canonicalUserId)
               .eq('category', selectedCategory);

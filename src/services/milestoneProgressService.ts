@@ -423,14 +423,67 @@ export async function fetchUserMilestones(params?: {
       }
     }
 
-    // 2) إنجازات وتحديات المستخدم موثقة ومحسوبة مباشرة من جدول players وجدول challenges الفعليين في Supabase
-    // دون الحاجة لأي استعلامات إضافية لجداول غير موجودة
+    // 2) إنجازات وتحديات المستخدم موثقة ومحسوبة مباشرة من جدول players وجداول الإنجازات في Supabase
     if (dbPlayer) {
       if (dbPlayer.seerahCompleted || dbPlayer.activeFrame === 'seerah') {
         stats.seerah_60 = 60;
       }
       if (dbPlayer.generalCompleted || dbPlayer.activeFrame === 'general') {
         stats.figh_quiz = 100;
+      }
+    }
+
+    // جلب الشهادات والإنجازات المعتمدة من جدول certificates وجدول challenge_progress في Supabase
+    if (candidateTargets.length > 0) {
+      try {
+        const { data: certRows } = await supabase
+          .from('certificates')
+          .select('category, score, title')
+          .in('user_id', candidateTargets);
+
+        if (certRows && certRows.length > 0) {
+          certRows.forEach((c: any) => {
+            const cat = normalizeMilestoneCategory(c.category);
+            if (cat === 'seerah') stats.seerah_60 = 60;
+            if (cat === 'figh' || cat === 'general') stats.figh_quiz = 100;
+            if (cat === 'akida') stats.akida_bank = 100;
+            if (cat === 'hadith') stats.hadith_100 = 100;
+            if (cat === 'tafseer') stats.tafseer_100 = 100;
+            if (cat === 'history') stats.history_conquests = 100;
+            if (cat === 'arabia') stats.arabic_language = 100;
+          });
+        }
+      } catch (certErr) {
+        console.warn('[MilestoneService] Certificates fetch notice:', certErr);
+      }
+
+      try {
+        const { data: progressRows } = await supabase
+          .from('challenge_progress')
+          .select('category, correct_answers, is_passed')
+          .in('user_id', candidateTargets);
+
+        if (progressRows && progressRows.length > 0) {
+          const categoryTotals: Record<string, number> = {};
+          progressRows.forEach((r: any) => {
+            if (r.is_passed && r.correct_answers) {
+              const norm = normalizeMilestoneCategory(r.category);
+              categoryTotals[norm] = (categoryTotals[norm] || 0) + (r.correct_answers || 0);
+            }
+          });
+
+          Object.entries(categoryTotals).forEach(([catKey, totalCorrect]) => {
+            if (catKey === 'seerah') stats.seerah_60 = Math.max(stats.seerah_60, totalCorrect);
+            if (catKey === 'figh') stats.figh_quiz = Math.max(stats.figh_quiz, totalCorrect);
+            if (catKey === 'akida') stats.akida_bank = Math.max(stats.akida_bank, totalCorrect);
+            if (catKey === 'hadith') stats.hadith_100 = Math.max(stats.hadith_100, totalCorrect);
+            if (catKey === 'tafseer') stats.tafseer_100 = Math.max(stats.tafseer_100, totalCorrect);
+            if (catKey === 'history') stats.history_conquests = Math.max(stats.history_conquests, totalCorrect);
+            if (catKey === 'arabia') stats.arabic_language = Math.max(stats.arabic_language, totalCorrect);
+          });
+        }
+      } catch (pErr) {
+        console.warn('[MilestoneService] Challenge progress fetch notice:', pErr);
       }
     }
 

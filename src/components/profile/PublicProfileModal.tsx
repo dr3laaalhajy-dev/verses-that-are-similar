@@ -119,13 +119,26 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
 
           // Fetch dynamic certificates from certificates table
           try {
-            const { data: certRows } = await supabase
-              .from('certificates')
-              .select('category, score, title, serial, total_correct, total_questions')
-              .or(orParts.join(','));
+            const certIdentifiers = [
+              targetPlayer.uniquePlayerId,
+              targetPlayer.id ? String(targetPlayer.id) : null,
+              targetPlayer.username,
+              targetPlayer.name,
+              fetchedPlayer?.uniquePlayerId,
+              fetchedPlayer?.id ? String(fetchedPlayer.id) : null,
+              fetchedPlayer?.username,
+              fetchedPlayer?.name
+            ].filter(Boolean) as string[];
 
-            if (certRows && certRows.length > 0) {
-              fetchedCertificates = certRows;
+            if (certIdentifiers.length > 0) {
+              const { data: certRows } = await supabase
+                .from('certificates')
+                .select('category, score, title, serial, total_correct, total_questions')
+                .in('user_id', certIdentifiers);
+
+              if (certRows && certRows.length > 0) {
+                fetchedCertificates = certRows;
+              }
             }
           } catch (_) {}
         }

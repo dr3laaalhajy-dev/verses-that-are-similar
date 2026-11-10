@@ -113,7 +113,7 @@ export async function syncOfflineData(): Promise<{ syncedCount: number; errors: 
     try {
       if (item.type === 'GROUP_PROGRESS') {
         const { error } = await supabase
-          .from('user_challenge_progress')
+          .from('challenge_progress')
           .upsert(item.payload, { onConflict: 'user_id,category,group_num,level_num' });
 
         if (error) throw error;
@@ -203,3 +203,4 @@ export function initOfflineSyncManager(): () => void {
     document.removeEventListener('visibilitychange', handleVisibility);
   };
 }
+
