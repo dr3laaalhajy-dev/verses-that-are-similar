@@ -160,6 +160,8 @@ const IslamicQuiz: React.FC<{
   useEffect(() => {
     if (!selectedCategory) return;
 
+    let initialLevels = { easy: 1, hard: 1 };
+
     if (isCustomCategory) {
       const key = `quran_quiz_topics_${selectedCategory}`;
       const saved = localStorage.getItem(key);
@@ -185,6 +187,7 @@ const IslamicQuiz: React.FC<{
         try {
           const parsed = JSON.parse(saved);
           if (parsed.easy && parsed.hard) {
+            initialLevels = parsed;
             setUnlockedLevels(parsed);
           }
         } catch {
@@ -193,13 +196,125 @@ const IslamicQuiz: React.FC<{
       } else {
         setUnlockedLevels({ easy: 1, hard: 1 });
       }
+
+      // Check local certificates for completed status
+      try {
+        const rawCerts = localStorage.getItem('quran_user_certificates');
+        if (rawCerts) {
+          const certs = JSON.parse(rawCerts);
+          if (Array.isArray(certs)) {
+            if (isSeerah && certs.some((c: any) => c.category === 'seerah')) {
+              initialLevels = { ...initialLevels, easy: Math.max(initialLevels.easy || 1, 4) };
+              setUnlockedLevels(initialLevels);
+            }
+            if (isGeneral && certs.some((c: any) => c.category === 'general')) {
+              initialLevels = { ...initialLevels, easy: Math.max(initialLevels.easy || 1, 6), hard: Math.max(initialLevels.hard || 1, 6) };
+              setUnlockedLevels(initialLevels);
+            }
+          }
+        }
+      } catch (_) {}
+
+      // Check local correct answers count (fallback calculation for group unlocks: 20 per group)
+      try {
+        const answersKey = isSeerah ? 'quran_correct_answers_seerah' : (isGeneral ? 'quran_correct_answers_figh' : null);
+        if (answersKey) {
+          const rawAnswers = localStorage.getItem(answersKey);
+          if (rawAnswers) {
+            const count = (JSON.parse(rawAnswers) || []).length;
+            if (isSeerah) {
+              const unlockedByAnswers = count >= 60 ? 4 : (count >= 40 ? 3 : (count >= 20 ? 2 : 1));
+              if (unlockedByAnswers > (initialLevels.easy || 1)) {
+                initialLevels = { ...initialLevels, easy: unlockedByAnswers };
+                setUnlockedLevels(initialLevels);
+              }
+            } else if (isGeneral) {
+              const unlockedByAnswers = count >= 100 ? 6 : (count >= 80 ? 5 : (count >= 60 ? 4 : (count >= 40 ? 3 : (count >= 20 ? 2 : 1))));
+              if (unlockedByAnswers > (initialLevels.easy || 1)) {
+                initialLevels = { ...initialLevels, easy: unlockedByAnswers, hard: unlockedByAnswers };
+                setUnlockedLevels(initialLevels);
+              }
+            }
+          }
+        }
+      } catch (_) {}
     }
-  }, [selectedCategory, isCustomCategory]);
+
+    // Authoritative live synchronization with Supabase (players table)
+    const fetchUserChallengeProgress = async () => {
+      const pUnique = localStorage.getItem('quran_unique_player_id');
+      const pUser = localStorage.getItem('quran_player_username');
+      const pName = localStorage.getItem('quran_player_name');
+      const pId = localStorage.getItem('quran_player_id');
+
+      if (!pUnique && !pUser && !pName && !pId) return;
+
+      try {
+        const orFilter = [
+          pUnique ? `uniquePlayerId.eq.${pUnique}` : null,
+          pUser ? `username.eq.${pUser}` : null,
+          pName ? `name.eq.${pName}` : null,
+          (pId && /^\d+$/.test(pId)) ? `id.eq.${pId}` : null
+        ].filter(Boolean).join(',');
+
+        if (orFilter) {
+          const { data: dbPlayer, error } = await supabase
+            .from('players')
+            .select('id, seerahCompleted, generalCompleted, activeFrame, completedChallengeIds')
+            .or(orFilter)
+            .limit(1)
+            .maybeSingle();
+
+          if (!error && dbPlayer) {
+            if (isSeerah && (dbPlayer.seerahCompleted || dbPlayer.activeFrame === 'seerah')) {
+              setUnlockedLevels(prev => {
+                const next = { ...prev, easy: Math.max(prev.easy || 1, 4) };
+                localStorage.setItem(getStorageKey('seerah'), JSON.stringify(next));
+                return next;
+              });
+            } else if (isGeneral && (dbPlayer.generalCompleted || dbPlayer.activeFrame === 'general')) {
+              setUnlockedLevels(prev => {
+                const next = { ...prev, easy: Math.max(prev.easy || 1, 6), hard: Math.max(prev.hard || 1, 6) };
+                localStorage.setItem(getStorageKey('general'), JSON.stringify(next));
+                return next;
+              });
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[IslamicQuiz] Could not restore progress from Supabase:', err);
+      }
+    };
+
+    fetchUserChallengeProgress();
+  }, [selectedCategory, isCustomCategory, isSeerah, isGeneral]);
 
   // Sync state to storage helper
   const syncProgress = (newProgress: { easy: number, hard: number }) => {
     if (!selectedCategory) return;
     localStorage.setItem(getStorageKey(selectedCategory), JSON.stringify(newProgress));
+
+    const pUnique = localStorage.getItem('quran_unique_player_id');
+    const pUser = localStorage.getItem('quran_player_username');
+    const pName = localStorage.getItem('quran_player_name');
+    const pId = localStorage.getItem('quran_player_id');
+
+    if (pUnique || pUser || pName || pId) {
+      try {
+        const updateData: Record<string, any> = { updatedAt: new Date().toISOString() };
+        if (isSeerah && newProgress.easy > 3) updateData.seerahCompleted = true;
+        if (isGeneral && newProgress.easy > 5) updateData.generalCompleted = true;
+
+        if (Object.keys(updateData).length > 1) {
+          let q = supabase.from('players').update(updateData);
+          if (pUnique) q = q.eq('uniquePlayerId', pUnique);
+          else if (pUser) q = q.eq('username', pUser);
+          else if (pName) q = q.eq('name', pName);
+          else if (pId && /^\d+$/.test(pId)) q = q.eq('id', Number(pId));
+          q.then(() => {}, () => {});
+        }
+      } catch (_) {}
+    }
   };
 
   const syncCustomTopics = (newTopics: Record<number, number[]>) => {
