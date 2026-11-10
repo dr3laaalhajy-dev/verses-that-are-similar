@@ -562,7 +562,7 @@ export const GlobalOverlays: React.FC = () => {
 
               const category = certData.category === 'seerah' ? 'seerah' : 'general';
               app.setActiveFrame(category);
-              app.setIsNameDecorated(true);
+              if (typeof app.setIsNameDecorated === 'function') app.setIsNameDecorated(true);
               localStorage.setItem('quran_active_frame', category);
               localStorage.setItem('quran_name_decorated', 'true');
 

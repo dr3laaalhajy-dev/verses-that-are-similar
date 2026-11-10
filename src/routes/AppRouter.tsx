@@ -329,8 +329,8 @@ export const AppRouter: React.FC = () => {
             localStorage.setItem('quran_user_certificates', JSON.stringify(updated));
 
             app.setActiveFrame(cat);
-            app.setIsNameDecorated(true);
-            app.setShowProfileDecoration(true);
+            if (typeof app.setIsNameDecorated === 'function') app.setIsNameDecorated(true);
+            if (typeof app.setShowProfileDecoration === 'function') app.setShowProfileDecoration(true);
             localStorage.setItem('quran_active_frame', cat);
             localStorage.setItem('quran_name_decorated', 'true');
             localStorage.setItem('quran_show_decoration', 'true');
@@ -382,14 +382,14 @@ export const AppRouter: React.FC = () => {
             const cleanFrame = (frame === 'seerah' || frame === 'general') ? frame : null;
             app.setActiveFrame(cleanFrame);
             if (cleanFrame) {
-              app.setIsNameDecorated(true);
-              app.setShowProfileDecoration(true);
+              if (typeof app.setIsNameDecorated === 'function') app.setIsNameDecorated(true);
+              if (typeof app.setShowProfileDecoration === 'function') app.setShowProfileDecoration(true);
               localStorage.setItem('quran_active_frame', cleanFrame);
               localStorage.setItem('quran_name_decorated', 'true');
               localStorage.setItem('quran_show_decoration', 'true');
             } else {
-              app.setIsNameDecorated(false);
-              app.setShowProfileDecoration(false);
+              if (typeof app.setIsNameDecorated === 'function') app.setIsNameDecorated(false);
+              if (typeof app.setShowProfileDecoration === 'function') app.setShowProfileDecoration(false);
               localStorage.removeItem('quran_active_frame');
               localStorage.removeItem('quran_name_decorated');
               localStorage.removeItem('quran_show_decoration');

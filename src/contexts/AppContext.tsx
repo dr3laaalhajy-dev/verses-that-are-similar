@@ -7339,6 +7339,8 @@ ${versesList}
     userCosmetics: ownedCosmetics, setUserCosmetics: setOwnedCosmetics,
     ownedCosmetics, setOwnedCosmetics,
     activeFrame, setActiveFrame,
+    isNameDecorated, setIsNameDecorated,
+    showProfileDecoration, setShowProfileDecoration,
     userCertificates, setUserCertificates,
     equippedBadge: activeFrame, setEquippedBadge: setActiveFrame,
     syncLeaderboard,
