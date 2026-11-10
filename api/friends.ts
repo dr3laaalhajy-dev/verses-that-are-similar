@@ -592,40 +592,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       }
 
-      // Query correct answers from user_answers
-      let seerahCount = 0;
-      let fiqhCount = 0;
-      try {
-        const canonicalUserId = String(
-          target.uniquePlayerId ||
-          (target.id ? String(target.id) : '')
-        ).trim();
-
-        if (canonicalUserId) {
-          const { data: answers } = await supabaseAdmin
-            .from('user_answers')
-            .select('category, question_id, is_correct')
-            .eq('user_id', canonicalUserId)
-            .eq('is_correct', true);
-
-          if (answers && Array.isArray(answers)) {
-            const seerahSet = new Set();
-            const fiqhSet = new Set();
-            answers.forEach((a: any) => {
-              const cat = String(a.category || '').toLowerCase();
-              if (cat === 'seerah' || cat === 'seerah_60' || cat === 'sirah') {
-                seerahSet.add(a.question_id);
-              } else if (cat === 'figh' || cat === 'figh_quiz' || cat === 'fiqh' || cat === 'general') {
-                fiqhSet.add(a.question_id);
-              }
-            });
-            seerahCount = seerahSet.size;
-            fiqhCount = fiqhSet.size;
-          }
-        }
-      } catch (err) {
-        console.error('[Friends Profile] Error querying user_answers:', err);
-      }
+      // Achievements and certifications are verified directly from players table
+      let seerahCount = (target.seerahCompleted || target.activeFrame === 'seerah') ? 60 : 0;
+      let fiqhCount = (target.generalCompleted || target.activeFrame === 'general') ? 100 : 0;
 
       // Strict Validation: userProgress >= targetGoal
       if (ayahCount >= 100 || (target.quranCompleted && completedIds.length >= 100)) {

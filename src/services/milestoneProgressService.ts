@@ -216,30 +216,8 @@ export function recordMilestoneAnswer(params: {
     console.warn('[MilestoneService] Local storage answer record notice:', err);
   }
 
-  // ب) مزامنة مع قاعدة بيانات Supabase
-  const activeUser = String(
-    params.uniquePlayerId ||
-    params.userId ||
-    (typeof window !== 'undefined' && (
-      localStorage.getItem('quran_unique_player_id') ||
-      localStorage.getItem('quran_player_id')
-    )) ||
-    ''
-  ).trim();
-
-  if (activeUser) {
-    try {
-      supabase
-        .from('user_answers')
-        .insert({
-          user_id: activeUser,
-          category: category,
-          question_id: qIdStr,
-          is_correct: true
-        })
-        .then(() => {}, () => {});
-    } catch (_) {}
-  }
+  // ب) مزامنة مع التخزين المحلي فقط (البيانات المركزية تُحفظ في جدول players عبر إتمام التحديات)
+  return;
 }
 
 /**
@@ -445,64 +423,15 @@ export async function fetchUserMilestones(params?: {
       }
     }
 
-    // 2) استعلام الإجابات الصحيحة فقط (is_correct === true) من Supabase
-    // استخراج معرّف المستخدم الصريح والموحّد (String/UUID مثل MT-3CET أو ID الرقمي)
-    const targetUserId = String(
-      dbPlayer?.uniquePlayerId ||
-      params?.uniquePlayerId ||
-      (dbPlayer?.id ? String(dbPlayer.id) : '') ||
-      params?.userId ||
-      ''
-    ).trim();
-
-    if (targetUserId) {
-      try {
-        const { data: correctRows } = await supabase
-          .from('user_answers')
-          .select('category, question_id, is_correct')
-          .eq('user_id', targetUserId)
-          .eq('is_correct', true);
-
-        if (correctRows && Array.isArray(correctRows)) {
-          // تجميع وتصنيف الإجابات الصحيحة بكل قسم حصراً
-          const catMap: Record<string, Set<string>> = {};
-          correctRows.forEach((r) => {
-            if (r.is_correct === true && r.category) {
-              const norm = normalizeMilestoneCategory(r.category);
-              if (!catMap[norm]) catMap[norm] = new Set();
-              catMap[norm].add(String(r.question_id || ''));
-            }
-          });
-
-          if (catMap['figh']) {
-            stats.figh_quiz = isLocalUser ? Math.max(stats.figh_quiz, catMap['figh'].size) : catMap['figh'].size;
-          }
-          if (catMap['seerah']) {
-            stats.seerah_60 = isLocalUser ? Math.max(stats.seerah_60, catMap['seerah'].size) : catMap['seerah'].size;
-          }
-          if (catMap['akida']) {
-            stats.akida_bank = isLocalUser ? Math.max(stats.akida_bank, catMap['akida'].size) : catMap['akida'].size;
-          }
-          if (catMap['hadith']) {
-            stats.hadith_100 = isLocalUser ? Math.max(stats.hadith_100, catMap['hadith'].size) : catMap['hadith'].size;
-          }
-          if (catMap['tafseer']) {
-            stats.tafseer_100 = isLocalUser ? Math.max(stats.tafseer_100, catMap['tafseer'].size) : catMap['tafseer'].size;
-          }
-          if (catMap['history']) {
-            stats.history_conquests = isLocalUser ? Math.max(stats.history_conquests, catMap['history'].size) : catMap['history'].size;
-          }
-          if (catMap['arabic']) {
-            stats.arabic_language = isLocalUser ? Math.max(stats.arabic_language, catMap['arabic'].size) : catMap['arabic'].size;
-          }
-          if (catMap['ayah']) {
-            stats.ayah_100 = isLocalUser ? Math.max(stats.ayah_100, catMap['ayah'].size) : catMap['ayah'].size;
-          }
-          if (catMap['surah']) {
-            stats.surah_50 = isLocalUser ? Math.max(stats.surah_50, catMap['surah'].size) : catMap['surah'].size;
-          }
-        }
-      } catch (_) {}
+    // 2) إنجازات وتحديات المستخدم موثقة ومحسوبة مباشرة من جدول players وجدول challenges الفعليين في Supabase
+    // دون الحاجة لأي استعلامات إضافية لجداول غير موجودة
+    if (dbPlayer) {
+      if (dbPlayer.seerahCompleted || dbPlayer.activeFrame === 'seerah') {
+        stats.seerah_60 = 60;
+      }
+      if (dbPlayer.generalCompleted || dbPlayer.activeFrame === 'general') {
+        stats.figh_quiz = 100;
+      }
     }
 
     // 3) فحص تقدم المواضيع المكتملة محلياً للمستخدم المتصل فقط
