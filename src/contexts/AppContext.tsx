@@ -1394,7 +1394,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             authHeal.generalCompleted = true;
             p.generalCompleted = true;
           }
-          supabase.from('players').update(authHeal).eq('id', p.id).then(() => {}).catch(() => {});
+          supabase.from('players').update(authHeal).eq('id', p.id).then(() => {}, () => {});
         }
 
         if (p.seerahCompleted || p.generalCompleted) {
@@ -6037,7 +6037,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             else if (pUser) q = q.eq('username', pUser);
             else if (pName) q = q.eq('name', pName);
             else if (pId && /^\d+$/.test(pId)) q = q.eq('id', Number(pId));
-            q.then(() => {}).catch(() => {});
+            q.then(() => {}, () => {});
           }
         } catch (_) {}
 
@@ -6324,7 +6324,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           user.generalCompleted = true;
         }
         if (user.id) {
-          supabase.from('players').update(healUpdates).eq('id', user.id).then(() => {}).catch(() => {});
+          supabase.from('players').update(healUpdates).eq('id', user.id).then(() => {}, () => {});
         }
       }
 

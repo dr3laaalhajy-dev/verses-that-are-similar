@@ -358,7 +358,7 @@ export const AppRouter: React.FC = () => {
               q.then(() => {
                 window.dispatchEvent(new CustomEvent('milestones_updated'));
                 window.dispatchEvent(new CustomEvent('quran_certificates_updated'));
-              }).catch(err => console.error('Failed to update Supabase in AppRouter:', err));
+              }, err => console.error('Failed to update Supabase in AppRouter:', err));
             }
 
             if (app.playerUsername || app.playerName) {

@@ -589,7 +589,7 @@ export const GlobalOverlays: React.FC = () => {
                 q.then(() => {
                   window.dispatchEvent(new CustomEvent('milestones_updated'));
                   window.dispatchEvent(new CustomEvent('quran_certificates_updated'));
-                }).catch(err => console.error('Failed to update Supabase in GlobalOverlays:', err));
+                }, err => console.error('Failed to update Supabase in GlobalOverlays:', err));
               }
 
               if (app.playerUsername || app.playerName) {

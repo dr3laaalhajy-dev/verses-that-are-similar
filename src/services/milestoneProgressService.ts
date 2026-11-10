@@ -188,6 +188,7 @@ export function recordMilestoneAnswer(params: {
   questionId: string | number;
   isCorrect: boolean;
   userId?: string | null;
+  uniquePlayerId?: string | null;
 }) {
   // قاعدة حاسمة: أي إجابة خاطئة أو متخطاة (Skipped) تُتجاهل تماماً
   if (!params.isCorrect) {

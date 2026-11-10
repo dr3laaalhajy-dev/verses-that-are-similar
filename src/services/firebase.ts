@@ -62,7 +62,7 @@ export async function getFCMMessaging(): Promise<Messaging | null> {
  * Strictly follows Web Push standard & iOS Safari PWA requirements
  */
 export async function requestFCMToken(customVapidKey?: string): Promise<string | null> {
-  if (typeof window === 'undefined' || (!('Notification' in window) && !window.AndroidBridge) || !('serviceWorker' in navigator)) {
+  if (typeof window === 'undefined' || (!('Notification' in window) && !(window as any).AndroidBridge) || !('serviceWorker' in navigator)) {
     console.warn('[FCM] Notifications or Service Worker not supported.');
     return null;
   }
