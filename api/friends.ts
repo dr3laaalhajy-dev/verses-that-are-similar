@@ -596,32 +596,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       let seerahCount = 0;
       let fiqhCount = 0;
       try {
-        const candidateUserIds = [
-          target.uniquePlayerId,
-          target.username,
-          target.name,
-          target.id ? String(target.id) : null
-        ].filter(Boolean) as string[];
+        const canonicalUserId = String(
+          target.uniquePlayerId ||
+          (target.id ? String(target.id) : '')
+        ).trim();
 
-        const { data: answers } = await supabaseAdmin
-          .from('user_answers')
-          .select('category, question_id, is_correct')
-          .in('user_id', candidateUserIds)
-          .eq('is_correct', true);
+        if (canonicalUserId) {
+          const { data: answers } = await supabaseAdmin
+            .from('user_answers')
+            .select('category, question_id, is_correct')
+            .eq('user_id', canonicalUserId)
+            .eq('is_correct', true);
 
-        if (answers && Array.isArray(answers)) {
-          const seerahSet = new Set();
-          const fiqhSet = new Set();
-          answers.forEach((a: any) => {
-            const cat = String(a.category || '').toLowerCase();
-            if (cat === 'seerah' || cat === 'seerah_60' || cat === 'sirah') {
-              seerahSet.add(a.question_id);
-            } else if (cat === 'figh' || cat === 'figh_quiz' || cat === 'fiqh' || cat === 'general') {
-              fiqhSet.add(a.question_id);
-            }
-          });
-          seerahCount = seerahSet.size;
-          fiqhCount = fiqhSet.size;
+          if (answers && Array.isArray(answers)) {
+            const seerahSet = new Set();
+            const fiqhSet = new Set();
+            answers.forEach((a: any) => {
+              const cat = String(a.category || '').toLowerCase();
+              if (cat === 'seerah' || cat === 'seerah_60' || cat === 'sirah') {
+                seerahSet.add(a.question_id);
+              } else if (cat === 'figh' || cat === 'figh_quiz' || cat === 'fiqh' || cat === 'general') {
+                fiqhSet.add(a.question_id);
+              }
+            });
+            seerahCount = seerahSet.size;
+            fiqhCount = fiqhSet.size;
+          }
         }
       } catch (err) {
         console.error('[Friends Profile] Error querying user_answers:', err);
@@ -652,7 +652,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       }
 
-      if (seerahCount >= 60 || target.seerahCompleted) {
+      if (seerahCount >= 60 || target.seerahCompleted || target.activeFrame === 'seerah') {
         earnedCertificates.push({
           id: 'seerah_60',
           title: 'إتمام 60 سؤالاً في السيرة النبوية الشريفة',
@@ -664,7 +664,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       }
 
-      if (fiqhCount >= 100 || target.generalCompleted) {
+      if (fiqhCount >= 100 || target.generalCompleted || target.activeFrame === 'general') {
         earnedCertificates.push({
           id: 'figh_quiz',
           title: 'ختم مسابقة الفقه والمعلومات الإسلامية',

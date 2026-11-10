@@ -216,13 +216,15 @@ export function recordMilestoneAnswer(params: {
   }
 
   // ب) مزامنة مع قاعدة بيانات Supabase
-  const activeUser =
+  const activeUser = String(
+    params.uniquePlayerId ||
     params.userId ||
     (typeof window !== 'undefined' && (
-      localStorage.getItem('quran_player_username') ||
-      localStorage.getItem('quran_player_name') ||
+      localStorage.getItem('quran_unique_player_id') ||
       localStorage.getItem('quran_player_id')
-    ));
+    )) ||
+    ''
+  ).trim();
 
   if (activeUser) {
     try {
@@ -443,24 +445,21 @@ export async function fetchUserMilestones(params?: {
     }
 
     // 2) استعلام الإجابات الصحيحة فقط (is_correct === true) من Supabase
-    const searchUserIds = Array.from(
-      new Set(
-        [
-          dbPlayer?.uniquePlayerId,
-          dbPlayer?.username,
-          dbPlayer?.name,
-          dbPlayer?.id ? String(dbPlayer.id) : null,
-          ...candidateTargets
-        ].filter(Boolean) as string[]
-      )
-    );
+    // استخراج معرّف المستخدم الصريح والموحّد (String/UUID مثل MT-3CET أو ID الرقمي)
+    const targetUserId = String(
+      dbPlayer?.uniquePlayerId ||
+      params?.uniquePlayerId ||
+      (dbPlayer?.id ? String(dbPlayer.id) : '') ||
+      params?.userId ||
+      ''
+    ).trim();
 
-    if (searchUserIds.length > 0) {
+    if (targetUserId) {
       try {
         const { data: correctRows } = await supabase
           .from('user_answers')
           .select('category, question_id, is_correct')
-          .in('user_id', searchUserIds)
+          .eq('user_id', targetUserId)
           .eq('is_correct', true);
 
         if (correctRows && Array.isArray(correctRows)) {
