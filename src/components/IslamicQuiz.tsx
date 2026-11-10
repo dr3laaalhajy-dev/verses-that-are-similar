@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trophy, RotateCcw, ChevronLeft, CheckCircle2, XCircle, Award, Sparkles, Lock, Play, ChevronRight, Eye, ExternalLink, ArrowRight, Loader2 } from 'lucide-react';
+import { Trophy, RotateCcw, ChevronLeft, CheckCircle2, XCircle, Award, Sparkles, Lock, Play, ChevronRight, Eye, ExternalLink, ArrowRight, Loader2, WifiOff, Cloud } from 'lucide-react';
 import { quizQuestions } from '../data/quizQuestionsData';
 import { islamicCategoriesData, islamicCategoriesList, CategoryQuestion } from '../data/islamicCategories';
 import CertificateGenerator from './CertificateGenerator';
 import { recordMilestoneAnswer } from '../services/milestoneProgressService';
 import { supabase } from '../services/supabase';
+import { isOnline, enqueueSyncItem, syncOfflineData } from '../services/offlineSyncManager';
 
 const getStorageKey = (category: string | null) => `quran_quiz_progress_${category || 'general'}`;
 
@@ -31,6 +32,20 @@ const IslamicQuiz: React.FC<{
   const [isSavingProgress, setIsSavingProgress] = useState(false);
   const [certSaveSuccess, setCertSaveSuccess] = useState<boolean>(false);
   const [certSaveError, setCertSaveError] = useState<string | null>(null);
+  const [syncNotice, setSyncNotice] = useState<string | null>(null);
+
+  // مستمع لتحديث إشعار المزامنة عند عودة الاتصال ومزامنة البيانات المعلقة
+  useEffect(() => {
+    const handleSyncComplete = (e: any) => {
+      const count = e?.detail?.syncedCount;
+      if (count && count > 0) {
+        setSyncNotice('تمت مزامنة النتائج والشهادات بنجاح مع الخادم ☁️✅');
+        setTimeout(() => setSyncNotice(null), 5000);
+      }
+    };
+    window.addEventListener('offline_sync_completed', handleSyncComplete);
+    return () => window.removeEventListener('offline_sync_completed', handleSyncComplete);
+  }, []);
 
   // Check if selected category is one of the new Islamic categories from IslamicQuizAPI
   const isCustomCategory = !!(selectedCategory && selectedCategory in islamicCategoriesData);
@@ -67,7 +82,7 @@ const IslamicQuiz: React.FC<{
       localStorage.setItem(scoreKey, JSON.stringify(existing));
     } catch (_) {}
 
-    // 2. إرسال طلب الحفظ (Upsert) إلى جدول user_challenge_progress في Supabase
+    // 2. إرسال طلب الحفظ (Upsert) إلى جدول user_challenge_progress في Supabase أو وضعه في طابور الأوفلاين
     const pUnique = localStorage.getItem('quran_unique_player_id');
     const pUser = localStorage.getItem('quran_player_username');
     const pName = localStorage.getItem('quran_player_name');
@@ -76,19 +91,39 @@ const IslamicQuiz: React.FC<{
 
     if (!canonicalUserId) return;
 
+    const progressPayload = {
+      user_id: canonicalUserId,
+      category: cat,
+      group_num: groupNum,
+      level_num: levelNum,
+      correct_answers: correct,
+      wrong_answers: wrong,
+      is_passed: true,
+      updated_at: new Date().toISOString()
+    };
+
+    // التحقق من حالة الاتصال (Offline Sync Queue)
+    if (!isOnline()) {
+      enqueueSyncItem('GROUP_PROGRESS', progressPayload);
+      setSyncNotice('تم حفظ النتيجة محلياً وستتم مزامنتها عند عودة الاتصال');
+      return;
+    }
+
     try {
-      await supabase.from('user_challenge_progress').upsert({
-        user_id: canonicalUserId,
-        category: cat,
-        group_num: groupNum,
-        level_num: levelNum,
-        correct_answers: correct,
-        wrong_answers: wrong,
-        is_passed: true,
-        updated_at: new Date().toISOString()
-      }, { onConflict: 'user_id,category,group_num,level_num' });
+      const { error } = await supabase.from('user_challenge_progress').upsert(progressPayload, {
+        onConflict: 'user_id,category,group_num,level_num'
+      });
+      if (error) {
+        console.warn('[IslamicQuiz] user_challenge_progress upsert error, queueing offline:', error);
+        enqueueSyncItem('GROUP_PROGRESS', progressPayload);
+        setSyncNotice('تم حفظ النتيجة محلياً وستتم مزامنتها عند عودة الاتصال');
+      } else {
+        setSyncNotice(null);
+      }
     } catch (err) {
-      console.warn('[IslamicQuiz] user_challenge_progress upsert notice:', err);
+      console.warn('[IslamicQuiz] Network failure, queueing offline:', err);
+      enqueueSyncItem('GROUP_PROGRESS', progressPayload);
+      setSyncNotice('تم حفظ النتيجة محلياً وستتم مزامنتها عند عودة الاتصال');
     }
   };
 
@@ -107,16 +142,71 @@ const IslamicQuiz: React.FC<{
     const pId = localStorage.getItem('quran_player_id');
     const canonicalUserId = pUnique || (pId && /^\d+$/.test(pId) ? pId : null) || pUser || pName;
 
+    const serialNum = `${parseInt(realScore) || 100}-${pId || 'USR'}`;
+    const certPayload = {
+      user_id: canonicalUserId || 'local_user',
+      category: categoryToSave,
+      title: categoryToSave === 'seerah' ? 'ختم مسابقة السيرة النبوية الشريفة' : 'ختم مسابقة الفقه والمعلومات الإسلامية',
+      score: realScore,
+      total_correct: totalCorrect,
+      total_questions: totalQuestions,
+      serial: `MTN-${categoryToSave.toUpperCase()}-${serialNum}`,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    const updateData: Record<string, any> = {
+      updatedAt: new Date().toISOString()
+    };
+    if (categoryToSave === 'seerah') updateData.seerahCompleted = true;
+    if (categoryToSave === 'general') updateData.generalCompleted = true;
+
+    const playerIdFilter = [
+      pUnique ? `uniquePlayerId.eq.${pUnique}` : null,
+      pUser ? `username.eq.${pUser}` : null,
+      pName ? `name.eq.${pName}` : null,
+      (pId && /^\d+$/.test(pId)) ? `id.eq.${pId}` : null
+    ].filter(Boolean).join(',');
+
+    const storeCertificateLocally = () => {
+      const savedCerts = JSON.parse(localStorage.getItem('quran_user_certificates') || '[]');
+      const existingIdx = savedCerts.findIndex((c: any) => c.category === categoryToSave);
+      const certItem = {
+        category: categoryToSave,
+        date: new Date().toLocaleDateString('ar-SA'),
+        name: pName || 'البطل القرآني',
+        score: realScore,
+        totalCorrect,
+        totalQuestions
+      };
+      if (existingIdx >= 0) {
+        savedCerts[existingIdx] = { ...savedCerts[existingIdx], ...certItem };
+      } else {
+        savedCerts.push(certItem);
+      }
+      localStorage.setItem('quran_user_certificates', JSON.stringify(savedCerts));
+      window.dispatchEvent(new CustomEvent('milestones_updated'));
+      window.dispatchEvent(new CustomEvent('quran_certificates_updated'));
+    };
+
+    // في حالة انقطاع الإنترنت: الإدراج في طابور الأوفلاين مباشرة
+    if (!isOnline()) {
+      enqueueSyncItem('CERTIFICATE', {
+        certificate: certPayload,
+        playerUpdate: updateData,
+        playerIdFilter: playerIdFilter || undefined
+      });
+      storeCertificateLocally();
+      setCertSaveSuccess(true);
+      setSyncNotice('تم حفظ النتيجة محلياً وستتم مزامنتها عند عودة الاتصال');
+      setIsSavingProgress(false);
+      return true;
+    }
+
     let writeSucceeded = false;
     let writeError: any = null;
 
     try {
-      const updateData: Record<string, any> = {
-        updatedAt: new Date().toISOString()
-      };
-      if (categoryToSave === 'seerah') updateData.seerahCompleted = true;
-      if (categoryToSave === 'general') updateData.generalCompleted = true;
-
       if (pUnique || pUser || pName || pId) {
         let q = supabase.from('players').update(updateData);
         if (pUnique) q = q.eq('uniquePlayerId', pUnique);
@@ -130,22 +220,12 @@ const IslamicQuiz: React.FC<{
           console.error('[IslamicQuiz] Supabase save error:', error);
         } else if (data && data.length > 0) {
           writeSucceeded = true;
-        } else {
-          // If no rows updated with primary filter, fallback to .or()
-          const orFilter = [
-            pUnique ? `uniquePlayerId.eq.${pUnique}` : null,
-            pUser ? `username.eq.${pUser}` : null,
-            pName ? `name.eq.${pName}` : null,
-            (pId && /^\d+$/.test(pId)) ? `id.eq.${pId}` : null
-          ].filter(Boolean).join(',');
-
-          if (orFilter) {
-            const fallbackRes = await supabase.from('players').update(updateData).or(orFilter).select('id');
-            if (!fallbackRes.error && fallbackRes.data && fallbackRes.data.length > 0) {
-              writeSucceeded = true;
-            } else {
-              writeError = fallbackRes.error || new Error('Player row not found in database');
-            }
+        } else if (playerIdFilter) {
+          const fallbackRes = await supabase.from('players').update(updateData).or(playerIdFilter).select('id');
+          if (!fallbackRes.error && fallbackRes.data && fallbackRes.data.length > 0) {
+            writeSucceeded = true;
+          } else {
+            writeError = fallbackRes.error || new Error('Player row not found in database');
           }
         }
       } else {
@@ -156,58 +236,41 @@ const IslamicQuiz: React.FC<{
       // حفظ النسبة المئوية الحقيقية في جدول الشهادات (certificates) في Supabase
       if (canonicalUserId) {
         try {
-          const serialNum = `${parseInt(realScore) || 100}-${pId || 'USR'}`;
-          await supabase.from('certificates').upsert({
-            user_id: canonicalUserId,
-            category: categoryToSave,
-            title: categoryToSave === 'seerah' ? 'ختم مسابقة السيرة النبوية الشريفة' : 'ختم مسابقة الفقه والمعلومات الإسلامية',
-            score: realScore,
-            total_correct: totalCorrect,
-            total_questions: totalQuestions,
-            serial: `MTN-${categoryToSave.toUpperCase()}-${serialNum}`,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          }, { onConflict: 'user_id,category' });
+          const { error: certErr } = await supabase.from('certificates').upsert(certPayload, { onConflict: 'user_id,category' });
+          if (certErr) console.warn('[IslamicQuiz] certificates table upsert notice:', certErr);
         } catch (certErr) {
-          console.warn('[IslamicQuiz] certificates table upsert notice:', certErr);
+          console.warn('[IslamicQuiz] certificates table upsert error:', certErr);
         }
       }
 
       if (writeSucceeded) {
-        // 1. Update localStorage certificates with dynamic real score
-        const savedCerts = JSON.parse(localStorage.getItem('quran_user_certificates') || '[]');
-        const existingIdx = savedCerts.findIndex((c: any) => c.category === categoryToSave);
-        const certItem = {
-          category: categoryToSave,
-          date: new Date().toLocaleDateString('ar-SA'),
-          name: pName || 'البطل القرآني',
-          score: realScore,
-          totalCorrect,
-          totalQuestions
-        };
-        if (existingIdx >= 0) {
-          savedCerts[existingIdx] = { ...savedCerts[existingIdx], ...certItem };
-        } else {
-          savedCerts.push(certItem);
-        }
-        localStorage.setItem('quran_user_certificates', JSON.stringify(savedCerts));
-
-        // 2. Dispatch events for instant reactivity & cache invalidation across the app
-        window.dispatchEvent(new CustomEvent('milestones_updated'));
-        window.dispatchEvent(new CustomEvent('quran_certificates_updated'));
-
+        storeCertificateLocally();
         setCertSaveSuccess(true);
+        setSyncNotice(null);
         return true;
       } else {
-        setCertSaveSuccess(false);
-        setCertSaveError(writeError?.message || 'تعذر تأكيد حفظ التحدي في قاعدة البيانات');
-        return false;
+        // إذا فشل الاتصال بقاعدة البيانات، الحفظ في طابور الأوفلاين
+        enqueueSyncItem('CERTIFICATE', {
+          certificate: certPayload,
+          playerUpdate: updateData,
+          playerIdFilter: playerIdFilter || undefined
+        });
+        storeCertificateLocally();
+        setCertSaveSuccess(true);
+        setSyncNotice('تم حفظ النتيجة محلياً وستتم مزامنتها عند عودة الاتصال');
+        return true;
       }
     } catch (e: any) {
-      console.error('[IslamicQuiz] Error saving certificate to DB:', e);
-      setCertSaveSuccess(false);
-      setCertSaveError(e?.message || 'حدث خطأ أثناء الاتصال بالخادم لحفظ الإنجاز');
-      return false;
+      console.warn('[IslamicQuiz] Network error saving certificate, enqueued offline:', e);
+      enqueueSyncItem('CERTIFICATE', {
+        certificate: certPayload,
+        playerUpdate: updateData,
+        playerIdFilter: playerIdFilter || undefined
+      });
+      storeCertificateLocally();
+      setCertSaveSuccess(true);
+      setSyncNotice('تم حفظ النتيجة محلياً وستتم مزامنتها عند عودة الاتصال');
+      return true;
     } finally {
       setIsSavingProgress(false);
 
@@ -352,6 +415,55 @@ const IslamicQuiz: React.FC<{
                 return next;
               });
             }
+          }
+        }
+
+        // استعادة تقدم المجموعات من جدول user_challenge_progress في Supabase
+        const canonicalUserId = pUnique || (pId && /^\d+$/.test(pId) ? pId : null) || pUser || pName;
+        if (canonicalUserId && selectedCategory) {
+          try {
+            const { data: progressRows } = await supabase
+              .from('user_challenge_progress')
+              .select('group_num, correct_answers, wrong_answers, is_passed')
+              .eq('user_id', canonicalUserId)
+              .eq('category', selectedCategory);
+
+            if (progressRows && progressRows.length > 0) {
+              const scoreKey = `quran_group_scores_${selectedCategory}`;
+              let existing: Record<number, { correct: number, wrong: number }> = {};
+              try {
+                existing = JSON.parse(localStorage.getItem(scoreKey) || '{}');
+              } catch (_) {}
+
+              let maxPassedGroup = 0;
+              for (const row of progressRows) {
+                if (row.is_passed) {
+                  existing[row.group_num] = {
+                    correct: row.correct_answers ?? 12,
+                    wrong: row.wrong_answers ?? 0
+                  };
+                  if (row.group_num > maxPassedGroup) {
+                    maxPassedGroup = row.group_num;
+                  }
+                }
+              }
+              localStorage.setItem(scoreKey, JSON.stringify(existing));
+
+              if (maxPassedGroup > 0) {
+                const nextGroupToUnlock = maxPassedGroup + 1;
+                setUnlockedLevels(prev => {
+                  const next = {
+                    ...prev,
+                    easy: Math.max(prev.easy || 1, nextGroupToUnlock),
+                    ...(isGeneral ? { hard: Math.max(prev.hard || 1, nextGroupToUnlock) } : {})
+                  };
+                  localStorage.setItem(getStorageKey(selectedCategory), JSON.stringify(next));
+                  return next;
+                });
+              }
+            }
+          } catch (progressErr) {
+            console.warn('[IslamicQuiz] Could not query user_challenge_progress:', progressErr);
           }
         }
       } catch (err) {
@@ -517,7 +629,7 @@ const IslamicQuiz: React.FC<{
 
         // شرط 2: إذا كان عدد الإجابات الصحيحة 12 فما فوق: قم بإرسال طلب الحفظ (Upsert) إلى Supabase،
         // وتخزين الـ correct_answers والـ wrong_answers الخاصة بهذه المجموعة تحديداً
-        saveGroupProgressToDB(
+        await saveGroupProgressToDB(
           selectedCategory,
           selectedGroup,
           correctAnswers,
@@ -1234,7 +1346,19 @@ const IslamicQuiz: React.FC<{
           <div className={`text-6xl font-black mb-4 tabular-nums ${percentage >= 60 ? 'text-emerald-600' : 'text-amber-500'}`}>
             {score}/{questions.length}
           </div>
-          <p className="text-base text-slate-600 font-bold mb-8 leading-relaxed">{message}</p>
+          <p className="text-base text-slate-600 font-bold mb-6 leading-relaxed">{message}</p>
+
+          {/* تنبيه حالة الحفظ وطابور الأوفلاين */}
+          {syncNotice && (
+            <motion.div
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex items-center justify-center gap-2 py-3 px-4 bg-amber-50 border border-amber-200 text-amber-900 rounded-2xl text-xs font-bold mb-6 shadow-sm"
+            >
+              <WifiOff className="w-4 h-4 text-amber-600 flex-shrink-0" />
+              <span>{syncNotice}</span>
+            </motion.div>
+          )}
 
           <div className="flex flex-col gap-3 mt-4">
             {isPassed && selectedGroup === (isSeerah ? 3 : 5) && (

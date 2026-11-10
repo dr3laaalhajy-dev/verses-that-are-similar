@@ -2,6 +2,10 @@ import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
+import { initOfflineSyncManager } from './services/offlineSyncManager';
+
+// تشغيل نظام المزامنة الأوفلاين التلقائي فور بدء تشغيل التطبيق
+initOfflineSyncManager();
 
 // Route relative /api/ calls to the live server when running packaged inside Capacitor
 const originalFetch = window.fetch.bind(window);
