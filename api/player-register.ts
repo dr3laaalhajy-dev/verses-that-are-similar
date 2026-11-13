@@ -12,6 +12,7 @@ import {
   findPlayerRow,
   findUsernameOwnerId,
   stripAt,
+  isPlayerBlocked,
   MIN_NEW_PASSWORD_LENGTH,
   NO_PASSWORD_MESSAGE,
   NEW_PASSWORD_TOO_SHORT_MESSAGE
@@ -127,7 +128,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const token = extractBearerToken(req);
       if (token) {
         try {
-          await revokeSessionByToken(token);
+          await revokeSessionByToken(token, 'logout');
         } catch (e: any) {
           console.error('[player-register] logout revoke failed:', e?.message ?? 'unknown');
         }
@@ -157,7 +158,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       }
 
-      if ((player as any).isBlocked) {
+      if (isPlayerBlocked(player)) {
         return res.status(403).json({
           error: 'تم حظر هذا الحساب من تسجيل الدخول من قِبل إدارة التطبيق'
         });
@@ -252,7 +253,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const current = await authenticatePlayer(req);
       const keepSessionId = current && current.playerId === Number(player.id) ? current.sessionId : undefined;
       try {
-        await revokeAllPlayerSessions(Number(player.id), { exceptSessionId: keepSessionId });
+        await revokeAllPlayerSessions(Number(player.id), 'password_changed', { exceptSessionId: keepSessionId });
       } catch (e: any) {
         console.error('[player-register] revoke after password change failed:', e?.message ?? 'unknown');
       }
@@ -411,7 +412,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // Revoke all sessions first (the FK also deletes them with the player row).
       try {
-        await revokeAllPlayerSessions(Number(player.id));
+        await revokeAllPlayerSessions(Number(player.id), 'account_deleted');
       } catch (e: any) {
         console.error('[player-register] revoke before account deletion failed:', e?.message ?? 'unknown');
       }

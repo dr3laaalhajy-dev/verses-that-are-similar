@@ -100,6 +100,11 @@ export function toSafePlayer(row: any): any {
   return out;
 }
 
+/** Single rule for "this player may not use the app" (login and session checks share it). */
+export function isPlayerBlocked(row: any): boolean {
+  return Boolean(row?.isBlocked);
+}
+
 export const SAFE_ADMIN_FIELDS = [
   'id',
   'username',

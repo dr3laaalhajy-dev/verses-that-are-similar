@@ -1,6 +1,7 @@
 /**
- * Player sessions: issue, verify, expiry, revoke, sliding renewal, max sessions, no token leaks,
- * and the /api/player-register wiring (login, register, change-password, delete-account, logout).
+ * Player sessions: issue, verify, expiry, revoke reasons, sliding renewal, one active session
+ * per player (SESSION_REPLACED), blocked players, no token leaks, and the /api/player-register
+ * wiring (login, register, change-password, delete-account, logout).
  * Fully offline (in-memory fake DB). Run with:
  *   node --import tsx --experimental-test-module-mocks --test tests/player-sessions.test.ts
  */
@@ -34,6 +35,11 @@ class FakeDb {
   failError: any = null;
   from(t: string) { return new Query(this, t); }
   rows(t: string) { return (this.tables[t] ||= []); }
+  /** Seeds players (unblocked unless stated) so session checks can find them. */
+  withPlayers(...ids: number[]) {
+    for (const id of ids) this.rows('players').push({ id, name: `P${id}`, isBlocked: false });
+    return this;
+  }
 }
 
 class Query {
@@ -41,13 +47,13 @@ class Query {
   private op: 'select' | 'update' | 'insert' | 'delete' = 'select';
   private payload: any = null;
   private max = Infinity;
-  private wantRows = false;
   constructor(private db: FakeDb, private table: string) {}
-  select(_c?: string) { this.wantRows = true; return this; }
+  select(_c?: string) { return this; }
   eq(c: string, v: any) { this.filters.push(r => r[c] === v); return this; }
   neq(c: string, v: any) { this.filters.push(r => r[c] !== v); return this; }
   is(c: string, v: any) { this.filters.push(r => (r[c] ?? null) === v); return this; }
   gt(c: string, v: any) { this.filters.push(r => String(r[c]) > String(v)); return this; }
+  lte(c: string, v: any) { this.filters.push(r => String(r[c]) <= String(v)); return this; }
   in(c: string, vs: any[]) { this.filters.push(r => vs.includes(r[c])); return this; }
   ilike(c: string, p: string) { const re = likeToRegex(p); this.filters.push(r => typeof r[c] === 'string' && re.test(r[c])); return this; }
   or(_s: string) { this.filters.push(() => false); return this; }
@@ -67,7 +73,9 @@ class Query {
           return { data: null, error: { code: '23505', message: 'duplicate key', details: `Key (token_hash)=(${item.token_hash}) already exists.` } };
         }
         const id = this.table === 'player_sessions' ? `sess-${++this.db.seq}` : all.length + 1;
-        const row = { id, revoked_at: null, ...item };
+        const row = this.table === 'player_sessions'
+          ? { id, revoked_at: null, revoked_reason: null, ...item }
+          : { id, ...item };
         all.push(row);
         out.push({ ...row });
       }
@@ -133,11 +141,28 @@ before(async () => {
 
 beforeEach(() => { sharedDb = new FakeDb(); });
 
+/** requirePlayer and return {status, body, ctx}. */
+async function check(token: string | null, deps: any = {}) {
+  const res = mockRes();
+  const req = token ? bearer(token) : { headers: {} };
+  const ctx = await S.requirePlayer(req as any, res as any, deps);
+  return { status: res.statusCode, body: res.body, ctx };
+}
+
 // ---------------------------------------------------------------------------
 // Unit: playerSession.ts
 // ---------------------------------------------------------------------------
+test('defaults: one active session per player; REQUIRE_PLAYER_TOKEN off', () => {
+  assert.equal(S.MAX_ACTIVE_PLAYER_SESSIONS, 1);
+  assert.deepEqual([...S.REVOKE_REASONS], ['replaced', 'logout', 'password_changed', 'account_deleted']);
+  assert.equal(S.isPlayerTokenRequired({}), false);
+  assert.equal(S.isPlayerTokenRequired({ REQUIRE_PLAYER_TOKEN: 'false' }), false);
+  assert.equal(S.isPlayerTokenRequired({ REQUIRE_PLAYER_TOKEN: 'true' }), true);
+  assert.equal(S.isPlayerTokenRequired({ REQUIRE_PLAYER_TOKEN: ' ON ' }), true);
+});
+
 test('issue: 32-byte base64url token; DB stores only its SHA-256 hash', async () => {
-  const db = new FakeDb(); const clock = makeClock();
+  const db = new FakeDb().withPlayers(7); const clock = makeClock();
   const { token, expiresAt } = await S.issuePlayerSession(7, { db, now: clock.now });
   assert.match(token, /^[A-Za-z0-9_-]{43}$/);
   assert.equal(Buffer.from(token, 'base64url').length, 32);
@@ -149,77 +174,52 @@ test('issue: 32-byte base64url token; DB stores only its SHA-256 hash', async ()
   assert.equal(rows[0].player_id, 7);
 });
 
-test('issue: two sessions never share a token', async () => {
-  const db = new FakeDb();
-  const a = await S.issuePlayerSession(1, { db });
-  const b = await S.issuePlayerSession(1, { db });
-  assert.notEqual(a.token, b.token);
-});
-
 test('issue: rejects invalid player ids', async () => {
   for (const bad of [0, -1, 1.5, NaN, '3' as any, null as any]) {
     await assert.rejects(() => S.issuePlayerSession(bad, { db: new FakeDb() }), /invalid player id/);
   }
 });
 
-test('verify: valid Bearer token -> player id', async () => {
-  const db = new FakeDb(); const clock = makeClock();
+test('verify: valid token -> player id; requirePlayer passes through', async () => {
+  const db = new FakeDb().withPlayers(42); const clock = makeClock();
   const { token } = await S.issuePlayerSession(42, { db, now: clock.now });
-  const ctx = await S.authenticatePlayer(bearer(token), { db, now: clock.now });
-  assert.equal(ctx?.playerId, 42);
-  assert.equal(ctx?.sessionId, db.rows('player_sessions')[0].id);
+  const r = await check(token, { db, now: clock.now });
+  assert.equal(r.ctx?.playerId, 42);
+  assert.equal(r.ctx?.sessionId, db.rows('player_sessions')[0].id);
+  assert.equal(r.body, undefined);
 });
 
-test('verify: missing/malformed/unknown tokens -> null', async () => {
-  const db = new FakeDb();
+test('verify: missing/malformed/unknown -> 401 { code: SESSION_INVALID } and nothing else', async () => {
+  const db = new FakeDb().withPlayers(42);
   const { token } = await S.issuePlayerSession(42, { db });
-  const cases = [
-    { headers: {} },
-    { headers: { authorization: token } },                       // no "Bearer"
-    { headers: { authorization: `Basic ${token}` } },
-    { headers: { authorization: 'Bearer ' } },
-    { headers: { authorization: `Bearer ${token}x` } },          // wrong length
-    { headers: { authorization: `Bearer ${token.slice(0, 42)}!` } },
-    bearer('A'.repeat(43)),                                       // well-formed but unknown
+  const headerCases = [
+    {},
+    { authorization: token },                                  // no "Bearer"
+    { authorization: `Basic ${token}` },
+    { authorization: 'Bearer ' },
+    { authorization: `Bearer ${token}x` },                     // wrong length
+    { authorization: `Bearer ${token.slice(0, 42)}!` },
+    { authorization: `Bearer ${'A'.repeat(43)}` },             // well-formed but unknown
   ];
-  for (const req of cases) assert.equal(await S.authenticatePlayer(req as any, { db }), null);
+  for (const headers of headerCases) {
+    const res = mockRes();
+    assert.equal(await S.requirePlayer({ headers } as any, res as any, { db }), null);
+    assert.equal(res.statusCode, 401);
+    assert.deepEqual(res.body, { code: 'SESSION_INVALID' });
+  }
 });
 
-test('expiry: token stops working after 30 days without use', async () => {
-  const db = new FakeDb(); const clock = makeClock();
+test('expiry: 30 days without use -> SESSION_INVALID', async () => {
+  const db = new FakeDb().withPlayers(5); const clock = makeClock();
   const { token } = await S.issuePlayerSession(5, { db, now: clock.now });
-  clock.advance(S.SESSION_TTL_MS - 1000);
-  // Look without renewing: read row directly to confirm it's still valid just before expiry.
-  assert.ok(Date.parse(db.rows('player_sessions')[0].expires_at) > clock.now());
-  clock.advance(2000);
-  assert.equal(await S.authenticatePlayer(bearer(token), { db, now: clock.now }), null);
-});
-
-test('revoke: revoked token -> null (logout path)', async () => {
-  const db = new FakeDb(); const clock = makeClock();
-  const { token } = await S.issuePlayerSession(5, { db, now: clock.now });
-  assert.equal(await S.revokeSessionByToken(token, { db, now: clock.now }), true);
-  assert.equal(await S.authenticatePlayer(bearer(token), { db, now: clock.now }), null);
-  assert.equal(await S.revokeSessionByToken(token, { db, now: clock.now }), false, 'second revoke is a no-op');
-  assert.equal(await S.revokeSessionByToken('not-a-token', { db }), false);
-});
-
-test('revoke all: keeps only the excepted session', async () => {
-  const db = new FakeDb();
-  const a = await S.issuePlayerSession(9, { db });
-  const b = await S.issuePlayerSession(9, { db });
-  const other = await S.issuePlayerSession(10, { db });
-  const ctxA = await S.authenticatePlayer(bearer(a.token), { db });
-  assert.equal(await S.revokeAllPlayerSessions(9, { exceptSessionId: ctxA!.sessionId }, { db }), 1);
-  assert.ok(await S.authenticatePlayer(bearer(a.token), { db }));
-  assert.equal(await S.authenticatePlayer(bearer(b.token), { db }), null);
-  assert.ok(await S.authenticatePlayer(bearer(other.token), { db }), 'other players untouched');
-  assert.equal(await S.revokeAllPlayerSessions(9, {}, { db }), 1);
-  assert.equal(await S.authenticatePlayer(bearer(a.token), { db }), null);
+  clock.advance(S.SESSION_TTL_MS + 1000);
+  const r = await check(token, { db, now: clock.now });
+  assert.equal(r.status, 401);
+  assert.deepEqual(r.body, { code: 'SESSION_INVALID' });
 });
 
 test('sliding renewal: use extends expiry to now+30d; no write within the touch interval', async () => {
-  const db = new FakeDb(); const clock = makeClock();
+  const db = new FakeDb().withPlayers(3); const clock = makeClock();
   const { token } = await S.issuePlayerSession(3, { db, now: clock.now });
   const row = db.rows('player_sessions')[0];
 
@@ -228,83 +228,126 @@ test('sliding renewal: use extends expiry to now+30d; no write within the touch 
   assert.equal(Date.parse(row.expires_at), clock.now() + S.SESSION_TTL_MS);
   assert.equal(Date.parse(row.last_used_at), clock.now());
 
-  const before = row.expires_at;
+  const prev = row.expires_at;
   clock.advance(S.SESSION_TOUCH_INTERVAL_MS - 1);
   assert.ok(await S.authenticatePlayer(bearer(token), { db, now: clock.now }));
-  assert.equal(row.expires_at, before, 'no renewal write inside the interval');
+  assert.equal(row.expires_at, prev, 'no renewal write inside the interval');
 
   clock.advance(25 * DAY); // 45 days after creation, but used within the last 30
   assert.ok(await S.authenticatePlayer(bearer(token), { db, now: clock.now }), 'still valid thanks to renewal');
 });
 
-test(`max sessions: at most ${10} active per player, oldest revoked`, async () => {
-  const db = new FakeDb(); const clock = makeClock();
+test('two devices: second login revokes the first (reason replaced -> SESSION_REPLACED); second stays valid', async () => {
+  const db = new FakeDb().withPlayers(11, 12); const clock = makeClock();
+  const deviceA = await S.issuePlayerSession(11, { db, now: clock.now });
+  clock.advance(1000);
+  const deviceB = await S.issuePlayerSession(11, { db, now: clock.now });
+  const other = await S.issuePlayerSession(12, { db, now: clock.now });
+
+  const a = await check(deviceA.token, { db, now: clock.now });
+  assert.equal(a.status, 401);
+  assert.deepEqual(a.body, { code: 'SESSION_REPLACED' });
+  assert.equal(db.rows('player_sessions').find(r => r.token_hash === sha(deviceA.token)).revoked_reason, 'replaced');
+
+  assert.equal((await check(deviceB.token, { db, now: clock.now })).ctx?.playerId, 11);
+  assert.equal((await check(other.token, { db, now: clock.now })).ctx?.playerId, 12, 'other players untouched');
+  assert.equal(db.rows('player_sessions').filter(r => r.player_id === 11 && !r.revoked_at).length, 1);
+});
+
+test('same-millisecond logins: the newer login still revokes the older one', async () => {
+  const db = new FakeDb().withPlayers(13); const clock = makeClock();
+  const first = await S.issuePlayerSession(13, { db, now: clock.now });
+  const second = await S.issuePlayerSession(13, { db, now: clock.now });
+  assert.deepEqual((await check(first.token, { db, now: clock.now })).body, { code: 'SESSION_REPLACED' });
+  assert.ok((await check(second.token, { db, now: clock.now })).ctx);
+});
+
+test('limit override (maxActiveSessions) keeps the newest N', async () => {
+  const db = new FakeDb().withPlayers(14); const clock = makeClock();
   const tokens: string[] = [];
-  for (let i = 0; i < S.MAX_ACTIVE_SESSIONS + 2; i++) {
+  for (let i = 0; i < 5; i++) {
     clock.advance(1000);
-    tokens.push((await S.issuePlayerSession(11, { db, now: clock.now })).token);
+    tokens.push((await S.issuePlayerSession(14, { db, now: clock.now, maxActiveSessions: 3 })).token);
   }
   const active = db.rows('player_sessions').filter(r => !r.revoked_at);
-  assert.equal(active.length, S.MAX_ACTIVE_SESSIONS);
-  assert.equal(await S.authenticatePlayer(bearer(tokens[0]), { db, now: clock.now }), null, 'oldest revoked');
-  assert.equal(await S.authenticatePlayer(bearer(tokens[1]), { db, now: clock.now }), null, '2nd oldest revoked');
-  assert.ok(await S.authenticatePlayer(bearer(tokens[2]), { db, now: clock.now }));
-  assert.ok(await S.authenticatePlayer(bearer(tokens.at(-1)!), { db, now: clock.now }));
-  // Other players are not counted
-  await S.issuePlayerSession(12, { db, now: clock.now });
-  assert.equal(db.rows('player_sessions').filter(r => r.player_id === 11 && !r.revoked_at).length, S.MAX_ACTIVE_SESSIONS);
+  assert.equal(active.length, 3);
+  assert.deepEqual((await check(tokens[0], { db, now: clock.now })).body, { code: 'SESSION_REPLACED' });
+  assert.deepEqual((await check(tokens[1], { db, now: clock.now })).body, { code: 'SESSION_REPLACED' });
+  assert.ok((await check(tokens[4], { db, now: clock.now })).ctx);
 });
 
-test('requirePlayer: bare 401 without details; context when valid', async () => {
-  const db = new FakeDb();
-  const res = mockRes();
-  assert.equal(await S.requirePlayer({ headers: {} } as any, res as any, { db }), null);
-  assert.equal(res.statusCode, 401);
-  assert.deepEqual(res.body, { error: 'Unauthorized' });
-
-  const { token } = await S.issuePlayerSession(8, { db });
-  await S.revokeSessionByToken(token, { db });
-  const res2 = mockRes();
-  assert.equal(await S.requirePlayer(bearer(token) as any, res2 as any, { db }), null);
-  assert.deepEqual(res2.body, { error: 'Unauthorized' }, 'revoked looks identical to missing');
-
-  const fresh = await S.issuePlayerSession(8, { db });
-  const res3 = mockRes();
-  const ctx = await S.requirePlayer(bearer(fresh.token) as any, res3 as any, { db });
-  assert.equal(ctx?.playerId, 8);
-  assert.equal(res3.body, undefined);
+test('revoke reasons: logout / password_changed / account_deleted all -> SESSION_INVALID', async () => {
+  for (const reason of ['logout', 'password_changed', 'account_deleted'] as const) {
+    const db = new FakeDb().withPlayers(5);
+    const { token } = await S.issuePlayerSession(5, { db });
+    if (reason === 'logout') assert.equal(await S.revokeSessionByToken(token, 'logout', { db }), true);
+    else assert.equal(await S.revokeAllPlayerSessions(5, reason, {}, { db }), 1);
+    assert.equal(db.rows('player_sessions')[0].revoked_reason, reason);
+    const r = await check(token, { db });
+    assert.equal(r.status, 401);
+    assert.deepEqual(r.body, { code: 'SESSION_INVALID' }, `${reason} must not reveal the reason`);
+  }
 });
 
-test('no leaks: DB errors that echo the hash never reach error messages or logs', async () => {
-  const db = new FakeDb(); const clock = makeClock();
+test('revoke: second logout is a no-op; garbage token ignored; unknown reason rejected', async () => {
+  const db = new FakeDb().withPlayers(5);
+  const { token } = await S.issuePlayerSession(5, { db });
+  assert.equal(await S.revokeSessionByToken(token, 'logout', { db }), true);
+  assert.equal(await S.revokeSessionByToken(token, 'logout', { db }), false);
+  assert.equal(db.rows('player_sessions')[0].revoked_reason, 'logout', 'reason not overwritten');
+  assert.equal(await S.revokeSessionByToken('not-a-token', 'logout', { db }), false);
+  await assert.rejects(() => S.revokeAllPlayerSessions(5, 'hacked' as any, {}, { db }), /invalid revoke reason/);
+});
+
+test('revoke all: exceptSessionId keeps the caller', async () => {
+  const db = new FakeDb().withPlayers(9);
+  const a = await S.issuePlayerSession(9, { db, maxActiveSessions: 5 });
+  const b = await S.issuePlayerSession(9, { db, maxActiveSessions: 5 });
+  const ctxA = await S.authenticatePlayer(bearer(a.token), { db });
+  assert.equal(await S.revokeAllPlayerSessions(9, 'password_changed', { exceptSessionId: ctxA!.sessionId }, { db }), 1);
+  assert.ok(await S.authenticatePlayer(bearer(a.token), { db }));
+  assert.equal(await S.authenticatePlayer(bearer(b.token), { db }), null);
+});
+
+test('blocked player: valid session is rejected (SESSION_INVALID); unblocking restores it', async () => {
+  const db = new FakeDb().withPlayers(21);
+  const { token } = await S.issuePlayerSession(21, { db });
+  db.rows('players')[0].isBlocked = true;
+  const r = await check(token, { db });
+  assert.equal(r.status, 401);
+  assert.deepEqual(r.body, { code: 'SESSION_INVALID' });
+  db.rows('players')[0].isBlocked = false;
+  assert.equal((await check(token, { db })).ctx?.playerId, 21);
+});
+
+test('deleted player: session rejected even if the row was not revoked', async () => {
+  const db = new FakeDb().withPlayers(22);
+  const { token } = await S.issuePlayerSession(22, { db });
+  db.tables.players = [];
+  assert.deepEqual((await check(token, { db })).body, { code: 'SESSION_INVALID' });
+});
+
+test('no leaks: DB errors that echo the hash never reach error messages, logs or responses', async () => {
+  const db = new FakeDb().withPlayers(4); const clock = makeClock();
   const { token } = await S.issuePlayerSession(4, { db, now: clock.now });
   const hash = sha(token);
-  // Simulate PostgREST echoing the value back in its error.
   db.failTable = 'player_sessions';
   db.failError = { code: '23505', message: `dup ${hash} ${token}`, details: `Key (token_hash)=(${hash})`, hint: token };
 
-  const { result: err, logs } = await captureLogs(async () => {
+  const { result, logs } = await captureLogs(async () => {
     const e1 = await S.issuePlayerSession(4, { db, now: clock.now }).then(() => null, (e: Error) => e);
-    const ctx = await S.authenticatePlayer(bearer(token), { db, now: clock.now });
-    const e2 = await S.revokeSessionByToken(token, { db }).then(() => null, (e: Error) => e);
-    const e3 = await S.revokeAllPlayerSessions(4, {}, { db }).then(() => null, (e: Error) => e);
-    assert.equal(ctx, null);
-    return [e1, e2, e3];
+    const r = await check(token, { db, now: clock.now });
+    const e2 = await S.revokeSessionByToken(token, 'logout', { db }).then(() => null, (e: Error) => e);
+    const e3 = await S.revokeAllPlayerSessions(4, 'password_changed', {}, { db }).then(() => null, (e: Error) => e);
+    return { errors: [e1, e2, e3], r };
   });
-  for (const e of err) {
+  for (const e of result.errors) {
     assert.ok(e instanceof Error);
     assert.ok(!e.message.includes(hash) && !e.message.includes(token), `leak in: ${e.message}`);
     assert.match(e.message, /code 23505/);
   }
+  assert.deepEqual(result.r.body, { code: 'SESSION_INVALID' });
   assert.ok(!logs.includes(hash) && !logs.includes(token), 'leak in logs');
-});
-
-test('REQUIRE_PLAYER_TOKEN is off by default', () => {
-  assert.equal(S.isPlayerTokenRequired({}), false);
-  assert.equal(S.isPlayerTokenRequired({ REQUIRE_PLAYER_TOKEN: '' }), false);
-  assert.equal(S.isPlayerTokenRequired({ REQUIRE_PLAYER_TOKEN: 'false' }), false);
-  assert.equal(S.isPlayerTokenRequired({ REQUIRE_PLAYER_TOKEN: 'true' }), true);
-  assert.equal(S.isPlayerTokenRequired({ REQUIRE_PLAYER_TOKEN: ' ON ' }), true);
 });
 
 // ---------------------------------------------------------------------------
@@ -316,25 +359,49 @@ async function call(body: any, headers: Record<string, string> = {}) {
   return res;
 }
 
-function seedPlayer(id: number, username: string, password: string) {
+function seedPlayer(id: number, username: string, password: string, isBlocked = false) {
   sharedDb.rows('players').push({
     id, name: `Player ${id}`, username, uniquePlayerId: `MT-P${id}`,
-    password: bcrypt.hashSync(password, 4), isBlocked: false,
+    password: bcrypt.hashSync(password, 4), isBlocked,
   });
 }
 
-test('login returns a playerToken that verifies; response has no hash', async () => {
+const sessionRow = (token: string) => sharedDb.rows('player_sessions').find(r => r.token_hash === sha(token));
+
+test('login returns a playerToken that verifies; response/logs have no hash', async () => {
   seedPlayer(1, 'alice', 'secret-pass');
   const { result: res, logs } = await captureLogs(() => call({ action: 'login', username: 'alice', password: 'secret-pass' }));
   assert.equal(res.statusCode, 200);
   assert.match(res.body.playerToken, /^[A-Za-z0-9_-]{43}$/);
   assert.ok(Date.parse(res.body.playerTokenExpiresAt) > Date.now());
   assert.equal(res.body.player.password, undefined);
-  const ctx = await S.authenticatePlayer(bearer(res.body.playerToken));
-  assert.equal(ctx?.playerId, 1);
+  assert.equal((await S.authenticatePlayer(bearer(res.body.playerToken)))?.playerId, 1);
   const hash = sha(res.body.playerToken);
   assert.ok(!JSON.stringify(res.body).includes(hash));
   assert.ok(!logs.includes(res.body.playerToken) && !logs.includes(hash));
+});
+
+test('login from two devices: first gets SESSION_REPLACED, second stays valid', async () => {
+  seedPlayer(1, 'alice', 'secret-pass');
+  const phone = (await call({ action: 'login', username: 'alice', password: 'secret-pass' })).body.playerToken;
+  const tablet = (await call({ action: 'login', username: 'alice', password: 'secret-pass' })).body.playerToken;
+  const r1 = await check(phone);
+  assert.equal(r1.status, 401);
+  assert.deepEqual(r1.body, { code: 'SESSION_REPLACED' });
+  assert.equal(sessionRow(phone).revoked_reason, 'replaced');
+  assert.equal((await check(tablet)).ctx?.playerId, 1);
+});
+
+test('blocked player: login refused (403, no token) and an existing session is rejected', async () => {
+  seedPlayer(1, 'alice', 'secret-pass');
+  const token = (await call({ action: 'login', username: 'alice', password: 'secret-pass' })).body.playerToken;
+  sharedDb.rows('players')[0].isBlocked = true;
+  const r = await check(token);
+  assert.equal(r.status, 401);
+  assert.deepEqual(r.body, { code: 'SESSION_INVALID' });
+  const login = await call({ action: 'login', username: 'alice', password: 'secret-pass' });
+  assert.equal(login.statusCode, 403);
+  assert.equal(login.body.playerToken, undefined);
 });
 
 test('wrong password: no token issued', async () => {
@@ -348,8 +415,7 @@ test('wrong password: no token issued', async () => {
 test('register returns a playerToken', async () => {
   const res = await call({ name: 'Bob Test', username: 'bob', password: 'bob-pass-1' });
   assert.equal(res.statusCode, 200);
-  const ctx = await S.authenticatePlayer(bearer(res.body.playerToken));
-  assert.equal(ctx?.playerId, res.body.player.id);
+  assert.equal((await S.authenticatePlayer(bearer(res.body.playerToken)))?.playerId, res.body.player.id);
 });
 
 test('login still succeeds (without token) if the sessions table is unavailable', async () => {
@@ -362,30 +428,33 @@ test('login still succeeds (without token) if the sessions table is unavailable'
   assert.equal(res.body.playerToken, undefined);
 });
 
-test('change-password with own token: other sessions revoked, current kept', async () => {
+test('change-password with own token: other sessions revoked with password_changed, caller kept', async () => {
   seedPlayer(1, 'alice', 'old-pass-1');
-  const t1 = (await call({ action: 'login', username: 'alice', password: 'old-pass-1' })).body.playerToken;
-  const t2 = (await call({ action: 'login', username: 'alice', password: 'old-pass-1' })).body.playerToken;
+  const mine = (await call({ action: 'login', username: 'alice', password: 'old-pass-1' })).body.playerToken;
+  // Another still-active session (e.g. created before the 1-session limit, or a concurrent login).
+  const extra = await S.issuePlayerSession(1, { db: proxyDb, maxActiveSessions: 5 });
   const res = await call(
     { action: 'change-password', username: 'alice', currentPassword: 'old-pass-1', newPassword: 'new-pass-2' },
-    { authorization: `Bearer ${t1}` }
+    { authorization: `Bearer ${mine}` }
   );
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.playerToken, undefined, 'caller keeps its own token');
-  assert.ok(await S.authenticatePlayer(bearer(t1)));
-  assert.equal(await S.authenticatePlayer(bearer(t2)), null);
+  assert.ok((await check(mine)).ctx);
+  assert.equal(sessionRow(extra.token).revoked_reason, 'password_changed');
+  assert.deepEqual((await check(extra.token)).body, { code: 'SESSION_INVALID' });
 });
 
-test('change-password without token (old app): all sessions revoked, fresh token returned', async () => {
+test('change-password without token (old app): all revoked with password_changed, fresh token returned', async () => {
   seedPlayer(1, 'alice', 'old-pass-1');
   const t1 = (await call({ action: 'login', username: 'alice', password: 'old-pass-1' })).body.playerToken;
   const res = await call({ action: 'change-password', username: 'alice', currentPassword: 'old-pass-1', newPassword: 'new-pass-2' });
   assert.equal(res.statusCode, 200);
-  assert.equal(await S.authenticatePlayer(bearer(t1)), null);
-  assert.ok(await S.authenticatePlayer(bearer(res.body.playerToken)));
+  assert.equal(sessionRow(t1).revoked_reason, 'password_changed', 'not "replaced"');
+  assert.deepEqual((await check(t1)).body, { code: 'SESSION_INVALID' });
+  assert.ok((await check(res.body.playerToken)).ctx);
 });
 
-test("change-password with ANOTHER player's token does not keep that token's player sessions alive", async () => {
+test("change-password with ANOTHER player's token: that token is not kept for alice", async () => {
   seedPlayer(1, 'alice', 'old-pass-1');
   seedPlayer(2, 'mallory', 'mal-pass-1');
   const ta = (await call({ action: 'login', username: 'alice', password: 'old-pass-1' })).body.playerToken;
@@ -395,33 +464,30 @@ test("change-password with ANOTHER player's token does not keep that token's pla
     { authorization: `Bearer ${tm}` }
   );
   assert.equal(res.statusCode, 200);
-  assert.equal(await S.authenticatePlayer(bearer(ta)), null, "alice's old session revoked");
-  assert.ok(await S.authenticatePlayer(bearer(tm)), "mallory's own session untouched");
+  assert.equal(sessionRow(ta).revoked_reason, 'password_changed');
+  assert.ok((await check(tm)).ctx, "mallory's own session untouched");
   assert.ok(res.body.playerToken, 'alice gets a fresh token');
 });
 
-test('logout revokes only the current session; idempotent; no token -> still 200', async () => {
+test('logout: revokes the current session with reason logout; idempotent; no token -> still 200', async () => {
   seedPlayer(1, 'alice', 'secret-pass');
   const t1 = (await call({ action: 'login', username: 'alice', password: 'secret-pass' })).body.playerToken;
-  const t2 = (await call({ action: 'login', username: 'alice', password: 'secret-pass' })).body.playerToken;
   const res = await call({ action: 'logout' }, { authorization: `Bearer ${t1}` });
   assert.equal(res.statusCode, 200);
   assert.deepEqual(res.body, { success: true });
-  assert.equal(await S.authenticatePlayer(bearer(t1)), null);
-  assert.ok(await S.authenticatePlayer(bearer(t2)));
+  assert.equal(sessionRow(t1).revoked_reason, 'logout');
+  assert.deepEqual((await check(t1)).body, { code: 'SESSION_INVALID' });
   assert.equal((await call({ action: 'logout' }, { authorization: `Bearer ${t1}` })).statusCode, 200);
   assert.deepEqual((await call({ action: 'logout' })).body, { success: true });
 });
 
-test('delete-account revokes all sessions of that player', async () => {
+test('delete-account: sessions revoked with account_deleted', async () => {
   seedPlayer(1, 'alice', 'secret-pass');
   const t1 = (await call({ action: 'login', username: 'alice', password: 'secret-pass' })).body.playerToken;
-  const t2 = (await call({ action: 'login', username: 'alice', password: 'secret-pass' })).body.playerToken;
   const res = await call({ action: 'delete-account', username: 'alice', password: 'secret-pass' });
   assert.equal(res.statusCode, 200);
-  assert.equal(await S.authenticatePlayer(bearer(t1)), null);
-  assert.equal(await S.authenticatePlayer(bearer(t2)), null);
-  assert.ok(sharedDb.rows('player_sessions').every(r => r.revoked_at));
+  assert.equal(sessionRow(t1).revoked_reason, 'account_deleted');
+  assert.deepEqual((await check(t1)).body, { code: 'SESSION_INVALID' });
 });
 
 test('old endpoints still work without a token (enforcement off)', async () => {

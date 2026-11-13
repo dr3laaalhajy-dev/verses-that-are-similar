@@ -338,12 +338,28 @@ CREATE TABLE IF NOT EXISTS public.player_sessions (
   last_used_at timestamptz NOT NULL DEFAULT now(),
   expires_at   timestamptz NOT NULL,
   revoked_at   timestamptz,
+  revoked_reason text,
   CONSTRAINT player_sessions_pkey PRIMARY KEY (id),
   CONSTRAINT player_sessions_token_hash_key UNIQUE (token_hash),
   CONSTRAINT player_sessions_token_hash_format CHECK (token_hash ~ '^[0-9a-f]{64}$'),
   CONSTRAINT player_sessions_player_id_fkey FOREIGN KEY (player_id)
     REFERENCES public.players(id) ON DELETE CASCADE
 );
+ALTER TABLE public.player_sessions ADD COLUMN IF NOT EXISTS revoked_reason text;
+DO $do$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'public.player_sessions'::regclass
+      AND conname = 'player_sessions_revoked_reason_check'
+  ) THEN
+    ALTER TABLE public.player_sessions
+      ADD CONSTRAINT player_sessions_revoked_reason_check
+      CHECK (revoked_reason IS NULL
+             OR revoked_reason IN ('replaced', 'logout', 'password_changed', 'account_deleted'));
+  END IF;
+END
+$do$;
 
 -- ربط الـ sequences بأعمدتها (مثل الإنتاج: owned_by)
 ALTER SEQUENCE public.admin_codes_id_seq        OWNED BY public.admin_codes.id;
