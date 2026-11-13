@@ -20,6 +20,10 @@ import {
   withPlayerAuthorization,
   installApiFetch,
   __resetSessionEndingForTests,
+  checkPlayerSession,
+  startSessionChecks,
+  SESSION_CHECK_MIN_INTERVAL_MS,
+  __resetSessionCheckForTests,
 } from '../src/lib/playerSession.ts';
 
 // A realistic-shaped fake token (43 base64url chars). Not a real credential.
@@ -56,6 +60,7 @@ beforeEach(() => {
     };
   }
   __resetSessionEndingForTests();
+  __resetSessionCheckForTests();
 });
 afterEach(() => {
   for (const m of consoleMethods) (console as any)[m] = originals[m];
@@ -445,5 +450,159 @@ describe('the token stays in one place', () => {
     const { fileURLToPath } = await import('node:url');
     const src = readFileSync(fileURLToPath(new URL('../src/lib/playerSession.ts', import.meta.url)), 'utf8');
     assert.equal(/console\./.test(src), false);
+  });
+});
+
+describe('check-session (client)', () => {
+  function setup(responder: (url: string, init?: RequestInit) => Response | Promise<Response>) {
+    const local = new MemoryStorage();
+    const session = new MemoryStorage();
+    savePlayerSession({ playerToken: TOKEN }, local);
+    const ended: string[] = [];
+    const { target, calls } = fakeTarget(responder);
+    installApiFetch(target, {
+      storage: local,
+      onSessionEnded: (code) => {
+        ended.push(code);
+        endPlayerSessionLocally(code, { local, session, redirect: () => {} });
+      },
+    });
+    let clock = 1_000_000;
+    const deps = { fetchImpl: (u: string, i?: RequestInit) => target.fetch(u, i), storage: local, now: () => clock };
+    return { local, session, ended, calls, deps, advance: (ms: number) => (clock += ms) };
+  }
+
+  it('sends action check-session through the wrapper, with the token in the header', async () => {
+    const t = setup(() => jsonResponse(200, { ok: true }));
+    assert.equal(await checkPlayerSession(t.deps), 'ok');
+    assert.equal(t.calls.length, 1);
+    assert.equal(t.calls[0].url, '/api/player-register');
+    assert.equal(t.calls[0].init!.method, 'POST');
+    assert.deepEqual(JSON.parse(String(t.calls[0].init!.body)), { action: 'check-session' });
+    assert.equal(authOf(t.calls[0].init), `Bearer ${TOKEN}`);
+    assert.deepEqual(t.ended, []);
+    assert.equal(getPlayerToken(t.local), TOKEN);
+  });
+
+  for (const code of ['SESSION_REPLACED', 'SESSION_INVALID'] as const) {
+    it(`401 ${code}: the player is logged out with the matching message`, async () => {
+      const t = setup(() => jsonResponse(401, { code }));
+      assert.equal(await checkPlayerSession(t.deps), 'ended');
+      await flush();
+      assert.deepEqual(t.ended, [code]);
+      assert.equal(getPlayerToken(t.local), null);
+      assert.equal(takeSessionEndedMessage(t.session), SESSION_ENDED_MESSAGES[code]);
+    });
+  }
+
+  it('network failure never logs the player out', async () => {
+    const t = setup(() => Promise.reject(new TypeError('Failed to fetch')));
+    assert.equal(await checkPlayerSession(t.deps), 'error');
+    await flush();
+    assert.deepEqual(t.ended, []);
+    assert.equal(getPlayerToken(t.local), TOKEN);
+  });
+
+  it('server errors and other 401s never log the player out', async () => {
+    for (const res of [jsonResponse(500, { error: 'x' }), jsonResponse(401, { message: 'nope' }), new Response('<html>', { status: 502 })]) {
+      __resetSessionCheckForTests();
+      const t = setup(() => res);
+      assert.equal(await checkPlayerSession(t.deps), 'error');
+      await flush();
+      assert.deepEqual(t.ended, []);
+      assert.equal(getPlayerToken(t.local), TOKEN);
+    }
+  });
+
+  it('no stored token (old app): no request at all', async () => {
+    let called = 0;
+    const r = await checkPlayerSession({
+      storage: new MemoryStorage(),
+      fetchImpl: async () => { called++; return jsonResponse(200, {}); },
+    });
+    assert.equal(r, 'skipped');
+    assert.equal(called, 0);
+  });
+
+  it('at most one call per 30 seconds (also after a failure)', async () => {
+    assert.equal(SESSION_CHECK_MIN_INTERVAL_MS, 30_000);
+    let fail = true;
+    const t = setup(() => (fail ? Promise.reject(new TypeError('offline')) : jsonResponse(200, { ok: true })));
+    assert.equal(await checkPlayerSession(t.deps), 'error');
+    fail = false;
+    assert.equal(await checkPlayerSession(t.deps), 'skipped');
+    t.advance(29_999);
+    assert.equal(await checkPlayerSession(t.deps), 'skipped');
+    t.advance(1);
+    assert.equal(await checkPlayerSession(t.deps), 'ok');
+    assert.equal(await checkPlayerSession(t.deps), 'skipped');
+    assert.equal(t.calls.length, 2);
+  });
+});
+
+describe('startSessionChecks', () => {
+  function fakeWindow(withAppPlugin = false) {
+    const listeners: Record<string, Function[]> = {};
+    const appListeners: Function[] = [];
+    const doc: any = {
+      visibilityState: 'visible',
+      addEventListener: (name: string, fn: Function) => (listeners[name] ||= []).push(fn),
+    };
+    const win: any = { document: doc };
+    if (withAppPlugin) {
+      win.Capacitor = { Plugins: { App: { addListener: (name: string, fn: Function) => name === 'appStateChange' && appListeners.push(fn) } } };
+    }
+    const fire = (name: string) => (listeners[name] || []).forEach((fn) => fn());
+    return { win, doc, fire, appListeners };
+  }
+
+  it('checks once at start, then only when the app becomes visible / resumes', () => {
+    const { win, doc, fire } = fakeWindow();
+    let runs = 0;
+    startSessionChecks(win, async () => { runs++; });
+    assert.equal(runs, 1, 'at start');
+    doc.visibilityState = 'hidden';
+    fire('visibilitychange');
+    assert.equal(runs, 1, 'going to background does not check');
+    doc.visibilityState = 'visible';
+    fire('visibilitychange');
+    assert.equal(runs, 2);
+    fire('resume');
+    assert.equal(runs, 3, 'Capacitor native resume event');
+  });
+
+  it('uses the Capacitor App plugin appStateChange when available', () => {
+    const { win, appListeners } = fakeWindow(true);
+    let runs = 0;
+    startSessionChecks(win, async () => { runs++; });
+    assert.equal(appListeners.length, 1);
+    appListeners[0]({ isActive: false });
+    assert.equal(runs, 1);
+    appListeners[0]({ isActive: true });
+    assert.equal(runs, 2);
+  });
+
+  it('installs listeners only once and never polls', async () => {
+    const { win, fire } = fakeWindow();
+    let runs = 0;
+    startSessionChecks(win, async () => { runs++; });
+    startSessionChecks(win, async () => { runs += 100; });
+    await new Promise((r) => setTimeout(r, 50));
+    assert.equal(runs, 1);
+    fire('resume');
+    assert.equal(runs, 2);
+  });
+
+  it('a failing check never throws out of the listener', () => {
+    const { win, fire } = fakeWindow();
+    startSessionChecks(win, () => Promise.reject(new Error('boom')));
+    assert.doesNotThrow(() => fire('resume'));
+  });
+
+  it('the helper has no timers for session checks (no polling)', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { fileURLToPath } = await import('node:url');
+    const src = readFileSync(fileURLToPath(new URL('../src/lib/playerSession.ts', import.meta.url)), 'utf8');
+    assert.equal(/setInterval/.test(src), false);
   });
 });

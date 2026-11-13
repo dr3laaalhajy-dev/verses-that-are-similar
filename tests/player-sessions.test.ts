@@ -496,3 +496,80 @@ test('old endpoints still work without a token (enforcement off)', async () => {
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.player.name, 'Alice Renamed');
 });
+
+// ---------------------------------------------------------------------------
+// action: 'check-session'
+// ---------------------------------------------------------------------------
+
+test('check-session: valid token -> 200 { ok: true }', async () => {
+  seedPlayer(1, 'alice', 'secret-pass');
+  const t = (await call({ action: 'login', username: 'alice', password: 'secret-pass' })).body.playerToken;
+  const res = await call({ action: 'check-session' }, { authorization: `Bearer ${t}` });
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.body, { ok: true });
+});
+
+test('check-session: no Authorization header (old app) -> 200 { ok: true, anonymous: true }', async () => {
+  const res = await call({ action: 'check-session' });
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(res.body, { ok: true, anonymous: true });
+});
+
+test('check-session: replaced by a login on another device -> 401 SESSION_REPLACED', async () => {
+  seedPlayer(1, 'alice', 'secret-pass');
+  const phone = (await call({ action: 'login', username: 'alice', password: 'secret-pass' })).body.playerToken;
+  const tablet = (await call({ action: 'login', username: 'alice', password: 'secret-pass' })).body.playerToken;
+  const r1 = await call({ action: 'check-session' }, { authorization: `Bearer ${phone}` });
+  assert.equal(r1.statusCode, 401);
+  assert.deepEqual(r1.body, { code: 'SESSION_REPLACED' });
+  const r2 = await call({ action: 'check-session' }, { authorization: `Bearer ${tablet}` });
+  assert.deepEqual([r2.statusCode, r2.body], [200, { ok: true }]);
+});
+
+test('check-session: logout / password change / deleted / blocked / unknown / malformed -> 401 SESSION_INVALID only', async () => {
+  const expectInvalid = async (authorization: string) => {
+    const r = await call({ action: 'check-session' }, { authorization });
+    assert.equal(r.statusCode, 401);
+    assert.deepEqual(r.body, { code: 'SESSION_INVALID' }, 'no extra details');
+  };
+
+  seedPlayer(1, 'alice', 'secret-pass');
+  const t1 = (await call({ action: 'login', username: 'alice', password: 'secret-pass' })).body.playerToken;
+  await call({ action: 'logout' }, { authorization: `Bearer ${t1}` });
+  await expectInvalid(`Bearer ${t1}`);
+
+  const t2 = (await call({ action: 'login', username: 'alice', password: 'secret-pass' })).body.playerToken;
+  await call({ action: 'change-password', username: 'alice', currentPassword: 'secret-pass', newPassword: 'new-pass-2' });
+  await expectInvalid(`Bearer ${t2}`);
+
+  const t3 = (await call({ action: 'login', username: 'alice', password: 'new-pass-2' })).body.playerToken;
+  sharedDb.rows('players')[0].isBlocked = true;
+  await expectInvalid(`Bearer ${t3}`);
+  sharedDb.rows('players')[0].isBlocked = false;
+
+  const t4 = (await call({ action: 'login', username: 'alice', password: 'new-pass-2' })).body.playerToken;
+  await call({ action: 'delete-account', username: 'alice', password: 'new-pass-2' });
+  await expectInvalid(`Bearer ${t4}`);
+
+  await expectInvalid(`Bearer ${'Q'.repeat(43)}`); // well-formed but unknown
+  await expectInvalid('Bearer not-a-token'); // header present but malformed: not "anonymous"
+  await expectInvalid('Basic abc');
+});
+
+test('check-session: expired token -> 401 SESSION_INVALID', async () => {
+  seedPlayer(1, 'alice', 'secret-pass');
+  const t = (await call({ action: 'login', username: 'alice', password: 'secret-pass' })).body.playerToken;
+  sessionRow(t).expires_at = new Date(Date.now() - 1000).toISOString();
+  const r = await call({ action: 'check-session' }, { authorization: `Bearer ${t}` });
+  assert.deepEqual([r.statusCode, r.body], [401, { code: 'SESSION_INVALID' }]);
+});
+
+test('check-session: DB failure -> 401 SESSION_INVALID without leaking details', async () => {
+  seedPlayer(1, 'alice', 'secret-pass');
+  const t = (await call({ action: 'login', username: 'alice', password: 'secret-pass' })).body.playerToken;
+  sharedDb.failTable = 'player_sessions';
+  sharedDb.failError = { code: '42P01', message: 'relation "player_sessions" does not exist' };
+  const { result: r, logs } = await captureLogs(() => call({ action: 'check-session' }, { authorization: `Bearer ${t}` }));
+  assert.deepEqual([r.statusCode, r.body], [401, { code: 'SESSION_INVALID' }]);
+  assert.ok(!logs.includes(t));
+});

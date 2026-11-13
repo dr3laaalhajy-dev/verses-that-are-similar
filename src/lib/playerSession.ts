@@ -308,7 +308,94 @@ export function installApiFetch(target: any, options: InstallApiFetchOptions = {
   target.__matinApiFetchInstalled = true;
 }
 
+// ---------------------------------------------------------------------------
+// Session check (app start + return from background; never periodic)
+// ---------------------------------------------------------------------------
+
+export const SESSION_CHECK_MIN_INTERVAL_MS = 30 * 1000;
+
+let lastSessionCheckAt: number | null = null;
+
+export type SessionCheckResult = 'skipped' | 'ok' | 'ended' | 'error';
+
+export interface SessionCheckDeps {
+  /** Must be the wrapped fetch (default: window.fetch), so the 401 handling above applies. */
+  fetchImpl?: (input: string, init?: RequestInit) => Promise<Response>;
+  storage?: StorageLike | null;
+  now?: () => number;
+}
+
+/**
+ * Asks the server whether this device's session is still valid (action 'check-session').
+ * - No stored token: nothing is sent.
+ * - At most one call per SESSION_CHECK_MIN_INTERVAL_MS.
+ * - Ending the session is done by the fetch wrapper, only for SESSION_REPLACED / SESSION_INVALID.
+ *   A network failure or any other answer never logs the player out.
+ */
+export async function checkPlayerSession(deps: SessionCheckDeps = {}): Promise<SessionCheckResult> {
+  const storage = deps.storage === undefined ? defaultLocal() : deps.storage;
+  if (!getPlayerToken(storage)) return 'skipped';
+  const nowMs = (deps.now ?? Date.now)();
+  if (lastSessionCheckAt !== null && nowMs - lastSessionCheckAt < SESSION_CHECK_MIN_INTERVAL_MS) return 'skipped';
+  lastSessionCheckAt = nowMs;
+
+  const fetchImpl =
+    deps.fetchImpl ??
+    ((input: string, init?: RequestInit) =>
+      typeof window !== 'undefined' ? window.fetch(input, init) : Promise.reject(new Error('no fetch')));
+  try {
+    const res = await fetchImpl('/api/player-register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'check-session' }),
+    });
+    if (res.ok) return 'ok';
+    return (await readSessionEndCode(res)) ? 'ended' : 'error';
+  } catch {
+    return 'error';
+  }
+}
+
+/**
+ * Runs checkPlayerSession at app start and whenever the app comes back to the foreground:
+ * document visibilitychange -> visible, Capacitor's native "resume" document event, and the
+ * Capacitor App plugin's appStateChange (isActive) when that plugin is present.
+ */
+export function startSessionChecks(
+  target: any = typeof window !== 'undefined' ? window : undefined,
+  check: () => Promise<unknown> = () => checkPlayerSession()
+): void {
+  if (!target || target.__matinSessionChecksStarted) return;
+  target.__matinSessionChecksStarted = true;
+  const run = () => {
+    check().catch(() => {});
+  };
+  const doc = target.document;
+
+  run();
+
+  doc?.addEventListener?.('visibilitychange', () => {
+    if (doc.visibilityState === 'visible') run();
+  });
+  doc?.addEventListener?.('resume', run);
+  try {
+    const appPlugin = target.Capacitor?.Plugins?.App;
+    if (appPlugin && typeof appPlugin.addListener === 'function') {
+      appPlugin.addListener('appStateChange', (state: any) => {
+        if (state?.isActive) run();
+      });
+    }
+  } catch {
+    // plugin not available
+  }
+}
+
 /** Test helper: allows endPlayerSessionLocally to run again. */
 export function __resetSessionEndingForTests(): void {
   sessionEnding = false;
+}
+
+/** Test helper: forgets the last session-check time. */
+export function __resetSessionCheckForTests(): void {
+  lastSessionCheckAt = null;
 }

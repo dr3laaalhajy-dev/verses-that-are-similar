@@ -20,6 +20,7 @@ import {
 import {
   issuePlayerSession,
   authenticatePlayer,
+  verifyPlayerSession,
   revokeAllPlayerSessions,
   revokeSessionByToken,
   extractBearerToken,
@@ -135,6 +136,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
       // Same answer whether or not a session existed (nothing to learn from it).
       return res.status(200).json({ success: true });
+    }
+
+    // ==========================================
+    // 0b. CHECK-SESSION (فحص الجلسة عند فتح التطبيق أو العودة إليه)
+    // ==========================================
+    // Never enforces anything: a request without an Authorization header (old app) is fine.
+    // With a header, the answer is exactly what requirePlayer would give.
+    if (action === 'check-session') {
+      res.setHeader('Cache-Control', 'no-store');
+      if (!req.headers?.authorization) {
+        return res.status(200).json({ ok: true, anonymous: true });
+      }
+      const check = await verifyPlayerSession(req);
+      if (check.ok === false) {
+        return res.status(401).json({ code: check.code });
+      }
+      return res.status(200).json({ ok: true });
     }
 
     // ==========================================
