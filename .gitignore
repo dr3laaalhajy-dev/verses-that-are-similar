@@ -11,3 +11,6 @@ coverage/
 .vercel
 .env*.local
 *.apk
+
+# Local backup folder (never commit)
+_old_neon_backup/

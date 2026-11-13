@@ -3,6 +3,7 @@ import { supabaseAdmin } from './_lib/supabaseAdmin.js';
 import { handleCors } from './_lib/cors.js';
 import { getOrGenerateUniquePlayerId } from './_lib/uniquePlayerId.js';
 import { compareLeaderboardUsers, LeaderboardUser } from './_lib/ranking.js';
+import { findPlayerRow, toSafePlayer } from './_lib/playerSecurity.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (handleCors(req, res)) return;
@@ -120,27 +121,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const numId = Number(playerId);
 
     try {
-      const orConditions: string[] = [];
-      if (cleanUnique) orConditions.push(`uniquePlayerId.eq.${cleanUnique}`);
-      if (cleanU) {
-        orConditions.push(`username.eq.${cleanU}`);
-        orConditions.push(`username.eq.@${cleanU}`);
-      }
-      if (cleanN) orConditions.push(`name.ilike.${cleanN}`);
-      if (Number.isInteger(numId) && numId > 0) orConditions.push(`id.eq.${numId}`);
-
-      if (orConditions.length === 0) {
+      if (!cleanUnique && !cleanU && !cleanN && !(Number.isInteger(numId) && numId > 0)) {
         return res.status(400).json({ message: 'Missing search parameter' });
       }
 
-      const { data: player, error: fetchErr } = await supabaseAdmin
-        .from('players')
-        .select('*')
-        .or(orConditions.join(','))
-        .limit(1)
-        .maybeSingle();
+      const player = await findPlayerRow(supabaseAdmin, {
+        id: numId,
+        uniquePlayerId: cleanUnique,
+        username: cleanU,
+        name: cleanN
+      });
 
-      if (fetchErr || !player) {
+      if (!player) {
         return res.status(404).json({ message: 'Player not found' });
       }
 
@@ -153,7 +145,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       }
 
-      return res.status(200).json(player);
+      return res.status(200).json(toSafePlayer(player));
     } catch (err: any) {
       console.error('Player Fetch Error:', err);
       return res.status(500).json({ error: 'Failed to fetch player stats', message: err.message });
@@ -181,24 +173,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       if (roomErr || !room) return res.status(404).json({ error: 'Room not found' });
 
-      const cleanP = String(playerId).trim().replace(/^@+/, '');
-      const numId = Number(playerId);
+      const player = await findPlayerRow(supabaseAdmin, {
+        id: playerId,
+        username: playerId,
+        name: playerId
+      });
 
-      const orParts: string[] = [
-        `username.eq.${cleanP}`,
-        `username.eq.@${cleanP}`,
-        `name.ilike.${String(playerId).trim()}`
-      ];
-      if (Number.isInteger(numId) && numId > 0) orParts.push(`id.eq.${numId}`);
-
-      const { data: player, error: playerErr } = await supabaseAdmin
-        .from('players')
-        .select('*')
-        .or(orParts.join(','))
-        .limit(1)
-        .maybeSingle();
-
-      if (playerErr || !player) return res.status(404).json({ error: 'Player not found' });
+      if (!player) return res.status(404).json({ error: 'Player not found' });
 
       let playersProgress = (room.playersProgress as any) || {};
       if (!playersProgress[player.id]) {
@@ -237,22 +218,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const orConditions: string[] = [];
-    if (cleanU) {
-      orConditions.push(`username.eq.${cleanU}`);
-      orConditions.push(`username.eq.@${cleanU}`);
-    }
-    if (cleanN) orConditions.push(`name.ilike.${cleanN}`);
-    if (Number.isInteger(numId) && numId > 0) orConditions.push(`id.eq.${numId}`);
+    const player = await findPlayerRow(supabaseAdmin, {
+      id: numId,
+      username: cleanU,
+      name: cleanN
+    });
 
-    const { data: player, error: fetchErr } = await supabaseAdmin
-      .from('players')
-      .select('*')
-      .or(orConditions.join(','))
-      .limit(1)
-      .maybeSingle();
-
-    if (fetchErr || !player) {
+    if (!player) {
       return res.status(404).json({ message: 'Player not found' });
     }
 
@@ -342,11 +314,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         console.error('Supabase update player score error:', updateErr.message);
         return res.status(500).json({ error: 'Failed to update score', message: updateErr.message });
       }
-      return res.status(200).json(updatedPlayer);
+      return res.status(200).json(toSafePlayer(updatedPlayer));
     }
 
     // If no updates needed, return current player
-    return res.status(200).json(player);
+    return res.status(200).json(toSafePlayer(player));
   } catch (error: any) {
     console.error('Score Update Error:', error);
     return res.status(500).json({ 

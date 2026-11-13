@@ -3,6 +3,16 @@ import { supabaseAdmin } from './_lib/supabaseAdmin.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
+import {
+  hashPassword,
+  isSafeFilterValue,
+  isAcceptableNewUsername,
+  findUsernameOwnerId,
+  toSafePlayer,
+  toSafeAdmin,
+  MIN_NEW_PASSWORD_LENGTH,
+  NEW_PASSWORD_TOO_SHORT_MESSAGE
+} from './_lib/playerSecurity.js';
 
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET && process.env.NODE_ENV === 'production') {
@@ -12,8 +22,28 @@ const EFFECTIVE_JWT_SECRET = JWT_SECRET || 'dev-fallback-local-only-change-me-im
 
 const RESERVED_USERNAMES = ['alaa', 'علاء', 'founder', 'المؤسس', 'superadmin', 'admin', 'root', 'system'];
 
-function sanitizeFilterValue(val: string): string {
-  return (val || '').replace(/[,()%*\\\"']/g, '').trim();
+/**
+ * Finds an admin by username without filter injection:
+ * exact .eq() first, then a case-insensitive .ilike() only when the value is filter-safe.
+ */
+async function findAdminByUsername(username: string, columns: string) {
+  const clean = (username || '').trim();
+  if (!clean) return null;
+  const { data: exact } = await supabaseAdmin
+    .from('admins')
+    .select(columns)
+    .eq('username', clean)
+    .limit(1)
+    .maybeSingle();
+  if (exact) return exact as any;
+  if (!isSafeFilterValue(clean)) return null;
+  const { data: ci } = await supabaseAdmin
+    .from('admins')
+    .select(columns)
+    .ilike('username', clean)
+    .limit(1)
+    .maybeSingle();
+  return (ci as any) || null;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -101,19 +131,13 @@ async function handleLogin(req: VercelRequest, res: VercelResponse) {
   const { username, password } = req.body || {};
   if (!username || !password) return res.status(400).json({ message: 'اسم المستخدم وكلمة المرور مطلوبة' });
 
-  const rawUsername = (username || '').trim();
+  const rawUsername = String(username || '').trim();
   const cleanUsername = rawUsername.replace(/^@+/, '');
-  const safeUser = sanitizeFilterValue(cleanUsername);
 
   try {
-    const { data: admin } = await supabaseAdmin
-      .from('admins')
-      .select('id, username, name, password, role, isSuperAdmin, canManageUsers')
-      .ilike('username', safeUser)
-      .limit(1)
-      .maybeSingle();
+    const admin = await findAdminByUsername(cleanUsername, 'id, username, name, password, role, isSuperAdmin, canManageUsers');
 
-    if (!admin || !(await bcrypt.compare(password, admin.password))) {
+    if (!admin || typeof admin.password !== 'string' || !admin.password || !(await bcrypt.compare(String(password), admin.password))) {
       return res.status(401).json({ message: 'بيانات الدخول غير صحيحة' });
     }
 
@@ -145,9 +169,12 @@ async function handleRegister(req: VercelRequest, res: VercelResponse) {
   const { username, password, code, name } = req.body || {};
   if (!username || !password || !code) return res.status(400).json({ message: 'جميع الحقول مطلوبة' });
 
-  const rawUsername = (username || '').trim();
+  const rawUsername = String(username || '').trim();
   const cleanUsername = rawUsername.replace(/^@+/, '');
-  const safeUser = sanitizeFilterValue(cleanUsername);
+
+  if (!isAcceptableNewUsername(cleanUsername)) {
+    return res.status(400).json({ message: 'اسم المستخدم يحتوي على رموز غير مسموحة' });
+  }
 
   if (RESERVED_USERNAMES.includes(cleanUsername.toLowerCase())) {
     return res.status(400).json({ message: 'اسم مستخدم غير متاح أو محجوز' });
@@ -168,12 +195,7 @@ async function handleRegister(req: VercelRequest, res: VercelResponse) {
 
     if (!adminCode) return res.status(400).json({ message: 'كود التسجيل غير صحيح أو تم استخدامه مسبقاً' });
 
-    const { data: existing } = await supabaseAdmin
-      .from('admins')
-      .select('id')
-      .ilike('username', safeUser)
-      .limit(1)
-      .maybeSingle();
+    const existing = await findAdminByUsername(cleanUsername, 'id');
 
     if (existing) return res.status(409).json({ message: 'اسم المستخدم موجود مسبقاً' });
 
@@ -285,9 +307,12 @@ async function handleManage(req: VercelRequest, res: VercelResponse, currentAdmi
     const { username, password, role: targetRole, isSuperAdmin, name } = req.body || {};
     if (!username || !password) return res.status(400).json({ message: 'اسم المستخدم وكلمة المرور مطلوبة' });
 
-    const rawUsername = (username || '').trim();
+    const rawUsername = String(username || '').trim();
     const cleanUsername = rawUsername.replace(/^@+/, '');
-    const safeUser = sanitizeFilterValue(cleanUsername);
+
+    if (!isAcceptableNewUsername(cleanUsername)) {
+      return res.status(400).json({ message: 'اسم المستخدم يحتوي على رموز غير مسموحة' });
+    }
 
     if (RESERVED_USERNAMES.includes(cleanUsername.toLowerCase())) {
       return res.status(400).json({ message: 'اسم مستخدم غير متاح أو محجوز' });
@@ -297,12 +322,7 @@ async function handleManage(req: VercelRequest, res: VercelResponse, currentAdmi
       return res.status(400).json({ message: 'كلمة المرور يجب أن لا تقل عن 8 خانات' });
     }
 
-    const { data: existing } = await supabaseAdmin
-      .from('admins')
-      .select('id')
-      .ilike('username', safeUser)
-      .limit(1)
-      .maybeSingle();
+    const existing = await findAdminByUsername(cleanUsername, 'id');
 
     if (existing) return res.status(409).json({ message: 'اسم المستخدم موجود مسبقاً' });
 
@@ -423,7 +443,11 @@ async function handleChangePassword(req: VercelRequest, res: VercelResponse, cur
 
 async function handleUsers(req: VercelRequest, res: VercelResponse, currentAdmin: any) {
   if (req.method === 'GET') {
-    const search = sanitizeFilterValue(req.query.search as string || '');
+    const search = String(req.query.search || '').trim();
+    if (search && !isSafeFilterValue(search)) {
+      // Unsafe characters cannot be placed into the .or() filter: return no matches.
+      return res.status(200).json([]);
+    }
     let query = supabaseAdmin
       .from('players')
       .select('id, name, username, points, cups, isBlocked, activeFrame, seerahCompleted, generalCompleted, quranCompleted, createdAt, updatedAt')
@@ -440,7 +464,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, currentAdmin
       console.error('[Admin handleUsers GET error]:', error);
       return res.status(500).json({ message: 'فشل جلب المستخدمين' });
     }
-    return res.status(200).json(players || []);
+    return res.status(200).json((players || []).map(toSafePlayer));
   }
 
   if (req.method === 'POST') {
@@ -456,16 +480,15 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, currentAdmin
     if (fetchErr || !player) return res.status(404).json({ message: 'المستخدم غير موجود' });
 
     if (subAction === 'update-info') {
-      const cleanU = sanitizeFilterValue((username || '').trim().replace(/^@+/, ''));
-      const cleanN = (name || '').trim();
+      const cleanU = String(username || '').trim().replace(/^@+/, '');
+      const cleanN = String(name || '').trim();
+
+      if (cleanU && !isAcceptableNewUsername(cleanU)) {
+        return res.status(400).json({ message: 'اسم المستخدم يحتوي على رموز غير مسموحة' });
+      }
 
       if (cleanU && cleanU !== player.username?.replace(/^@+/, '')) {
-        const { data: existing } = await supabaseAdmin
-          .from('players')
-          .select('id')
-          .or(`username.eq.${cleanU},username.eq.@${cleanU}`)
-          .neq('id', player.id)
-          .maybeSingle();
+        const existing = await findUsernameOwnerId(supabaseAdmin, cleanU, player.id);
         if (existing) {
           return res.status(400).json({ message: 'اسم المستخدم هذا مستخدم بالفعل لمستخدم آخر' });
         }
@@ -497,17 +520,18 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, currentAdmin
       }
 
       res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-      return res.status(200).json({ success: true, message: 'تم تحديث بيانات المستخدم بنجاح', player: updated });
+      return res.status(200).json({ success: true, message: 'تم تحديث بيانات المستخدم بنجاح', player: toSafePlayer(updated) });
     }
 
     if (subAction === 'reset-password') {
       const trimmedPass = String(newPassword || '').trim();
-      if (!trimmedPass || trimmedPass.length < 6) {
-        return res.status(400).json({ message: 'كلمة المرور يجب أن لا تقل عن 6 خانات' });
+      if (!trimmedPass || trimmedPass.length < MIN_NEW_PASSWORD_LENGTH) {
+        return res.status(400).json({ message: NEW_PASSWORD_TOO_SHORT_MESSAGE });
       }
+      const hashedReset = await hashPassword(trimmedPass);
       const { error: resetErr } = await supabaseAdmin
         .from('players')
-        .update({ password: trimmedPass, updatedAt: new Date().toISOString() })
+        .update({ password: hashedReset, updatedAt: new Date().toISOString() })
         .eq('id', player.id);
 
       if (resetErr) {
@@ -533,7 +557,7 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, currentAdmin
       return res.status(200).json({
         success: true,
         message: updated.isBlocked ? 'تم حظر المستخدم ومنعه من تسجيل الدخول' : 'تم إلغاء حظر المستخدم بنجاح',
-        player: updated
+        player: toSafePlayer(updated)
       });
     }
 
@@ -608,7 +632,7 @@ async function handleToggleUserPermission(req: VercelRequest, res: VercelRespons
   return res.status(200).json({
     success: true,
     message: updated.canManageUsers ? 'تم منح صلاحية إدارة المستخدمين' : 'تم سحب صلاحية إدارة المستخدمين',
-    admin: updated
+    admin: toSafeAdmin(updated)
   });
 }
 

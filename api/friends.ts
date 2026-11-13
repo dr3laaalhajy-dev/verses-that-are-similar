@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { handleCors } from './_lib/cors.js';
 import { getOrGenerateUniquePlayerId } from './_lib/uniquePlayerId.js';
 import { supabaseAdmin } from './_lib/supabaseAdmin.js';
+import { isSafeFilterValue } from './_lib/playerSecurity.js';
 
 // Surah metadata lookup helper for Quran page (1-604)
 const SURAH_PAGES: Array<{ number: number; name: string; startPage: number; endPage: number }> = [
@@ -147,21 +148,34 @@ async function resolvePlayer(identifier?: string | number): Promise<any | null> 
     if (data) return data;
   }
 
-  // 3. By Username
-  const { data: byUser } = await supabaseAdmin
-    .from('players')
-    .select('*')
-    .or(`username.eq.${cleanU},username.eq.@${cleanU}`)
-    .maybeSingle();
-  if (byUser) return byUser;
+  // 3. By Username (exact, then legacy "@username") — separate .eq() lookups, no string-built .or()
+  if (cleanU) {
+    const { data: byUser } = await supabaseAdmin
+      .from('players')
+      .select('*')
+      .eq('username', cleanU)
+      .limit(1)
+      .maybeSingle();
+    if (byUser) return byUser;
 
-  // 4. By Name
-  const { data: byName } = await supabaseAdmin
-    .from('players')
-    .select('*')
-    .ilike('name', str)
-    .maybeSingle();
-  if (byName) return byName;
+    const { data: byAtUser } = await supabaseAdmin
+      .from('players')
+      .select('*')
+      .eq('username', `@${cleanU}`)
+      .limit(1)
+      .maybeSingle();
+    if (byAtUser) return byAtUser;
+  }
+
+  // 4. By Name (case-insensitive exact) — only when free of filter/wildcard characters
+  if (isSafeFilterValue(str)) {
+    const { data: byName } = await supabaseAdmin
+      .from('players')
+      .select('*')
+      .ilike('name', str)
+      .maybeSingle();
+    if (byName) return byName;
+  }
 
   return null;
 }
@@ -199,6 +213,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (/^MT-[A-Z0-9]{4}$/i.test(q)) {
         query = query.ilike('uniquePlayerId', q);
       } else {
+        if (!isSafeFilterValue(q) || !isSafeFilterValue(cleanQ)) {
+          return res.status(200).json({ results: [] });
+        }
         query = query.or(`username.ilike.%${cleanQ}%,name.ilike.%${q}%`);
       }
 

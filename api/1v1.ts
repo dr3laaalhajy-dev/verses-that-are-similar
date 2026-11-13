@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { supabaseAdmin } from './_lib/supabaseAdmin.js'
+import { findPlayerRow, toSafePlayer, selectByAnyEq } from './_lib/playerSecurity.js'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const action = req.method === 'GET' ? req.query.action : req.body.action
@@ -64,39 +65,24 @@ const mapChallenges = (challenges: any[]) =>
 async function findPlayer(idOrUsernameOrName: any, nameFallback?: string) {
   if (!idOrUsernameOrName && !nameFallback) return null;
   const str = String(idOrUsernameOrName || '').trim();
-  const cleanU = str.replace(/^@+/, '');
-  const numId = Number(idOrUsernameOrName);
-
-  const orConditions: string[] = [];
-  if (Number.isInteger(numId) && numId > 0) {
-    orConditions.push(`id.eq.${numId}`);
-  }
-  if (str) {
-    orConditions.push(`uniquePlayerId.eq.${str.toUpperCase()}`);
-    orConditions.push(`name.ilike.${str}`);
-  }
-  if (cleanU) {
-    orConditions.push(`username.ilike.${cleanU}`);
-  }
-  if (nameFallback && nameFallback.trim()) {
-    orConditions.push(`name.ilike.${nameFallback.trim()}`);
-  }
-
-  if (orConditions.length === 0) return null;
 
   try {
-    const { data, error } = await supabaseAdmin
-      .from('players')
-      .select('*')
-      .or(orConditions.join(','))
-      .limit(1)
-      .maybeSingle();
+    // Separate lookups instead of a string-built .or() filter (prevents filter injection).
+    // Order: id -> uniquePlayerId -> username (case-insensitive, incl. legacy "@") -> name -> name fallback.
+    const found = await findPlayerRow(supabaseAdmin, {
+      id: idOrUsernameOrName,
+      uniquePlayerId: str,
+      username: str,
+      name: str,
+      usernameCaseInsensitive: true
+    });
+    if (found) return found;
 
-    if (error) {
-      console.warn('[findPlayer] Supabase query error:', error.message);
-      return null;
+    const fallback = (nameFallback || '').trim();
+    if (fallback && fallback !== str) {
+      return await findPlayerRow(supabaseAdmin, { name: fallback });
     }
-    return data;
+    return null;
   } catch (err: any) {
     console.error('[findPlayer] catch:', err);
     return null;
@@ -1577,11 +1563,15 @@ async function handleCheckActive(req: VercelRequest, res: VercelResponse) {
     }
 
     // 3. Fallback: check room_participants table for active rooms
-    const { data: participantRecords } = await supabaseAdmin
-      .from('room_participants')
-      .select('room_id')
-      .or(`user_id.eq.${player.id},name.eq.${player.name}`)
-      .limit(5);
+    // Separate parameterized .eq() lookups instead of a string-built .or() containing the player name
+    const participantRecords = await selectByAnyEq(
+      supabaseAdmin,
+      'room_participants',
+      'room_id',
+      [['user_id', player.id], ['name', player.name]],
+      5,
+      'room_id'
+    );
 
     if (participantRecords && participantRecords.length > 0) {
       for (const rec of participantRecords) {
@@ -2612,7 +2602,7 @@ async function handlePurchasePowerup(req: VercelRequest, res: VercelResponse) {
       powerupType,
       cost,
       remainingPoints,
-      player: updatedPlayer || { ...player, points: remainingPoints }
+      player: updatedPlayer || toSafePlayer({ ...player, points: remainingPoints })
     });
   } catch (err: any) {
     console.error('Error in handlePurchasePowerup:', err);

@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { supabaseAdmin } from '../_lib/supabaseAdmin.js';
 import { handleCors } from '../_lib/cors.js';
+import { findPlayerRow, toSafePlayer } from '../_lib/playerSecurity.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (handleCors(req, res)) return;
@@ -19,32 +20,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    let player: any = null;
+    const row = await findPlayerRow(supabaseAdmin, {
+      id: numId,
+      uniquePlayerId: cleanUnique,
+      username: cleanU,
+      name: cleanN
+    });
 
-    const orParts: string[] = [];
-    if (cleanUnique) orParts.push(`uniquePlayerId.eq.${cleanUnique}`);
-    if (cleanU) {
-      orParts.push(`username.eq.${cleanU}`);
-      orParts.push(`username.eq.@${cleanU}`);
-    }
-    if (cleanN) orParts.push(`name.ilike.${cleanN}`);
-    if (Number.isInteger(numId) && numId > 0) orParts.push(`id.eq.${numId}`);
-
-    const { data, error } = await supabaseAdmin
-      .from('players')
-      .select('*')
-      .or(orParts.join(','))
-      .limit(1)
-      .maybeSingle();
-
-    if (!error && data) {
-      player = data;
-    }
-
-    if (!player) {
+    if (!row) {
       return res.status(404).json({ error: 'Player not found' });
     }
 
+    const player = toSafePlayer(row);
     return res.status(200).json({ user: player, player });
   } catch (error: any) {
     console.error('Error in /api/users/me:', error);
