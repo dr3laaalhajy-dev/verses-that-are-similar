@@ -329,6 +329,22 @@ CREATE TABLE IF NOT EXISTS public.who_am_i_submissions (
   CONSTRAINT who_am_i_submissions_round_id_fkey FOREIGN KEY (round_id) REFERENCES public.who_am_i_rounds(id) ON DELETE CASCADE
 );
 
+-- جلسات اللاعبين (نفس supabase/hotfix/03-player-sessions.sql). hash للتوكن فقط.
+CREATE TABLE IF NOT EXISTS public.player_sessions (
+  id           uuid        NOT NULL DEFAULT gen_random_uuid(),
+  player_id    integer     NOT NULL,
+  token_hash   text        NOT NULL,
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  last_used_at timestamptz NOT NULL DEFAULT now(),
+  expires_at   timestamptz NOT NULL,
+  revoked_at   timestamptz,
+  CONSTRAINT player_sessions_pkey PRIMARY KEY (id),
+  CONSTRAINT player_sessions_token_hash_key UNIQUE (token_hash),
+  CONSTRAINT player_sessions_token_hash_format CHECK (token_hash ~ '^[0-9a-f]{64}$'),
+  CONSTRAINT player_sessions_player_id_fkey FOREIGN KEY (player_id)
+    REFERENCES public.players(id) ON DELETE CASCADE
+);
+
 -- ربط الـ sequences بأعمدتها (مثل الإنتاج: owned_by)
 ALTER SEQUENCE public.admin_codes_id_seq        OWNED BY public.admin_codes.id;
 ALTER SEQUENCE public.admins_id_seq             OWNED BY public.admins.id;
@@ -368,6 +384,7 @@ CREATE INDEX IF NOT EXISTS idx_user_answers_category              ON public.user
 CREATE INDEX IF NOT EXISTS idx_user_answers_user_id               ON public.user_answers USING btree (user_id);
 CREATE INDEX IF NOT EXISTS idx_user_wird_is_active                ON public.user_wird USING btree (is_active);
 CREATE INDEX IF NOT EXISTS idx_user_wird_user_id                  ON public.user_wird USING btree (user_id);
+CREATE INDEX IF NOT EXISTS idx_player_sessions_player_id          ON public.player_sessions USING btree (player_id);
 
 -- ---------------------------------------------------------------------
 -- 5) الدوال والتريغر
@@ -421,6 +438,7 @@ ALTER TABLE public.who_am_i_categories  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.who_am_i_questions   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.who_am_i_rounds      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.who_am_i_submissions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.player_sessions      ENABLE ROW LEVEL SECURITY;  -- بدون أي سياسة عمداً
 
 -- ---------------------------------------------------------------------
 -- 7) السياسات (Policies) — نسخة مطابقة لسياسات الإنتاج (متساهلة كما هي اليوم)
@@ -516,6 +534,8 @@ REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon, authenticated;
 GRANT  ALL ON ALL TABLES IN SCHEMA public TO service_role;
 
 -- admins و admin_codes و app_testers: لا شيء لـ anon/authenticated (مثل الإنتاج).
+-- player_sessions: لا شيء لـ anon/authenticated (السيرفر فقط عبر service_role).
+REVOKE ALL ON public.player_sessions FROM PUBLIC;
 
 GRANT SELECT, INSERT, UPDATE         ON public.certificates         TO anon, authenticated;
 GRANT SELECT, INSERT, UPDATE         ON public.challenge_progress   TO anon, authenticated;

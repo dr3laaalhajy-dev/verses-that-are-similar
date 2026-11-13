@@ -16,6 +16,14 @@ import {
   NO_PASSWORD_MESSAGE,
   NEW_PASSWORD_TOO_SHORT_MESSAGE
 } from './_lib/playerSecurity.js';
+import {
+  issuePlayerSession,
+  authenticatePlayer,
+  revokeAllPlayerSessions,
+  revokeSessionByToken,
+  extractBearerToken,
+  type IssuedPlayerSession
+} from './_lib/playerSession.js';
 
 const RESERVED_USERNAMES = ['alaa', 'علاء', 'founder', 'المؤسس', 'superadmin', 'admin', 'root', 'system'];
 
@@ -24,6 +32,24 @@ const INVALID_CHARS_MESSAGE = 'يحتوي الإدخال على رموز غير 
 /** Looks up a player by login identifier: username, legacy "@username", then exact display name. */
 function findPlayerByIdentifier(identifier: string) {
   return findPlayerRow(supabaseAdmin, { username: identifier, name: identifier });
+}
+
+/**
+ * Issues a session token, but never blocks login/register if that fails (e.g. the
+ * player_sessions table is not created yet): tokens are not required in this phase.
+ * Only a generic message is logged (no token, no hash).
+ */
+async function tryIssueSession(playerId: unknown): Promise<IssuedPlayerSession | null> {
+  try {
+    return await issuePlayerSession(Number(playerId));
+  } catch (e: any) {
+    console.error('[player-register] session not issued:', e?.message ?? 'unknown');
+    return null;
+  }
+}
+
+function sessionFields(session: IssuedPlayerSession | null) {
+  return session ? { playerToken: session.token, playerTokenExpiresAt: session.expiresAt } : {};
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -95,6 +121,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     // ==========================================
+    // 0. LOGOUT (إلغاء الجلسة الحالية)
+    // ==========================================
+    if (action === 'logout') {
+      const token = extractBearerToken(req);
+      if (token) {
+        try {
+          await revokeSessionByToken(token);
+        } catch (e: any) {
+          console.error('[player-register] logout revoke failed:', e?.message ?? 'unknown');
+        }
+      }
+      // Same answer whether or not a session existed (nothing to learn from it).
+      return res.status(200).json({ success: true });
+    }
+
+    // ==========================================
     // 1. LOGIN MODE (تسجيل الدخول لحساب موجود)
     // ==========================================
     if (action === 'login') {
@@ -152,9 +194,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       }
 
+      const session = await tryIssueSession(player.id);
+
       return res.status(200).json({
         success: true,
-        player: toSafePlayer(player)
+        player: toSafePlayer(player),
+        ...sessionFields(session)
       });
     }
 
@@ -202,10 +247,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       if (updateErr) throw updateErr;
 
+      // Revoke every other session of this player. Keep the caller's own session only if the
+      // request carries a valid token for THIS player; otherwise issue a fresh one.
+      const current = await authenticatePlayer(req);
+      const keepSessionId = current && current.playerId === Number(player.id) ? current.sessionId : undefined;
+      try {
+        await revokeAllPlayerSessions(Number(player.id), { exceptSessionId: keepSessionId });
+      } catch (e: any) {
+        console.error('[player-register] revoke after password change failed:', e?.message ?? 'unknown');
+      }
+      const freshSession = keepSessionId ? null : await tryIssueSession(player.id);
+
       return res.status(200).json({
         success: true,
         message: 'تم تغيير كلمة المرور بنجاح',
-        player: toSafePlayer(updated)
+        player: toSafePlayer(updated),
+        ...sessionFields(freshSession)
       });
     }
 
@@ -352,6 +409,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(401).json({ error: 'كلمة المرور غير صحيحة' });
       }
 
+      // Revoke all sessions first (the FK also deletes them with the player row).
+      try {
+        await revokeAllPlayerSessions(Number(player.id));
+      } catch (e: any) {
+        console.error('[player-register] revoke before account deletion failed:', e?.message ?? 'unknown');
+      }
+
       // Delete associated records
       try {
         await supabaseAdmin
@@ -473,9 +537,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       throw insertError;
     }
 
+    const session = await tryIssueSession(newPlayer?.id);
+
     return res.status(200).json({
       success: true,
-      player: toSafePlayer(newPlayer)
+      player: toSafePlayer(newPlayer),
+      ...sessionFields(session)
     });
   } catch (error: any) {
     console.error('Player Auth Database Error:', error);
