@@ -24,6 +24,10 @@ import {
   startSessionChecks,
   SESSION_CHECK_MIN_INTERVAL_MS,
   __resetSessionCheckForTests,
+  SESSION_END_PENDING_KEY,
+  completePendingSessionEnd,
+  setSessionEndedStateReset,
+  isPlayerSessionEnding,
 } from '../src/lib/playerSession.ts';
 
 // A realistic-shaped fake token (43 base64url chars). Not a real credential.
@@ -319,7 +323,10 @@ describe('forced logout on this device', () => {
     assert.equal(endPlayerSessionLocally('SESSION_REPLACED', { local, session, redirect: (p) => redirects.push(p) }), true);
     assert.equal(getPlayerToken(local), null);
     assert.equal(local.map.size, 0);
-    assert.deepEqual([...session.map.entries()], [[SESSION_ENDED_NOTICE_KEY, 'SESSION_REPLACED']]);
+    assert.deepEqual(
+      [...session.map.entries()].sort(),
+      [[SESSION_ENDED_NOTICE_KEY, 'SESSION_REPLACED'], [SESSION_END_PENDING_KEY, '1']].sort()
+    );
     assert.deepEqual(redirects, ['/login']);
   });
 
@@ -604,5 +611,109 @@ describe('startSessionChecks', () => {
     const { fileURLToPath } = await import('node:url');
     const src = readFileSync(fileURLToPath(new URL('../src/lib/playerSession.ts', import.meta.url)), 'utf8');
     assert.equal(/setInterval/.test(src), false);
+  });
+});
+
+describe('regression: forced logout must not leave the player signed in', () => {
+  // Preview bug: after SESSION_REPLACED the message appeared but the player stayed in the app.
+  // Cause: code still running on the old page (e.g. refreshUserProfile resolving late) wrote
+  // quran_player_name back after the wipe, and the next page load read it.
+
+  for (const code of ['SESSION_REPLACED', 'SESSION_INVALID'] as const) {
+    it(`${code}: late writes from the old page are wiped on the next load; message shown once`, () => {
+      const local = new MemoryStorage();
+      const session = new MemoryStorage();
+      savePlayerSession({ playerToken: TOKEN }, local);
+      local.setItem('quran_player_name', 'لاعب');
+      local.setItem('quran_player_username', 'player1');
+
+      endPlayerSessionLocally(code, { local, session, redirect: () => {} });
+      assert.equal(local.map.size, 0);
+
+      // The old page is still alive for a moment and writes the player back:
+      local.setItem('quran_player_name', 'لاعب');
+      local.setItem('quran_player_username', 'player1');
+      local.setItem('quran_player_id', '7');
+
+      // Next page load (/login), before React reads storage:
+      assert.equal(completePendingSessionEnd(local, session), true);
+      assert.equal(local.getItem('quran_player_name'), null);
+      assert.equal(local.getItem('quran_player_username'), null);
+      assert.equal(local.map.size, 0);
+      assert.equal(getPlayerToken(local), null);
+
+      // The message is still there for AppContext, exactly once:
+      assert.equal(takeSessionEndedMessage(session), SESSION_ENDED_MESSAGES[code]);
+      assert.equal(takeSessionEndedMessage(session), null);
+    });
+  }
+
+  it('the wipe happens only once: a new login after that is kept', () => {
+    const local = new MemoryStorage();
+    const session = new MemoryStorage();
+    endPlayerSessionLocally('SESSION_REPLACED', { local, session, redirect: () => {} });
+    completePendingSessionEnd(local, session);
+    // The player logs in again on this page, then reloads:
+    savePlayerSession({ playerToken: TOKEN_2 }, local);
+    local.setItem('quran_player_name', 'لاعب');
+    assert.equal(completePendingSessionEnd(local, session), false);
+    assert.equal(getPlayerToken(local), TOKEN_2);
+    assert.equal(local.getItem('quran_player_name'), 'لاعب');
+  });
+
+  it('a normal start (no forced logout) never wipes anything', () => {
+    const local = new MemoryStorage();
+    local.setItem('quran_player_name', 'لاعب');
+    savePlayerSession({ playerToken: TOKEN }, local);
+    assert.equal(completePendingSessionEnd(local, new MemoryStorage()), false);
+    assert.equal(local.getItem('quran_player_name'), 'لاعب');
+    assert.equal(getPlayerToken(local), TOKEN);
+  });
+
+  it('resets the app state (registered by AppContext) once, before redirecting', () => {
+    const order: string[] = [];
+    const unregister = setSessionEndedStateReset(() => order.push('reset-state'));
+    endPlayerSessionLocally('SESSION_INVALID', {
+      local: new MemoryStorage(),
+      session: new MemoryStorage(),
+      redirect: (p) => order.push(`redirect:${p}`),
+    });
+    endPlayerSessionLocally('SESSION_INVALID', { local: new MemoryStorage(), session: new MemoryStorage(), redirect: () => order.push('again') });
+    assert.deepEqual(order, ['reset-state', 'redirect:/login']);
+    assert.equal(isPlayerSessionEnding(), true);
+    unregister();
+  });
+
+  it('a failing state reset still clears storage and redirects', () => {
+    setSessionEndedStateReset(() => { throw new Error('boom'); });
+    const local = new MemoryStorage();
+    savePlayerSession({ playerToken: TOKEN }, local);
+    const redirects: string[] = [];
+    endPlayerSessionLocally('SESSION_REPLACED', { local, session: new MemoryStorage(), redirect: (p) => redirects.push(p) });
+    assert.equal(getPlayerToken(local), null);
+    assert.deepEqual(redirects, ['/login']);
+  });
+
+  it('unregister only removes its own reset', () => {
+    const calls: string[] = [];
+    const off1 = setSessionEndedStateReset(() => calls.push('first'));
+    setSessionEndedStateReset(() => calls.push('second'));
+    off1(); // stale unregister (e.g. React re-ran the effect) must not remove the newer one
+    endPlayerSessionLocally('SESSION_REPLACED', { local: new MemoryStorage(), session: new MemoryStorage(), redirect: () => {} });
+    assert.deepEqual(calls, ['second']);
+  });
+
+  it('wiring: main.tsx wipes before rendering; AppContext registers its state reset', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { fileURLToPath } = await import('node:url');
+    const read = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
+    const main = read('../src/main.tsx');
+    const wipeAt = main.indexOf('completePendingSessionEnd();');
+    assert.ok(wipeAt > 0, 'main.tsx calls completePendingSessionEnd()');
+    assert.ok(wipeAt < main.indexOf('createRoot('), 'before React renders');
+    assert.ok(wipeAt < main.indexOf('startSessionChecks(window)'), 'before session checks start');
+    const ctx = read('../src/contexts/AppContext.tsx');
+    assert.match(ctx, /setSessionEndedStateReset\(resetPlayerState\)/);
+    assert.match(ctx, /const handlePlayerLogout = useCallback\(async \(\) => \{[\s\S]{0,300}resetPlayerState\(\);/);
   });
 });

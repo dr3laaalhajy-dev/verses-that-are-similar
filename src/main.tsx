@@ -3,7 +3,11 @@ import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
 import { initOfflineSyncManager } from './services/offlineSyncManager';
-import { installApiFetch, startSessionChecks } from './lib/playerSession';
+import { completePendingSessionEnd, installApiFetch, startSessionChecks } from './lib/playerSession';
+
+// If the previous page ended the player session (another device / expired), finish wiping the
+// local player data before anything reads it.
+completePendingSessionEnd();
 
 // One fetch wrapper for every /api/* call: routes to the live server when packaged inside
 // Capacitor, adds the player token, and ends the session on SESSION_REPLACED / SESSION_INVALID.

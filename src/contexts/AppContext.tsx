@@ -7,7 +7,7 @@ import {
   Info, HelpCircle, AtSign, Key, LogIn, UserPlus, Smartphone, Download, Share2, Mail, ExternalLink, Send,
   Clock, RefreshCw, Globe, Plus, Gamepad2, Trash2, Play, ShoppingBag
 } from 'lucide-react';
-import { clearPlayerSession, logoutPlayerSession, replacePlayerSession, takeSessionEndedMessage } from '../lib/playerSession';
+import { clearPlayerSession, logoutPlayerSession, replacePlayerSession, setSessionEndedStateReset, takeSessionEndedMessage } from '../lib/playerSession';
 import { quranData } from '../services/QuranRepository';
 import { HADITHS, Hadith } from '../services/HadithRepository';
 import {
@@ -6407,10 +6407,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [refreshUserProfile]);
 
-  const handlePlayerLogout = useCallback(async () => {
-    // Revoke this device's session on the server; the local token is cleared even if this fails.
-    await logoutPlayerSession();
-
+  // In-memory part of logout, shared with the forced logout (session replaced / invalid).
+  const resetPlayerState = useCallback(() => {
     // 4. تنظيف حالة الواجهة (State Reset) فوراً
     try {
       setPlayerName(null);
@@ -6425,6 +6423,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch (stateErr) {
       console.warn('[Hard Reset] State cleanup warning:', stateErr);
     }
+  }, []);
+
+  useEffect(() => setSessionEndedStateReset(resetPlayerState), [resetPlayerState]);
+
+  const handlePlayerLogout = useCallback(async () => {
+    // Revoke this device's session on the server; the local token is cleared even if this fails.
+    await logoutPlayerSession();
+
+    resetPlayerState();
 
     // 1. عزل عملية الخروج تماماً داخل try...catch مخصص (Safe Execution)
     try {
@@ -6452,7 +6459,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         window.location.replace('/login');
       }
     }
-  }, []);
+  }, [resetPlayerState]);
 
   const handleDeletePlayerAccount = useCallback(async (password: string) => {
     const identifier = (playerUsername || playerName || '').trim();

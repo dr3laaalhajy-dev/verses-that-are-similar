@@ -16,6 +16,11 @@ export const PLAYER_TOKEN_KEY = 'matin_player_token';
 export const PLAYER_TOKEN_EXPIRES_KEY = 'matin_player_token_expires_at';
 /** sessionStorage key holding the reason code to show once after a forced logout. */
 export const SESSION_ENDED_NOTICE_KEY = 'matin_session_ended_notice';
+/**
+ * sessionStorage flag: the next page load must wipe local player data again before the app
+ * reads it (code still running on the old page can write player data back after the wipe).
+ */
+export const SESSION_END_PENDING_KEY = 'matin_session_end_pending';
 
 /** Production server used when the app runs packaged (Capacitor). */
 export const NATIVE_API_ORIGIN = 'https://mateen-quran.vercel.app';
@@ -161,6 +166,23 @@ export async function logoutPlayerSession(
 // ---------------------------------------------------------------------------
 
 let sessionEnding = false;
+let resetAppState: (() => void) | null = null;
+
+/**
+ * The app (AppContext) registers the in-memory part of its logout here: clearing React state
+ * so nothing re-saves the old player while the page is leaving. Returns an unregister function.
+ */
+export function setSessionEndedStateReset(fn: (() => void) | null): () => void {
+  resetAppState = fn;
+  return () => {
+    if (resetAppState === fn) resetAppState = null;
+  };
+}
+
+/** True once this page has ended the player session (no more player writes should happen). */
+export function isPlayerSessionEnding(): boolean {
+  return sessionEnding;
+}
 
 export interface SessionEndDeps {
   local?: StorageLike | null;
@@ -170,8 +192,12 @@ export interface SessionEndDeps {
 }
 
 /**
- * Ends the player session on this device: clears the token and the local player data (same
- * cleanup as a normal logout), remembers which message to show, and goes to /login.
+ * Ends the player session on this device (no server call: the server already ended it):
+ *  1. clears the token,
+ *  2. resets the app's in-memory player state (registered by AppContext),
+ *  3. clears local and session storage (same cleanup as a normal logout),
+ *  4. remembers the message + a "wipe again on next load" flag,
+ *  5. goes to /login (a full page load).
  * Runs at most once per page load (several requests may fail at the same time).
  */
 export function endPlayerSessionLocally(code: SessionEndCode, deps: SessionEndDeps = {}): boolean {
@@ -181,6 +207,11 @@ export function endPlayerSessionLocally(code: SessionEndCode, deps: SessionEndDe
   const session = deps.session === undefined ? defaultSession() : deps.session;
 
   clearPlayerSession(local);
+  try {
+    resetAppState?.();
+  } catch {
+    // ignore: storage is cleared below and wiped again on the next load
+  }
   try {
     local?.clear?.();
   } catch {
@@ -193,6 +224,7 @@ export function endPlayerSessionLocally(code: SessionEndCode, deps: SessionEndDe
   }
   try {
     session?.setItem(SESSION_ENDED_NOTICE_KEY, code);
+    session?.setItem(SESSION_END_PENDING_KEY, '1');
   } catch {
     // ignore
   }
@@ -204,6 +236,30 @@ export function endPlayerSessionLocally(code: SessionEndCode, deps: SessionEndDe
     });
   try {
     redirect('/login');
+  } catch {
+    // ignore
+  }
+  return true;
+}
+
+/**
+ * Call once at boot, BEFORE the app reads player data from localStorage. If the previous page
+ * ended the session, wipe local data again (late writes from that page are discarded) and keep
+ * the message for takeSessionEndedMessage. Returns true if a wipe happened.
+ */
+export function completePendingSessionEnd(
+  local: StorageLike | null = defaultLocal(),
+  session: StorageLike | null = defaultSession()
+): boolean {
+  try {
+    if (session?.getItem(SESSION_END_PENDING_KEY) !== '1') return false;
+    session.removeItem(SESSION_END_PENDING_KEY);
+  } catch {
+    return false;
+  }
+  clearPlayerSession(local);
+  try {
+    local?.clear?.();
   } catch {
     // ignore
   }
@@ -393,6 +449,7 @@ export function startSessionChecks(
 /** Test helper: allows endPlayerSessionLocally to run again. */
 export function __resetSessionEndingForTests(): void {
   sessionEnding = false;
+  resetAppState = null;
 }
 
 /** Test helper: forgets the last session-check time. */
