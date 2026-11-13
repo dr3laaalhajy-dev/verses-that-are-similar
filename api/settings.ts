@@ -1,11 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import jwt from 'jsonwebtoken'
+import { verifyAdminToken } from './_lib/jwt.js'
 import { supabaseAdmin } from './_lib/supabaseAdmin.js'
 import testersHandler from './_lib/testersHandler.js'
 import versionControlHandler from './_lib/versionControlHandler.js'
 import wirdHandler from './_lib/wirdHandler.js'
-
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const target = req.query.target as string | undefined;
@@ -59,14 +57,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const token = authHeader.split(' ')[1]
     let decoded: any
     try {
-      decoded = jwt.verify(token, JWT_SECRET)
+      decoded = verifyAdminToken(token)
     } catch (err) {
       return res.status(401).json({ message: 'جلسة تسجيل الدخول غير صالحة' })
     }
 
     const { data: currentAdmin } = await supabaseAdmin
       .from('admins')
-      .select('*')
+      .select('id, username, role')
       .eq('id', decoded.adminId)
       .maybeSingle()
 
@@ -74,10 +72,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(401).json({ message: 'المشرف غير موجود' })
     }
 
-    // Restriction: Founder check
-    const isFounder = currentAdmin.id === 5 || currentAdmin.role === 'FOUNDER' || currentAdmin.username === 'alaa'
+    // Restriction: Founder check based strictly on database role
+    const isFounder = currentAdmin.role === 'FOUNDER'
     if (!isFounder) {
-      return res.status(403).json({ message: 'فقط المؤسس علاء يملك صلاحية تعديل الإعدادات العامة' })
+      return res.status(403).json({ message: 'فقط المؤسس يملك صلاحية تعديل الإعدادات العامة' })
     }
 
     const {

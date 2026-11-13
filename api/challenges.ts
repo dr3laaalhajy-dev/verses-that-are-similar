@@ -1,8 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { supabaseAdmin } from './_lib/supabaseAdmin.js'
-import jwt from 'jsonwebtoken'
-
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
+import { verifyAdminToken } from './_lib/jwt.js'
 
 const mapChallenges = (challenges: any[]) => 
   (challenges || []).map(c => {
@@ -33,7 +31,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const token = authHeader.split(' ')[1]
     try {
-      jwt.verify(token, JWT_SECRET)
+      verifyAdminToken(token)
     } catch (err) {
       return res.status(401).json({ message: 'Invalid token' })
     }
@@ -181,7 +179,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const token = authHeader.split(' ')[1]
     try {
-      jwt.verify(token, JWT_SECRET)
+      verifyAdminToken(token)
     } catch (err) {
       return res.status(401).json({ message: 'Invalid token' })
     }

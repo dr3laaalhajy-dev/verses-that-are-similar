@@ -1,8 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import jwt from 'jsonwebtoken'
+import { verifyAdminToken } from './jwt.js'
 import { supabaseAdmin } from './supabaseAdmin.js'
-
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
 
 export interface VersionControlData {
   latestAndroidVersionCode: number
@@ -55,7 +53,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const token = authHeader.split(' ')[1]
     let decoded: any
     try {
-      decoded = jwt.verify(token, JWT_SECRET)
+      decoded = verifyAdminToken(token)
     } catch (err) {
       return res.status(401).json({ message: 'انتهت صلاحية الجلسة' })
     }

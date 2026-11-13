@@ -2,9 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { handleCors } from '../_lib/cors.js';
 import { broadcastNotification, resolveFullUrl } from '../_lib/broadcastNotification.js';
 import { supabaseAdmin } from '../_lib/supabaseAdmin.js';
-import jwt from 'jsonwebtoken';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+import { verifyAdminToken } from './jwt.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
@@ -25,7 +23,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const token = authHeader.split(' ')[1];
     let decoded: any;
     try {
-      decoded = jwt.verify(token, JWT_SECRET);
+      decoded = verifyAdminToken(token);
     } catch (err: any) {
       return res.status(401).json({ error: 'غير مصرح', details: 'رمز الجلسة غير صالح أو منتهي الصلاحية' });
     }

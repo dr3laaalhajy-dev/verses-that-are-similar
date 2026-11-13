@@ -2,6 +2,20 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { supabaseAdmin } from './_lib/supabaseAdmin.js';
 import { handleCors } from './_lib/cors.js';
 import { getOrGenerateUniquePlayerId } from './_lib/uniquePlayerId.js';
+import bcrypt from 'bcryptjs';
+
+const RESERVED_USERNAMES = ['alaa', 'علاء', 'founder', 'المؤسس', 'superadmin', 'admin', 'root', 'system'];
+
+function sanitizeFilterValue(val: string): string {
+  return (val || '').replace(/[,()%*\\\"']/g, '').trim();
+}
+
+function stripPassword(playerObj: any) {
+  if (!playerObj) return playerObj;
+  const clone = { ...playerObj };
+  delete clone.password;
+  return clone;
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (handleCors(req, res)) return;
@@ -14,9 +28,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const { id, playerId, username, name, uniquePlayerId } = req.query;
     const targetId = Number(id || playerId);
-    const cleanU = String(username || '').trim().replace(/^@+/, '');
-    const cleanN = String(name || '').trim();
-    const cleanUnique = String(uniquePlayerId || '').trim().toUpperCase();
+    const cleanU = sanitizeFilterValue(String(username || '').trim().replace(/^@+/, ''));
+    const cleanN = sanitizeFilterValue(String(name || '').trim());
+    const cleanUnique = sanitizeFilterValue(String(uniquePlayerId || '').trim().toUpperCase());
 
     if (!targetId && !cleanU && !cleanN && !cleanUnique) {
       return res.status(400).json({ error: 'Missing user identifier' });
@@ -52,14 +66,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       }
 
+      const safePlayer = stripPassword(player);
       return res.status(200).json({
         success: true,
-        user: player,
-        player
+        user: safePlayer,
+        player: safePlayer
       });
     } catch (err: any) {
       console.error('Error fetching player in /api/player-register:', err);
-      return res.status(500).json({ error: 'Failed to fetch user', message: err.message });
+      return res.status(500).json({ error: 'Failed to fetch user' });
     }
   }
 
@@ -84,7 +99,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // ==========================================
     if (action === 'login') {
       const rawIdentifier = (username || name || '').trim();
-      const cleanIdentifier = rawIdentifier.replace(/^@+/, '');
+      const cleanIdentifier = sanitizeFilterValue(rawIdentifier.replace(/^@+/, ''));
       const inputPass = (password || '').trim();
 
       if (!rawIdentifier || !inputPass) {
@@ -112,8 +127,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       }
 
-      const effectivePassword = player.password || '1234';
-      if (effectivePassword !== inputPass) {
+      const storedPass = player.password || '1234';
+      let isMatch = false;
+      const isBcrypt = storedPass.startsWith('$2a$') || storedPass.startsWith('$2b$') || storedPass.startsWith('$2y$');
+
+      if (isBcrypt) {
+        isMatch = await bcrypt.compare(inputPass, storedPass);
+      } else {
+        isMatch = (storedPass === inputPass);
+        // Progressive upgrade to bcrypt upon successful plain text verification
+        if (isMatch) {
+          try {
+            const hashed = await bcrypt.hash(inputPass, 10);
+            await supabaseAdmin.from('players').update({ password: hashed }).eq('id', player.id);
+          } catch (migrateErr) {
+            console.error('Password hash upgrade error:', migrateErr);
+          }
+        }
+      }
+
+      if (!isMatch) {
         return res.status(401).json({
           error: 'كلمة المرور غير صحيحة'
         });
@@ -130,7 +163,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       return res.status(200).json({
         success: true,
-        player
+        player: stripPassword(player)
       });
     }
 
@@ -139,7 +172,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // ==========================================
     if (action === 'change-password') {
       const targetUser = (username || name || currentUsername || '').trim();
-      const cleanUser = targetUser.replace(/^@+/, '');
+      const cleanUser = sanitizeFilterValue(targetUser.replace(/^@+/, ''));
 
       if (!cleanUser) {
         return res.status(400).json({ error: 'اسم المستخدم مطلوب لتغيير كلمة المرور' });
@@ -151,14 +184,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!curPass) {
         return res.status(400).json({ error: 'يرجى إدخال كلمة المرور الحالية' });
       }
-      if (!newPass || newPass.length < 4) {
-        return res.status(400).json({ error: 'كلمة المرور الجديدة يجب أن تتكون من 4 خانات على الأقل' });
+      if (!newPass || newPass.length < 6) {
+        return res.status(400).json({ error: 'كلمة المرور الجديدة يجب أن تتكون من 6 خانات على الأقل' });
       }
 
       const { data: player, error } = await supabaseAdmin
         .from('players')
         .select('*')
-        .or(`username.eq.${cleanUser},username.eq.@${cleanUser},name.ilike.${targetUser}`)
+        .or(`username.eq.${cleanUser},username.eq.@${cleanUser},name.ilike.${cleanUser}`)
         .limit(1)
         .maybeSingle();
 
@@ -166,14 +199,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(404).json({ error: 'لم يتم العثور على حساب اللاعب' });
       }
 
-      const effectivePassword = player.password || '1234';
-      if (effectivePassword !== curPass) {
+      const storedPass = player.password || '1234';
+      let isMatch = false;
+      const isBcrypt = storedPass.startsWith('$2a$') || storedPass.startsWith('$2b$') || storedPass.startsWith('$2y$');
+
+      if (isBcrypt) {
+        isMatch = await bcrypt.compare(curPass, storedPass);
+      } else {
+        isMatch = (storedPass === curPass);
+      }
+
+      if (!isMatch) {
         return res.status(400).json({ error: 'كلمة المرور الحالية غير صحيحة' });
       }
 
+      const hashedNew = await bcrypt.hash(newPass, 10);
       const { data: updated, error: updateErr } = await supabaseAdmin
         .from('players')
-        .update({ password: newPass, updatedAt: new Date().toISOString() })
+        .update({ password: hashedNew, updatedAt: new Date().toISOString() })
         .eq('id', player.id)
         .select()
         .single();
@@ -183,7 +226,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({
         success: true,
         message: 'تم تغيير كلمة المرور بنجاح',
-        player: updated
+        player: stripPassword(updated)
       });
     }
 
@@ -192,7 +235,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // ==========================================
     if (action === 'update-profile') {
       const targetUser = (currentUsername || username || currentName || name || '').trim();
-      const cleanTarget = targetUser.replace(/^@+/, '');
+      const cleanTarget = sanitizeFilterValue(targetUser.replace(/^@+/, ''));
 
       if (!cleanTarget) {
         return res.status(400).json({ error: 'بيانات الحساب الحالي مطلوبة' });
@@ -201,7 +244,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const { data: player, error } = await supabaseAdmin
         .from('players')
         .select('*')
-        .or(`username.eq.${cleanTarget},username.eq.@${cleanTarget},name.ilike.${targetUser}`)
+        .or(`username.eq.${cleanTarget},username.eq.@${cleanTarget},name.ilike.${cleanTarget}`)
         .limit(1)
         .maybeSingle();
 
@@ -210,7 +253,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       const trimmedName = (name || '').trim();
-      const cleanNewUsername = (username || '').trim().replace(/^@+/, '');
+      const cleanNewUsername = sanitizeFilterValue((username || '').trim().replace(/^@+/, ''));
+
+      if (cleanNewUsername && RESERVED_USERNAMES.includes(cleanNewUsername.toLowerCase())) {
+        return res.status(400).json({ error: 'اسم مستخدم غير متاح أو محجوز' });
+      }
 
       const updateData: any = {};
 
@@ -263,7 +310,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(200).json({
           success: true,
           message: 'لم يتم إجراء أي تغييرات',
-          player
+          player: stripPassword(player)
         });
       }
 
@@ -280,7 +327,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({
         success: true,
         message: 'تم تحديث بيانات الحساب بنجاح',
-        player: updated
+        player: stripPassword(updated)
       });
     }
 
@@ -289,7 +336,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // ==========================================
     if (action === 'delete-account') {
       const rawIdentifier = (username || name || currentUsername || '').trim();
-      const cleanIdentifier = rawIdentifier.replace(/^@+/, '');
+      const cleanIdentifier = sanitizeFilterValue(rawIdentifier.replace(/^@+/, ''));
       const inputPass = (password || currentPassword || '').trim();
 
       if (!rawIdentifier) {
@@ -311,16 +358,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(404).json({ error: 'لم يتم العثور على حساب بهذا الاسم أو اسم المستخدم' });
       }
 
-      const effectivePassword = player.password || '1234';
-      if (effectivePassword !== inputPass) {
+      const storedPass = player.password || '1234';
+      let isMatch = false;
+      const isBcrypt = storedPass.startsWith('$2a$') || storedPass.startsWith('$2b$') || storedPass.startsWith('$2y$');
+
+      if (isBcrypt) {
+        isMatch = await bcrypt.compare(inputPass, storedPass);
+      } else {
+        isMatch = (storedPass === inputPass);
+      }
+
+      if (!isMatch) {
         return res.status(401).json({ error: 'كلمة المرور غير صحيحة' });
       }
 
-      // Delete associated rooms first
-      await supabaseAdmin
-        .from('rooms')
-        .delete()
-        .or(`player1Id.eq.${player.id},player2Id.eq.${player.id},winnerId.eq.${player.id}`);
+      // Delete associated records
+      try {
+        await supabaseAdmin
+          .from('rooms')
+          .delete()
+          .or(`player1Id.eq.${player.id},player2Id.eq.${player.id},winnerId.eq.${player.id}`);
+      } catch (_) {}
+
+      try {
+        await supabaseAdmin.from('challenge_progress').delete().eq('user_id', player.id);
+        await supabaseAdmin.from('certificates').delete().eq('user_id', player.id);
+      } catch (_) {}
 
       // Delete player
       const { error: delErr } = await supabaseAdmin
@@ -340,7 +403,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // 5. REGISTER MODE (إنشاء حساب جديد للاعب)
     // ==========================================
     const trimmedName = (name || '').trim();
-    const cleanUsername = (username || '').trim().replace(/^@+/, '');
+    const cleanUsername = sanitizeFilterValue((username || '').trim().replace(/^@+/, ''));
     const userPass = (password || '').trim() || '1234';
 
     if (!trimmedName) {
@@ -355,9 +418,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    if (!userPass) {
+    if (RESERVED_USERNAMES.includes(cleanUsername.toLowerCase())) {
       return res.status(400).json({
-        error: 'يرجى إدخال كلمة المرور'
+        error: 'اسم مستخدم غير متاح أو محجوز'
+      });
+    }
+
+    if (userPass.length < 4) {
+      return res.status(400).json({
+        error: 'كلمة المرور يجب أن لا تقل عن 4 خانات'
       });
     }
 
@@ -398,12 +467,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.error('Failed to generate uniquePlayerId:', e);
     }
 
+    const hashedPass = await bcrypt.hash(userPass, 10);
+
     const { data: newPlayer, error: insertError } = await supabaseAdmin
       .from('players')
       .insert({
         name: trimmedName,
         username: cleanUsername,
-        password: userPass,
+        password: hashedPass,
         uniquePlayerId: newUniqueId,
         points: 0,
         cups: 0,
@@ -423,13 +494,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     return res.status(200).json({
       success: true,
-      player: newPlayer
+      player: stripPassword(newPlayer)
     });
   } catch (error: any) {
     console.error('Player Auth Database Error:', error);
     return res.status(500).json({
       message: 'Internal server error',
-      error: error.message || 'حدث خطأ في الخادم'
+      error: 'حدث خطأ في الخادم'
     });
   }
 }

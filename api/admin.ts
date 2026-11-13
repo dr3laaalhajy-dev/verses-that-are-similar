@@ -4,7 +4,17 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET && process.env.NODE_ENV === 'production') {
+  throw new Error('FATAL: JWT_SECRET environment variable is missing.');
+}
+const EFFECTIVE_JWT_SECRET = JWT_SECRET || 'dev-fallback-local-only-change-me-immediately-32chars!';
+
+const RESERVED_USERNAMES = ['alaa', 'علاء', 'founder', 'المؤسس', 'superadmin', 'admin', 'root', 'system'];
+
+function sanitizeFilterValue(val: string): string {
+  return (val || '').replace(/[,()%*\\\"']/g, '').trim();
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const action = (req.query.action as string) || (req.body && req.body.action);
@@ -26,7 +36,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const token = authHeader.split(' ')[1];
   let decoded: any;
   try {
-    decoded = jwt.verify(token, JWT_SECRET);
+    decoded = jwt.verify(token, EFFECTIVE_JWT_SECRET, { algorithms: ['HS256'] });
   } catch (err) {
     return res.status(401).json({ message: 'Invalid token' });
   }
@@ -34,7 +44,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Fetch current admin directly from Supabase
   const { data: currentAdmin, error: adminErr } = await supabaseAdmin
     .from('admins')
-    .select('*')
+    .select('id, username, name, role, isSuperAdmin, canManageUsers')
     .eq('id', decoded.adminId)
     .maybeSingle();
 
@@ -42,22 +52,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(401).json({ message: 'حساب المشرف غير موجود' });
   }
 
-  // Auto-protect and ensure alaa is FOUNDER
-  if ((currentAdmin.username.toLowerCase() === 'alaa' || currentAdmin.username === 'علاء') && currentAdmin.role !== 'FOUNDER') {
-    currentAdmin.role = 'FOUNDER';
-    currentAdmin.isSuperAdmin = true;
-    await supabaseAdmin
-      .from('admins')
-      .update({ role: 'FOUNDER', isSuperAdmin: true })
-      .eq('id', currentAdmin.id);
-  }
+  const isFounder = currentAdmin.role === 'FOUNDER';
+  const isPrivileged = isFounder || currentAdmin.role === 'CO_FOUNDER';
 
-  const isPrivileged = currentAdmin.role === 'FOUNDER' || currentAdmin.role === 'CO_FOUNDER';
-  if ((action === 'invite' || action === 'manage' || action === 'change-password' || action === 'testers') && !isPrivileged) {
+  // Privileged actions restriction (change-password is open to any authenticated admin to change their own password)
+  if ((action === 'invite' || action === 'manage' || action === 'testers') && !isPrivileged) {
     return res.status(403).json({ message: 'هذا الإجراء مسموح للمؤسس ومساعدي المؤسس فقط' });
   }
 
-  const isFounder = currentAdmin.role === 'FOUNDER' || currentAdmin.username.toLowerCase() === 'alaa' || currentAdmin.username === 'علاء';
   const canManageUsers = isFounder || (currentAdmin.role === 'CO_FOUNDER' && currentAdmin.canManageUsers);
 
   if (action === 'users' && !canManageUsers) {
@@ -74,7 +76,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         id: currentAdmin.id,
         username: currentAdmin.username,
         name: currentAdmin.name,
-        role: (currentAdmin.username.toLowerCase() === 'alaa' || currentAdmin.username === 'علاء') ? 'FOUNDER' : (currentAdmin.role || 'ADMIN'),
+        role: currentAdmin.role || 'ADMIN',
         isSuperAdmin: currentAdmin.isSuperAdmin,
         canManageUsers: !!canManageUsers
       });
@@ -96,51 +98,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 }
 
 async function handleLogin(req: VercelRequest, res: VercelResponse) {
-  const { username, password } = req.body;
+  const { username, password } = req.body || {};
   if (!username || !password) return res.status(400).json({ message: 'اسم المستخدم وكلمة المرور مطلوبة' });
 
   const rawUsername = (username || '').trim();
   const cleanUsername = rawUsername.replace(/^@+/, '');
+  const safeUser = sanitizeFilterValue(cleanUsername);
 
   try {
-    let { data: admin } = await supabaseAdmin
+    const { data: admin } = await supabaseAdmin
       .from('admins')
-      .select('*')
-      .or(`username.eq.${cleanUsername},username.eq.@${cleanUsername},username.eq.${rawUsername}`)
+      .select('id, username, name, password, role, isSuperAdmin, canManageUsers')
+      .ilike('username', safeUser)
       .limit(1)
       .maybeSingle();
-
-    const { count: adminCount } = await supabaseAdmin
-      .from('admins')
-      .select('*', { count: 'exact', head: true });
-
-    if (adminCount === 0) {
-      const hashedPassword = await bcrypt.hash(password, 10);
-      const { data: newAdmin } = await supabaseAdmin
-        .from('admins')
-        .insert({ username: cleanUsername, name: cleanUsername, password: hashedPassword, isSuperAdmin: true, role: 'FOUNDER' })
-        .select()
-        .single();
-      admin = newAdmin;
-    }
 
     if (!admin || !(await bcrypt.compare(password, admin.password))) {
       return res.status(401).json({ message: 'بيانات الدخول غير صحيحة' });
     }
 
-    const isAlaa = admin.username.toLowerCase() === 'alaa' || admin.username === 'علاء' || cleanUsername.toLowerCase() === 'alaa' || cleanUsername === 'علاء';
-    const effectiveRole = isAlaa ? 'FOUNDER' : (admin.role || 'ADMIN');
-    const isSuper = effectiveRole === 'FOUNDER' || effectiveRole === 'CO_FOUNDER';
-
-    if (isAlaa && admin.role !== 'FOUNDER') {
-      await supabaseAdmin.from('admins').update({ role: 'FOUNDER', isSuperAdmin: true }).eq('id', admin.id);
-      admin.role = 'FOUNDER';
-    }
+    const effectiveRole = admin.role || 'ADMIN';
+    const isSuper = effectiveRole === 'FOUNDER' || effectiveRole === 'CO_FOUNDER' || !!admin.isSuperAdmin;
 
     const token = jwt.sign(
       { adminId: admin.id, username: admin.username, isSuperAdmin: isSuper, role: effectiveRole },
-      JWT_SECRET,
-      { expiresIn: '7d' }
+      EFFECTIVE_JWT_SECRET,
+      { algorithm: 'HS256', expiresIn: '7d' }
     );
 
     return res.status(200).json({
@@ -150,7 +133,7 @@ async function handleLogin(req: VercelRequest, res: VercelResponse) {
       adminId: admin.id,
       isSuperAdmin: isSuper,
       role: effectiveRole,
-      canManageUsers: isAlaa || effectiveRole === 'FOUNDER' || !!admin.canManageUsers
+      canManageUsers: effectiveRole === 'FOUNDER' || !!admin.canManageUsers
     });
   } catch (error) {
     console.error('Login error:', error);
@@ -159,29 +142,53 @@ async function handleLogin(req: VercelRequest, res: VercelResponse) {
 }
 
 async function handleRegister(req: VercelRequest, res: VercelResponse) {
-  const { username, password, code, name } = req.body;
+  const { username, password, code, name } = req.body || {};
   if (!username || !password || !code) return res.status(400).json({ message: 'جميع الحقول مطلوبة' });
 
   const rawUsername = (username || '').trim();
   const cleanUsername = rawUsername.replace(/^@+/, '');
+  const safeUser = sanitizeFilterValue(cleanUsername);
+
+  if (RESERVED_USERNAMES.includes(cleanUsername.toLowerCase())) {
+    return res.status(400).json({ message: 'اسم مستخدم غير متاح أو محجوز' });
+  }
+
+  if (password.length < 8) {
+    return res.status(400).json({ message: 'كلمة المرور يجب أن لا تقل عن 8 خانات' });
+  }
 
   try {
+    const cleanCode = String(code).trim().toUpperCase();
     const { data: adminCode } = await supabaseAdmin
       .from('admin_codes')
       .select('*')
-      .eq('code', code.toUpperCase())
+      .eq('code', cleanCode)
+      .eq('isUsed', false)
       .maybeSingle();
 
-    if (!adminCode || adminCode.isUsed) return res.status(400).json({ message: 'كود التسجيل غير صحيح أو مستخدم' });
+    if (!adminCode) return res.status(400).json({ message: 'كود التسجيل غير صحيح أو تم استخدامه مسبقاً' });
 
     const { data: existing } = await supabaseAdmin
       .from('admins')
       .select('id')
-      .or(`username.eq.${cleanUsername},username.eq.@${cleanUsername},username.eq.${rawUsername}`)
+      .ilike('username', safeUser)
       .limit(1)
       .maybeSingle();
 
     if (existing) return res.status(409).json({ message: 'اسم المستخدم موجود مسبقاً' });
+
+    // Atomically mark code as used to prevent concurrency race conditions
+    const { data: updatedCode, error: codeErr } = await supabaseAdmin
+      .from('admin_codes')
+      .update({ isUsed: true, usedAt: new Date().toISOString() })
+      .eq('id', adminCode.id)
+      .eq('isUsed', false)
+      .select()
+      .maybeSingle();
+
+    if (codeErr || !updatedCode) {
+      return res.status(400).json({ message: 'كود التسجيل مستخدم بالفعل أو انتهت صلاحيته' });
+    }
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const assignedRole = adminCode.role === 'CO_FOUNDER' || adminCode.role === 'SUPERADMIN' ? 'CO_FOUNDER' : 'ADMIN';
@@ -195,15 +202,13 @@ async function handleRegister(req: VercelRequest, res: VercelResponse) {
         isSuperAdmin: assignedRole === 'CO_FOUNDER',
         role: assignedRole
       })
-      .select()
+      .select('id, username, name, role, isSuperAdmin, canManageUsers, createdAt')
       .single();
 
-    if (createErr) throw createErr;
-
-    await supabaseAdmin
-      .from('admin_codes')
-      .update({ isUsed: true, usedAt: new Date().toISOString() })
-      .eq('id', adminCode.id);
+    if (createErr) {
+      console.error('Create admin error:', createErr);
+      return res.status(500).json({ message: 'حدث خطأ أثناء إنشاء حساب المشرف' });
+    }
 
     return res.status(201).json({ message: 'تم التسجيل بنجاح!', username: admin.username, name: admin.name, role: admin.role });
   } catch (error) {
@@ -222,7 +227,7 @@ async function handleInvite(req: VercelRequest, res: VercelResponse, currentAdmi
   }
 
   if (req.method === 'POST') {
-    const { role } = req.body;
+    const { role } = req.body || {};
     
     if (role === 'CO_FOUNDER' && currentAdmin.role !== 'FOUNDER') {
       return res.status(403).json({ message: 'فقط المؤسس يمكنه توليد كود دعوة لمساعد مؤسس' });
@@ -239,7 +244,10 @@ async function handleInvite(req: VercelRequest, res: VercelResponse, currentAdmi
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error('Invite code creation error:', error);
+      return res.status(500).json({ message: 'فشل في توليد كود الدعوة' });
+    }
     return res.status(201).json(newCode);
   }
 
@@ -248,6 +256,8 @@ async function handleInvite(req: VercelRequest, res: VercelResponse, currentAdmi
     await supabaseAdmin.from('admin_codes').delete().eq('id', parseInt(id as string));
     return res.status(200).json({ message: 'Deleted' });
   }
+
+  return res.status(405).json({ message: 'Method not allowed' });
 }
 
 async function handleManage(req: VercelRequest, res: VercelResponse, currentAdmin: any) {
@@ -259,29 +269,38 @@ async function handleManage(req: VercelRequest, res: VercelResponse, currentAdmi
 
     let mapped = (admins || []).map(a => ({
       ...a,
-      role: (a.username.toLowerCase() === 'alaa' || a.username === 'علاء') ? 'FOUNDER' : (a.role || 'ADMIN'),
-      canManageUsers: (a.username.toLowerCase() === 'alaa' || a.username === 'علاء' || a.role === 'FOUNDER') ? true : !!a.canManageUsers
+      role: a.role || 'ADMIN',
+      canManageUsers: a.role === 'FOUNDER' ? true : !!a.canManageUsers
     }));
 
-    const isCallerFounder = currentAdmin.role === 'FOUNDER' || currentAdmin.username.toLowerCase() === 'alaa' || currentAdmin.username === 'علاء';
+    const isCallerFounder = currentAdmin.role === 'FOUNDER';
     if (!isCallerFounder) {
-      mapped = mapped.filter(a => a.role !== 'FOUNDER' && a.username.toLowerCase() !== 'alaa' && a.username !== 'علاء');
+      mapped = mapped.filter(a => a.role !== 'FOUNDER');
     }
 
     return res.status(200).json(mapped);
   }
 
   if (req.method === 'POST') {
-    const { username, password, role: targetRole, isSuperAdmin, name } = req.body;
+    const { username, password, role: targetRole, isSuperAdmin, name } = req.body || {};
     if (!username || !password) return res.status(400).json({ message: 'اسم المستخدم وكلمة المرور مطلوبة' });
 
     const rawUsername = (username || '').trim();
     const cleanUsername = rawUsername.replace(/^@+/, '');
+    const safeUser = sanitizeFilterValue(cleanUsername);
+
+    if (RESERVED_USERNAMES.includes(cleanUsername.toLowerCase())) {
+      return res.status(400).json({ message: 'اسم مستخدم غير متاح أو محجوز' });
+    }
+
+    if (password.length < 8) {
+      return res.status(400).json({ message: 'كلمة المرور يجب أن لا تقل عن 8 خانات' });
+    }
 
     const { data: existing } = await supabaseAdmin
       .from('admins')
       .select('id')
-      .or(`username.eq.${cleanUsername},username.eq.@${cleanUsername},username.eq.${rawUsername}`)
+      .ilike('username', safeUser)
       .limit(1)
       .maybeSingle();
 
@@ -290,12 +309,16 @@ async function handleManage(req: VercelRequest, res: VercelResponse, currentAdmi
     let assignedRole = 'ADMIN';
     if (targetRole === 'CO_FOUNDER') {
       if (currentAdmin.role !== 'FOUNDER') {
-        return res.status(403).json({ message: 'فقط المؤسس (علاء) يمكنه تعيين مساعد مؤسس' });
+        return res.status(403).json({ message: 'فقط المؤسس يمكنه تعيين مساعد مؤسس' });
       }
       assignedRole = 'CO_FOUNDER';
     } else if (targetRole === 'FOUNDER') {
       return res.status(403).json({ message: 'لا يمكن تعيين مؤسس إضافي' });
     }
+
+    // isSuperAdmin can only be explicitly granted by the FOUNDER
+    const canAssignSuper = currentAdmin.role === 'FOUNDER';
+    const assignedSuper = canAssignSuper ? (assignedRole === 'CO_FOUNDER' || Boolean(isSuperAdmin)) : false;
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const { data: admin, error } = await supabaseAdmin
@@ -304,13 +327,16 @@ async function handleManage(req: VercelRequest, res: VercelResponse, currentAdmi
         username: cleanUsername,
         name: name?.trim() || cleanUsername,
         password: hashedPassword,
-        isSuperAdmin: assignedRole === 'CO_FOUNDER' || !!isSuperAdmin,
+        isSuperAdmin: assignedSuper,
         role: assignedRole
       })
-      .select()
+      .select('id, username, name, role, isSuperAdmin, canManageUsers, createdAt')
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error('Manage create admin error:', error);
+      return res.status(500).json({ message: 'فشل إنشاء المشرف' });
+    }
     return res.status(201).json({ id: admin.id, username: admin.username, name: admin.name, role: admin.role, isSuperAdmin: admin.isSuperAdmin });
   }
 
@@ -320,15 +346,14 @@ async function handleManage(req: VercelRequest, res: VercelResponse, currentAdmi
 
     const { data: targetAdmin } = await supabaseAdmin
       .from('admins')
-      .select('*')
+      .select('id, username, role')
       .eq('id', targetId)
       .maybeSingle();
 
     if (!targetAdmin) return res.status(404).json({ message: 'المشرف غير موجود' });
 
-    const isTargetFounder = targetAdmin.role === 'FOUNDER' || targetAdmin.username.toLowerCase() === 'alaa' || targetAdmin.username === 'علاء';
-    if (isTargetFounder) {
-      return res.status(403).json({ message: 'خط أحمر: لا يمكن حذف حساب المؤسس (علاء) نهائياً' });
+    if (targetAdmin.role === 'FOUNDER') {
+      return res.status(403).json({ message: 'خط أحمر: لا يمكن حذف حساب المؤسس نهائياً' });
     }
 
     if (targetAdmin.role === 'CO_FOUNDER' && currentAdmin.role !== 'FOUNDER') {
@@ -346,36 +371,39 @@ async function handleManage(req: VercelRequest, res: VercelResponse, currentAdmi
   if (req.method === 'PATCH') {
     return handleChangePassword(req, res, currentAdmin);
   }
+
+  return res.status(405).json({ message: 'Method not allowed' });
 }
 
 async function handleChangePassword(req: VercelRequest, res: VercelResponse, currentAdmin: any) {
-  const { id, newPassword } = req.body;
+  const { id, newPassword } = req.body || {};
   if (!id || !newPassword) {
     return res.status(400).json({ message: 'معرف المشرف وكلمة المرور الجديدة مطلوبة' });
   }
-  if (newPassword.length < 4) {
-    return res.status(400).json({ message: 'كلمة المرور يجب أن لا تقل عن 4 خانات' });
+  if (newPassword.length < 8) {
+    return res.status(400).json({ message: 'كلمة المرور يجب أن لا تقل عن 8 خانات' });
   }
 
   const targetId = parseInt(id.toString());
   const { data: targetAdmin } = await supabaseAdmin
     .from('admins')
-    .select('*')
+    .select('id, username, role')
     .eq('id', targetId)
     .maybeSingle();
 
   if (!targetAdmin) return res.status(404).json({ message: 'المشرف غير موجود' });
 
-  const isTargetFounder = targetAdmin.role === 'FOUNDER' || targetAdmin.username.toLowerCase() === 'alaa' || targetAdmin.username === 'علاء';
-
-  if (isTargetFounder && currentAdmin.id !== targetAdmin.id) {
+  // 1. Target is FOUNDER: only founder can change their own password
+  if (targetAdmin.role === 'FOUNDER' && currentAdmin.id !== targetAdmin.id) {
     return res.status(403).json({ message: 'لا يمكن تعديل كلمة مرور المؤسس إلا من قبل المؤسس نفسه' });
   }
 
+  // 2. Target is CO_FOUNDER: founder can change, or co-founder themselves
   if (targetAdmin.role === 'CO_FOUNDER' && currentAdmin.role !== 'FOUNDER' && currentAdmin.id !== targetAdmin.id) {
     return res.status(403).json({ message: 'فقط المؤسس يمكنه تعديل كلمة مرور مساعد المؤسس' });
   }
 
+  // 3. Regular admin: founder or co-founder or admin themselves can change
   if (currentAdmin.role === 'CO_FOUNDER') {
     if (targetAdmin.role !== 'ADMIN' && currentAdmin.id !== targetAdmin.id) {
       return res.status(403).json({ message: 'مساعد المؤسس يمكنه تعديل كلمات مرور المشرفين العاديين فقط' });
@@ -395,7 +423,7 @@ async function handleChangePassword(req: VercelRequest, res: VercelResponse, cur
 
 async function handleUsers(req: VercelRequest, res: VercelResponse, currentAdmin: any) {
   if (req.method === 'GET') {
-    const search = (req.query.search as string || '').trim();
+    const search = sanitizeFilterValue(req.query.search as string || '');
     let query = supabaseAdmin
       .from('players')
       .select('id, name, username, points, cups, isBlocked, activeFrame, seerahCompleted, generalCompleted, quranCompleted, createdAt, updatedAt')
@@ -410,25 +438,25 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, currentAdmin
     const { data: players, error } = await query;
     if (error) {
       console.error('[Admin handleUsers GET error]:', error);
-      return res.status(500).json({ message: 'فشل جلب المستخدمين', error: error.message });
+      return res.status(500).json({ message: 'فشل جلب المستخدمين' });
     }
     return res.status(200).json(players || []);
   }
 
   if (req.method === 'POST') {
-    const { subAction, id, name, username, points, cups, newPassword, isBlocked } = req.body;
+    const { subAction, id, name, username, points, cups, newPassword, isBlocked } = req.body || {};
     if (!id) return res.status(400).json({ message: 'معرف المستخدم مطلوب' });
 
     const { data: player, error: fetchErr } = await supabaseAdmin
       .from('players')
-      .select('*')
+      .select('id, name, username')
       .eq('id', Number(id))
       .maybeSingle();
 
     if (fetchErr || !player) return res.status(404).json({ message: 'المستخدم غير موجود' });
 
     if (subAction === 'update-info') {
-      const cleanU = (username || '').trim().replace(/^@+/, '');
+      const cleanU = sanitizeFilterValue((username || '').trim().replace(/^@+/, ''));
       const cleanN = (name || '').trim();
 
       if (cleanU && cleanU !== player.username?.replace(/^@+/, '')) {
@@ -460,12 +488,12 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, currentAdmin
         .from('players')
         .update(updateData)
         .eq('id', player.id)
-        .select()
+        .select('id, name, username, points, cups, isBlocked, activeFrame, seerahCompleted, generalCompleted, quranCompleted, createdAt, updatedAt')
         .single();
 
       if (updateErr) {
         console.error('[Admin update-info error]:', updateErr);
-        return res.status(500).json({ message: 'فشل تحديث بيانات المستخدم', error: updateErr.message });
+        return res.status(500).json({ message: 'فشل تحديث بيانات المستخدم' });
       }
 
       res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
@@ -473,16 +501,18 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, currentAdmin
     }
 
     if (subAction === 'reset-password') {
-      if (!newPassword || !String(newPassword).trim()) {
-        return res.status(400).json({ message: 'كلمة المرور الجديدة مطلوبة' });
+      const trimmedPass = String(newPassword || '').trim();
+      if (!trimmedPass || trimmedPass.length < 6) {
+        return res.status(400).json({ message: 'كلمة المرور يجب أن لا تقل عن 6 خانات' });
       }
       const { error: resetErr } = await supabaseAdmin
         .from('players')
-        .update({ password: String(newPassword).trim(), updatedAt: new Date().toISOString() })
+        .update({ password: trimmedPass, updatedAt: new Date().toISOString() })
         .eq('id', player.id);
 
       if (resetErr) {
-        return res.status(500).json({ message: 'فشل إعادة تعيين كلمة المرور', error: resetErr.message });
+        console.error('[Admin reset password error]:', resetErr);
+        return res.status(500).json({ message: 'فشل إعادة تعيين كلمة المرور' });
       }
       return res.status(200).json({ success: true, message: 'تم إعادة تعيين كلمة المرور بنجاح' });
     }
@@ -492,12 +522,14 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, currentAdmin
         .from('players')
         .update({ isBlocked: Boolean(isBlocked), updatedAt: new Date().toISOString() })
         .eq('id', player.id)
-        .select()
+        .select('id, name, username, points, cups, isBlocked, activeFrame, seerahCompleted, generalCompleted, quranCompleted, createdAt, updatedAt')
         .single();
 
       if (blockErr) {
-        return res.status(500).json({ message: 'فشل تغيير حالة الحظر', error: blockErr.message });
+        console.error('[Admin toggle block error]:', blockErr);
+        return res.status(500).json({ message: 'فشل تغيير حالة الحظر' });
       }
+
       return res.status(200).json({
         success: true,
         message: updated.isBlocked ? 'تم حظر المستخدم ومنعه من تسجيل الدخول' : 'تم إلغاء حظر المستخدم بنجاح',
@@ -519,13 +551,28 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, currentAdmin
         .or(`player1Id.eq.${id},player2Id.eq.${id},winnerId.eq.${id}`);
     } catch (_) {}
 
+    try {
+      await supabaseAdmin
+        .from('challenge_progress')
+        .delete()
+        .eq('user_id', id);
+    } catch (_) {}
+
+    try {
+      await supabaseAdmin
+        .from('certificates')
+        .delete()
+        .eq('user_id', id);
+    } catch (_) {}
+
     const { error: delErr } = await supabaseAdmin
       .from('players')
       .delete()
       .eq('id', id);
 
     if (delErr) {
-      return res.status(500).json({ message: 'فشل حذف حساب المستخدم', error: delErr.message });
+      console.error('[Admin delete player error]:', delErr);
+      return res.status(500).json({ message: 'فشل حذف حساب المستخدم' });
     }
     return res.status(200).json({ success: true, message: 'تم حذف حساب المستخدم نهائياً' });
   }
@@ -535,12 +582,12 @@ async function handleUsers(req: VercelRequest, res: VercelResponse, currentAdmin
 
 async function handleToggleUserPermission(req: VercelRequest, res: VercelResponse, currentAdmin: any) {
   if (req.method !== 'POST') return res.status(405).json({ message: 'Method not allowed' });
-  const { adminId, canManageUsers } = req.body;
+  const { adminId, canManageUsers } = req.body || {};
   if (!adminId) return res.status(400).json({ message: 'معرف المشرف مطلوب' });
 
   const { data: targetAdmin } = await supabaseAdmin
     .from('admins')
-    .select('*')
+    .select('id, username')
     .eq('id', Number(adminId))
     .maybeSingle();
 
@@ -550,10 +597,13 @@ async function handleToggleUserPermission(req: VercelRequest, res: VercelRespons
     .from('admins')
     .update({ canManageUsers: Boolean(canManageUsers), updatedAt: new Date().toISOString() })
     .eq('id', targetAdmin.id)
-    .select()
+    .select('id, username, name, role, isSuperAdmin, canManageUsers, updatedAt')
     .single();
 
-  if (error) throw error;
+  if (error) {
+    console.error('Toggle permission error:', error);
+    return res.status(500).json({ message: 'فشل تعديل صلاحيات المشرف' });
+  }
 
   return res.status(200).json({
     success: true,
@@ -709,7 +759,7 @@ async function handleTesters(req: VercelRequest, res: VercelResponse, currentAdm
       return res.status(400).json({ message: 'إجراء غير معروف' });
     } catch (err: any) {
       console.error('Testers action error:', err);
-      return res.status(500).json({ message: err.message || 'حدث خطأ أثناء معالجة الطلب' });
+      return res.status(500).json({ message: 'حدث خطأ أثناء معالجة الطلب' });
     }
   }
 
