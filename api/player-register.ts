@@ -6,7 +6,8 @@ import {
   verifyPassword,
   hashPassword,
   toSafePlayer,
-  isSafeFilterValue,
+  isUsableLookupValue,
+  escapeLikePattern,
   isAcceptableNewUsername,
   findPlayerRow,
   findUsernameOwnerId,
@@ -255,13 +256,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // 1. Check Display Name
       if (trimmedName && trimmedName !== player.name) {
-        if (!isSafeFilterValue(trimmedName)) {
+        if (!isUsableLookupValue(trimmedName)) {
           return res.status(400).json({ error: INVALID_CHARS_MESSAGE });
         }
         const { data: existingName } = await supabaseAdmin
           .from('players')
           .select('id')
-          .ilike('name', trimmedName)
+          .ilike('name', escapeLikePattern(trimmedName))
           .neq('id', player.id)
           .limit(1)
           .maybeSingle();
@@ -397,7 +398,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    if (!isAcceptableNewUsername(cleanUsername) || !isSafeFilterValue(trimmedName)) {
+    if (!isAcceptableNewUsername(cleanUsername) || !isUsableLookupValue(trimmedName)) {
       return res.status(400).json({
         error: INVALID_CHARS_MESSAGE
       });
@@ -429,7 +430,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { data: existingPlayerWithName } = await supabaseAdmin
       .from('players')
       .select('id')
-      .ilike('name', trimmedName)
+      .ilike('name', escapeLikePattern(trimmedName))
       .limit(1)
       .maybeSingle();
 

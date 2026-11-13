@@ -1,11 +1,13 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { supabaseAdmin } from './_lib/supabaseAdmin.js';
 import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
+import { signAdminToken, verifyAdminToken } from './_lib/jwt.js';
 import { v4 as uuidv4 } from 'uuid';
 import {
   hashPassword,
-  isSafeFilterValue,
+  isUsableLookupValue,
+  escapeLikePattern,
+  searchContains,
   isAcceptableNewUsername,
   findUsernameOwnerId,
   toSafePlayer,
@@ -14,17 +16,11 @@ import {
   NEW_PASSWORD_TOO_SHORT_MESSAGE
 } from './_lib/playerSecurity.js';
 
-const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET && process.env.NODE_ENV === 'production') {
-  throw new Error('FATAL: JWT_SECRET environment variable is missing.');
-}
-const EFFECTIVE_JWT_SECRET = JWT_SECRET || 'dev-fallback-local-only-change-me-immediately-32chars!';
-
 const RESERVED_USERNAMES = ['alaa', 'علاء', 'founder', 'المؤسس', 'superadmin', 'admin', 'root', 'system'];
 
 /**
  * Finds an admin by username without filter injection:
- * exact .eq() first, then a case-insensitive .ilike() only when the value is filter-safe.
+ * exact .eq() first, then a case-insensitive .ilike() with wildcards escaped (literal match).
  */
 async function findAdminByUsername(username: string, columns: string) {
   const clean = (username || '').trim();
@@ -36,11 +32,11 @@ async function findAdminByUsername(username: string, columns: string) {
     .limit(1)
     .maybeSingle();
   if (exact) return exact as any;
-  if (!isSafeFilterValue(clean)) return null;
+  if (!isUsableLookupValue(clean)) return null;
   const { data: ci } = await supabaseAdmin
     .from('admins')
     .select(columns)
-    .ilike('username', clean)
+    .ilike('username', escapeLikePattern(clean))
     .limit(1)
     .maybeSingle();
   return (ci as any) || null;
@@ -66,7 +62,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const token = authHeader.split(' ')[1];
   let decoded: any;
   try {
-    decoded = jwt.verify(token, EFFECTIVE_JWT_SECRET, { algorithms: ['HS256'] });
+    decoded = verifyAdminToken(token);
   } catch (err) {
     return res.status(401).json({ message: 'Invalid token' });
   }
@@ -144,10 +140,9 @@ async function handleLogin(req: VercelRequest, res: VercelResponse) {
     const effectiveRole = admin.role || 'ADMIN';
     const isSuper = effectiveRole === 'FOUNDER' || effectiveRole === 'CO_FOUNDER' || !!admin.isSuperAdmin;
 
-    const token = jwt.sign(
+    const token = signAdminToken(
       { adminId: admin.id, username: admin.username, isSuperAdmin: isSuper, role: effectiveRole },
-      EFFECTIVE_JWT_SECRET,
-      { algorithm: 'HS256', expiresIn: '7d' }
+      '7d'
     );
 
     return res.status(200).json({
@@ -444,22 +439,31 @@ async function handleChangePassword(req: VercelRequest, res: VercelResponse, cur
 async function handleUsers(req: VercelRequest, res: VercelResponse, currentAdmin: any) {
   if (req.method === 'GET') {
     const search = String(req.query.search || '').trim();
-    if (search && !isSafeFilterValue(search)) {
-      // Unsafe characters cannot be placed into the .or() filter: return no matches.
-      return res.status(200).json([]);
-    }
-    let query = supabaseAdmin
+    const baseQuery = () => supabaseAdmin
       .from('players')
       .select('id, name, username, points, cups, isBlocked, activeFrame, seerahCompleted, generalCompleted, quranCompleted, createdAt, updatedAt')
       .order('cups', { ascending: false })
       .order('points', { ascending: false })
       .order('createdAt', { ascending: false });
 
+    let players: any[] | null = null;
+    let error: any = null;
     if (search) {
-      query = query.or(`name.ilike.%${search}%,username.ilike.%${search}%`);
+      // Separate escaped .ilike() searches instead of a string-built .or(); re-sorted like the base query
+      try {
+        players = (await searchContains(baseQuery, ['name', 'username'], search)).sort((a, b) =>
+          (Number(b.cups) || 0) - (Number(a.cups) || 0)
+          || (Number(b.points) || 0) - (Number(a.points) || 0)
+          || String(b.createdAt || '').localeCompare(String(a.createdAt || ''))
+        );
+      } catch (e: any) {
+        error = e;
+      }
+    } else {
+      const r = await baseQuery();
+      players = r.data;
+      error = r.error;
     }
-
-    const { data: players, error } = await query;
     if (error) {
       console.error('[Admin handleUsers GET error]:', error);
       return res.status(500).json({ message: 'فشل جلب المستخدمين' });

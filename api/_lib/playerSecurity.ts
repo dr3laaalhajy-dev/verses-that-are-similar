@@ -124,23 +124,34 @@ export function toSafeAdmin(row: any): any {
 // Filter-injection guards
 // ---------------------------------------------------------------------------
 
-/** Characters that are meaningful inside PostgREST .or() strings or LIKE patterns. */
-const FILTER_FORBIDDEN = /[,()%_*\\"']/;
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARS = /[\u0000-\u001F\u007F]/;
+/** Values made only of LIKE wildcards / escape chars / whitespace (e.g. "%", "_", "*", "%_*"). */
+const WILDCARD_ONLY = /^[%_*\\\s]+$/;
 
 /**
- * True when a value may be placed inside an .or() string or an .ilike() pattern.
- * Rejects empty/whitespace values and anything containing , ( ) % _ * \ " '
- * (which also covers wildcard-only values).
+ * True when a value may be used as a lookup/search term: non-empty, no control characters,
+ * and not wildcard-only. Characters such as _ ' , ( ) are allowed: values are only ever passed
+ * as parameters (.eq) or as ESCAPED .ilike() patterns, never inside string-built .or() filters.
  */
-export function isSafeFilterValue(value: unknown): value is string {
+export function isUsableLookupValue(value: unknown): value is string {
   if (typeof value !== 'string') return false;
   const v = value.trim();
   if (!v) return false;
-  return !FILTER_FORBIDDEN.test(v);
+  if (CONTROL_CHARS.test(v)) return false;
+  return !WILDCARD_ONLY.test(v);
+}
+
+/**
+ * Escapes LIKE/ILIKE metacharacters so the value matches literally:
+ * backslash, % and _ (SQL wildcards) and * (PostgREST alias for %).
+ */
+export function escapeLikePattern(value: string): string {
+  return value.replace(/[\\%_*]/g, (ch) => `\\${ch}`);
 }
 
 /** Characters never allowed in a NEW username (underscore is allowed: usernames are only matched with .eq()). */
-const USERNAME_FORBIDDEN = /[,()%*\\"'\s]/;
+const USERNAME_FORBIDDEN = /[,()%*\\"'\s\u0000-\u001F\u007F]/;
 
 export function isAcceptableNewUsername(value: unknown): value is string {
   if (typeof value !== 'string') return false;
@@ -198,9 +209,10 @@ export async function findPlayerRow(db: any, lookup: PlayerLookup, columns = '*'
 
   const cleanU = stripAt(lookup.username);
   if (cleanU) {
-    if (lookup.usernameCaseInsensitive && isSafeFilterValue(cleanU)) {
-      const row = (await firstRow(players().ilike('username', cleanU)))
-        || (await firstRow(players().ilike('username', `@${cleanU}`)));
+    if (lookup.usernameCaseInsensitive && isUsableLookupValue(cleanU)) {
+      const pattern = escapeLikePattern(cleanU);
+      const row = (await firstRow(players().ilike('username', pattern)))
+        || (await firstRow(players().ilike('username', `@${pattern}`)));
       if (row) return row;
     } else {
       const row = (await firstRow(players().eq('username', cleanU)))
@@ -210,8 +222,8 @@ export async function findPlayerRow(db: any, lookup: PlayerLookup, columns = '*'
   }
 
   const name = String(lookup.name ?? '').trim();
-  if (isSafeFilterValue(name)) {
-    const row = await firstRow(players().ilike('name', name));
+  if (isUsableLookupValue(name)) {
+    const row = await firstRow(players().ilike('name', escapeLikePattern(name)));
     if (row) return row;
   }
 
@@ -251,6 +263,37 @@ export async function selectByAnyEq(
     }
   }
   return out;
+}
+
+/**
+ * Case-insensitive "contains" search over several columns WITHOUT a string-built .or():
+ * one escaped .ilike('%term%') query per column, merged and de-duplicated by `id`.
+ * `makeQuery` must return a fresh base query (select + any fixed filters) each call.
+ * Returns [] for unusable terms (empty, control chars, wildcard-only).
+ */
+export async function searchContains(
+  makeQuery: () => any,
+  columns: string[],
+  term: string,
+  limit?: number
+): Promise<any[]> {
+  if (!isUsableLookupValue(term)) return [];
+  const pattern = `%${escapeLikePattern(term.trim())}%`;
+  const out: any[] = [];
+  const seen = new Set<string>();
+  for (const column of columns) {
+    let q = makeQuery().ilike(column, pattern);
+    if (limit !== undefined) q = q.limit(limit);
+    const { data, error } = await q;
+    if (error) throw error;
+    for (const row of data || []) {
+      const key = String(row?.id);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(row);
+    }
+  }
+  return limit !== undefined ? out.slice(0, limit) : out;
 }
 
 /** Returns the id of another player that already uses this username (or "@"+username), else null. */

@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { handleCors } from './_lib/cors.js';
 import { getOrGenerateUniquePlayerId } from './_lib/uniquePlayerId.js';
 import { supabaseAdmin } from './_lib/supabaseAdmin.js';
-import { isSafeFilterValue } from './_lib/playerSecurity.js';
+import { isUsableLookupValue, escapeLikePattern, searchContains } from './_lib/playerSecurity.js';
 
 // Surah metadata lookup helper for Quran page (1-604)
 const SURAH_PAGES: Array<{ number: number; name: string; startPage: number; endPage: number }> = [
@@ -167,12 +167,13 @@ async function resolvePlayer(identifier?: string | number): Promise<any | null> 
     if (byAtUser) return byAtUser;
   }
 
-  // 4. By Name (case-insensitive exact) — only when free of filter/wildcard characters
-  if (isSafeFilterValue(str)) {
+  // 4. By Name (case-insensitive exact, wildcards escaped so they match literally)
+  if (isUsableLookupValue(str)) {
     const { data: byName } = await supabaseAdmin
       .from('players')
       .select('*')
-      .ilike('name', str)
+      .ilike('name', escapeLikePattern(str))
+      .limit(1)
       .maybeSingle();
     if (byName) return byName;
   }
@@ -201,25 +202,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       const cleanQ = q.replace(/^@+/, '');
-      let query = supabaseAdmin
-        .from('players')
-        .select('id, name, username, uniquePlayerId, points, cups, streak, activeFrame, equippedNameColor, seerahCompleted, generalCompleted, quranCompleted')
-        .eq('isBlocked', false);
+      const baseQuery = () => {
+        let q0 = supabaseAdmin
+          .from('players')
+          .select('id, name, username, uniquePlayerId, points, cups, streak, activeFrame, equippedNameColor, seerahCompleted, generalCompleted, quranCompleted')
+          .eq('isBlocked', false);
+        if (viewer) q0 = q0.neq('id', viewer.id);
+        return q0;
+      };
 
-      if (viewer) {
-        query = query.neq('id', viewer.id);
-      }
-
-      if (/^MT-[A-Z0-9]{4}$/i.test(q)) {
-        query = query.ilike('uniquePlayerId', q);
-      } else {
-        if (!isSafeFilterValue(q) || !isSafeFilterValue(cleanQ)) {
-          return res.status(200).json({ results: [] });
+      let players: any[] | null = null;
+      let error: any = null;
+      try {
+        if (/^MT-[A-Z0-9]{4}$/i.test(q)) {
+          const r = await baseQuery().ilike('uniquePlayerId', q).limit(15);
+          players = r.data;
+          error = r.error;
+        } else {
+          // Separate escaped .ilike() searches (no string-built .or()); _ ' etc. match literally
+          const byUsername = await searchContains(baseQuery, ['username'], cleanQ, 15);
+          const byName = await searchContains(baseQuery, ['name'], q, 15);
+          const seen = new Set<number>();
+          players = [...byUsername, ...byName].filter(p => (seen.has(p.id) ? false : (seen.add(p.id), true))).slice(0, 15);
         }
-        query = query.or(`username.ilike.%${cleanQ}%,name.ilike.%${q}%`);
+      } catch (e: any) {
+        error = e;
       }
-
-      const { data: players, error } = await query.limit(15);
       if (error) {
         console.warn('[Friends Search] Error:', error.message);
         return res.status(200).json({ results: [] });

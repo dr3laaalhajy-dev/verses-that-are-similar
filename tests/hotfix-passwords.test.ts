@@ -15,10 +15,24 @@ type Row = Record<string, any>;
 const tables: Record<string, Row[]> = {};
 const calls: string[] = [];
 
+const ilikePatterns: string[] = [];
+
+/** Real ILIKE semantics: % and * (PostgREST alias) = any run, _ = one char, backslash escapes. */
 function likeToRegex(pattern: string) {
-  // Tests only feed safe values (no wildcards), so this is a case-insensitive exact match.
-  const esc = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`^${esc}$`, 'i');
+  let re = '';
+  for (let i = 0; i < pattern.length; i++) {
+    const ch = pattern[i];
+    if (ch === '\\' && i + 1 < pattern.length) {
+      re += pattern[++i].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    } else if (ch === '%' || ch === '*') {
+      re += '.*';
+    } else if (ch === '_') {
+      re += '.';
+    } else {
+      re += ch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+  }
+  return new RegExp(`^${re}$`, 'is');
 }
 
 class Query {
@@ -32,7 +46,7 @@ class Query {
   neq(c: string, v: any) { this.filters.push(r => r[c] !== v); return this; }
   ilike(c: string, p: string) {
     calls.push(`${this.table}.ilike.${c}`);
-    assert.ok(!/[%_*,()\\"']/.test(p), `unsafe ilike pattern reached DB: ${p}`);
+    ilikePatterns.push(p);
     const re = likeToRegex(p);
     this.filters.push(r => typeof r[c] === 'string' && re.test(r[c]));
     return this;
@@ -72,6 +86,7 @@ let security: typeof import('../api/_lib/playerSecurity.ts');
 let registerHandler: any;
 let scoreHandler: any;
 let meHandler: any;
+let friendsHandler: any;
 
 before(async () => {
   const supaUrl = new URL('../api/_lib/supabaseAdmin.ts', import.meta.url).href;
@@ -83,6 +98,7 @@ before(async () => {
   registerHandler = (await import('../api/player-register.ts')).default;
   scoreHandler = (await import('../api/player-score.ts')).default;
   meHandler = (await import('../api/users/me.ts')).default;
+  friendsHandler = (await import('../api/friends.ts')).default;
 });
 
 function makeRes() {
@@ -139,13 +155,44 @@ test('toSafeAdmin drops password', () => {
   assert.deepEqual(security.toSafeAdmin({ id: 1, username: 'a', password: 'h', role: 'ADMIN' }), { id: 1, username: 'a', role: 'ADMIN' });
 });
 
-test('isSafeFilterValue rejects filter/wildcard characters', () => {
-  for (const bad of ['a,b', 'a(b', 'a)b', '50%', 'a_b', '*', 'a\\b', 'a"b', "a'b", '', '   ', '%%', '_']) {
-    assert.equal(security.isSafeFilterValue(bad), false, bad);
+test('isUsableLookupValue: rejects only empty, control chars and wildcard-only values', () => {
+  for (const bad of ['', '   ', '%', '_', '*', '%%', '%_*', ' % ', '\\', 'a\u0000b', 'a\nb', 'tab\there']) {
+    assert.equal(security.isUsableLookupValue(bad), false, JSON.stringify(bad));
   }
-  for (const ok of ['ahmad', 'أحمد', 'MT-AB12', 'ali.k', '@ali']) {
-    assert.equal(security.isSafeFilterValue(ok), true, ok);
+  for (const ok of ['ahmad', 'أحمد', 'Ahmad_99', "O'Brien", 'a,b', 'x,id.gt.0', '50%', 'MT-AB12', '@ali']) {
+    assert.equal(security.isUsableLookupValue(ok), true, ok);
   }
+});
+
+test('escapeLikePattern escapes % _ * and backslash', () => {
+  assert.equal(security.escapeLikePattern('a%b_c*d\\e'), 'a\\%b\\_c\\*d\\\\e');
+  assert.equal(security.escapeLikePattern("O'Brien,(x)"), "O'Brien,(x)");
+});
+
+test('escaped name lookup matches literally: "A_i" does not match "Ali" but matches "A_i"', async () => {
+  seedPlayers([{ id: 1, name: 'Ali', password: 'p' }]);
+  assert.equal(await security.findPlayerRow(fakeDb, { name: 'A_i' }), null);
+  seedPlayers([{ id: 1, name: 'Ali', password: 'p' }, { id: 2, name: 'A_i', password: 'p' }]);
+  assert.equal((await security.findPlayerRow(fakeDb, { name: 'a_I' }))?.id, 2);
+});
+
+test('"%", "_" and "*" alone never match everyone (lookup and search)', async () => {
+  seedPlayers([{ id: 1, name: 'Ali', username: 'ali' }, { id: 2, name: 'Sara', username: 'sara' }]);
+  for (const w of ['%', '_', '*', '%%', '_%*']) {
+    calls.length = 0;
+    assert.equal(await security.findPlayerRow(fakeDb, { username: w, name: w }), null, w);
+    assert.ok(!calls.some(c => c.includes('.ilike.')), `ilike ran for ${w}`);
+    const found = await security.searchContains(() => fakeDb.from('players').select('*'), ['name', 'username'], w);
+    assert.deepEqual(found, [], w);
+  }
+});
+
+test('searchContains escapes wildcards inside the term and never uses .or()', async () => {
+  seedPlayers([{ id: 1, name: 'Ahmad_99', username: 'ahmad' }, { id: 2, name: 'Ahmad199', username: 'a2' }, { id: 3, name: 'x', username: 'b_99' }]);
+  ilikePatterns.length = 0;
+  const rows = await security.searchContains(() => fakeDb.from('players').select('*'), ['name', 'username'], '_99');
+  assert.deepEqual(rows.map(r => r.id).sort(), [1, 3]);
+  assert.deepEqual(ilikePatterns, ['%\\_99%', '%\\_99%']);
 });
 
 test('findPlayerRow matches legacy "@username" and never uses .or()', async () => {
@@ -154,12 +201,18 @@ test('findPlayerRow matches legacy "@username" and never uses .or()', async () =
   assert.equal(row?.id, 7);
 });
 
-test('findPlayerRow skips name ilike for injection-like input', async () => {
-  seedPlayers([{ id: 1, name: 'Ali', username: 'ali', password: 'pw' }]);
+test('injection string "x,id.gt.0" is only a literal value and never alters a query', async () => {
+  seedPlayers([{ id: 1, name: 'Ali', username: 'ali', password: 'pw' }, { id: 2, name: 'Sara', username: 'sara', password: 'pw' }]);
   calls.length = 0;
-  const row = await security.findPlayerRow(fakeDb, { username: 'x,id.gt.0', name: 'x,id.gt.0' });
+  ilikePatterns.length = 0;
+  const evil = 'x,id.gt.0';
+  const row = await security.findPlayerRow(fakeDb, { username: evil, name: evil });
   assert.equal(row, null);
-  assert.ok(!calls.includes('players.ilike.name'));
+  // only parameterized .eq / .ilike calls, never .or(); the value is passed through unchanged
+  assert.deepEqual(calls, ['players.eq.username', 'players.eq.username', 'players.ilike.name']);
+  assert.deepEqual(ilikePatterns, [evil]);
+  const search = await security.searchContains(() => fakeDb.from('players').select('*'), ['name', 'username'], evil);
+  assert.deepEqual(search, []);
 });
 
 test('selectByAnyEq: separate .eq() lookups, merged and deduplicated, injection text is just a value', async () => {
@@ -218,12 +271,49 @@ test('register: no 1234 default, min 6 chars, stores bcrypt hash, no password in
   assert.match(tables.players[0].password, /^\$2[aby]\$10\$/);
 });
 
-test('register rejects names/usernames with filter characters', async () => {
+test('register accepts display names like "Ahmad_99" and "O\'Brien"', async () => {
   seedPlayers([]);
-  const r1 = await call(registerHandler, 'POST', { body: { name: 'a,b', username: 'ab', password: '123456' } });
+  const a = await call(registerHandler, 'POST', { body: { name: 'Ahmad_99', username: 'ahmad99', password: '123456' } });
+  assert.equal(a.statusCode, 200, JSON.stringify(a.body));
+  const b = await call(registerHandler, 'POST', { body: { name: "O'Brien", username: 'obrien', password: '123456' } });
+  assert.equal(b.statusCode, 200, JSON.stringify(b.body));
+  // "Ahmad199" is a different name: the escaped "_" must not make it look taken
+  const c = await call(registerHandler, 'POST', { body: { name: 'Ahmad199', username: 'ahmad199', password: '123456' } });
+  assert.equal(c.statusCode, 200, JSON.stringify(c.body));
+  // the exact same name (any case) is still detected as taken
+  const d = await call(registerHandler, 'POST', { body: { name: 'ahmad_99', username: 'other1', password: '123456' } });
+  assert.equal(d.statusCode, 400);
+  assert.equal(d.body.message, 'NAME_TAKEN');
+});
+
+test('register still rejects control characters, wildcard-only names and unsafe usernames', async () => {
+  seedPlayers([]);
+  const r1 = await call(registerHandler, 'POST', { body: { name: 'Ab\u0007c', username: 'abc', password: '123456' } });
   assert.equal(r1.statusCode, 400);
-  const r2 = await call(registerHandler, 'POST', { body: { name: 'Ab', username: 'a(b)', password: '123456' } });
+  const r2 = await call(registerHandler, 'POST', { body: { name: '%%', username: 'abc', password: '123456' } });
   assert.equal(r2.statusCode, 400);
+  const r3 = await call(registerHandler, 'POST', { body: { name: 'Ab', username: 'a(b)', password: '123456' } });
+  assert.equal(r3.statusCode, 400);
+});
+
+test('update-profile accepts a new display name with _ and \'', async () => {
+  seedPlayers([{ id: 1, name: 'Ali', username: 'ali', password: 'oldpass' }]);
+  const res = await call(registerHandler, 'POST', { body: { action: 'update-profile', currentUsername: 'ali', name: "O'Brien_1", username: 'ali' } });
+  assert.equal(res.statusCode, 200, JSON.stringify(res.body));
+  assert.equal(tables.players[0].name, "O'Brien_1");
+});
+
+test('friends search: "_" matches literally, "%" alone returns nothing', async () => {
+  seedPlayers([
+    { id: 1, name: 'Ahmad_99', username: 'ahmad', isBlocked: false },
+    { id: 2, name: 'Ahmad199', username: 'a2', isBlocked: false },
+  ]);
+  const lit = await call(friendsHandler, 'GET', { query: { action: 'search', q: 'd_9' } });
+  assert.equal(lit.statusCode, 200);
+  assert.deepEqual(lit.body.results.map((r: any) => r.id), [1]);
+  const all = await call(friendsHandler, 'GET', { query: { action: 'search', q: '%' } });
+  assert.deepEqual(all.body.results, []);
+  assertNoPassword(lit.body);
 });
 
 test('change-password requires current password and stores bcrypt hash', async () => {
@@ -278,4 +368,40 @@ test('POST player-score response never returns password', async () => {
   assert.equal(res.statusCode, 200);
   assertNoPassword(res.body);
   assert.equal(res.body.points, 10);
+});
+
+// ---------------------------------------------------------------------------
+// Admin JWT must fail closed when deployed without JWT_SECRET
+// ---------------------------------------------------------------------------
+test('admin JWT: no hardcoded fallback when NODE_ENV=production or VERCEL_ENV is set', async () => {
+  const jwtLib = await import('../api/_lib/jwt.ts');
+  const saved = { JWT_SECRET: process.env.JWT_SECRET, NODE_ENV: process.env.NODE_ENV, VERCEL_ENV: process.env.VERCEL_ENV };
+  const restore = () => {
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k]; else process.env[k] = v;
+    }
+  };
+  try {
+    // local dev (neither set): fallback allowed, so a dev token can be produced
+    delete process.env.JWT_SECRET; delete process.env.NODE_ENV; delete process.env.VERCEL_ENV;
+    const devToken = jwtLib.signAdminToken({ adminId: 1 });
+
+    for (const env of [{ NODE_ENV: 'production' }, { VERCEL_ENV: 'production' }, { VERCEL_ENV: 'preview' }]) {
+      delete process.env.NODE_ENV; delete process.env.VERCEL_ENV; delete process.env.JWT_SECRET;
+      Object.assign(process.env, env);
+      assert.throws(() => jwtLib.signAdminToken({ adminId: 1 }), /JWT_SECRET/, JSON.stringify(env));
+      assert.throws(() => jwtLib.verifyAdminToken(devToken), /JWT_SECRET/, JSON.stringify(env));
+      process.env.JWT_SECRET = '   ';
+      assert.throws(() => jwtLib.signAdminToken({ adminId: 1 }), /JWT_SECRET/, 'blank secret');
+    }
+
+    // deployed with a real secret: works, and a token made with the dev fallback is rejected
+    process.env.VERCEL_ENV = 'production';
+    process.env.JWT_SECRET = 'unit-test-secret-not-real-0123456789';
+    const t = jwtLib.signAdminToken({ adminId: 7 });
+    assert.equal(jwtLib.verifyAdminToken(t).adminId, 7);
+    assert.throws(() => jwtLib.verifyAdminToken(devToken));
+  } finally {
+    restore();
+  }
 });
