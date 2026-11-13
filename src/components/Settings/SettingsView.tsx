@@ -3,6 +3,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useApp } from '../../contexts/AppContext';
+import { clearPlayerSession, logoutPlayerSession, savePlayerSession } from '../../lib/playerSession';
 import {
   ChevronRight,
   ChevronLeft,
@@ -83,6 +84,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const { permission: pushPermission, requestPermissionAndRegister: requestPushPermission, isLoading: isPushLoading } = usePushNotifications(playerUsername || playerName);
 
   const handleLogoutClick = async () => {
+    // 0. Revoke this device's session on the server; the local token is cleared even if this fails.
+    await logoutPlayerSession();
+
     // 1. عزل عملية الخروج تماماً (Safe Execution)
     try {
       await supabase.auth.signOut();
@@ -343,6 +347,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         return;
       }
 
+      // The server may issue a fresh session (other devices are signed out).
+      savePlayerSession(data);
+
       setPasswordMsg({ type: 'success', text: 'تم تغيير كلمة المرور بنجاح!' });
       setCurrentPassword('');
       setNewPassword('');
@@ -392,6 +399,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           setIsDeletingAccount(false);
           return;
         }
+
+        // The server revoked every session of the deleted account.
+        clearPlayerSession();
 
         localStorage.removeItem('quran_player_name');
         localStorage.removeItem('quran_player_username');

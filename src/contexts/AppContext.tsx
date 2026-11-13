@@ -7,6 +7,7 @@ import {
   Info, HelpCircle, AtSign, Key, LogIn, UserPlus, Smartphone, Download, Share2, Mail, ExternalLink, Send,
   Clock, RefreshCw, Globe, Plus, Gamepad2, Trash2, Play, ShoppingBag
 } from 'lucide-react';
+import { clearPlayerSession, logoutPlayerSession, replacePlayerSession, takeSessionEndedMessage } from '../lib/playerSession';
 import { quranData } from '../services/QuranRepository';
 import { HADITHS, Hadith } from '../services/HadithRepository';
 import {
@@ -903,6 +904,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }, 3500);
     };
     toastListeners.add(handleToast);
+    const sessionEndedMessage = takeSessionEndedMessage();
+    if (sessionEndedMessage) {
+      handleToast({ id: `session-ended-${Date.now()}`, type: 'error', message: sessionEndedMessage });
+    }
     return () => {
       toastListeners.delete(handleToast);
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
@@ -1289,6 +1294,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
 
         const p = data.player;
+        replacePlayerSession(data);
         setPlayerName(p.name);
         setPlayerUsername(p.username);
         localStorage.setItem('quran_player_name', p.name);
@@ -1336,6 +1342,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
 
         const p = data.player;
+        replacePlayerSession(data);
         setPlayerName(p.name);
         setPlayerUsername(p.username);
         localStorage.setItem('quran_player_name', p.name);
@@ -6401,6 +6408,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [refreshUserProfile]);
 
   const handlePlayerLogout = useCallback(async () => {
+    // Revoke this device's session on the server; the local token is cleared even if this fails.
+    await logoutPlayerSession();
+
     // 4. تنظيف حالة الواجهة (State Reset) فوراً
     try {
       setPlayerName(null);
@@ -6472,6 +6482,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     // Complete cleanup from state and storage
+    clearPlayerSession();
     setPlayerName(null);
     setPlayerUsername(null);
     setActiveFrame(null);
