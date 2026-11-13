@@ -10,7 +10,9 @@ export function resolveFullUrl(pathOrUrl?: string | null): string | null {
   let baseUrl = process.env.VITE_APP_URL || process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || '';
   if (!baseUrl && process.env.VERCEL_URL) baseUrl = `https://${process.env.VERCEL_URL}`;
   if (!baseUrl && process.env.VERCEL_PROJECT_PRODUCTION_URL) baseUrl = `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
-  if (!baseUrl) baseUrl = 'https://mateen-quran.vercel.app';
+  // No hardcoded production URL: on Vercel, VERCEL_URL is always set. Without any base URL
+  // (e.g. local scripts) keep the link relative instead of pointing at production.
+  if (!baseUrl) return relativePath;
   return `${baseUrl.replace(/\/+$/, '')}${relativePath}`;
 }
 
