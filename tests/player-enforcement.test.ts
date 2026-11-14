@@ -836,3 +836,50 @@ describe('daily challenge is never hijacked by a room the player left (fix 6)', 
     assert.doesNotMatch(page, /\.\.\.updated \}\) : updated\)/);
   });
 });
+
+describe('daily left open, then a group room (fix 7)', () => {
+  const ctxSrc = async () => {
+    const { readFileSync } = await import('node:fs');
+    const { fileURLToPath } = await import('node:url');
+    return readFileSync(fileURLToPath(new URL('../src/contexts/AppContext.tsx', import.meta.url)), 'utf8');
+  };
+  const body = (ctx: string, signature: string, len = 600) => {
+    const i = ctx.indexOf(signature);
+    assert.ok(i > 0, signature);
+    return ctx.slice(i, i + len);
+  };
+
+  for (const sig of [
+    'const handleJoinV1 = async (roomId: string, password?: string) => {',
+    'const handleCreateV1 = async () => {',
+    'const handleStartRoomV1 = async () => {',
+    'const handleResumeActiveRoom = (targetRoom: any) => {',
+    'const handleAcceptRoomInvite = useCallback(async (roomOrInvite: any) => {',
+  ]) {
+    test(`${sig.split(' = ')[0].replace('const ', '')} leaves daily mode before anything else`, async () => {
+      const fn = body(await ctxSrc(), sig, 500);
+      const modeAt = fn.indexOf("setChallengeMode('normal');");
+      assert.ok(modeAt > 0, 'sets the group (normal) mode');
+      for (const call of ['fetch(', 'setRoom(', 'setView(']) {
+        const at = fn.indexOf(call);
+        assert.ok(at === -1 || modeAt < at, `mode is set before ${call}`);
+      }
+    });
+  }
+
+  test('a correct answer inside a room never completes the daily or gives the streak', async () => {
+    const fn = body(await ctxSrc(), 'const handleConfirmAnswer = () => {', 6000);
+    const i = fn.indexOf('incrementStreak();');
+    assert.ok(i > 0);
+    const guard = fn.slice(fn.lastIndexOf('if (', i), i);
+    assert.match(guard, /challengeMode === 'daily' && !room\?\.id && view !== 'group_game'/);
+  });
+
+  test('the mode switch is NOT inside setView or setRoom (a stale room must not flip it)', async () => {
+    const ctx = await ctxSrc();
+    const setView = body(ctx, 'const setView = useCallback', 1500);
+    assert.doesNotMatch(setView, /setChallengeMode/);
+    const setRoom = body(ctx, 'const setRoom = (val: any) => {', 500);
+    assert.doesNotMatch(setRoom, /setChallengeMode/);
+  });
+});

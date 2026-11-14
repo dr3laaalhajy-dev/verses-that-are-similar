@@ -2799,6 +2799,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   ]);
 
   const handleJoinV1 = async (roomId: string, password?: string) => {
+    // Entering a group room: leave daily mode first (a daily challenge left open must not turn
+    // room answers into the daily completion, nor make the daily guards clear this room).
+    setChallengeMode('normal');
     if (!playerName) {
       toast.error('يرجى تسجيل اسمك أولاً للانضمام');
       return;
@@ -2875,6 +2878,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const handleCreateV1 = async () => {
+    // Entering a group room: leave daily mode first (a daily challenge left open must not turn
+    // room answers into the daily completion, nor make the daily guards clear this room).
+    setChallengeMode('normal');
     if (!playerName) return;
     if (v1IsPrivate && !v1RoomPassword.trim()) {
       toast.error('يرجى كتابة كلمة المرور للغرفة الخاصة');
@@ -3588,6 +3594,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const handleStartRoomV1 = async () => {
+    // Entering a group room: leave daily mode first (a daily challenge left open must not turn
+    // room answers into the daily completion, nor make the daily guards clear this room).
+    setChallengeMode('normal');
     if (!room?.id || v1IsStartingRoom) return;
     if ((room?.participants?.length || 0) < 2) {
       toast.error('يجب وجود لاعبين على الأقل لبدء التحدي');
@@ -4538,6 +4547,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const handleAcceptRoomInvite = useCallback(async (roomOrInvite: any) => {
     setIncomingRoomInvite(null);
     if (!roomOrInvite) return;
+    // Entering a group room: leave daily mode first (a daily challenge left open must not turn
+    // room answers into the daily completion, nor make the daily guards clear this room).
+    setChallengeMode('normal');
 
     // If RoomInviteModal already completed the join and passed the room object:
     if (roomOrInvite.status && (roomOrInvite.id || roomOrInvite.room)) {
@@ -4621,6 +4633,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const handleResumeActiveRoom = (targetRoom: any) => {
     if (!targetRoom) return;
+    // Entering a group room: leave daily mode first (a daily challenge left open must not turn
+    // room answers into the daily completion, nor make the daily guards clear this room).
+    setChallengeMode('normal');
     setRoom(targetRoom);
     localStorage.setItem('activeRoomId', targetRoom.id);
 
@@ -5606,7 +5621,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           });
         }
 
-        if (challengeMode === 'daily') {
+        // Only a solved DAILY question counts: an answer inside a group room never does.
+        if (challengeMode === 'daily' && !room?.id && view !== 'group_game') {
           // Requirement 2: Trigger central streak increment immediately upon solving daily question
           incrementStreak();
           setSkillsFeedback(true);
