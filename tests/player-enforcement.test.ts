@@ -1,0 +1,593 @@
+/**
+ * REQUIRE_PLAYER_TOKEN enforcement on player endpoints:
+ *   api/player-register.ts (change-password, update-profile, delete-account)
+ *   api/friends.ts (send-request, respond-request, remove-friend, list)
+ *   api/1v1.ts (every action that acts for a player; start / update-settings owner only)
+ * For each: switch on + no token -> 401, another player's token -> 403, own token -> works,
+ * switch off -> old behaviour. Public actions stay public.
+ * Fully offline (in-memory fake DB). Run with:
+ *   node --import tsx --experimental-test-module-mocks --test tests/player-enforcement.test.ts
+ */
+import { test, mock, before, beforeEach, afterEach, describe } from 'node:test';
+import assert from 'node:assert/strict';
+import bcrypt from 'bcryptjs';
+
+// ---------------------------------------------------------------------------
+// In-memory fake of the Supabase query builder subset used by these endpoints
+// ---------------------------------------------------------------------------
+type Row = Record<string, any>;
+
+/** Parses PostgREST or() strings: "a.eq.1,b.eq.2" and "and(a.eq.1,b.eq.2),and(...)". */
+function orToPredicate(expr: string): (r: Row) => boolean {
+  const parts: string[] = [];
+  let depth = 0, cur = '';
+  for (const ch of expr) {
+    if (ch === '(') depth++;
+    if (ch === ')') depth--;
+    if (ch === ',' && depth === 0) { parts.push(cur); cur = ''; } else cur += ch;
+  }
+  if (cur) parts.push(cur);
+  const cond = (c: string) => {
+    const [col, op, ...rest] = c.split('.');
+    const val = rest.join('.');
+    return (r: Row) => op === 'eq' && String(r[col]) === val;
+  };
+  const preds = parts.map((p) => {
+    const m = /^and\((.*)\)$/.exec(p.trim());
+    if (m) {
+      const cs = m[1].split(',').map(cond);
+      return (r: Row) => cs.every((f) => f(r));
+    }
+    return cond(p.trim());
+  });
+  return (r: Row) => preds.some((f) => f(r));
+}
+
+class FakeDb {
+  tables: Record<string, Row[]> = {};
+  seq = 0;
+  from(t: string) { return new Query(this, t); }
+  rows(t: string) { return (this.tables[t] ||= []); }
+}
+
+class Query {
+  private filters: ((r: Row) => boolean)[] = [];
+  private op: 'select' | 'update' | 'insert' | 'delete' | 'upsert' = 'select';
+  private payload: any = null;
+  private max = Infinity;
+  constructor(private db: FakeDb, private table: string) {}
+  select(_c?: string) { return this; }
+  eq(c: string, v: any) { this.filters.push((r) => String(r[c]) === String(v)); return this; }
+  neq(c: string, v: any) { this.filters.push((r) => String(r[c]) !== String(v)); return this; }
+  is(c: string, v: any) { this.filters.push((r) => (r[c] ?? null) === v); return this; }
+  gt(c: string, v: any) { this.filters.push((r) => String(r[c]) > String(v)); return this; }
+  gte(c: string, v: any) { this.filters.push((r) => String(r[c]) >= String(v)); return this; }
+  lt(c: string, v: any) { this.filters.push((r) => String(r[c]) < String(v)); return this; }
+  lte(c: string, v: any) { this.filters.push((r) => String(r[c]) <= String(v)); return this; }
+  in(c: string, vs: any[]) { const s = (vs || []).map(String); this.filters.push((r) => s.includes(String(r[c]))); return this; }
+  ilike(c: string, p: string) {
+    const re = new RegExp('^' + p.replace(/\\(.)/g, '$1').replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/%/g, '.*') + '$', 'i');
+    this.filters.push((r) => typeof r[c] === 'string' && re.test(r[c]));
+    return this;
+  }
+  or(expr: string) { this.filters.push(orToPredicate(expr)); return this; }
+  not() { return this; }
+  contains() { return this; }
+  order() { return this; }
+  range() { return this; }
+  limit(n: number) { this.max = n; return this; }
+  update(d: any) { this.op = 'update'; this.payload = d; return this; }
+  insert(d: any) { this.op = 'insert'; this.payload = d; return this; }
+  upsert(d: any) { this.op = 'upsert'; this.payload = d; return this; }
+  delete() { this.op = 'delete'; return this; }
+  private run(): { data: Row[] | null; error: any } {
+    const all = this.db.rows(this.table);
+    if (this.op === 'insert' || this.op === 'upsert') {
+      const items = Array.isArray(this.payload) ? this.payload : [this.payload];
+      const out = items.map((item: Row) => {
+        const id = this.table === 'player_sessions' ? `sess-${++this.db.seq}` : item.id ?? all.length + 100;
+        const row = this.table === 'player_sessions' ? { id, revoked_at: null, revoked_reason: null, ...item } : { id, ...item };
+        all.push(row);
+        return { ...row };
+      });
+      return { data: out, error: null };
+    }
+    const matched = all.filter((r) => this.filters.every((f) => f(r))).slice(0, this.max);
+    if (this.op === 'update') matched.forEach((r) => Object.assign(r, this.payload));
+    if (this.op === 'delete') this.db.tables[this.table] = all.filter((r) => !matched.includes(r));
+    return { data: matched.map((r) => ({ ...r })), error: null };
+  }
+  async maybeSingle() { const r = this.run(); return { data: r.data?.[0] ?? null, error: r.error }; }
+  async single() { const r = this.run(); return r.data?.[0] ? { data: r.data[0], error: null } : { data: null, error: r.error ?? { message: 'no rows' } }; }
+  then(resolve: any, reject: any) { return Promise.resolve(this.run()).then(resolve, reject); }
+}
+
+let db = new FakeDb();
+const proxyDb = { from: (t: string) => db.from(t), channel: () => ({ send: async () => ({}), subscribe: () => ({}) }), removeChannel: async () => ({}) };
+
+function mockRes() {
+  return {
+    statusCode: 200, body: undefined as any, headers: {} as Record<string, string>,
+    setHeader(k: string, v: string) { this.headers[k] = v; },
+    status(c: number) { this.statusCode = c; return this; },
+    json(b: any) { this.body = b; return this; },
+    send(b: any) { this.body = b; return this; },
+    end() { return this; },
+  };
+}
+
+let S: typeof import('../api/_lib/playerSession.ts');
+let A: typeof import('../api/_lib/playerAuth.ts');
+let registerHandler: any;
+let friendsHandler: any;
+let duelHandler: any;
+
+before(async () => {
+  const supaUrl = new URL('../api/_lib/supabaseAdmin.ts', import.meta.url).href;
+  mock.module(supaUrl, { namedExports: { supabaseAdmin: proxyDb }, defaultExport: proxyDb });
+  const uidUrl = new URL('../api/_lib/uniquePlayerId.ts', import.meta.url).href;
+  mock.module(uidUrl, { namedExports: { getOrGenerateUniquePlayerId: async () => 'MT-TEST' } });
+  S = await import('../api/_lib/playerSession.ts');
+  A = await import('../api/_lib/playerAuth.ts');
+  registerHandler = (await import('../api/player-register.ts')).default;
+  friendsHandler = (await import('../api/friends.ts')).default;
+  duelHandler = (await import('../api/1v1.ts')).default;
+});
+
+const ORIGINAL_FLAG = process.env.REQUIRE_PLAYER_TOKEN;
+beforeEach(() => {
+  db = new FakeDb();
+  process.env.REQUIRE_PLAYER_TOKEN = 'true';
+});
+afterEach(() => {
+  if (ORIGINAL_FLAG === undefined) delete process.env.REQUIRE_PLAYER_TOKEN;
+  else process.env.REQUIRE_PLAYER_TOKEN = ORIGINAL_FLAG;
+});
+const switchOff = () => { process.env.REQUIRE_PLAYER_TOKEN = 'false'; };
+
+const PASS = 'secret-pass';
+const HASH = bcrypt.hashSync(PASS, 4);
+
+/** alice (1) and bob (2), with passwords and usernames; carol (3) for friends. */
+function seedPlayers() {
+  db.rows('players').push(
+    { id: 1, name: 'Alice', username: 'alice', uniquePlayerId: 'MT-AAAA', password: HASH, isBlocked: false, points: 100, cups: 0 },
+    { id: 2, name: 'Bob', username: 'bob', uniquePlayerId: 'MT-BBBB', password: HASH, isBlocked: false, points: 100, cups: 0 },
+    { id: 3, name: 'Carol', username: 'carol', uniquePlayerId: 'MT-CCCC', password: HASH, isBlocked: false, points: 100, cups: 0 },
+  );
+}
+async function tokenFor(id: number) {
+  return (await S.issuePlayerSession(id, { db: proxyDb, maxActiveSessions: 5 })).token;
+}
+const auth = (t: string | null) => (t ? { authorization: `Bearer ${t}` } : {});
+
+async function call(handler: any, opts: { method?: string; body?: any; query?: any; headers?: Record<string, string> }) {
+  const res = mockRes();
+  const req: any = {
+    method: opts.method ?? 'POST',
+    body: opts.body,
+    query: opts.query ?? {},
+    headers: { ...(opts.headers || {}) },
+  };
+  await handler(req, res);
+  return res;
+}
+const quiet = async <T>(fn: () => Promise<T>): Promise<T> => {
+  const orig = { error: console.error, warn: console.warn, log: console.log, info: console.info };
+  console.error = console.warn = console.log = console.info = () => {};
+  try { return await fn(); } finally { Object.assign(console, orig); }
+};
+
+// ---------------------------------------------------------------------------
+// Unit: matching + the gate
+// ---------------------------------------------------------------------------
+describe('identity matching', () => {
+  const p = { id: 7, name: 'Ali Hasan', username: '@ali', uniquePlayerId: 'MT-AB12' };
+  test('matches id, uniquePlayerId, username (with/without @, any case), name', () => {
+    for (const v of [7, '7', ' 7 ', 'MT-AB12', 'mt-ab12', 'ali', '@ali', 'ALI', 'Ali Hasan', 'ali hasan']) {
+      assert.equal(A.identifierMatchesPlayer(v, p), true, String(v));
+    }
+  });
+  test('rejects anything else', () => {
+    for (const v of [8, '8', '7.0', 'alex', 'MT-AB13', 'Ali H', 'ali2', {}, [7], true, 7.5]) {
+      assert.equal(A.identifierMatchesPlayer(v, p), false, JSON.stringify(v));
+    }
+  });
+  test('empty claims are ignored', () => {
+    for (const v of [undefined, null, '', '  ', 'undefined', 'null']) assert.equal(A.isEmptyClaim(v), true);
+    for (const v of [0, 'x', {}]) assert.equal(A.isEmptyClaim(v), false);
+  });
+});
+
+describe('enforcePlayerActor', () => {
+  beforeEach(seedPlayers);
+  const spec = { fields: { playerId: 'id', playerName: 'name' }, headers: { 'x-player-id': 'id' } } as const;
+
+  test('switch off: no effect at all (request untouched, no response)', async () => {
+    switchOff();
+    const req: any = { method: 'POST', body: { playerId: 'bob' }, query: {}, headers: {} };
+    const before = JSON.stringify(req);
+    const res = mockRes();
+    assert.deepEqual(await A.enforcePlayerActor(req, res as any, spec as any), { enforced: false });
+    assert.equal(JSON.stringify(req), before);
+    assert.equal(res.body, undefined);
+  });
+
+  test('no token -> 401 SESSION_INVALID; replaced token -> 401 SESSION_REPLACED', async () => {
+    const res = mockRes();
+    assert.equal(await A.enforcePlayerActor({ method: 'POST', body: {}, query: {}, headers: {} } as any, res as any, spec as any), null);
+    assert.deepEqual([res.statusCode, res.body], [401, { code: 'SESSION_INVALID' }]);
+
+    const old = (await S.issuePlayerSession(1, { db: proxyDb })).token;
+    await S.issuePlayerSession(1, { db: proxyDb }); // newer login replaces it
+    const res2 = mockRes();
+    await A.enforcePlayerActor({ method: 'POST', body: {}, query: {}, headers: auth(old) } as any, res2 as any, spec as any);
+    assert.deepEqual([res2.statusCode, res2.body], [401, { code: 'SESSION_REPLACED' }]);
+  });
+
+  test('a claim naming another player -> 403 { code: FORBIDDEN } and nothing else', async () => {
+    const t = await tokenFor(1);
+    for (const req of [
+      { body: { playerId: 'bob' } },
+      { body: { playerId: 2 } },
+      { body: { playerName: 'Bob' } },
+      { body: { playerId: ['alice', 'bob'] } },
+      { body: {}, query: { playerId: 'MT-BBBB' } },
+      { body: {}, headers: { 'x-player-id': '2' } },
+    ] as any[]) {
+      const res = mockRes();
+      const r: any = { method: 'POST', query: {}, ...req, headers: { ...auth(t), ...(req.headers || {}) } };
+      assert.equal(await A.enforcePlayerActor(r, res as any, spec as any), null, JSON.stringify(req));
+      assert.deepEqual([res.statusCode, res.body], [403, { code: 'FORBIDDEN' }]);
+    }
+  });
+
+  test('matching claims are replaced by the token player (operation always on the token player)', async () => {
+    const t = await tokenFor(1);
+    const req: any = { method: 'POST', body: { playerId: 'ALICE', playerName: 'alice' }, query: {}, headers: { ...auth(t), 'x-player-id': 'MT-AAAA' } };
+    const gate: any = await A.enforcePlayerActor(req, mockRes() as any, spec as any);
+    assert.equal(gate.enforced, true);
+    assert.equal(gate.actor.id, 1);
+    assert.deepEqual(req.body, { playerId: '1', playerName: 'Alice' });
+    assert.equal(req.headers['x-player-id'], '1');
+    assert.equal(A.getActingPlayer(req)?.id, 1);
+  });
+
+  test('missing identity fields are filled with the token player', async () => {
+    const t = await tokenFor(2);
+    const post: any = { method: 'POST', body: { roomId: 'r1' }, query: {}, headers: auth(t) };
+    await A.enforcePlayerActor(post, mockRes() as any, spec as any);
+    assert.deepEqual(post.body, { roomId: 'r1', playerId: '2', playerName: 'Bob' });
+    const get: any = { method: 'GET', query: { roomId: 'r1' }, headers: auth(t) };
+    await A.enforcePlayerActor(get, mockRes() as any, spec as any);
+    assert.equal(get.query.playerId, '2');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// api/player-register.ts
+// ---------------------------------------------------------------------------
+describe('player-register', () => {
+  beforeEach(seedPlayers);
+  const reg = (body: any, t: string | null = null) => quiet(() => call(registerHandler, { body, headers: auth(t) }));
+  const player = (id: number) => db.rows('players').find((p) => p.id === id);
+
+  const cases: Record<string, any> = {
+    'change-password': { action: 'change-password', username: 'alice', currentPassword: PASS, newPassword: 'new-pass-123' },
+    'update-profile': { action: 'update-profile', currentUsername: 'alice', currentName: 'Alice', name: 'Alice 2', username: 'alice' },
+    'delete-account': { action: 'delete-account', username: 'alice', password: PASS },
+  };
+
+  for (const [action, body] of Object.entries(cases)) {
+    test(`${action}: on + no token -> 401`, async () => {
+      const r = await reg(body);
+      assert.deepEqual([r.statusCode, r.body], [401, { code: 'SESSION_INVALID' }]);
+      assert.ok(player(1), 'nothing changed');
+      assert.equal(player(1).name, 'Alice');
+    });
+    test(`${action}: on + another player's token -> 403`, async () => {
+      const r = await reg(body, await tokenFor(2));
+      assert.deepEqual([r.statusCode, r.body], [403, { code: 'FORBIDDEN' }]);
+      assert.equal(player(1).name, 'Alice');
+      assert.equal(player(1).password, HASH);
+      assert.equal(player(2).name, 'Bob');
+    });
+  }
+
+  test('change-password: on + own token -> works; password still required', async () => {
+    const t = await tokenFor(1);
+    const wrong = await reg({ ...cases['change-password'], currentPassword: 'nope-nope' }, t);
+    assert.equal(wrong.statusCode, 400);
+    const r = await reg(cases['change-password'], t);
+    assert.equal(r.statusCode, 200);
+    assert.ok(bcrypt.compareSync('new-pass-123', player(1).password));
+  });
+
+  test('update-profile: on + own token -> works (no password needed)', async () => {
+    const r = await reg(cases['update-profile'], await tokenFor(1));
+    assert.equal(r.statusCode, 200);
+    assert.equal(player(1).name, 'Alice 2');
+  });
+
+  test('update-profile: on + token without identity fields acts on the TOKEN player only', async () => {
+    const r = await reg({ action: 'update-profile', name: 'Bobby' }, await tokenFor(2));
+    assert.equal(r.statusCode, 200);
+    assert.equal(player(2).name, 'Bobby');
+    assert.equal(player(1).name, 'Alice');
+  });
+
+  test('delete-account: on + own token -> works; password still required', async () => {
+    const t = await tokenFor(1);
+    const wrong = await reg({ ...cases['delete-account'], password: 'nope-nope' }, t);
+    assert.equal(wrong.statusCode, 401);
+    assert.ok(player(1));
+    const r = await reg(cases['delete-account'], t);
+    assert.equal(r.statusCode, 200);
+    assert.equal(player(1), undefined);
+    assert.ok(player(2));
+  });
+
+  test('switch off: old behaviour (update-profile without token or password, by username)', async () => {
+    switchOff();
+    const r = await reg(cases['update-profile']);
+    assert.equal(r.statusCode, 200);
+    assert.equal(player(1).name, 'Alice 2');
+    const d = await reg(cases['delete-account']);
+    assert.equal(d.statusCode, 200);
+    assert.equal(player(1), undefined);
+  });
+
+  test('public actions stay public with the switch on (login, register, check-session, logout, GET)', async () => {
+    const login = await reg({ action: 'login', username: 'alice', password: PASS });
+    assert.equal(login.statusCode, 200);
+    const register = await reg({ name: 'Dan', username: 'dan', password: 'dan-pass-1' });
+    assert.equal(register.statusCode, 200);
+    assert.deepEqual((await reg({ action: 'check-session' })).body, { ok: true, anonymous: true });
+    assert.equal((await reg({ action: 'logout' })).statusCode, 200);
+    const get = await quiet(() => call(registerHandler, { method: 'GET', query: { username: 'alice' } }));
+    assert.equal(get.statusCode, 200);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// api/friends.ts
+// ---------------------------------------------------------------------------
+describe('friends', () => {
+  beforeEach(() => {
+    seedPlayers();
+    db.rows('friendships').push(
+      { id: 11, user_id: 1, friend_id: 3, status: 'ACCEPTED' },
+      { id: 12, user_id: 2, friend_id: 1, status: 'PENDING' },
+    );
+  });
+  const fr = (opts: any, t: string | null = null) =>
+    quiet(() => call(friendsHandler, { ...opts, headers: { ...(opts.headers || {}), ...auth(t) } }));
+
+  const cases: Record<string, any> = {
+    'send-request': { body: { action: 'send-request', requesterId: 1, targetId: 3 } },
+    'respond-request': { body: { action: 'respond-request', viewerId: 1, requesterId: 2, response: 'ACCEPT' } },
+    'remove-friend': { body: { action: 'remove-friend', viewerId: 1, friendId: 3 } },
+    list: { method: 'GET', query: { action: 'list', viewerId: '1' } },
+  };
+
+  for (const [action, opts] of Object.entries(cases)) {
+    test(`${action}: on + no token -> 401`, async () => {
+      const r = await fr(opts);
+      assert.deepEqual([r.statusCode, r.body], [401, { code: 'SESSION_INVALID' }]);
+    });
+    test(`${action}: on + another player's token -> 403`, async () => {
+      const r = await fr(opts, await tokenFor(2));
+      assert.deepEqual([r.statusCode, r.body], [403, { code: 'FORBIDDEN' }]);
+      assert.equal(db.rows('friendships').length, 2, 'nothing changed');
+    });
+    test(`${action}: on + own token -> not refused`, async () => {
+      const r = await fr(opts, await tokenFor(1));
+      assert.ok(![401, 403].includes(r.statusCode), `${r.statusCode} ${JSON.stringify(r.body)}`);
+    });
+  }
+
+  test('remove-friend with own token removes alice\'s friendship', async () => {
+    const r = await fr(cases['remove-friend'], await tokenFor(1));
+    assert.equal(r.statusCode, 200);
+    assert.equal(db.rows('friendships').some((f) => f.id === 11), false);
+  });
+
+  test('list without viewerId uses the token player', async () => {
+    const r = await fr({ method: 'GET', query: { action: 'list' } }, await tokenFor(1));
+    assert.equal(r.statusCode, 200);
+  });
+
+  test('switch off: old behaviour (remove-friend by body viewerId, no token)', async () => {
+    switchOff();
+    const r = await fr(cases['remove-friend']);
+    assert.equal(r.statusCode, 200);
+    assert.equal(db.rows('friendships').some((f) => f.id === 11), false);
+  });
+
+  test('public: search and profile need no token', async () => {
+    for (const q of [{ action: 'search', q: 'bo' }, { action: 'profile', targetId: '2' }]) {
+      const r = await fr({ method: 'GET', query: q });
+      assert.ok(![401, 403].includes(r.statusCode), `${q.action}: ${r.statusCode}`);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// api/1v1.ts
+// ---------------------------------------------------------------------------
+describe('1v1', () => {
+  const ROOM = 'room-1';
+  beforeEach(() => {
+    seedPlayers();
+    db.rows('rooms').push({
+      id: ROOM, code: 'ABC123', status: 'WAITING', player1Id: 1, player2Id: null,
+      playersProgress: { '1': { name: 'Alice', isOnline: true }, '3': { name: 'Carol', isOnline: true } },
+      createdAt: new Date().toISOString(), challengeIds: [], currentAnswers: {}, maxPlayers: 4,
+    });
+  });
+  const duel = (opts: any, t: string | null = null) =>
+    quiet(() => call(duelHandler, { ...opts, headers: { ...(opts.headers || {}), ...auth(t) } }));
+  const room = () => db.rows('rooms').find((r) => r.id === ROOM);
+
+  // Every action that acts for a player, with a request whose identity names ALICE (id 1).
+  const POST = (action: string, extra: any) => ({ body: { action, roomId: ROOM, ...extra } });
+  const GET = (action: string, extra: any) => ({ method: 'GET', query: { action, roomId: ROOM, ...extra } });
+  const ACTOR_CASES: Record<string, any> = {
+    create: POST('create', { player1Id: 1, player1Name: 'Alice', category: 'x' }),
+    join: POST('join', { code: 'ABC123', player2Id: 'alice', playerName: 'Alice' }),
+    poll: GET('poll', { playerId: 'alice' }),
+    'check-active': GET('check-active', { playerId: 'alice' }),
+    'submit-answer': POST('submit-answer', { playerId: 'alice', questionIndex: 0, isCorrect: true }),
+    'advance-question': POST('advance-question', { playerId: 'alice', questionIndex: 0 }),
+    'end-room': POST('end-room', { playerId: 'alice' }),
+    'finish-room': POST('finish-room', { playerId: 'alice' }),
+    'submit-progress': POST('submit-progress', { playerId: 'alice', progress: 1 }),
+    presence: POST('presence', { playerId: 'alice', isOnline: false }),
+    'cancel-room': POST('cancel-room', { playerId: 'alice' }),
+    reaction: POST('reaction', { playerId: 'alice', playerName: 'Alice', emoji: 'x' }),
+    'dnd-cooldown': POST('dnd-cooldown', { senderId: 'alice', receiverId: 'carol' }),
+    resign: POST('resign', { playerId: 'alice' }),
+    withdraw: POST('withdraw', { playerId: 'alice' }),
+    leaveRoom: POST('leaveRoom', { playerId: 'alice' }),
+    leave: POST('leave', { playerId: 'alice' }),
+    kick: POST('kick', { hostId: 'alice', targetPlayerId: 3 }),
+    'kick-player': POST('kick-player', { hostId: 'alice', targetPlayerId: 3 }),
+    kickPlayer: POST('kickPlayer', { hostId: 'alice', targetPlayerId: 3 }),
+    invite: POST('invite', { senderId: 'alice', receiverId: 3 }),
+    'send-invite': POST('send-invite', { senderId: 'alice', receiverId: 3 }),
+    'check-invite': POST('check-invite', { senderId: 'alice', receiverId: 3 }),
+    rematch: POST('rematch', { playerId: 'alice', playerName: 'Alice' }),
+    'play-again': POST('play-again', { playerId: 'alice' }),
+    playAgain: POST('playAgain', { playerId: 'alice' }),
+    'purchase-powerup': POST('purchase-powerup', { playerId: 'alice', powerupType: 'x' }),
+    'buy-powerup': POST('buy-powerup', { playerId: 'alice', powerupType: 'x' }),
+    purchasePowerup: POST('purchasePowerup', { playerId: 'alice', powerupType: 'x' }),
+    buyPowerup: POST('buyPowerup', { playerId: 'alice', powerupType: 'x' }),
+  };
+  const OWNER_CASES: Record<string, any> = {
+    start: POST('start', {}),
+    'update-settings': POST('update-settings', { updatePayload: { roomName: 'New' } }),
+    updateSettings: POST('updateSettings', { updatePayload: { roomName: 'New' } }),
+    'update-room': POST('update-room', { updatePayload: { roomName: 'New' } }),
+  };
+
+  for (const [action, opts] of Object.entries({ ...ACTOR_CASES, ...OWNER_CASES })) {
+    test(`${action}: on + no token -> 401`, async () => {
+      const before = JSON.stringify(db.tables);
+      const r = await duel(opts);
+      assert.deepEqual([r.statusCode, r.body], [401, { code: 'SESSION_INVALID' }]);
+      assert.equal(JSON.stringify(db.tables), before, 'nothing changed');
+    });
+  }
+
+  for (const [action, opts] of Object.entries(ACTOR_CASES)) {
+    test(`${action}: on + bob's token claiming alice -> 403`, async () => {
+      const t = await tokenFor(2);
+      const before = JSON.stringify(db.tables.rooms) + JSON.stringify(db.tables.players);
+      const r = await duel(opts, t);
+      assert.deepEqual([r.statusCode, r.body], [403, { code: 'FORBIDDEN' }]);
+      assert.equal(JSON.stringify(db.tables.rooms) + JSON.stringify(db.tables.players), before, 'nothing changed');
+    });
+    test(`${action}: on + alice's own token -> not refused`, async () => {
+      const r = await duel(opts, await tokenFor(1));
+      assert.ok(![401, 403].includes(r.statusCode) || r.body?.code === undefined, `${r.statusCode} ${JSON.stringify(r.body)}`);
+      assert.notDeepEqual(r.body, { code: 'FORBIDDEN' });
+    });
+  }
+
+  for (const [action, opts] of Object.entries(OWNER_CASES)) {
+    test(`${action}: owner only -> bob (not owner) 403, alice (owner) works`, async () => {
+      const bob = await duel(opts, await tokenFor(2));
+      assert.deepEqual([bob.statusCode, bob.body], [403, { code: 'FORBIDDEN' }]);
+      assert.equal(room().status, 'WAITING');
+      assert.equal(room().roomName, undefined);
+      const alice = await duel(opts, await tokenFor(1));
+      assert.equal(alice.statusCode, 200, JSON.stringify(alice.body));
+      if (action === 'start') assert.equal(room().status, 'PLAYING');
+      else assert.equal(room().roomName, 'New');
+    });
+  }
+
+  test('owner check: unknown room -> 403', async () => {
+    const r = await duel({ body: { action: 'start', roomId: 'nope' } }, await tokenFor(1));
+    assert.deepEqual([r.statusCode, r.body], [403, { code: 'FORBIDDEN' }]);
+  });
+
+  test('presence with own token updates the TOKEN player (by id), even if the body names them by username', async () => {
+    const r = await duel(POST('presence', { playerId: 'ALICE', isOnline: false }), await tokenFor(1));
+    assert.equal(r.statusCode, 200);
+    assert.equal(room().playersProgress['1'].isOnline, false);
+    assert.equal(room().playersProgress['3'].isOnline, true);
+  });
+
+  test('presence without any identity in the body acts as the token player', async () => {
+    const r = await duel(POST('presence', { isOnline: false }), await tokenFor(3));
+    assert.equal(r.statusCode, 200);
+    assert.equal(room().playersProgress['3'].isOnline, false);
+    assert.equal(room().playersProgress['1'].isOnline, true);
+  });
+
+  test('join with own token: never creates a player or renames one', async () => {
+    const t = await tokenFor(2);
+    const before = db.rows('players').length;
+    const r = await duel(POST('join', { code: 'ABC123', player2Id: 'bob', playerName: 'bob' }), t);
+    assert.ok(![401, 403].includes(r.statusCode), `${r.statusCode} ${JSON.stringify(r.body)}`);
+    assert.equal(db.rows('players').length, before, 'no new player');
+    assert.equal(db.rows('players').find((p) => p.id === 2).name, 'Bob', 'not renamed to "bob"');
+  });
+
+  test('join: a claimed name that is not the token player -> 403 (no rename, no new player)', async () => {
+    const t = await tokenFor(2);
+    const before = JSON.stringify(db.tables.players);
+    const r = await duel(POST('join', { code: 'ABC123', player2Id: 2, playerName: 'Someone Else' }), t);
+    assert.deepEqual([r.statusCode, r.body], [403, { code: 'FORBIDDEN' }]);
+    assert.equal(JSON.stringify(db.tables.players), before);
+  });
+
+  test('switch off: old behaviour (no token needed; start and update-settings by anyone)', async () => {
+    switchOff();
+    const p = await duel(POST('presence', { playerId: 1, isOnline: false }));
+    assert.equal(p.statusCode, 200);
+    assert.equal(room().playersProgress['1'].isOnline, false);
+    const s = await duel(OWNER_CASES['update-settings']);
+    assert.equal(s.statusCode, 200);
+    assert.equal(room().roomName, 'New');
+    const st = await duel(OWNER_CASES.start);
+    assert.equal(st.statusCode, 200);
+    assert.equal(room().status, 'PLAYING');
+  });
+
+  test('switch off: join still auto-creates an unknown player (old behaviour)', async () => {
+    switchOff();
+    const before = db.rows('players').length;
+    await duel(POST('join', { code: 'ABC123', playerName: 'Newcomer' }));
+    assert.equal(db.rows('players').length, before + 1);
+  });
+
+  test('public actions need no token with the switch on', async () => {
+    for (const q of ['list-rooms', 'available-counts', 'list-challenges']) {
+      const r = await duel({ method: 'GET', query: { action: q } });
+      assert.ok(![401, 403].includes(r.statusCode), `${q}: ${r.statusCode}`);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Client: presence goes through fetch (wrapper adds the token), not sendBeacon
+// ---------------------------------------------------------------------------
+test('client: no sendBeacon left in src/ (it cannot send the player token)', async () => {
+  const { readFileSync, readdirSync, statSync } = await import('node:fs');
+  const { join } = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const root = fileURLToPath(new URL('../src', import.meta.url));
+  const hits: string[] = [];
+  const walk = (d: string) => {
+    for (const n of readdirSync(d)) {
+      const p = join(d, n);
+      if (statSync(p).isDirectory()) walk(p);
+      else if (/\.(ts|tsx)$/.test(n) && /sendBeacon\(/.test(readFileSync(p, 'utf8'))) hits.push(p);
+    }
+  };
+  walk(root);
+  assert.deepEqual(hits, []);
+});

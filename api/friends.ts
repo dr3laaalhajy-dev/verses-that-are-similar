@@ -3,6 +3,17 @@ import { handleCors } from './_lib/cors.js';
 import { getOrGenerateUniquePlayerId } from './_lib/uniquePlayerId.js';
 import { supabaseAdmin } from './_lib/supabaseAdmin.js';
 import { isUsableLookupValue, escapeLikePattern, searchContains } from './_lib/playerSecurity.js';
+import { enforcePlayerActor, type ActorSpec } from './_lib/playerAuth.js';
+
+// Actions that act on behalf of a player (REQUIRE_PLAYER_TOKEN on): the acting player comes from
+// the token and these fields (naming the actor, never the other player) must match it.
+// search and profile stay public.
+const ACTOR_SPECS: Record<string, ActorSpec> = {
+  'send-request': { fields: { requesterId: 'id' } },
+  'respond-request': { fields: { viewerId: 'id' } },
+  'remove-friend': { fields: { viewerId: 'id' } },
+  list: { fields: { viewerId: 'id' } },
+};
 
 // Surah metadata lookup helper for Quran page (1-604)
 const SURAH_PAGES: Array<{ number: number; name: string; startPage: number; endPage: number }> = [
@@ -187,6 +198,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
 
   const action = (req.query.action || req.body?.action || 'list') as string;
+
+  if (Object.prototype.hasOwnProperty.call(ACTOR_SPECS, action)) {
+    const gate = await enforcePlayerActor(req, res, ACTOR_SPECS[action]);
+    if (!gate) return;
+  }
 
   try {
     // ========================================================

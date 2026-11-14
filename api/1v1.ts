@@ -1,9 +1,59 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { supabaseAdmin } from './_lib/supabaseAdmin.js'
 import { findPlayerRow, toSafePlayer, selectByAnyEq } from './_lib/playerSecurity.js'
+import { enforcePlayerActor, enforceRoomOwner, getActingPlayer, type ActorSpec } from './_lib/playerAuth.js'
+
+// Actions that act on behalf of a player: with REQUIRE_PLAYER_TOKEN on, the acting player comes
+// from the token; these fields (naming the actor, never another player) must match it.
+const ACTOR_SPECS: Record<string, ActorSpec> = (() => {
+  const player: ActorSpec = { fields: { playerId: 'id', playerName: 'name', playerUsername: 'username' } }
+  const specs: Record<string, ActorSpec> = {
+    create: { fields: { player1Id: 'id', player1Name: 'name' } },
+    join: {
+      fields: { player2Id: 'id', player2Name: 'name', playerName: 'name' },
+      headers: { 'x-player-id': 'id', 'x-player-username': 'username', 'x-player-name': 'name' },
+    },
+    poll: player,
+    'check-active': player,
+    'submit-answer': player,
+    'advance-question': player,
+    'submit-progress': player,
+    presence: player,
+    'cancel-room': player,
+    reaction: player,
+    'dnd-cooldown': { fields: { senderId: 'id' } },
+    // Owner-only actions carry no identity; ownership is checked below.
+    start: {},
+  }
+  for (const a of ['end-room', 'finish-room']) specs[a] = player
+  for (const a of ['resign', 'withdraw', 'leaveRoom', 'leave']) {
+    specs[a] = { fields: player.fields, headers: { 'x-player-id': 'id' } }
+  }
+  for (const a of ['kick', 'kick-player', 'kickPlayer']) {
+    specs[a] = { fields: { hostId: 'id' }, headers: { 'x-player-id': 'id', 'x-player-username': 'username' } }
+  }
+  for (const a of ['update-settings', 'updateSettings', 'update-room']) specs[a] = {}
+  for (const a of ['invite', 'send-invite', 'check-invite']) specs[a] = { fields: { senderId: 'id' } }
+  for (const a of ['rematch', 'play-again', 'playAgain']) specs[a] = player
+  for (const a of ['purchase-powerup', 'buy-powerup', 'purchasePowerup', 'buyPowerup']) specs[a] = player
+  return specs
+})()
+
+const OWNER_ONLY_ACTIONS = new Set(['start', 'update-settings', 'updateSettings', 'update-room'])
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const action = req.method === 'GET' ? req.query.action : req.body.action
+
+  const spec = typeof action === 'string' && Object.prototype.hasOwnProperty.call(ACTOR_SPECS, action)
+    ? ACTOR_SPECS[action]
+    : null
+  if (spec) {
+    const gate = await enforcePlayerActor(req, res, spec)
+    if (!gate) return
+    if (gate.enforced && OWNER_ONLY_ACTIONS.has(action as string)) {
+      if (!(await enforceRoomOwner(req.body?.roomId, gate.actor, res))) return
+    }
+  }
 
   switch (action) {
     case 'create': return handleCreate(req, res)
@@ -202,10 +252,11 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
     const finalTransitionMode = (transitionMode === 'ASYNC' || transition_mode === 'ASYNC') ? 'ASYNC' : 'SYNC'
 
     try {
-      let player1 = await findPlayer(player1Id, player1Name)
+      const acting = getActingPlayer(req)
+      let player1 = acting ? acting.row : await findPlayer(player1Id, player1Name)
       
-      // Auto-register if not found
-      if (!player1 && player1Name) {
+      // Auto-register if not found (never when the player comes from the session token)
+      if (!acting && !player1 && player1Name) {
         const { data: newP } = await supabaseAdmin
           .from('players')
           .insert({ name: player1Name })
@@ -415,10 +466,13 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
         return res.status(410).json({ message: 'انتهت صلاحية هذه الغرفة' })
       }
 
-      let player = await findPlayer(effectivePlayerId, effectivePlayerName)
+      const acting = getActingPlayer(req)
+      let player = acting ? acting.row : await findPlayer(effectivePlayerId, effectivePlayerName)
       
-      // Auto-register player if not in database yet
-      if (!player) {
+      // Auto-register player if not in database yet (never when the player comes from the token)
+      if (acting) {
+        // The token's player: no new player, no rename.
+      } else if (!player) {
         const defaultName = (effectivePlayerName && String(effectivePlayerName).trim()) || 'متسابق جديد'
         const { data: newP } = await supabaseAdmin.from('players').insert({ name: defaultName }).select().single()
         player = newP

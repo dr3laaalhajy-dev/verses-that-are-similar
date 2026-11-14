@@ -26,6 +26,7 @@ import {
   extractBearerToken,
   type IssuedPlayerSession
 } from './_lib/playerSession.js';
+import { enforcePlayerActor } from './_lib/playerAuth.js';
 
 const RESERVED_USERNAMES = ['alaa', 'علاء', 'founder', 'المؤسس', 'superadmin', 'admin', 'root', 'system'];
 
@@ -226,9 +227,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // 2. CHANGE PASSWORD MODE (تغيير كلمة المرور)
     // ==========================================
     if (action === 'change-password') {
+      // REQUIRE_PLAYER_TOKEN on: the account is the token's player; these fields must match it.
+      const gate = await enforcePlayerActor(req, res, {
+        fields: { username: 'username', name: 'name', currentUsername: 'username' }
+      });
+      if (!gate) return;
+
       const targetUser = String(username || name || currentUsername || '').trim();
 
-      if (!stripAt(targetUser)) {
+      if (!gate.enforced && !stripAt(targetUser)) {
         return res.status(400).json({ error: 'اسم المستخدم مطلوب لتغيير كلمة المرور' });
       }
 
@@ -242,7 +249,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({ error: `كلمة المرور الجديدة يجب أن تتكون من ${MIN_NEW_PASSWORD_LENGTH} خانات على الأقل` });
       }
 
-      const player = await findPlayerByIdentifier(targetUser);
+      const player = gate.enforced ? gate.actor.row : await findPlayerByIdentifier(targetUser);
 
       if (!player) {
         return res.status(404).json({ error: 'لم يتم العثور على حساب اللاعب' });
@@ -289,9 +296,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // 3. UPDATE PROFILE MODE (تغيير الاسم واسم المستخدم)
     // ==========================================
     if (action === 'update-profile') {
+      // REQUIRE_PLAYER_TOKEN on: the account is the token's player. Only the CURRENT identity
+      // fields are checked; username/name here are the new values.
+      const gate = await enforcePlayerActor(req, res, {
+        fields: { currentUsername: 'username', currentName: 'name' }
+      });
+      if (!gate) return;
+
       const targetUser = String(currentUsername || username || currentName || name || '').trim();
 
-      if (!stripAt(targetUser)) {
+      if (!gate.enforced && !stripAt(targetUser)) {
         return res.status(400).json({ error: 'بيانات الحساب الحالي مطلوبة' });
       }
 
@@ -301,7 +315,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // TODO(next phase): update-profile must require a valid player session token.
       const curPass = String(currentPassword || password || '').trim();
 
-      const player = await findPlayerByIdentifier(targetUser);
+      const player = gate.enforced ? gate.actor.row : await findPlayerByIdentifier(targetUser);
 
       if (!player) {
         return res.status(404).json({ error: 'لم يتم العثور على حساب اللاعب' });
@@ -403,10 +417,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // 4. DELETE ACCOUNT MODE (حذف الحساب والبيانات)
     // ==========================================
     if (action === 'delete-account') {
+      // REQUIRE_PLAYER_TOKEN on: the account is the token's player; these fields must match it.
+      const gate = await enforcePlayerActor(req, res, {
+        fields: { username: 'username', name: 'name', currentUsername: 'username' }
+      });
+      if (!gate) return;
+
       const rawIdentifier = String(username || name || currentUsername || '').trim();
       const inputPass = String(password || currentPassword || '').trim();
 
-      if (!rawIdentifier) {
+      if (!gate.enforced && !rawIdentifier) {
         return res.status(400).json({ error: 'يرجى إدخال اسم المستخدم أو الاسم' });
       }
 
@@ -414,7 +434,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(400).json({ error: 'يرجى إدخال كلمة المرور لتأكيد الحذف' });
       }
 
-      const player = await findPlayerByIdentifier(rawIdentifier);
+      const player = gate.enforced ? gate.actor.row : await findPlayerByIdentifier(rawIdentifier);
 
       if (!player) {
         return res.status(404).json({ error: 'لم يتم العثور على حساب بهذا الاسم أو اسم المستخدم' });

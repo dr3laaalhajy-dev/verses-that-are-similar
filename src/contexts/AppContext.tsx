@@ -4062,17 +4062,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         isOnline: online
       });
 
-      if (!online && typeof navigator !== 'undefined' && navigator.sendBeacon) {
-        const blob = new Blob([payload], { type: 'application/json' });
-        navigator.sendBeacon('/api/1v1', blob);
-      } else {
-        fetch('/api/1v1', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: payload,
-          keepalive: true
-        }).catch(err => console.error('Presence error:', err));
-      }
+      // fetch + keepalive (also on page close) instead of sendBeacon: it survives unload and goes
+      // through the /api fetch wrapper, so the player token is sent (sendBeacon cannot send headers).
+      fetch('/api/1v1', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: payload,
+        keepalive: true
+      }).catch(err => console.error('Presence error:', err));
     };
 
     // Mark online on entering
