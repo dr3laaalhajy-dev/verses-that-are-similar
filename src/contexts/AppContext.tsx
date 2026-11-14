@@ -189,6 +189,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const nextView = typeof next === 'function' ? next(prev) : next;
       if (nextView === prev) return prev;
 
+      // The group results screen needs a room. Late realtime events / responses from a room the
+      // player already left (or the /challenge/results deep link they trigger) must not pull the
+      // player back there: every real path sets the room first.
+      if (nextView === 'group_game' && !roomRef.current) {
+        let savedRoomId: string | null = null;
+        try { savedRoomId = localStorage.getItem('activeRoomId'); } catch (e) { }
+        if (!savedRoomId) {
+          console.info('[setView] ignored group_game: no active room');
+          return prev;
+        }
+      }
+
       try {
         sessionStorage.setItem('current_app_view', nextView);
       } catch (e) { }
@@ -3771,6 +3783,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // The setInterval was removed: real-time updates now come from postgres_changes / broadcast channels
   useEffect(() => {
     if (!room?.id || (view !== 'group_waiting' && view !== 'group_game' && view !== 'challenge')) return;
+    if (view === 'challenge' && challengeMode === 'daily') return; // the daily challenge is not a room
     if (room.status === 'FINISHED' && view === 'group_game') return;
 
     // One-time fetch on dependency change (e.g. view transition) — not a polling loop
@@ -4050,7 +4063,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // Single fetch on effect run — Realtime handles ongoing updates
     poll();
-  }, [room?.id, view, room?.status, currentChallengeIndex, playerName, playerUsername, hasAnsweredCurrentQuestion, challenges, resetQuestionUIState, roomPresenceOnlineIds, playerId, uniquePlayerId]);
+  }, [room?.id, view, room?.status, currentChallengeIndex, playerName, playerUsername, hasAnsweredCurrentQuestion, challenges, resetQuestionUIState, roomPresenceOnlineIds, playerId, uniquePlayerId, challengeMode]);
 
   // Presence & Connection Management: Track online/offline status & background lifecycle
   useEffect(() => {
@@ -4150,6 +4163,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setRoomPresenceOnlineIds(new Set());
     };
   }, [room?.id, view, playerId, playerName, playerUsername, uniquePlayerId]);
+
+  // During the daily challenge a room must not exist: a late event from a room the player left
+  // could otherwise bring it back. Local only.
+  useEffect(() => {
+    if (view === 'challenge' && challengeMode === 'daily' && room) {
+      setRoom(null);
+      try {
+        localStorage.removeItem('activeRoomId');
+        localStorage.removeItem('currentRoomId');
+      } catch (_) { }
+    }
+  }, [view, challengeMode, room]);
 
   // Back on Home after a group game: drop a room that is over, so nothing reopens its results.
   useEffect(() => {
@@ -5328,7 +5353,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (dailyCompleted) return;
     // The daily challenge is single-player: a leftover group room would make the challenge screen
     // show that room (or jump to its results) instead of the daily challenge.
-    if (room) clearLocalRoomState();
+    clearLocalRoomState();
     setDailyChallengeOffset(0);
     setChallengeMode('daily');
     setSkillsType('complete');

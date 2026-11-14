@@ -775,7 +775,7 @@ describe('daily challenge after a group game (fix 5)', () => {
     const ctx = await ctxSrc();
     const start = ctx.indexOf('const handleStartDaily = () => {');
     const fn = ctx.slice(start, ctx.indexOf('const handleStartNormal', start));
-    assert.match(fn, /if \(room\) clearLocalRoomState\(\);/);
+    assert.match(fn, /clearLocalRoomState\(\);/);
     assert.ok(fn.indexOf('clearLocalRoomState()') < fn.indexOf("setView('challenge')"), 'cleared before opening the challenge');
     const clear = ctx.slice(ctx.indexOf('const clearLocalRoomState = () => {'), start);
     assert.match(clear, /setRoom\(null\)/);
@@ -793,5 +793,46 @@ describe('daily challenge after a group game (fix 5)', () => {
     assert.match(effect, /'FINISHED', 'completed', 'CANCELLED', 'EXPIRED'/);
     assert.match(effect, /setRoom\(null\)/);
     assert.doesNotMatch(effect, /fetch\(|supabase\./, 'local only');
+  });
+});
+
+describe('daily challenge is never hijacked by a room the player left (fix 6)', () => {
+  const read = async (rel: string) => {
+    const { readFileSync } = await import('node:fs');
+    const { fileURLToPath } = await import('node:url');
+    return readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
+  };
+
+  test('setView refuses group_game when there is no room (in memory or saved)', async () => {
+    const ctx = await read('../src/contexts/AppContext.tsx');
+    const fn = ctx.slice(ctx.indexOf('const setView = useCallback'), ctx.indexOf('const setView = useCallback') + 1400);
+    assert.match(fn, /nextView === 'group_game' && !roomRef\.current/);
+    assert.match(fn, /localStorage\.getItem\('activeRoomId'\)/);
+    assert.match(fn, /return prev;/);
+  });
+
+  test('the daily challenge screen never receives a room', async () => {
+    const router = await read('../src/routes/AppRouter.tsx');
+    assert.match(router, /room=\{app\.challengeMode === 'daily' \? null : app\.room\}/);
+  });
+
+  test('room poll is skipped and a revived room is cleared during the daily challenge', async () => {
+    const ctx = await read('../src/contexts/AppContext.tsx');
+    assert.match(ctx, /if \(view === 'challenge' && challengeMode === 'daily'\) return; \/\/ the daily challenge is not a room/);
+    assert.match(ctx, /if \(view === 'challenge' && challengeMode === 'daily' && room\) \{\s*setRoom\(null\);/);
+  });
+
+  test('starting the daily challenge always clears the saved room', async () => {
+    const ctx = await read('../src/contexts/AppContext.tsx');
+    const start = ctx.indexOf('const handleStartDaily = () => {');
+    const fn = ctx.slice(start, ctx.indexOf('const handleStartNormal', start));
+    assert.match(fn, /\n\s+clearLocalRoomState\(\);/);
+    assert.doesNotMatch(fn, /if \(room\) clearLocalRoomState/);
+  });
+
+  test('game page realtime update never brings back a cleared room', async () => {
+    const page = await read('../src/pages/ChallengeGamePage.tsx');
+    assert.match(page, /setRoom\(\(prev: any\) => prev \? \(\{ \.\.\.prev, \.\.\.updated \}\) : prev\);/);
+    assert.doesNotMatch(page, /\.\.\.updated \}\) : updated\)/);
   });
 });

@@ -649,7 +649,8 @@ export const AppRouter: React.FC = () => {
           currentChallenge={app.currentChallenge}
           setView={app.setView}
           isSpeedMode={app.isSpeedMode}
-          room={app.room}
+          // The daily challenge is single-player: never let a (stale) group room drive this screen.
+          room={app.challengeMode === 'daily' ? null : app.room}
           isFreezeActive={app.isFreezeActive}
           speedTimeLeft={app.speedTimeLeft}
           freezeSecondsLeft={app.freezeSecondsLeft}

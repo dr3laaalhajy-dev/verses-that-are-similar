@@ -302,7 +302,8 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
         handleRoomFinish();
         return;
       }
-      setRoom((prev: any) => prev ? ({ ...prev, ...updated }) : updated);
+      // Merge into the current room only; never bring back a room the player has left.
+      setRoom((prev: any) => prev ? ({ ...prev, ...updated }) : prev);
       if (updated.currentQuestionIndex !== undefined && updated.currentQuestionIndex > currentQuestionIdx) {
         advancingQuestionRef.current = null;
         app?.resetQuestionUIState?.(updated.currentQuestionIndex, updated);
