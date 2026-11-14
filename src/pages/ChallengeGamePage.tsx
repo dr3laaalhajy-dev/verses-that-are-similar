@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { LEAVE_GRACE_MS, startLeaveGuard } from '../lib/leaveGuard';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Zap, Loader2, Users, AlertCircle, Trophy, CheckCircle2, XCircle, Plus, ShoppingBag, Settings, LogOut, Trash2, X } from 'lucide-react';
 import { View } from '../types/challenges';
@@ -141,53 +142,32 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
   const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false);
   const isMultiplayer = Boolean(room?.id || (room as any)?.room_code || room?.host_id || (room as any)?.participants?.length);
 
-  // ── Anti-Cheat System with Grace Period (5 seconds) ──
-  // If the user navigates away or hides the screen (document.visibilityState === 'hidden'),
-  // a 5-second grace period timer starts. If they return within 5 seconds, the timer is cancelled.
-  // If they stay away for more than 5 seconds, they are disqualified and withdrawn from the room.
-  const cheatTimerRef = useRef<any>(null);
+  // ── Anti-Cheat System with Grace Period (LEAVE_GRACE_MS) ──
+  // Only a really hidden page counts (tab switch, minimised window, app in background); blur,
+  // the notification shade or clicking another window never does. Coming back within
+  // LEAVE_GRACE_MS cancels everything; staying away longer withdraws the player from the room.
+  const leaveAppRef = useRef<any>(app);
+  leaveAppRef.current = app;
 
   useEffect(() => {
     // Only active during an in-progress multiplayer group challenge
     if (!isMultiplayer || !room?.id || (room.status !== 'PLAYING' && room.status !== 'in-progress')) {
-      if (cheatTimerRef.current) {
-        clearTimeout(cheatTimerRef.current);
-        cheatTimerRef.current = null;
-      }
       return;
     }
 
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') {
-        // Start 5-second countdown timer
-        if (cheatTimerRef.current) clearTimeout(cheatTimerRef.current);
-        cheatTimerRef.current = setTimeout(() => {
-          app?.toast?.error?.('تم اعتبارك منسحباً لمغادرتك شاشة التحدي لأكثر من 5 ثوانٍ');
-          if (typeof app?.handleWithdraw === 'function') {
-            app.handleWithdraw();
-          } else if (typeof app?.handleResignGroupChallenge === 'function') {
-            app.handleResignGroupChallenge();
-          }
-        }, 5000);
-      } else if (document.visibilityState === 'visible') {
-        // Player returned before 5 seconds, cancel the timer!
-        if (cheatTimerRef.current) {
-          clearTimeout(cheatTimerRef.current);
-          cheatTimerRef.current = null;
+    return startLeaveGuard({
+      onLeave: () => {
+        const current = leaveAppRef.current;
+        current?.toast?.error?.(`تم اعتبارك منسحباً لمغادرتك شاشة التحدي لأكثر من ${Math.round(LEAVE_GRACE_MS / 1000)} ثوانٍ`);
+        if (typeof current?.handleWithdraw === 'function') {
+          current.handleWithdraw();
+        } else if (typeof current?.handleResignGroupChallenge === 'function') {
+          current.handleResignGroupChallenge();
         }
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      if (cheatTimerRef.current) {
-        clearTimeout(cheatTimerRef.current);
-        cheatTimerRef.current = null;
-      }
-    };
-  }, [isMultiplayer, room?.id, room?.status, app]);
+      },
+    });
+    // `app` is read through a ref: it changes on every render and must not reset the timer.
+  }, [isMultiplayer, room?.id, room?.status]);
 
   const currentUserId = playerUsername || playerName;
   const isHost = Boolean(

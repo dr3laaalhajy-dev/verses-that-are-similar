@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { startLeaveGuard } from '../lib/leaveGuard';
 import { supabase } from '../services/supabase';
 import { router } from '../services/router';
 import { isAnswerCorrect } from '../utils/normalizeArabic';
@@ -56,38 +57,19 @@ export default function WhoAmIGame({
   const revealingRef = useRef<string | null>(null);
   const queueRef = useRef<any[]>([]);
 
-  // ── Anti-Cheat System with 5-Second Grace Period ──
-  const cheatTimerRef = useRef<any>(null);
+  // ── Anti-Cheat System with Grace Period (LEAVE_GRACE_MS) ──
+  // Only a really hidden page counts; blur never does. Back within LEAVE_GRACE_MS = nothing happens.
+  const onWithdrawRef = useRef(onWithdraw);
+  onWithdrawRef.current = onWithdraw;
 
   useEffect(() => {
     if (!roomId) return;
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') {
-        if (cheatTimerRef.current) clearTimeout(cheatTimerRef.current);
-        cheatTimerRef.current = setTimeout(() => {
-          if (typeof onWithdraw === 'function') {
-            onWithdraw();
-          }
-        }, 5000);
-      } else if (document.visibilityState === 'visible') {
-        if (cheatTimerRef.current) {
-          clearTimeout(cheatTimerRef.current);
-          cheatTimerRef.current = null;
-        }
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      if (cheatTimerRef.current) {
-        clearTimeout(cheatTimerRef.current);
-        cheatTimerRef.current = null;
-      }
-    };
-  }, [roomId, onWithdraw]);
+    return startLeaveGuard({
+      onLeave: () => {
+        if (typeof onWithdrawRef.current === 'function') onWithdrawRef.current();
+      },
+    });
+  }, [roomId]);
 
   const round = rounds[rounds.length - 1] || null;
   const roundId = round?.id;

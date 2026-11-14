@@ -7,6 +7,7 @@ import {
   Info, HelpCircle, AtSign, Key, LogIn, UserPlus, Smartphone, Download, Share2, Mail, ExternalLink, Send,
   Clock, RefreshCw, Globe, Plus, Gamepad2, Trash2, Play, ShoppingBag
 } from 'lucide-react';
+import { presenceWithGrace } from '../lib/leaveGuard';
 import { clearPlayerSession, logoutPlayerSession, replacePlayerSession, setSessionEndedStateReset, takeSessionEndedMessage } from '../lib/playerSession';
 import { quranData } from '../services/QuranRepository';
 import { HADITHS, Hadith } from '../services/HadithRepository';
@@ -4133,22 +4134,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       config: { presence: { key: myPresenceId } }
     });
 
-    // Pure WebSocket Presence tracking driven directly by Supabase Realtime join, leave, and sync events
+    // Pure WebSocket Presence tracking driven directly by Supabase Realtime join, leave, and sync events.
+    // Grace period: a player who drops out of presence stays "online" for LEAVE_GRACE_MS, so a brief
+    // disconnect (app briefly in background, network blip) never lets the host skip their answer.
+    const presenceLastSeen = new Map<string, number>();
+    let presenceGraceTimer: ReturnType<typeof setTimeout> | null = null;
+    let presenceDisposed = false;
     const syncPresence = () => {
+      if (presenceDisposed) return;
       const state = presenceChannel.presenceState();
-      const onlineIds = new Set<string | number>();
+      const currentIds = new Set<string>();
       Object.entries(state).forEach(([key, presences]) => {
-        onlineIds.add(key);
+        currentIds.add(key);
         if (Array.isArray(presences)) {
           presences.forEach((p: any) => {
-            if (p.playerId != null)   onlineIds.add(String(p.playerId));
-            if (p.playerName)         onlineIds.add(String(p.playerName).trim().toLowerCase());
-            if (p.playerUsername)     onlineIds.add(String(p.playerUsername).trim().toLowerCase().replace(/^@+/, ''));
-            if (p.uniquePlayerId)     onlineIds.add(String(p.uniquePlayerId).trim().toUpperCase());
+            if (p.playerId != null)   currentIds.add(String(p.playerId));
+            if (p.playerName)         currentIds.add(String(p.playerName).trim().toLowerCase());
+            if (p.playerUsername)     currentIds.add(String(p.playerUsername).trim().toLowerCase().replace(/^@+/, ''));
+            if (p.uniquePlayerId)     currentIds.add(String(p.uniquePlayerId).trim().toUpperCase());
           });
         }
       });
-      setRoomPresenceOnlineIds(onlineIds);
+      const { online, nextCheckInMs } = presenceWithGrace(currentIds, presenceLastSeen, Date.now());
+      setRoomPresenceOnlineIds(online as Set<string | number>);
+      if (presenceGraceTimer) clearTimeout(presenceGraceTimer);
+      presenceGraceTimer = nextCheckInMs !== null ? setTimeout(syncPresence, nextCheckInMs + 50) : null;
     };
 
     presenceChannel
@@ -4168,6 +4178,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
 
     return () => {
+      presenceDisposed = true;
+      if (presenceGraceTimer) clearTimeout(presenceGraceTimer);
       try { supabase.removeChannel(presenceChannel); } catch (_) {}
       setRoomPresenceOnlineIds(new Set());
     };
