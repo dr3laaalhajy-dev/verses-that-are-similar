@@ -26,7 +26,20 @@ import {
   extractBearerToken,
   type IssuedPlayerSession
 } from './_lib/playerSession.js';
-import { enforcePlayerActor } from './_lib/playerAuth.js';
+import { enforcePlayerActor, rejectUnlistedAction, type ActorSpec } from './_lib/playerAuth.js';
+
+// POST actions that act for a player (REQUIRE_PLAYER_TOKEN on): the account is the token's
+// player and these fields (the CURRENT identity) must match it. For update-profile,
+// username/name are the new values, so only currentUsername/currentName are checked.
+export const ACTOR_SPECS: Record<string, ActorSpec> = {
+  'change-password': { fields: { username: 'username', name: 'name', currentUsername: 'username' } },
+  'update-profile': { fields: { currentUsername: 'username', currentName: 'name' } },
+  'delete-account': { fields: { username: 'username', name: 'name', currentUsername: 'username' } },
+};
+
+// POST actions that need no player token (GET is always public). A request without an action
+// is a registration (old app). Anything else is refused when REQUIRE_PLAYER_TOKEN is on.
+export const PUBLIC_ACTIONS: ReadonlySet<string> = new Set(['login', 'register', 'logout', 'check-session']);
 
 const RESERVED_USERNAMES = ['alaa', 'علاء', 'founder', 'المؤسس', 'superadmin', 'admin', 'root', 'system'];
 
@@ -121,6 +134,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     currentPassword,
     newPassword
   } = req.body || {};
+
+  if (rejectUnlistedAction(action === undefined || action === null || action === '' ? 'register' : action, ACTOR_SPECS, PUBLIC_ACTIONS, res)) return;
 
   try {
     // ==========================================
@@ -228,9 +243,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // ==========================================
     if (action === 'change-password') {
       // REQUIRE_PLAYER_TOKEN on: the account is the token's player; these fields must match it.
-      const gate = await enforcePlayerActor(req, res, {
-        fields: { username: 'username', name: 'name', currentUsername: 'username' }
-      });
+      const gate = await enforcePlayerActor(req, res, ACTOR_SPECS['change-password']);
       if (!gate) return;
 
       const targetUser = String(username || name || currentUsername || '').trim();
@@ -298,9 +311,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (action === 'update-profile') {
       // REQUIRE_PLAYER_TOKEN on: the account is the token's player. Only the CURRENT identity
       // fields are checked; username/name here are the new values.
-      const gate = await enforcePlayerActor(req, res, {
-        fields: { currentUsername: 'username', currentName: 'name' }
-      });
+      const gate = await enforcePlayerActor(req, res, ACTOR_SPECS['update-profile']);
       if (!gate) return;
 
       const targetUser = String(currentUsername || username || currentName || name || '').trim();
@@ -418,9 +429,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // ==========================================
     if (action === 'delete-account') {
       // REQUIRE_PLAYER_TOKEN on: the account is the token's player; these fields must match it.
-      const gate = await enforcePlayerActor(req, res, {
-        fields: { username: 'username', name: 'name', currentUsername: 'username' }
-      });
+      const gate = await enforcePlayerActor(req, res, ACTOR_SPECS['delete-account']);
       if (!gate) return;
 
       const rawIdentifier = String(username || name || currentUsername || '').trim();

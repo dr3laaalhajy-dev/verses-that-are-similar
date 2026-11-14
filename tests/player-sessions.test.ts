@@ -573,3 +573,144 @@ test('check-session: DB failure -> 401 SESSION_INVALID without leaking details',
   assert.deepEqual([r.statusCode, r.body], [401, { code: 'SESSION_INVALID' }]);
   assert.ok(!logs.includes(t));
 });
+
+// ---------------------------------------------------------------------------
+// Success cache in verifyPlayerSession
+// ---------------------------------------------------------------------------
+
+/** A db wrapper that counts reads per table. */
+function countingDb() {
+  const reads: Record<string, number> = {};
+  return {
+    reads,
+    db: { from: (t: string) => { reads[t] = (reads[t] ?? 0) + 1; return sharedDb.from(t); } },
+  };
+}
+
+test('cache: a second check within 25 s does not read the database', async () => {
+  S.__clearSessionCacheForTests();
+  sharedDb.withPlayers(1);
+  const clock = makeClock();
+  const { token } = await S.issuePlayerSession(1, { db: proxyDb, now: clock.now });
+  const c = countingDb();
+  assert.equal((await S.verifyPlayerSession(bearer(token), { db: c.db, now: clock.now })).ok, true);
+  const afterFirst = { ...c.reads };
+  clock.advance(S.SESSION_CACHE_TTL_MS - 1);
+  assert.equal((await S.verifyPlayerSession(bearer(token), { db: c.db, now: clock.now })).ok, true);
+  assert.deepEqual(c.reads, afterFirst, 'no extra reads');
+  assert.equal(S.SESSION_CACHE_TTL_MS, 25_000);
+});
+
+test('cache: expires after the TTL and reads again', async () => {
+  S.__clearSessionCacheForTests();
+  sharedDb.withPlayers(1);
+  const clock = makeClock();
+  const { token } = await S.issuePlayerSession(1, { db: proxyDb, now: clock.now });
+  const c = countingDb();
+  await S.verifyPlayerSession(bearer(token), { db: c.db, now: clock.now });
+  const n = c.reads.player_sessions;
+  clock.advance(S.SESSION_CACHE_TTL_MS);
+  assert.equal((await S.verifyPlayerSession(bearer(token), { db: c.db, now: clock.now })).ok, true);
+  assert.equal(c.reads.player_sessions, n + 1);
+});
+
+test('cache: failures are never cached', async () => {
+  S.__clearSessionCacheForTests();
+  sharedDb.withPlayers(1);
+  const c = countingDb();
+  const unknown = 'Q'.repeat(43);
+  await S.verifyPlayerSession(bearer(unknown), { db: c.db });
+  await S.verifyPlayerSession(bearer(unknown), { db: c.db });
+  assert.equal(c.reads.player_sessions, 2);
+
+  const { token } = await S.issuePlayerSession(1, { db: proxyDb });
+  sharedDb.rows('players')[0].isBlocked = true;
+  assert.deepEqual(await S.verifyPlayerSession(bearer(token), { db: proxyDb }), { ok: false, code: 'SESSION_INVALID' });
+  sharedDb.rows('players')[0].isBlocked = false;
+  assert.equal((await S.verifyPlayerSession(bearer(token), { db: proxyDb })).ok, true, 'a failure did not stick');
+  assert.equal(S.sessionCacheSize(), 1);
+});
+
+test('cache: logout clears it at once (same instance)', async () => {
+  S.__clearSessionCacheForTests();
+  sharedDb.withPlayers(1);
+  const { token } = await S.issuePlayerSession(1, { db: proxyDb });
+  assert.equal((await S.verifyPlayerSession(bearer(token), { db: proxyDb })).ok, true);
+  await S.revokeSessionByToken(token, 'logout', { db: proxyDb });
+  assert.deepEqual(await S.verifyPlayerSession(bearer(token), { db: proxyDb }), { ok: false, code: 'SESSION_INVALID' });
+});
+
+test('cache: a login on another device clears the old session at once (same instance) -> SESSION_REPLACED', async () => {
+  S.__clearSessionCacheForTests();
+  sharedDb.withPlayers(1);
+  const clock = makeClock();
+  const phone = (await S.issuePlayerSession(1, { db: proxyDb, now: clock.now })).token;
+  assert.equal((await S.verifyPlayerSession(bearer(phone), { db: proxyDb, now: clock.now })).ok, true);
+  clock.advance(1000);
+  const tablet = (await S.issuePlayerSession(1, { db: proxyDb, now: clock.now })).token;
+  assert.deepEqual(await S.verifyPlayerSession(bearer(phone), { db: proxyDb, now: clock.now }), { ok: false, code: 'SESSION_REPLACED' });
+  assert.equal((await S.verifyPlayerSession(bearer(tablet), { db: proxyDb, now: clock.now })).ok, true);
+});
+
+test('cache: password change / account deletion clear every session of the player except the kept one', async () => {
+  S.__clearSessionCacheForTests();
+  sharedDb.withPlayers(1, 2);
+  const a = await S.issuePlayerSession(1, { db: proxyDb, maxActiveSessions: 5 });
+  const b = await S.issuePlayerSession(1, { db: proxyDb, maxActiveSessions: 5 });
+  const other = await S.issuePlayerSession(2, { db: proxyDb });
+  const keep: any = await S.verifyPlayerSession(bearer(a.token), { db: proxyDb });
+  await S.verifyPlayerSession(bearer(b.token), { db: proxyDb });
+  await S.verifyPlayerSession(bearer(other.token), { db: proxyDb });
+  assert.equal(S.sessionCacheSize(), 3);
+
+  await S.revokeAllPlayerSessions(1, 'password_changed', { exceptSessionId: keep.session.sessionId }, { db: proxyDb });
+  assert.equal((await S.verifyPlayerSession(bearer(a.token), { db: proxyDb })).ok, true, 'kept session');
+  assert.deepEqual(await S.verifyPlayerSession(bearer(b.token), { db: proxyDb }), { ok: false, code: 'SESSION_INVALID' });
+  assert.equal((await S.verifyPlayerSession(bearer(other.token), { db: proxyDb })).ok, true, 'other player untouched');
+
+  await S.revokeAllPlayerSessions(1, 'account_deleted', {}, { db: proxyDb });
+  assert.deepEqual(await S.verifyPlayerSession(bearer(a.token), { db: proxyDb }), { ok: false, code: 'SESSION_INVALID' });
+});
+
+test('cache: a revoke done by ANOTHER server instance is seen after at most the TTL', async () => {
+  S.__clearSessionCacheForTests();
+  sharedDb.withPlayers(1);
+  const clock = makeClock();
+  const { token } = await S.issuePlayerSession(1, { db: proxyDb, now: clock.now });
+  assert.equal((await S.verifyPlayerSession(bearer(token), { db: proxyDb, now: clock.now })).ok, true);
+  // Another instance writes the revoke directly (this instance's cache is not told).
+  Object.assign(sessionRow(token), { revoked_at: new Date(clock.now()).toISOString(), revoked_reason: 'replaced' });
+  clock.advance(S.SESSION_CACHE_TTL_MS - 1);
+  assert.equal((await S.verifyPlayerSession(bearer(token), { db: proxyDb, now: clock.now })).ok, true, 'still cached');
+  clock.advance(1);
+  assert.deepEqual(await S.verifyPlayerSession(bearer(token), { db: proxyDb, now: clock.now }), { ok: false, code: 'SESSION_REPLACED' });
+});
+
+test('cache: never outlives the session expiry', async () => {
+  S.__clearSessionCacheForTests();
+  sharedDb.withPlayers(1);
+  const clock = makeClock();
+  const { token } = await S.issuePlayerSession(1, { db: proxyDb, now: clock.now });
+  sessionRow(token).expires_at = new Date(clock.now() + 10_000).toISOString();
+  sessionRow(token).last_used_at = new Date(clock.now()).toISOString();
+  assert.equal((await S.verifyPlayerSession(bearer(token), { db: proxyDb, now: clock.now })).ok, true);
+  clock.advance(10_000);
+  assert.deepEqual(await S.verifyPlayerSession(bearer(token), { db: proxyDb, now: clock.now }), { ok: false, code: 'SESSION_INVALID' });
+});
+
+test('cache: cacheTtlMs 0 disables it; keys are token hashes, never tokens', async () => {
+  S.__clearSessionCacheForTests();
+  sharedDb.withPlayers(1);
+  const { token } = await S.issuePlayerSession(1, { db: proxyDb });
+  const c = countingDb();
+  await S.verifyPlayerSession(bearer(token), { db: c.db, cacheTtlMs: 0 });
+  await S.verifyPlayerSession(bearer(token), { db: c.db, cacheTtlMs: 0 });
+  assert.equal(c.reads.player_sessions, 2);
+  assert.equal(S.sessionCacheSize(), 0);
+
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../api/_lib/playerSession.ts', import.meta.url), 'utf8');
+  assert.match(src, /cachePut\(tokenHash,/);
+  assert.match(src, /cacheGet\(tokenHash,/);
+  assert.doesNotMatch(src, /cache(Put|Get)\(token,/);
+});

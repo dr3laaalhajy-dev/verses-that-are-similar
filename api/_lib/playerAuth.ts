@@ -41,6 +41,26 @@ export interface PlayerAuthDeps extends SessionDeps {
 }
 
 export const FORBIDDEN_BODY = { code: 'FORBIDDEN' } as const;
+export const UNKNOWN_ACTION_BODY = { code: 'UNKNOWN_ACTION' } as const;
+
+/**
+ * Default deny (REQUIRE_PLAYER_TOKEN on): an action that is neither in the endpoint's
+ * ACTOR_SPECS nor in its explicit PUBLIC_ACTIONS list is refused with 400 { code: 'UNKNOWN_ACTION' }.
+ * Returns true if the response was sent. With the switch off it never refuses anything.
+ */
+export function rejectUnlistedAction(
+  action: unknown,
+  actorSpecs: Record<string, ActorSpec>,
+  publicActions: ReadonlySet<string>,
+  res: VercelResponse,
+  env?: Record<string, string | undefined>
+): boolean {
+  if (!isPlayerTokenRequired(env)) return false;
+  const name = typeof action === 'string' ? action : '';
+  if (Object.prototype.hasOwnProperty.call(actorSpecs, name) || publicActions.has(name)) return false;
+  res.status(400).json(UNKNOWN_ACTION_BODY);
+  return true;
+}
 
 function stripAt(v: string): string {
   return v.trim().replace(/^@+/, '');

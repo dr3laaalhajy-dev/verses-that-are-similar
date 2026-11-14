@@ -24,6 +24,14 @@ export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 export const MAX_ACTIVE_PLAYER_SESSIONS = 1;
 /** Sliding renewal writes at most once per interval per session (avoids a DB write per request). */
 export const SESSION_TOUCH_INTERVAL_MS = 60 * 1000;
+/**
+ * Successful checks are remembered for this long (per server instance), keyed by the token HASH,
+ * so frequent calls (poll, presence) do not hit the database twice per request.
+ * Failures are never cached. Revocations done by this instance clear the matching entries at
+ * once; a revocation done by ANOTHER instance is seen here after at most this delay.
+ */
+export const SESSION_CACHE_TTL_MS = 25 * 1000;
+const SESSION_CACHE_MAX_ENTRIES = 5000;
 
 export const REVOKE_REASONS = ['replaced', 'logout', 'password_changed', 'account_deleted'] as const;
 export type RevokeReason = (typeof REVOKE_REASONS)[number];
@@ -41,6 +49,8 @@ export interface SessionDeps {
   now?: () => number;
   /** Override for MAX_ACTIVE_PLAYER_SESSIONS (tests only). */
   maxActiveSessions?: number;
+  /** Override for SESSION_CACHE_TTL_MS; 0 disables the cache (tests only). */
+  cacheTtlMs?: number;
 }
 
 export interface IssuedPlayerSession {
@@ -56,6 +66,51 @@ export interface PlayerSessionContext {
 export type SessionCheck =
   | { ok: true; session: PlayerSessionContext }
   | { ok: false; code: SessionFailureCode };
+
+// ---------------------------------------------------------------------------
+// Success cache (token hash -> session), per server instance
+// ---------------------------------------------------------------------------
+interface CachedSession {
+  playerId: number;
+  sessionId: string;
+  validUntilMs: number;
+}
+const sessionCache = new Map<string, CachedSession>();
+
+function cacheGet(tokenHash: string, nowMs: number): CachedSession | null {
+  const entry = sessionCache.get(tokenHash);
+  if (!entry) return null;
+  if (entry.validUntilMs <= nowMs) {
+    sessionCache.delete(tokenHash);
+    return null;
+  }
+  return entry;
+}
+
+function cachePut(tokenHash: string, entry: CachedSession): void {
+  sessionCache.delete(tokenHash);
+  if (sessionCache.size >= SESSION_CACHE_MAX_ENTRIES) {
+    const oldest = sessionCache.keys().next().value;
+    if (oldest !== undefined) sessionCache.delete(oldest);
+  }
+  sessionCache.set(tokenHash, entry);
+}
+
+function forgetCachedSessions(match: (entry: CachedSession) => boolean): void {
+  for (const [key, entry] of sessionCache) {
+    if (match(entry)) sessionCache.delete(key);
+  }
+}
+
+/** Number of cached sessions (tests / diagnostics; never exposes keys). */
+export function sessionCacheSize(): number {
+  return sessionCache.size;
+}
+
+/** Test helper: empties the success cache. */
+export function __clearSessionCacheForTests(): void {
+  sessionCache.clear();
+}
 
 function resolve(deps: SessionDeps = {}) {
   return {
@@ -165,6 +220,9 @@ export async function enforceSessionLimit(
   const extra = older.slice(maxActive - 1).map((row: any) => row.id);
   if (extra.length === 0) return 0;
 
+  const extraIds = new Set(extra.map((id: any) => String(id)));
+  forgetCachedSessions((entry) => extraIds.has(entry.sessionId));
+
   const { error: revokeErr } = await db
     .from(SESSION_TABLE)
     .update({ revoked_at: nowIso, revoked_reason: 'replaced' satisfies RevokeReason })
@@ -189,13 +247,21 @@ export async function verifyPlayerSession(
   const token = extractBearerToken(req);
   if (!token) return invalid;
   const { db, now } = resolve(deps);
+  const tokenHash = hashSessionToken(token);
+  const cacheTtlMs = Math.max(0, deps?.cacheTtlMs ?? SESSION_CACHE_TTL_MS);
+
+  // Recent successful check on this instance: no database read.
+  if (cacheTtlMs > 0) {
+    const cached = cacheGet(tokenHash, now());
+    if (cached) return { ok: true, session: { playerId: cached.playerId, sessionId: cached.sessionId } };
+  }
 
   let row: any;
   try {
     const { data, error } = await db
       .from(SESSION_TABLE)
       .select('id, player_id, expires_at, revoked_at, revoked_reason, last_used_at')
-      .eq('token_hash', hashSessionToken(token))
+      .eq('token_hash', tokenHash)
       .maybeSingle();
     if (error) {
       console.error(`[playerSession] lookup failed (code ${safeCode(error)})`);
@@ -251,6 +317,15 @@ export async function verifyPlayerSession(
     }
   }
 
+  // Only successes are cached, never past the session's own expiry.
+  if (cacheTtlMs > 0) {
+    cachePut(tokenHash, {
+      playerId,
+      sessionId: String(row.id),
+      validUntilMs: Math.min(nowMs + cacheTtlMs, expiresMs),
+    });
+  }
+
   return { ok: true, session: { playerId, sessionId: String(row.id) } };
 }
 
@@ -289,10 +364,12 @@ export async function revokeSessionByToken(
   assertReason(reason);
   if (!TOKEN_PATTERN.test(String(token ?? ''))) return false;
   const { db, now } = resolve(deps);
+  const tokenHash = hashSessionToken(token);
+  sessionCache.delete(tokenHash);
   const { data, error } = await db
     .from(SESSION_TABLE)
     .update({ revoked_at: new Date(now()).toISOString(), revoked_reason: reason })
-    .eq('token_hash', hashSessionToken(token))
+    .eq('token_hash', tokenHash)
     .is('revoked_at', null)
     .select('id');
   if (error) throw new Error(`[playerSession] could not revoke session (code ${safeCode(error)})`);
@@ -308,6 +385,9 @@ export async function revokeAllPlayerSessions(
 ): Promise<number> {
   assertReason(reason);
   if (!isValidPlayerId(playerId)) return 0;
+  forgetCachedSessions(
+    (entry) => entry.playerId === playerId && (!options.exceptSessionId || entry.sessionId !== String(options.exceptSessionId))
+  );
   const { db, now } = resolve(deps);
   let q = db
     .from(SESSION_TABLE)

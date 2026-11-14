@@ -1,11 +1,11 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { supabaseAdmin } from './_lib/supabaseAdmin.js'
 import { findPlayerRow, toSafePlayer, selectByAnyEq } from './_lib/playerSecurity.js'
-import { enforcePlayerActor, enforceRoomOwner, getActingPlayer, type ActorSpec } from './_lib/playerAuth.js'
+import { enforcePlayerActor, enforceRoomOwner, getActingPlayer, rejectUnlistedAction, type ActorSpec } from './_lib/playerAuth.js'
 
 // Actions that act on behalf of a player: with REQUIRE_PLAYER_TOKEN on, the acting player comes
 // from the token; these fields (naming the actor, never another player) must match it.
-const ACTOR_SPECS: Record<string, ActorSpec> = (() => {
+export const ACTOR_SPECS: Record<string, ActorSpec> = (() => {
   const player: ActorSpec = { fields: { playerId: 'id', playerName: 'name', playerUsername: 'username' } }
   const specs: Record<string, ActorSpec> = {
     create: { fields: { player1Id: 'id', player1Name: 'name' } },
@@ -41,8 +41,14 @@ const ACTOR_SPECS: Record<string, ActorSpec> = (() => {
 
 const OWNER_ONLY_ACTIONS = new Set(['start', 'update-settings', 'updateSettings', 'update-room'])
 
+// Actions that need no player token. Anything not here and not in ACTOR_SPECS is refused when
+// REQUIRE_PLAYER_TOKEN is on (default deny).
+export const PUBLIC_ACTIONS: ReadonlySet<string> = new Set(['list-rooms', 'available-counts', 'list-challenges'])
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const action = req.method === 'GET' ? req.query.action : req.body.action
+
+  if (rejectUnlistedAction(action, ACTOR_SPECS, PUBLIC_ACTIONS, res)) return
 
   const spec = typeof action === 'string' && Object.prototype.hasOwnProperty.call(ACTOR_SPECS, action)
     ? ACTOR_SPECS[action]

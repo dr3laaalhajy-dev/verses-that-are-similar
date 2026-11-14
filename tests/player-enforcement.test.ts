@@ -591,3 +591,71 @@ test('client: no sendBeacon left in src/ (it cannot send the player token)', asy
   walk(root);
   assert.deepEqual(hits, []);
 });
+
+// ---------------------------------------------------------------------------
+// Default deny: every action a handler processes is either in ACTOR_SPECS or PUBLIC_ACTIONS
+// ---------------------------------------------------------------------------
+describe('default deny', () => {
+  const read = async (rel: string) => {
+    const { readFileSync } = await import('node:fs');
+    const { fileURLToPath } = await import('node:url');
+    return readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
+  };
+  const handled = (src: string, re: RegExp) => new Set([...src.matchAll(re)].map((m) => m[1]));
+
+  const endpoints = [
+    { file: '../api/1v1.ts', re: /case '([^']+)'/g, extra: [] as string[] },
+    { file: '../api/friends.ts', re: /action === '([^']+)'/g, extra: [] },
+    // Any other POST action falls through to registration.
+    { file: '../api/player-register.ts', re: /action === '([^']+)'/g, extra: ['register'] },
+  ];
+
+  for (const ep of endpoints) {
+    test(`${ep.file}: every handled action is listed exactly once (actor or public), and nothing stale`, async () => {
+      const mod: any = await import(ep.file.replace('../', '../'));
+      const actions = handled(await read(ep.file), ep.re);
+      for (const a of ep.extra) actions.add(a);
+      assert.ok(actions.size > 0);
+      const actor = new Set(Object.keys(mod.ACTOR_SPECS));
+      const pub = new Set<string>(mod.PUBLIC_ACTIONS);
+      for (const a of actions) {
+        assert.ok(actor.has(a) || pub.has(a), `${a} is neither in ACTOR_SPECS nor PUBLIC_ACTIONS`);
+        assert.ok(!(actor.has(a) && pub.has(a)), `${a} is in both lists`);
+      }
+      for (const a of [...actor, ...pub]) assert.ok(actions.has(a), `${a} is listed but not handled`);
+    });
+  }
+
+  test('switch on: unknown actions are refused with 400 UNKNOWN_ACTION and touch nothing', async () => {
+    seedPlayers();
+    const t = await tokenFor(1);
+    const before = JSON.stringify(db.tables);
+    const calls = [
+      () => call(duelHandler, { body: { action: 'drop-table', playerId: 1 }, headers: auth(t) }),
+      () => call(friendsHandler, { body: { action: 'make-admin', viewerId: 1 }, headers: auth(t) }),
+      () => call(registerHandler, { body: { action: 'set-points', name: 'X', username: 'xx', password: 'xx-pass-1' } }),
+      () => call(registerHandler, { body: { action: 'set-points', name: 'X', username: 'xx', password: 'xx-pass-1' }, headers: auth(t) }),
+    ];
+    for (const c of calls) {
+      const r = await quiet(c);
+      assert.deepEqual([r.statusCode, r.body], [400, { code: 'UNKNOWN_ACTION' }]);
+    }
+    const withoutSessions = (t: any) => JSON.stringify({ ...t, player_sessions: undefined });
+    assert.equal(withoutSessions(db.tables), withoutSessions(JSON.parse(before)), 'nothing but session rows exists');
+    assert.deepEqual(db.rows('players').map((p) => p.id), [1, 2, 3], 'no player created');
+  });
+
+  test('switch on: registration without an action still works (public)', async () => {
+    const r = await quiet(() => call(registerHandler, { body: { name: 'Eve', username: 'eve', password: 'eve-pass-1' } }));
+    assert.equal(r.statusCode, 200);
+  });
+
+  test('switch off: old behaviour for unknown actions (1v1 "Invalid action", player-register registers)', async () => {
+    switchOff();
+    const d = await quiet(() => call(duelHandler, { body: { action: 'drop-table' } }));
+    assert.deepEqual([d.statusCode, d.body], [400, { message: 'Invalid action' }]);
+    const r = await quiet(() => call(registerHandler, { body: { action: 'whatever', name: 'Old App', username: 'oldapp', password: 'old-pass-1' } }));
+    assert.equal(r.statusCode, 200);
+    assert.ok(db.rows('players').some((p) => p.username === 'oldapp'));
+  });
+});
