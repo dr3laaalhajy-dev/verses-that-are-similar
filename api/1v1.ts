@@ -1696,11 +1696,12 @@ async function handleCancelRoom(req: VercelRequest, res: VercelResponse) {
   if (!roomId || !playerId) return res.status(400).json({ message: 'Missing roomId or playerId' })
 
   try {
+    const { data: room } = await supabaseAdmin.from('rooms').select('*').eq('id', String(roomId)).maybeSingle()
+    // Idempotent: a room that no longer exists is already "cancelled".
+    if (!room) return res.status(200).json({ success: true, alreadyGone: true })
+
     const player = await findPlayer(playerId)
     if (!player) return res.status(404).json({ message: 'Player not found' })
-
-    const { data: room } = await supabaseAdmin.from('rooms').select('*').eq('id', String(roomId)).maybeSingle()
-    if (!room) return res.status(404).json({ message: 'Room not found' })
 
     // Security check: Only the host can cancel the room
     if (player.id !== room.player1Id) {
@@ -1708,6 +1709,13 @@ async function handleCancelRoom(req: VercelRequest, res: VercelResponse) {
     }
 
     await supabaseAdmin.from('rooms').update({ status: 'CANCELLED' }).eq('id', room.id)
+
+    // Clean up "Who am I" data of this room (was done from the browser before). Best effort.
+    await Promise.allSettled([
+      supabaseAdmin.from('who_am_i_submissions').delete().eq('room_id', String(room.id)),
+      supabaseAdmin.from('who_am_i_answers').delete().eq('room_id', String(room.id)),
+      supabaseAdmin.from('who_am_i_rounds').delete().eq('room_id', String(room.id)),
+    ])
 
     const fullRoom = await getFullRoom(room.id)
     return res.status(200).json(fullRoom)

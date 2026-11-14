@@ -2,6 +2,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Download, Share2, Printer, CheckCircle2, Award, Sparkles, Copy, Check, Edit3, X } from 'lucide-react';
 import html2canvas from 'html2canvas';
+import { inlineLegacyColors } from '../utils/html2canvasColors';
 
 export interface ChallengeCertificateProps {
   playerName: string;
@@ -185,6 +186,8 @@ export const ChallengeCertificate: React.FC<ChallengeCertificateProps> = ({
           if (el) {
             el.style.transform = 'none';
           }
+          // html2canvas 1.4.1 cannot read Tailwind v4 oklch() colours: convert them on the clone.
+          inlineLegacyColors(el, clonedDoc.defaultView);
         }
       });
 

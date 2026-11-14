@@ -659,3 +659,107 @@ describe('default deny', () => {
     assert.ok(db.rows('players').some((p) => p.username === 'oldapp'));
   });
 });
+
+// ---------------------------------------------------------------------------
+// fix-small-bundle: room cancel via server (idempotent), addPoint request, context exports
+// ---------------------------------------------------------------------------
+describe('cancel-room (server)', () => {
+  const ROOM = 'room-c';
+  beforeEach(() => {
+    seedPlayers();
+    db.rows('rooms').push({ id: ROOM, status: 'WAITING', player1Id: 1, playersProgress: {}, challengeIds: [] });
+    db.rows('who_am_i_rounds').push({ id: 1, room_id: ROOM }, { id: 2, room_id: 'other' });
+    db.rows('who_am_i_answers').push({ id: 1, room_id: ROOM });
+    db.rows('who_am_i_submissions').push({ id: 1, room_id: ROOM });
+  });
+  const cancel = (body: any, t: string | null = null) =>
+    quiet(() => call(duelHandler, { body: { action: 'cancel-room', ...body }, headers: auth(t) }));
+
+  for (const mode of ['off', 'on'] as const) {
+    test(`switch ${mode}: a room that does not exist -> 200 (idempotent), nothing touched`, async () => {
+      if (mode === 'off') switchOff();
+      const t = mode === 'on' ? await tokenFor(1) : null;
+      const before = JSON.stringify(db.tables.rooms);
+      const r = await cancel({ roomId: 'gone', playerId: 'alice' }, t);
+      assert.equal(r.statusCode, 200);
+      assert.deepEqual(r.body, { success: true, alreadyGone: true });
+      assert.equal(JSON.stringify(db.tables.rooms), before);
+    });
+
+    test(`switch ${mode}: host cancels -> CANCELLED and Who-am-I rows of that room removed`, async () => {
+      if (mode === 'off') switchOff();
+      const t = mode === 'on' ? await tokenFor(1) : null;
+      const r = await cancel({ roomId: ROOM, playerId: 'alice' }, t);
+      assert.equal(r.statusCode, 200);
+      assert.equal(db.rows('rooms').find((x) => x.id === ROOM).status, 'CANCELLED');
+      assert.deepEqual(db.rows('who_am_i_rounds').map((x) => x.room_id), ['other']);
+      assert.equal(db.rows('who_am_i_answers').length, 0);
+      assert.equal(db.rows('who_am_i_submissions').length, 0);
+    });
+
+    test(`switch ${mode}: a non-host cannot cancel (403), nothing touched`, async () => {
+      if (mode === 'off') switchOff();
+      const t = mode === 'on' ? await tokenFor(2) : null;
+      const r = await cancel({ roomId: ROOM, playerId: 'bob' }, t);
+      assert.equal(r.statusCode, 403);
+      assert.equal(db.rows('rooms').find((x) => x.id === ROOM).status, 'WAITING');
+      assert.equal(db.rows('who_am_i_rounds').length, 2);
+    });
+  }
+});
+
+describe('client source checks (fix-small-bundle)', () => {
+  const src = async (rel: string) => {
+    const { readFileSync } = await import('node:fs');
+    const { fileURLToPath } = await import('node:url');
+    return readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
+  };
+  const block = (text: string, start: string, end: string) => text.slice(text.indexOf(start), text.indexOf(end, text.indexOf(start)));
+
+  test('room cancel: only POST /api/1v1 cancel-room, no direct table deletes', async () => {
+    const ctx = await src('../src/contexts/AppContext.tsx');
+    const fn = block(ctx, 'const confirmCancelRoomByHost = async', 'const syncGroupProgress');
+    assert.match(fn, /action: 'cancel-room'/);
+    assert.doesNotMatch(fn, /supabase\.from\(/);
+    assert.doesNotMatch(fn, /'Room'|room_participants/);
+  });
+
+  test('addPoint: no roomId sent to /api/player-score; no challengeId inside a room', async () => {
+    const ctx = await src('../src/contexts/AppContext.tsx');
+    const fn = block(ctx, 'const addPoint = useCallback', '}, [');
+    assert.match(fn, /\/api\/player-score/);
+    assert.doesNotMatch(fn, /roomId: metadata/);
+    assert.match(fn, /challengeId: metadata\?\.roomId \? undefined : metadata\?\.challengeId/);
+  });
+
+  test('context exposes fetchChallenges and fetchCompletionChallenges (used by App.tsx / AppRouter)', async () => {
+    const ctx = await src('../src/contexts/AppContext.tsx');
+    const value = block(ctx, '  const value = {', '\n  };');
+    assert.match(value, /\n\s+fetchChallenges,/);
+    assert.match(value, /\n\s+fetchCompletionChallenges,/);
+  });
+
+  test('certificate captures convert oklch colours on the clone', async () => {
+    for (const f of ['../src/components/CertificateModal.tsx', '../src/components/ChallengeCertificate.tsx']) {
+      assert.match(await src(f), /inlineLegacyColors\(el, clonedDoc\.defaultView\)/, f);
+    }
+  });
+});
+
+test('replaceModernColors: replaces every modern colour function, keeps the rest', async () => {
+  // Minimal canvas stub: paints a fixed colour so we can check the parsing, not the browser.
+  const g: any = globalThis as any;
+  const hadDocument = 'document' in g;
+  g.document = { createElement: () => ({ getContext: () => ({ clearRect() {}, fillRect() {}, set fillStyle(_v: string) {}, getImageData: () => ({ data: [1, 2, 3, 255] }) }) }) };
+  try {
+    const { replaceModernColors } = await import('../src/utils/html2canvasColors.ts');
+    assert.equal(
+      replaceModernColors('linear-gradient(to right, oklch(0.769 0.188 70.08) 0%, oklab(0.5 0.1 0.1 / 0.3) 100%)'),
+      'linear-gradient(to right, rgba(1, 2, 3, 1) 0%, rgba(1, 2, 3, 1) 100%)'
+    );
+    assert.equal(replaceModernColors('rgb(0, 0, 0)'), 'rgb(0, 0, 0)');
+    assert.equal(replaceModernColors('0 1px 2px color(srgb 1 0 0)'), '0 1px 2px rgba(1, 2, 3, 1)');
+  } finally {
+    if (!hadDocument) delete g.document;
+  }
+});

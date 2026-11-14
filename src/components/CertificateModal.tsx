@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Share2, Printer, Download, Check, Award, Sparkles, CheckCircle2 } from 'lucide-react';
 import html2canvas from 'html2canvas';
+import { inlineLegacyColors } from '../utils/html2canvasColors';
 
 export interface CertificateModalProps {
   isOpen: boolean;
@@ -159,6 +160,8 @@ export const CertificateModal: React.FC<CertificateModalProps> = ({
           if (el) {
             el.style.transform = 'none';
           }
+          // html2canvas 1.4.1 cannot read Tailwind v4 oklch() colours: convert them on the clone.
+          inlineLegacyColors(el, clonedDoc.defaultView);
         }
       });
 

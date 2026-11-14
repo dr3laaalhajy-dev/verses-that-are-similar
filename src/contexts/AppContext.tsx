@@ -2104,8 +2104,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           name: playerName,
           points: pts,
           totalPoints: nextVal,
-          challengeId: metadata?.challengeId,
-          roomId: metadata?.roomId
+          // In a room only the points are sent: roomId made the server expect a room score update
+          // (playerId + score) and answer 400, and a challengeId would add a cup per question.
+          // Room scores and cups are handled by /api/1v1.
+          challengeId: metadata?.roomId ? undefined : metadata?.challengeId
         })
       })
       .then(res => res.json())
@@ -4695,37 +4697,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const roomId = String(room.id);
 
     try {
-      // 1. Delete from Supabase rooms, room_participants, and who_am_i tables
-      try {
-        await Promise.allSettled([
-          supabase.from('who_am_i_submissions').delete().eq('room_id', roomId),
-          supabase.from('who_am_i_answers').delete().eq('room_id', roomId),
-          supabase.from('who_am_i_rounds').delete().eq('room_id', roomId),
-          supabase.from('room_participants').delete().eq('room_id', roomId),
-          supabase.from('rooms').delete().eq('id', roomId),
-          supabase.from('Room').delete().eq('id', roomId)
-        ]);
-      } catch (sbErr) {
-        console.warn('[Supabase cancel-room cleanup warn]:', sbErr);
-      }
-
-      // 2. Call /api/1v1 with cancel-room
-      try {
-        const res = await fetch('/api/1v1', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'cancel-room',
-            roomId: roomId,
-            playerId: playerUsername || playerName
-          })
-        });
-        const data = await res.json();
-        if (!res.ok && res.status !== 404) {
-          console.warn('[API cancel-room non-200]:', data);
-        }
-      } catch (apiErr) {
-        console.warn('[API cancel-room fetch warn]:', apiErr);
+      // Cancel through the server only (it checks the host, marks the room CANCELLED and cleans
+      // up its "Who am I" data). A room that no longer exists counts as cancelled.
+      const res = await fetch('/api/1v1', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'cancel-room',
+          roomId: roomId,
+          playerId: playerUsername || playerName
+        })
+      });
+      if (!res.ok) {
+        let data: any = {};
+        try { data = await res.json(); } catch { data = {}; }
+        toast.error(data.message || data.error || 'تعذر إلغاء الغرفة');
+        return;
       }
 
       // 3. Reset local storage & state
@@ -7296,6 +7283,9 @@ ${versesList}
     isLoadingRooms, setIsLoadingRooms,
     isPullRefreshing, setIsPullRefreshing,
     fetchAvailableRooms,
+    // Used by App.tsx (admin "back to home") and AppRouter (retry button).
+    fetchChallenges,
+    fetchCompletionChallenges,
     handleJoinV1,
     privateRoomModal, setPrivateRoomModal,
     // Room Presence: Set of IDs (player id/name/username) currently online in the active game room
