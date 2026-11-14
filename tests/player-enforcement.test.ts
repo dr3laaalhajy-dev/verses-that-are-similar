@@ -763,3 +763,35 @@ test('replaceModernColors: replaces every modern colour function, keeps the rest
     if (!hadDocument) delete g.document;
   }
 });
+
+describe('daily challenge after a group game (fix 5)', () => {
+  const ctxSrc = async () => {
+    const { readFileSync } = await import('node:fs');
+    const { fileURLToPath } = await import('node:url');
+    return readFileSync(fileURLToPath(new URL('../src/contexts/AppContext.tsx', import.meta.url)), 'utf8');
+  };
+
+  test('starting the daily challenge drops a leftover room locally (no server call)', async () => {
+    const ctx = await ctxSrc();
+    const start = ctx.indexOf('const handleStartDaily = () => {');
+    const fn = ctx.slice(start, ctx.indexOf('const handleStartNormal', start));
+    assert.match(fn, /if \(room\) clearLocalRoomState\(\);/);
+    assert.ok(fn.indexOf('clearLocalRoomState()') < fn.indexOf("setView('challenge')"), 'cleared before opening the challenge');
+    const clear = ctx.slice(ctx.indexOf('const clearLocalRoomState = () => {'), start);
+    assert.match(clear, /setRoom\(null\)/);
+    assert.match(clear, /removeItem\('activeRoomId'\)/);
+    assert.match(clear, /removeItem\('currentRoomId'\)/);
+    assert.doesNotMatch(clear, /fetch\(|supabase\./, 'local only');
+  });
+
+  test('back on Home, a finished / cancelled / expired room is forgotten locally', async () => {
+    const ctx = await ctxSrc();
+    const i = ctx.indexOf("// Back on Home after a group game");
+    assert.ok(i > 0);
+    const effect = ctx.slice(i, ctx.indexOf('}, [view, room?.status]);', i));
+    assert.match(effect, /view !== 'home' \|\| !room/);
+    assert.match(effect, /'FINISHED', 'completed', 'CANCELLED', 'EXPIRED'/);
+    assert.match(effect, /setRoom\(null\)/);
+    assert.doesNotMatch(effect, /fetch\(|supabase\./, 'local only');
+  });
+});

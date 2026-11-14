@@ -4151,6 +4151,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, [room?.id, view, playerId, playerName, playerUsername, uniquePlayerId]);
 
+  // Back on Home after a group game: drop a room that is over, so nothing reopens its results.
+  useEffect(() => {
+    if (view !== 'home' || !room) return;
+    if (['FINISHED', 'completed', 'CANCELLED', 'EXPIRED'].includes(String(room.status))) {
+      setRoom(null);
+      try {
+        localStorage.removeItem('activeRoomId');
+        localStorage.removeItem('currentRoomId');
+      } catch (_) { }
+    }
+  }, [view, room?.status]);
+
   // Check for active unfinished challenges on Home and Challenges screens
   useEffect(() => {
     if ((view !== 'home' && view !== 'challenges') || !playerName) return;
@@ -5302,8 +5314,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setShowTafsirModal(true);
   };
 
+  // Local only: forget a group room this device is no longer playing. The room on the server and
+  // the other players are not affected (an unfinished room can still be resumed from the home banner).
+  const clearLocalRoomState = () => {
+    setRoom(null);
+    try {
+      localStorage.removeItem('activeRoomId');
+      localStorage.removeItem('currentRoomId');
+    } catch (_) { }
+  };
+
   const handleStartDaily = () => {
     if (dailyCompleted) return;
+    // The daily challenge is single-player: a leftover group room would make the challenge screen
+    // show that room (or jump to its results) instead of the daily challenge.
+    if (room) clearLocalRoomState();
     setDailyChallengeOffset(0);
     setChallengeMode('daily');
     setSkillsType('complete');
