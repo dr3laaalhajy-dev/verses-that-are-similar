@@ -360,6 +360,14 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
         })
       });
       const data = await res.json();
+      if (res.status === 409) {
+        // The server refused: not everyone answered and the question's time is not over. Stay on
+        // the question; the room's real state comes back via realtime / resync.
+        if (data?.room) setRoom(data.room);
+        finishTriggeredRef.current = null;
+        setIsEndingRoom(false);
+        return;
+      }
       if (data && (data.id || data.status)) {
         setRoom(data);
       }

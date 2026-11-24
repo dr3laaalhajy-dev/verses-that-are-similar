@@ -4047,16 +4047,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 const activeCount = activeParticipants.length;
                 const currentAnswers = data.currentAnswers || {};
 
-                // Filter answers for active question
-                const validAnswers = Object.entries(currentAnswers).filter(([_, ans]: [string, any]) => {
-                  return ans && (ans.questionIndex === undefined || ans.questionIndex === data.currentQuestionIndex);
+                // Condition: every active participant has an answer for THIS question. Checked per
+                // player, never by counting entries: currentAnswers also holds '_firstCorrectUserId'.
+                const allActiveAnswered = activeCount > 0 && activeParticipants.every((p: any) => {
+                  const ans = currentAnswers[String(p.id)];
+                  return Boolean(ans && (ans.questionIndex === undefined || ans.questionIndex === data.currentQuestionIndex));
                 });
-
-                // Condition: all active participants have answered
-                const allActiveAnswered = activeCount > 0 && (
-                  validAnswers.length >= activeCount ||
-                  activeParticipants.every((p: any) => Boolean(currentAnswers[String(p.id)]))
-                );
 
                 const totalQ = data.questionCount || (challenges && challenges.length) || 5;
                 const isLastQuestion = data.currentQuestionIndex !== undefined && data.currentQuestionIndex >= totalQ - 1;
@@ -4074,10 +4070,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                           playerId: playerUsername || playerName
                         })
                       })
-                        .then(res => res.json())
+                        .then(res => res.json().then(body => (res.ok ? body : null)))
                         .then(endedData => {
                           isAdvancingRef.current = false;
-                          if (endedData) {
+                          // Refused (409 TOO_EARLY) or failed: stay on the question.
+                          if (endedData && (endedData.status === 'FINISHED' || endedData.status === 'completed')) {
                             setRoom(endedData);
                             recordDailyGiftRoomMatch?.();
                             router.push('/challenge/results');

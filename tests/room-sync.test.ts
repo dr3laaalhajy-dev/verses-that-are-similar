@@ -166,6 +166,74 @@ describe('poll', () => {
 // ---------------------------------------------------------------------------
 // One player's overlapping requests (the "8 correct -> 4" ASYNC case)
 // ---------------------------------------------------------------------------
+describe('last question (SYNC, 2 players): P1 answers, P2 has not', () => {
+  // questionCount 8 -> index 7 is the last question; 20 s per question, started 3 s ago.
+  const lastQ = () => seed('SYNC', 2, { currentQuestionIndex: 7, timePerQuestion: 20, questionStartTime: Date.now() - 3_000 });
+  const isOver = () => ['FINISHED', 'completed'].includes(room().status);
+
+  it('the room stays on the question: answer, both players poll, P1 asks end-room -> 409', async () => {
+    lastQ();
+    const a = await call({ action: 'submit-answer', roomId: 'r', playerId: 1, questionIndex: 7, isCorrect: true });
+    assert.equal(a.statusCode, 200);
+    assert.equal(room().currentAnswers._firstCorrectUserId, 1, 'the marker that used to be counted as an answer');
+    // roomResync polls every 5 s from both players: this used to finish the room
+    await call({ action: 'poll', roomId: 'r', playerId: 'p1' }, 'GET');
+    await call({ action: 'poll', roomId: 'r', playerId: 'p2' }, 'GET');
+    assert.equal(isOver(), false, 'poll must not end the room');
+    assert.equal(room().currentQuestionIndex, 7);
+    // the host's client used to ask end-room here (same miscount); the server now refuses
+    const e = await call({ action: 'end-room', roomId: 'r', playerId: 1 });
+    assert.equal(e.statusCode, 409);
+    assert.equal(e.body.code, 'TOO_EARLY');
+    assert.equal(isOver(), false, 'end-room must not end the room');
+    // advance-question is refused as well
+    const adv = await call({ action: 'advance-question', roomId: 'r', playerId: 2, questionIndex: 7 });
+    assert.equal(adv.statusCode, 409);
+    assert.equal(isOver(), false);
+  });
+
+  it('P2 answers too -> the room ends (results)', async () => {
+    lastQ();
+    await call({ action: 'submit-answer', roomId: 'r', playerId: 1, questionIndex: 7, isCorrect: true });
+    await call({ action: 'submit-answer', roomId: 'r', playerId: 2, questionIndex: 7, isCorrect: false });
+    assert.equal(isOver(), true);
+  });
+
+  it('the question time is over (server clock) -> poll ends the room, P2 gets a wrong answer', async () => {
+    lastQ();
+    await call({ action: 'submit-answer', roomId: 'r', playerId: 1, questionIndex: 7, isCorrect: true });
+    room().questionStartTime = Date.now() - (20_000 + server.QUESTION_EXPIRY_SLACK_MS + 100);
+    await call({ action: 'poll', roomId: 'r', playerId: 'p1' }, 'GET');
+    assert.equal(isOver(), true);
+  });
+
+  it('time over -> end-room is accepted', async () => {
+    lastQ();
+    room().questionStartTime = Date.now() - (20_000 + server.QUESTION_EXPIRY_SLACK_MS + 100);
+    const e = await call({ action: 'end-room', roomId: 'r', playerId: 1 });
+    assert.equal(e.statusCode, 200);
+    assert.equal(isOver(), true);
+  });
+
+  it('P2 withdrew -> P1 alone counts as everyone', async () => {
+    lastQ();
+    room().playersProgress['2'].isResigned = true;
+    await call({ action: 'submit-answer', roomId: 'r', playerId: 1, questionIndex: 7, isCorrect: true });
+    assert.equal(isOver(), true);
+  });
+
+  it('client: the host check is per player (no answer count) and end-room 409 is not treated as finished', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { fileURLToPath } = await import('node:url');
+    const read = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
+    const ctx = read('../src/contexts/AppContext.tsx');
+    assert.doesNotMatch(ctx, /validAnswers\.length >= activeCount/);
+    assert.match(ctx, /res\.json\(\)\.then\(body => \(res\.ok \? body : null\)\)/);
+    const page = read('../src/pages/ChallengeGamePage.tsx');
+    assert.match(page, /if \(res\.status === 409\) \{/);
+  });
+});
+
 describe('ASYNC: one player, 8 correct answers + progress updates', () => {
   const play = async (useQueue: boolean) => {
     seed('ASYNC', 2);

@@ -1101,19 +1101,12 @@ async function handlePoll(req: VercelRequest, res: VercelResponse) {
     // In SYNC mode: Check if timer expired on server side OR all online players answered
     if (room.status === 'PLAYING' && (room as any).transitionMode !== 'ASYNC') {
       const curQ = room.currentQuestionIndex || 0
-      const curAnswers: Record<string, any> = (room.currentAnswers as any) || {}
-      const validAnswers = Object.entries(curAnswers).filter(([_, a]: [string, any]) => {
-        return a && (a.questionIndex === undefined || a.questionIndex === curQ)
-      })
-
-      const activePlayers = Object.entries(playersProgress).filter(([_, p]: [string, any]) => {
-        return p && !p.hasLeft && !p.isResigned && !p.isAbandoned && p.status !== 'abandoned'
-      })
-
       const isTimerExpired = room.timePerQuestion > 0 && room.questionStartTime &&
         ((Date.now() - Number(room.questionStartTime)) / 1000 >= (room.timePerQuestion + 1.5))
 
-      const allActiveAnswered = activePlayers.length > 0 && validAnswers.length >= activePlayers.length
+      // Per player, not a count: currentAnswers also holds '_firstCorrectUserId', which used to be
+      // counted as an answer (2 players, the first correct answer => "everyone answered").
+      const allActiveAnswered = haveAllActivePlayersAnswered(room)
       const totalQ = room.questionCount || 5
       const isLastQuestion = curQ >= totalQ - 1
 
@@ -1438,6 +1431,13 @@ async function handleEndRoom(req: VercelRequest, res: VercelResponse) {
           return res.status(403).json({ message: 'Only host can end the room' })
         }
       }
+    }
+
+    // SYNC: the room only ends once every non-withdrawn player answered or the question's time is
+    // over (server clock), like advance-question.
+    if (room.status === 'PLAYING' && (room as any).transitionMode !== 'ASYNC' && !isQuestionTimeUp(room) && !haveAllActivePlayersAnswered(room)) {
+      const fullRoom = await getFullRoom(room.id)
+      return res.status(409).json({ accepted: false, code: 'TOO_EARLY', room: fullRoom })
     }
 
     const currentAnswers = (room.currentAnswers as any) || {}
