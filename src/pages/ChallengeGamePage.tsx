@@ -932,9 +932,13 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
           </div>
         )}
 
-        {/* 2. Middle Content Area: Question & Options (Flex-1, Scroll-Free) */}
-        <div className="flex-1 flex flex-col justify-center items-center px-2 sm:px-4 py-1 overflow-hidden w-full max-w-2xl mx-auto relative z-10">
-          {renderChallengeMainContent(true)}
+        {/* 2. Middle Content Area: Question & Options. Scrolls when the question is taller than the
+            screen (long text, many items, phone keyboard open); short questions stay centred.
+            It used to be overflow-hidden + justify-center: the confirm button was cut off. */}
+        <div data-testid="room-question-scroll" className="flex-1 min-h-0 overflow-y-auto overscroll-contain w-full relative z-10">
+          <div className="min-h-full flex flex-col justify-center items-center px-2 sm:px-4 py-1 pb-4 w-full max-w-2xl mx-auto">
+            {renderChallengeMainContent(true)}
+          </div>
         </div>
 
         {/* 3. Bottom Area: Compact Player Status Row + Reactions FAB */}

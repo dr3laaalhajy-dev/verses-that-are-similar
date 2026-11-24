@@ -101,3 +101,22 @@ describe('4: room updates do not empty the input', () => {
     assert.doesNotMatch(ctx, /selectedSkillSurahs, selectedJuz, room\]\);/);
   });
 });
+
+describe('6: the room question area scrolls (confirm button always reachable)', () => {
+  const page = read('../src/pages/ChallengeGamePage.tsx');
+  it('the middle area is a scroll container that may shrink (min-h-0), not overflow-hidden', () => {
+    const m = page.match(/<div data-testid="room-question-scroll" className="([^"]+)">/);
+    assert.ok(m, 'scroll container present');
+    const cls = m![1].split(/\s+/);
+    for (const c of ['flex-1', 'min-h-0', 'overflow-y-auto']) assert.ok(cls.includes(c), c);
+    assert.ok(!cls.includes('overflow-hidden'));
+  });
+
+  it('short questions stay centred: inner wrapper min-h-full + justify-center', () => {
+    assert.match(page, /room-question-scroll"[^>]*>\s*<div className="min-h-full flex flex-col justify-center/);
+  });
+
+  it('the old clipping middle area is gone', () => {
+    assert.doesNotMatch(page, /flex-1 flex flex-col justify-center items-center px-2 sm:px-4 py-1 overflow-hidden/);
+  });
+});
