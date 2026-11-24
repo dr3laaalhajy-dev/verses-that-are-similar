@@ -1,9 +1,10 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CheckCircle, XCircle, Trophy, BookOpen, Lightbulb } from 'lucide-react';
+import { CheckCircle, XCircle, Trophy, BookOpen, Lightbulb, List } from 'lucide-react';
 import { renderQuranText } from '../../utils/quranUtils';
 import { normalizeArabicText, normalizeSurahName } from '../../utils/arabic';
 import { quranData } from '../../services/QuranRepository';
+import { filterSurahNames } from '../../utils/surahPicker';
 
 export interface OutOfRangeSurah {
   surah: string;
@@ -76,6 +77,48 @@ export const SurahChallengeUI: React.FC<SurahChallengeUIProps> = ({
   onBonusInputChange
 }) => {
   const isMultiplayerMode = Boolean(isMultiplayer ?? isRoom);
+  // Which box the surah list is open for (a <datalist> alone shows nothing on most phones).
+  const [pickerFor, setPickerFor] = React.useState<number | 'bonus' | null>(null);
+  React.useEffect(() => {
+    if (feedback) setPickerFor(null);
+  }, [feedback]);
+
+  const renderPickerButton = (target: number | 'bonus') => (
+    !feedback && (
+      <button
+        type="button"
+        onClick={() => setPickerFor(pickerFor === target ? null : target)}
+        aria-label="اختر السورة من القائمة"
+        title="اختر من القائمة"
+        className="absolute left-2 top-1/2 -translate-y-1/2 p-2 rounded-lg text-brand-emerald/70 hover:text-brand-emerald hover:bg-brand-gold/20 transition-all"
+      >
+        <List className="w-5 h-5" />
+      </button>
+    )
+  );
+
+  const renderPicker = (target: number | 'bonus', query: string, onPick: (value: string) => void) => {
+    if (feedback || pickerFor !== target) return null;
+    const items = filterSurahNames(query, quranData as any);
+    return (
+      <div role="listbox" aria-label="قائمة السور" className="mt-1.5 max-h-56 overflow-y-auto rounded-xl border-2 border-brand-gold/40 bg-white shadow-lg p-1.5 grid grid-cols-2 sm:grid-cols-3 gap-1 text-right">
+        {items.length === 0 ? (
+          <span className="col-span-full text-center text-sm text-slate-500 py-2">لا توجد سورة بهذا الاسم</span>
+        ) : items.map((s: any) => (
+          <button
+            key={s.id}
+            type="button"
+            role="option"
+            aria-selected={false}
+            onClick={() => { onPick(`سورة ${s.name}`); setPickerFor(null); }}
+            className="px-2 py-2 rounded-lg text-sm font-bold text-brand-emerald quran-text hover:bg-brand-gold/20 active:bg-brand-gold/30 text-center"
+          >
+            {s.name}
+          </button>
+        ))}
+      </div>
+    );
+  };
   const deduplicatedOutOfRange = React.useMemo(() => {
     if (!surahFeedbackData?.outOfRangeAnswers) return [];
     const seen = new Set<string>();
@@ -113,7 +156,8 @@ export const SurahChallengeUI: React.FC<SurahChallengeUIProps> = ({
                 : "bg-red-50 border-red-500 text-red-800 ring-2 ring-red-300";
           }
           return (
-            <motion.div key={idx} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: idx * 0.1 }} className="relative">
+            <motion.div key={idx} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: idx * 0.1 }}>
+              <div className="relative">
               <input
                 type="text"
                 list="surah-names-list"
@@ -121,9 +165,10 @@ export const SurahChallengeUI: React.FC<SurahChallengeUIProps> = ({
                 disabled={feedback}
                 onChange={(e) => onInputChange(idx, e.target.value)}
                 placeholder={inputs.length > 1 ? `اسم السورة ${idx + 1}` : "ما اسم السورة؟"}
-                className={`w-full p-3.5 md:p-4 rounded-xl md:rounded-2xl border-2 ${inputStyle} outline-none text-lg sm:text-xl md:text-xl font-bold text-center quran-text shadow-xs transition-all focus:shadow-sm`}
+                className={`w-full p-3.5 md:p-4 pl-11 md:pl-12 rounded-xl md:rounded-2xl border-2 ${inputStyle} outline-none text-lg sm:text-xl md:text-xl font-bold text-center quran-text shadow-xs transition-all focus:shadow-sm`}
                 autoFocus={idx === 0}
               />
+              {renderPickerButton(idx)}
               {feedback && surahFeedbackData && (
                 <div className="absolute left-3 top-1/2 -translate-y-1/2">
                   {isBonus ? (
@@ -135,6 +180,8 @@ export const SurahChallengeUI: React.FC<SurahChallengeUIProps> = ({
                   )}
                 </div>
               )}
+              </div>
+              {renderPicker(idx, input, (v) => onInputChange(idx, v))}
             </motion.div>
           );
         })}
@@ -178,17 +225,19 @@ export const SurahChallengeUI: React.FC<SurahChallengeUIProps> = ({
                       disabled={feedback}
                       onChange={(e) => onBonusInputChange?.(e.target.value)}
                       placeholder="🎁 تحدي إضافي: سورة أخرى (اختياري)"
-                      className={`w-full p-3.5 md:p-4 rounded-xl md:rounded-2xl border-2 ${bonusStyle} outline-none text-base sm:text-lg md:text-lg font-bold text-center quran-text shadow-xs transition-all placeholder:text-amber-700/60 dark:placeholder:text-amber-400/60`}
+                      className={`w-full p-3.5 md:p-4 pl-11 md:pl-12 rounded-xl md:rounded-2xl border-2 ${bonusStyle} outline-none text-base sm:text-lg md:text-lg font-bold text-center quran-text shadow-xs transition-all placeholder:text-amber-700/60 dark:placeholder:text-amber-400/60`}
                     />
                     {feedback && isBonusMatch && (
                       <div className="absolute left-3 top-1/2 -translate-y-1/2">
                         <span className="text-base animate-bounce" title="مكافأة الحُفّاظ!">🎁</span>
                       </div>
                     )}
+                    {renderPickerButton('bonus')}
                   </>
                 );
               })()}
             </div>
+            {renderPicker('bonus', bonusInput || '', (v) => onBonusInputChange?.(v))}
           </motion.div>
         )}
         <datalist id="surah-names-list">

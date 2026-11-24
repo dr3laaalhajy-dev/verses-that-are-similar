@@ -1050,6 +1050,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [speedTotalTimeSpent, setSpeedTotalTimeSpent] = useState(0);
   const [isSpeedGameOver, setIsSpeedGameOver] = useState(false);
   const [surahInputs, setSurahInputs] = useState<string[]>([]);
+  // What the player typed right now (a delayed submit must never read an older render's inputs).
+  const surahInputsRef = useRef<string[]>([]);
+  surahInputsRef.current = surahInputs;
+  // One evaluation per question: a second call (timer + confirm click) would overwrite the result.
+  const surahSubmitLockRef = useRef(false);
   const [surahBonusInput, setSurahBonusInput] = useState<string>('');
   const [roomScopeMode, setRoomScopeMode] = useState<'juz' | 'surah'>('juz');
   const [roomSelectedJuzs, setRoomSelectedJuzs] = useState<number[]>([]);
@@ -3666,6 +3671,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const isAdvancingRef = useRef(false);
+  // A new question (feedback cleared) may be answered again.
+  useEffect(() => {
+    if (!skillsFeedback) surahSubmitLockRef.current = false;
+  }, [skillsFeedback]);
   const notifiedWithdrawnPlayersRef = useRef<Set<string>>(new Set());
   // Set of player IDs currently tracked as online via Supabase Presence in the active room.
   // Populated by the roomPresence useEffect below and exposed to advance-question logic.
@@ -5225,30 +5234,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [room?.id, view, currentChallenge, selectedSkillJuzs, selectedSkillSurahs, selectedJuz]);
 
   const handleSurahBonusInputChange = (val: string) => {
+    // Typing only. The bonus (+2) is checked and counted once, when the answer is confirmed
+    // (on submit); awarding it while typing revealed a right answer before confirm.
     setSurahBonusInput(val);
-
-    if (val && val.trim() && currentChallenge) {
-      const normVal = normalizeSurahName(val);
-      const allCorrect = getChallengeSurahsList(currentChallenge);
-      const activeScope = getActiveScope(room, selectedSkillJuzs, selectedSkillSurahs, selectedJuz, currentChallenge?.type || 'SURAH');
-      const { bonusAnswers } = splitSurahAnswersByScope(allCorrect, activeScope, currentChallenge?.verses || []);
-
-      const matchedBonus = bonusAnswers.find(b => normalizeSurahName(b.surah) === normVal);
-      if (matchedBonus && !discoveredBonusSurahs.includes(matchedBonus.surah)) {
-        setDiscoveredBonusSurahs(prev => [...prev, matchedBonus.surah]);
-        addPoint({ challengeId: currentChallenge?.id, roomId: room?.id, points: 2 });
-        toast.success(
-          `🎁 مكافأة الحُفّاظ! إجابة إضافية خارج النطاق (+2 بونص): سورة ${matchedBonus.surah}`,
-          { duration: 4000 }
-        );
-      }
-    }
   };
 
   // Effect to handle Surah Name Challenge inputs initialization
   useEffect(() => {
     const isSurahMode = skillsType === 'surah' || (view === 'group_game' && roomGameMode === 'surah');
     if (currentChallenge && isSurahMode) {
+      surahSubmitLockRef.current = false;
       setDiscoveredBonusSurahs([]);
       setSurahBonusInput('');
       const allSurahs = getChallengeSurahsList(currentChallenge);
@@ -5263,54 +5258,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const inputCount = inRangeAnswers.length > 0 ? inRangeAnswers.length : 1;
       setSurahInputs(new Array(inputCount).fill(''));
     }
-  }, [currentChallenge, skillsType, room?.gameMode, view, selectedSkillJuzs, selectedSkillSurahs, selectedJuz, room]);
+    // Keyed on the question, not on `room` / the challenge object: every room update (realtime,
+    // resync, presence) used to empty what the player was typing.
+  }, [currentChallenge?.id, currentChallengeIndex, skillsType, room?.gameMode, view, selectedSkillJuzs, selectedSkillSurahs, selectedJuz, room?.id]);
 
   // دالة البونص للعب الجماعي (الغرف) - نظام المكافأة المخفية
   const handleSurahInputChangeBonus = (idx: number, val: string) => {
+    // Typing only: no right / wrong, no bonus and no auto-submit before the player presses the
+    // confirm button (the submit evaluates required and bonus answers once).
     setSurahInputs(prev => {
       const newInputs = [...prev];
       newInputs[idx] = val;
       return newInputs;
     });
-
-    if (val && val.trim() && currentChallenge) {
-      const normVal = normalizeSurahName(val);
-      const allCorrect = getChallengeSurahsList(currentChallenge);
-      const activeScope = getActiveScope(room, selectedSkillJuzs, selectedSkillSurahs, selectedJuz, currentChallenge?.type || 'SURAH');
-      const { bonusAnswers, inRangeAnswers } = splitSurahAnswersByScope(allCorrect, activeScope, currentChallenge?.verses || []);
-
-      const matchedBonus = bonusAnswers.find(b => normalizeSurahName(b.surah) === normVal);
-      if (matchedBonus && !discoveredBonusSurahs.includes(matchedBonus.surah)) {
-        setDiscoveredBonusSurahs(prevBonus => [...prevBonus, matchedBonus.surah]);
-        addPoint({ challengeId: currentChallenge?.id, roomId: room?.id, points: 2 });
-        toast.success(
-          `🎁 مكافأة الحُفّاظ! إجابة إضافية خارج النطاق (+2 بونص): سورة ${matchedBonus.surah}`,
-          { duration: 4000 }
-        );
-      }
-
-      // Check auto-completion for required answers (decoupled from bonus)
-      if (!hasBonusField && !skillsFeedback && !isComplete) {
-        const normalizedRequired = inRangeAnswers.map(a => normalizeSurahName(a.surah));
-        const candidateInputs = [...surahInputs];
-        candidateInputs[idx] = val;
-        const normalizedCurrent = candidateInputs.map(s => normalizeSurahName(s)).filter(Boolean);
-
-        const matchedRequiredIndices = new Set<number>();
-        normalizedCurrent.forEach(inp => {
-          const matchIdx = normalizedRequired.findIndex((req, rIdx) => req === inp && !matchedRequiredIndices.has(rIdx));
-          if (matchIdx !== -1) {
-            matchedRequiredIndices.add(matchIdx);
-          }
-        });
-
-        if (matchedRequiredIndices.size === normalizedRequired.length && normalizedRequired.length > 0) {
-          setTimeout(() => {
-            handleSubmitSurah();
-          }, 350);
-        }
-      }
-    }
   };
 
   // دالة التجاهل للعب الفردي (تحدي المهارات) - إلغاء البونص تماماً والتنبيه البعدي فقط
@@ -5797,7 +5757,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const handleSubmitSurah = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const currentQuestion = currentChallenge;
-    if (!currentQuestion || skillsFeedback) return;
+    if (!currentQuestion || skillsFeedback || surahSubmitLockRef.current) return;
+    surahSubmitLockRef.current = true;
+    const surahInputs = surahInputsRef.current;
 
     setSkillsFeedback(true);
 
