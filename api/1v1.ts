@@ -118,6 +118,33 @@ const mapChallenges = (challenges: any[]) =>
     text: c.verseText || c.keyword || c.text || '' 
   }));
 
+// ── SYNC question timing: the server clock is the reference ──
+// Margin for network delay before a question counts as timed out on the server.
+export const QUESTION_EXPIRY_SLACK_MS = 1500
+
+/** True when the current SYNC question's time is over (server clock). Rooms without a timer: always true. */
+export function isQuestionTimeUp(room: any, now: number = Date.now()): boolean {
+  const seconds = Number(room?.timePerQuestion) || 0
+  if (seconds <= 0) return true
+  const startedAt = Number(room?.questionStartTime) || 0
+  if (!startedAt) return true
+  return now - startedAt >= seconds * 1000 + QUESTION_EXPIRY_SLACK_MS
+}
+
+/** True when every non-withdrawn player has an answer stored for the current SYNC question. */
+export function haveAllActivePlayersAnswered(room: any): boolean {
+  const curQ = room?.currentQuestionIndex || 0
+  const answers: Record<string, any> = (room?.currentAnswers as any) || {}
+  const progress: Record<string, any> = (room?.playersProgress as any) || {}
+  const active = Object.entries(progress).filter(([id, p]: [string, any]) =>
+    id !== '__lastReaction' && id !== '_firstCorrectUserId' &&
+    p && !p.hasLeft && !p.isResigned && !p.isAbandoned && p.status !== 'abandoned')
+  return active.length > 0 && active.every(([id]) => {
+    const a = answers[id]
+    return Boolean(a && (a.questionIndex === undefined || a.questionIndex === curQ))
+  })
+}
+
 async function findPlayer(idOrUsernameOrName: any, nameFallback?: string) {
   if (!idOrUsernameOrName && !nameFallback) return null;
   const str = String(idOrUsernameOrName || '').trim();
@@ -1066,18 +1093,10 @@ async function handlePoll(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json(fullRoom)
     }
 
-    let playersProgress: any = (room.playersProgress as any) || {}
-    let needUpdate = false
-
-    // Update polling player's presence heartbeat
-    if (playerId) {
-      const pIdStr = String(playerId)
-      if (playersProgress[pIdStr]) {
-        playersProgress[pIdStr].isOnline = true
-        playersProgress[pIdStr].lastSeen = Date.now()
-        needUpdate = true
-      }
-    }
+    const playersProgress: any = (room.playersProgress as any) || {}
+    // No heartbeat write here any more: poll now runs every few seconds from every player, and
+    // writing back this (possibly stale) copy of playersProgress could erase answers / scores
+    // written in between. Presence comes from Supabase Presence and the 'presence' action.
 
     // In SYNC mode: Check if timer expired on server side OR all online players answered
     if (room.status === 'PLAYING' && (room as any).transitionMode !== 'ASYNC') {
@@ -1108,10 +1127,6 @@ async function handlePoll(req: VercelRequest, res: VercelResponse) {
           console.error('Error auto-advancing in poll:', err)
         }
       }
-    }
-
-    if (needUpdate) {
-      await supabaseAdmin.from('rooms').update({ playersProgress }).eq('id', room.id)
     }
 
     const fullRoom = await getFullRoom(roomId as string)
@@ -1236,10 +1251,11 @@ async function handleSubmitAnswer(req: VercelRequest, res: VercelResponse) {
       }).eq('id', room.id)
     } else {
       // SYNC MODE:
-      // Only accept answers for the active question
+      // Only accept answers for the active question. A late answer is refused explicitly so the
+      // client re-syncs to the room's real question (it used to be dropped silently).
       if (Number(questionIndex) !== room.currentQuestionIndex) {
         const fullRoom = await getFullRoom(roomId as string)
-        return res.status(200).json(fullRoom)
+        return res.status(409).json({ accepted: false, code: 'STALE_QUESTION', room: fullRoom })
       }
 
       const currentAnswers: Record<string, any> = (room.currentAnswers as any) || {}
@@ -1346,7 +1362,10 @@ async function handleAdvanceQuestion(req: VercelRequest, res: VercelResponse) {
       const player = await findPlayer(playerId)
       if (player) {
         const participants = Array.isArray(room.participants) ? room.participants : []
-        const isParticipant = (player.id === room.player1Id) || participants.some((p: any) =>
+        // rooms has no participants column: players are the keys of playersProgress (and player2Id).
+        const progressKeys = Object.keys((room.playersProgress as any) || {})
+        const isParticipant = (player.id === room.player1Id) || String(player.id) === String(room.player2Id) ||
+          progressKeys.includes(String(player.id)) || participants.some((p: any) =>
           String(p.id) === String(player.id) ||
           p.name === player.name ||
           (p.username && player.username && p.username.toLowerCase() === player.username.toLowerCase())
@@ -1364,6 +1383,13 @@ async function handleAdvanceQuestion(req: VercelRequest, res: VercelResponse) {
     if (Number(questionIndex) !== room.currentQuestionIndex) {
       const fullRoom = await getFullRoom(roomId as string)
       return res.status(200).json(fullRoom)
+    }
+
+    // SYNC: any player may ask, but only once everyone answered or the question's time is over
+    // (server clock). Nobody is skipped earlier because they look offline.
+    if ((room as any).transitionMode !== 'ASYNC' && !isQuestionTimeUp(room) && !haveAllActivePlayersAnswered(room)) {
+      const fullRoom = await getFullRoom(roomId as string)
+      return res.status(409).json({ accepted: false, code: 'TOO_EARLY', room: fullRoom })
     }
 
     const currentAnswers = (room.currentAnswers as any) || {}

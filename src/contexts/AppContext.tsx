@@ -8,6 +8,7 @@ import {
   Clock, RefreshCw, Globe, Plus, Gamepad2, Trash2, Play, ShoppingBag
 } from 'lucide-react';
 import { presenceWithGrace } from '../lib/leaveGuard';
+import { createSerialQueue, isQuestionTimeUp, postWithRetry, startRoomResync } from '../lib/roomSync';
 import { clearPlayerSession, logoutPlayerSession, replacePlayerSession, setSessionEndedStateReset, takeSessionEndedMessage } from '../lib/playerSession';
 import { quranData } from '../services/QuranRepository';
 import { HADITHS, Hadith } from '../services/HadithRepository';
@@ -958,6 +959,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       } catch (e) { }
     }
   };
+  // Room sync (see src/lib/roomSync.ts): one serial send queue per player, and the latest resync
+  // function (re-assigned every render so it never uses stale state).
+  const roomSendQueueRef = useRef(createSerialQueue());
+  const roomResyncRef = useRef<(reason: string) => void>(() => {});
+  const roomResyncInFlightRef = useRef(false);
   const prevParticipantsCount = useRef<number>(0);
   const prevRoomStatus = useRef<string>('WAITING');
   const [isCreatingRoom, setIsCreatingRoom] = useState(false);
@@ -3693,6 +3699,47 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [challenges, room?.timePerQuestion]);
 
+  // Read the room's real state from the server and catch up (missed realtime events, late answer,
+  // tab back, network back, app resumed, periodic check). Only while playing in a room.
+  roomResyncRef.current = (_reason: string) => {
+    const current = roomRef.current;
+    if (!current?.id || roomResyncInFlightRef.current) return;
+    if (view !== 'challenge' || challengeMode === 'daily') return;
+    roomResyncInFlightRef.current = true;
+    const playerIdParam = encodeURIComponent(playerUsername || playerName || '');
+    fetch(`/api/1v1?action=poll&roomId=${current.id}&playerId=${playerIdParam}`)
+      .then(res => (res.ok ? res.json() : null))
+      .then((data: any) => {
+        if (!data || !data.id || String(roomRef.current?.id) !== String(data.id)) return;
+        if (data.status === 'FINISHED' || data.status === 'completed') {
+          setRoom(data);
+          recordDailyGiftRoomMatch();
+          router.push('/challenge/results');
+          setView('group_game');
+          return;
+        }
+        if (data.status !== 'PLAYING') return; // cancelled / expired: handled by the existing room logic
+        if (data.transitionMode !== 'ASYNC' && typeof data.currentQuestionIndex === 'number' && data.currentQuestionIndex > currentChallengeIndex) {
+          setRoom(data);
+          resetQuestionUIState(data.currentQuestionIndex, data);
+          return;
+        }
+        const prev = roomRef.current;
+        if (JSON.stringify(prev?.currentAnswers || {}) !== JSON.stringify(data.currentAnswers || {})) {
+          setRoom(data);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        roomResyncInFlightRef.current = false;
+      });
+  };
+
+  useEffect(() => {
+    if (!room?.id || view !== 'challenge' || challengeMode === 'daily' || room.status !== 'PLAYING') return;
+    return startRoomResync({ onResync: (reason) => roomResyncRef.current(reason) });
+  }, [room?.id, view, room?.status, challengeMode]);
+
   const handleRoomTimeout = async () => {
     if (!room?.id) return;
     if (room.transitionMode === 'ASYNC') {
@@ -3700,18 +3747,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const totalQ = room.questionCount || challenges.length || 5;
       const isLastQuestion = currentChallengeIndex >= totalQ - 1;
       try {
-        fetch('/api/1v1', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'submit-answer',
-            roomId: room.id,
-            playerId: playerUsername || playerName,
-            questionIndex: currentChallengeIndex,
-            isCorrect: false,
-            timestamp: Date.now()
-          })
-        }).catch(err => console.error('Error submitting ASYNC timeout answer:', err));
+        // One request at a time per player, retried on failure (overlapping requests overwrote each other).
+        roomSendQueueRef.current(() => postWithRetry('/api/1v1', {
+          action: 'submit-answer',
+          roomId: room.id,
+          playerId: playerUsername || playerName,
+          questionIndex: currentChallengeIndex,
+          isCorrect: false,
+          timestamp: Date.now()
+        }));
         if (!isLastQuestion) {
           moveToNextQuestion();
         } else {
@@ -3739,6 +3783,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           isCorrect: false,
           timestamp: Date.now()
         })
+      }).then(res => res.json()).then(data => {
+        if (data?.code === 'STALE_QUESTION') roomResyncRef.current('stale'); // late answer: re-sync
       }).catch(err => console.error('Error submitting timeout answer:', err));
     }
 
@@ -3756,6 +3802,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       (room?.hostName && playerName && room.hostName === playerName) ||
       (room?.hostUsername && playerUsername && room.hostUsername.toLowerCase() === playerUsername.toLowerCase())
     );
+
+    // Any player (not only the host) asks the server to move on once the time is over; the server
+    // checks the time itself. Non-hosts wait a little so the host's request usually comes first.
+    if (!isHost && !isLastQuestion && !isAdvancingRef.current) {
+      const roomIdAtTimeout = room.id;
+      setTimeout(() => {
+        if (roomRef.current?.id !== roomIdAtTimeout) return;
+        postWithRetry('/api/1v1', {
+          action: 'advance-question',
+          roomId: roomIdAtTimeout,
+          playerId: playerUsername || playerName,
+          questionIndex: curQ
+        }, { retries: 1 }).then(() => roomResyncRef.current('interval'));
+      }, 1600 + Math.floor(Math.random() * 1200));
+    }
 
     if (isHost && !isAdvancingRef.current) {
       isAdvancingRef.current = true;
@@ -3976,7 +4037,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 // Active players: online (by presence) + not abandoned/left
                 const activeParticipants = participants.filter((p: any) => {
                   const pProg = data.playersProgress ? data.playersProgress[String(p.id)] : null;
-                  return isParticipantOnline(p) && !p.hasLeft && !p.isResigned && !p.isAbandoned && p.status !== 'abandoned' &&
+                  // Before the question's time is over (server questionStartTime + timePerQuestion), an
+                  // offline-looking player is still waited for. Rooms without a timer keep the presence rule.
+                  const hasQuestionTimer = Number(data.timePerQuestion) > 0;
+                  const mayBeSkippedIfOffline = !hasQuestionTimer || isQuestionTimeUp(data);
+                  return (isParticipantOnline(p) || !mayBeSkippedIfOffline) && !p.hasLeft && !p.isResigned && !p.isAbandoned && p.status !== 'abandoned' &&
                     (!pProg || (!pProg.hasLeft && !pProg.isResigned && !pProg.isAbandoned && pProg.status !== 'abandoned'));
                 });
                 const activeCount = activeParticipants.length;
@@ -4473,6 +4538,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setIsReconnecting(true);
         } else if (status === 'SUBSCRIBED') {
           setIsReconnecting(false);
+          // (Re)subscribed: events sent while disconnected are lost, so read the real state.
+          roomResyncRef.current('subscribed');
         }
       });
 
@@ -4801,24 +4868,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const syncGroupProgress = async (isFinished = false, forcedScore?: number) => {
     if (!room?.id) return;
     const progress = ((currentChallengeIndex + (isFinished ? 1 : 0)) / (challenges.length || 5)) * 100;
-    try {
-      const res = await fetch('/api/1v1', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'submit-progress',
-          roomId: room.id,
-          playerId: playerUsername || playerName,
-          progress,
-          score: forcedScore !== undefined ? forcedScore : sessionScore,
-          isFinished
-        })
-      });
-      const data = await res.json();
-      if (res.ok) setRoom(data);
-    } catch (err) {
-      console.error('Group sync error:', err);
-    }
+    // Same queue as the answers: never overlaps (and so never overwrites) this player's answer.
+    const { ok, data } = await roomSendQueueRef.current(() => postWithRetry('/api/1v1', {
+      action: 'submit-progress',
+      roomId: room.id,
+      playerId: playerUsername || playerName,
+      progress,
+      score: forcedScore !== undefined ? forcedScore : sessionScore,
+      isFinished
+    }));
+    if (ok && data) setRoom(data);
   };
 
   const handleWithdraw = async () => {
@@ -5676,22 +5735,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const isLastQ = currentChallengeIndex >= totalQ - 1;
 
         if (room.transitionMode === 'ASYNC') {
-          fetch('/api/1v1', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              action: 'submit-answer',
-              roomId: room.id,
-              playerId: playerUsername || playerName,
-              questionIndex: currentChallengeIndex,
-              isCorrect,
-              timestamp: Date.now()
-            })
-          }).then(res => res.json()).then(data => {
+          // One request at a time per player, retried on failure (overlapping requests overwrote each other).
+          roomSendQueueRef.current(() => postWithRetry('/api/1v1', {
+            action: 'submit-answer',
+            roomId: room.id,
+            playerId: playerUsername || playerName,
+            questionIndex: currentChallengeIndex,
+            isCorrect,
+            timestamp: Date.now()
+          })).then(({ data }) => {
             if (data && data.status) {
               setRoom(data);
             }
-          }).catch(err => console.error('Error submitting ASYNC room answer:', err));
+          });
 
           if (!isLastQ) {
             const advanceDelay = isCorrect ? 900 : 1500;
@@ -5715,6 +5771,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             timestamp: Date.now()
           })
         }).then(res => res.json()).then(data => {
+          if (data?.code === 'STALE_QUESTION') { roomResyncRef.current('stale'); return; } // late answer: re-sync
           if (data && data.status) {
             setRoom(data);
             if (!isLastQ && data.currentQuestionIndex !== undefined && data.currentQuestionIndex > currentChallengeIndex) {
@@ -5884,26 +5941,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const isLastQ = currentChallengeIndex >= totalQ - 1;
 
       if (room.transitionMode === 'ASYNC') {
-        fetch('/api/1v1', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'submit-answer',
-            roomId: room.id,
-            playerId: playerUsername || playerName,
-            questionIndex: currentChallengeIndex,
-            isCorrect: isFullyCorrect,
-            pointsEarned: questionScore,
-            basePoints: basePoints,
-            bonusPoints: bonusPoints,
-            score: newCumulativeScore,
-            timestamp: Date.now()
-          })
-        }).then(res => res.json()).then(data => {
+        // ASYNC: one request at a time per player, retried on failure.
+        roomSendQueueRef.current(() => postWithRetry('/api/1v1', {
+          action: 'submit-answer',
+          roomId: room.id,
+          playerId: playerUsername || playerName,
+          questionIndex: currentChallengeIndex,
+          isCorrect: isFullyCorrect,
+          pointsEarned: questionScore,
+          basePoints: basePoints,
+          bonusPoints: bonusPoints,
+          score: newCumulativeScore,
+          timestamp: Date.now()
+        })).then(({ data }) => {
           if (data && data.status) {
             setRoom(data);
           }
-        }).catch(err => console.error('Error submitting room surah answer:', err));
+        });
 
         if (!isLastQ) {
           const hasOutOfRange = outOfRangeFinal && outOfRangeFinal.length > 0;
@@ -5932,6 +5986,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           timestamp: Date.now()
         })
       }).then(res => res.json()).then(data => {
+        if (data?.code === 'STALE_QUESTION') { roomResyncRef.current('stale'); return; } // late answer: re-sync
         if (data && data.status) {
           setRoom(data);
           if (!isLastQ && data.currentQuestionIndex !== undefined && data.currentQuestionIndex > currentChallengeIndex) {
@@ -6012,22 +6067,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       if (room.transitionMode === 'ASYNC') {
         // ASYNC MODE: submit answer as incorrect and advance locally immediately
-        fetch('/api/1v1', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'submit-answer',
-            roomId: room.id,
-            playerId: playerUsername || playerName,
-            questionIndex: currentChallengeIndex,
-            isCorrect: false,
-            timestamp: Date.now()
-          })
-        }).then(res => res.json()).then(data => {
+        // ASYNC: one request at a time per player, retried on failure.
+        roomSendQueueRef.current(() => postWithRetry('/api/1v1', {
+          action: 'submit-answer',
+          roomId: room.id,
+          playerId: playerUsername || playerName,
+          questionIndex: currentChallengeIndex,
+          isCorrect: false,
+          timestamp: Date.now()
+        })).then(({ data }) => {
           if (data && data.status) {
             setRoom(data);
           }
-        }).catch(err => console.error('Error submitting ASYNC skip:', err));
+        });
 
         if (!isLastQ) {
           moveToNextQuestion();
@@ -6051,6 +6103,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           timestamp: Date.now()
         })
       }).then(res => res.json()).then(data => {
+        if (data?.code === 'STALE_QUESTION') { roomResyncRef.current('stale'); return; } // late answer: re-sync
         if (data && data.status) {
           setRoom(data);
           if (!isLastQ && data.currentQuestionIndex !== undefined && data.currentQuestionIndex > currentChallengeIndex) {
