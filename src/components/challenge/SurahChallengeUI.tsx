@@ -77,6 +77,10 @@ export const SurahChallengeUI: React.FC<SurahChallengeUIProps> = ({
   onBonusInputChange
 }) => {
   const isMultiplayerMode = Boolean(isMultiplayer ?? isRoom);
+  // Rooms: no browser suggestions at all (no <datalist>, no autocomplete history); the ☰ list
+  // is the only picker. Solo / speed challenges keep the old <datalist> for now.
+  const surahListAttr = isMultiplayerMode ? undefined : 'surah-names-list';
+  const autoCompleteAttr = isMultiplayerMode ? 'off' : undefined;
   // Which box the surah list is open for (a <datalist> alone shows nothing on most phones).
   const [pickerFor, setPickerFor] = React.useState<number | 'bonus' | null>(null);
   React.useEffect(() => {
@@ -160,7 +164,8 @@ export const SurahChallengeUI: React.FC<SurahChallengeUIProps> = ({
               <div className="relative">
               <input
                 type="text"
-                list="surah-names-list"
+                list={surahListAttr}
+                autoComplete={autoCompleteAttr}
                 value={input}
                 disabled={feedback}
                 onChange={(e) => onInputChange(idx, e.target.value)}
@@ -220,7 +225,8 @@ export const SurahChallengeUI: React.FC<SurahChallengeUIProps> = ({
                   <>
                     <input
                       type="text"
-                      list="surah-names-list"
+                      list={surahListAttr}
+                      autoComplete={autoCompleteAttr}
                       value={bonusInput || ''}
                       disabled={feedback}
                       onChange={(e) => onBonusInputChange?.(e.target.value)}
@@ -240,6 +246,7 @@ export const SurahChallengeUI: React.FC<SurahChallengeUIProps> = ({
             {renderPicker('bonus', bonusInput || '', (v) => onBonusInputChange?.(v))}
           </motion.div>
         )}
+        {!isMultiplayerMode && (
         <datalist id="surah-names-list">
           {quranData.map((s: any) => (
             <option key={s.id} value={`سورة ${s.name}`} />
@@ -248,6 +255,7 @@ export const SurahChallengeUI: React.FC<SurahChallengeUIProps> = ({
             <option key={`plain-${s.id}`} value={s.name} />
           ))}
         </datalist>
+        )}
 
         {feedback && surahFeedbackData && (
           <motion.div

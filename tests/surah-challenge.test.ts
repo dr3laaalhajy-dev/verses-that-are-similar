@@ -120,3 +120,19 @@ describe('6: the room question area scrolls (confirm button always reachable)', 
     assert.doesNotMatch(page, /flex-1 flex flex-col justify-center items-center px-2 sm:px-4 py-1 overflow-hidden/);
   });
 });
+
+describe('rooms: no old browser suggestions, only the ☰ list', () => {
+  it('room: no <datalist>, no list attribute, autocomplete off (answer boxes and bonus box)', () => {
+    const html = render({ inputs: ['', ''], hasBonusField: true, bonusInput: '' });
+    assert.doesNotMatch(html, /<datalist/);
+    assert.doesNotMatch(html, /\slist="/);
+    assert.equal((html.match(/autoComplete="off"|autocomplete="off"/g) || []).length, 3);
+    assert.equal((html.match(/aria-label="اختر السورة من القائمة"/g) || []).length, 3, '☰ on every box');
+  });
+
+  it('solo / speed (same component, not a room): unchanged, the <datalist> is still there', () => {
+    const html = render({ isRoom: false, isMultiplayer: false });
+    assert.match(html, /<datalist id="surah-names-list"/);
+    assert.match(html, /list="surah-names-list"/);
+  });
+});
