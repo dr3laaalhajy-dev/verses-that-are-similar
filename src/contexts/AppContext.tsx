@@ -81,6 +81,7 @@ import { useSpeechRecognition } from '../hooks/useSpeechRecognition';
 import { motion, AnimatePresence } from 'framer-motion';
 import { GoogleGenAI } from '@google/genai';
 import { supabase } from '../services/supabase';
+import { joinRoomChannel, sendRoomBroadcast } from '../lib/roomChannel';
 import { friendsRealtimeService } from '../services/friendsRealtimeService';
 import { getRandomIslamicRoomQuestions, getTargetedIslamicQuestions, getTotalIslamicAvailableCount, getIslamicTopicAvailableCount } from '../utils/islamicChallengeHelper';
 import { islamicCategoriesList } from '../data/islamicCategories';
@@ -3583,16 +3584,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       } : prev);
 
       // Broadcast update on room channel so all participants receive it immediately
-      try {
-        const existingChannel = supabase.getChannels().find(ch => ch.topic === `realtime:room_sync_${roomId}`);
-        if (existingChannel && existingChannel.state === 'joined') {
-          existingChannel.send({
-            type: 'broadcast',
-            event: 'room_settings_updated',
-            payload: updatePayload
-          }).catch(() => {});
-        }
-      } catch (_) {}
+      sendRoomBroadcast(supabase, roomId, 'room_settings_updated', updatePayload);
 
       toast.success('تم حفظ إعدادات الغرفة بنجاح');
       return true;
@@ -4436,17 +4428,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
 
-    const channelName = `room_sync_app_${room.id}`;
-    const existingChannel = supabase.getChannels().find(ch => ch.topic === `realtime:${channelName}`);
-    if (existingChannel) {
-      try {
-        supabase.removeChannel(existingChannel);
-      } catch (_) {}
-    }
+    // Own topic (the server also sends "player_kicked" here), through the shared channel manager:
+    // it never hands back a channel that is being removed, and a removed channel's CLOSED is not
+    // reported (that CLOSED, arriving after the next room's SUBSCRIBED, raised the "connection
+    // lost" overlay for no reason on play again / room change).
+    let isCurrent = true;
+    const stopRoomChannel = joinRoomChannel(supabase, room.id, {
+      onRoomChange: (change: any) => {
+        if (change?.eventType && change.eventType !== 'UPDATE') return;
+        const payload = change;
 
-    const channel = supabase
-      .channel(channelName)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${room.id}` }, (payload: any) => {
         if (payload?.new?.status === 'completed' || payload?.new?.status === 'FINISHED') {
           recordDailyGiftRoomMatch?.();
           router.push('/challenge/results');
@@ -4455,91 +4446,86 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           resetQuestionUIState(payload.new.currentQuestionIndex, payload.new);
           setRoom(payload.new);
         }
-      })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'Room', filter: `id=eq.${room.id}` }, (payload: any) => {
-        if (payload?.new?.status === 'completed' || payload?.new?.status === 'FINISHED') {
+      },
+      onBroadcast: (event: string, message: any) => {
+        const payload = message?.payload;
+        if (event === 'room_completed') {
           recordDailyGiftRoomMatch?.();
           router.push('/challenge/results');
           setView('group_game');
-        } else if (payload?.new?.currentQuestionIndex !== undefined && payload.new.currentQuestionIndex > currentChallengeIndex) {
-          resetQuestionUIState(payload.new.currentQuestionIndex, payload.new);
-          setRoom(payload.new);
+        } else if (event === 'question_advanced') {
+          ((payload: any) => {
+            if (!payload) return;
+            if (payload.isFinished || payload.status === 'FINISHED' || payload.room?.status === 'FINISHED') {
+              recordDailyGiftRoomMatch?.();
+              router.push('/challenge/results');
+              setView('group_game');
+              return;
+            }
+            if (payload.currentQuestionIndex !== undefined && payload.currentQuestionIndex > currentChallengeIndex) {
+              resetQuestionUIState(payload.currentQuestionIndex, payload.room);
+              if (payload.room) setRoom(payload.room);
+            }
+          })(payload);
+        } else if (event === 'player_kicked') {
+          ((payload: any) => {
+            if (!payload) return;
+            const myIds = [
+              String(playerId || ''),
+              String(playerUsername || '').toLowerCase().replace(/^@+/, ''),
+              String(playerName || '').trim().toLowerCase(),
+              String(uniquePlayerId || '').toUpperCase()
+            ].filter(Boolean);
+
+            const kickedTargets = [
+              String(payload.playerId || ''),
+              String(payload.targetPlayerId || ''),
+              String(payload.playerUsername || '').toLowerCase().replace(/^@+/, ''),
+              String(payload.playerName || '').trim().toLowerCase()
+            ].filter(Boolean);
+
+            if (myIds.some(id => kickedTargets.includes(id))) {
+              toast.error('تم إخراجك من الغرفة من قِبل المنشئ');
+
+              // Full room state reset — ensures no stale state blocks incoming invite for same room
+              setRoom(null);
+              setSkillsType(null);
+              setSkillsFeedback(false);
+              setHasAnsweredCurrentQuestion(false);
+              setSelectedOption(null);
+              setMatchedIds(new Set());
+              setIsRoomLoading(false);
+              setIncomingRoomInvite(null);  // clear any stale invite modal
+              setChallenges([]);
+              setCurrentChallengeIndex(0);
+
+              localStorage.removeItem('activeRoomId');
+              localStorage.removeItem('currentRoomId');
+              sessionStorage.removeItem(`is_creator_${payload.roomId || ''}`);
+
+              // Re-subscribe invite channels in case the kick handler caused a re-render that
+              // dropped the callback. Channels themselves stay alive (singleton pattern).
+              const identifiers = [
+                playerId ? `user_${playerId}` : null,
+                uniquePlayerId,
+                playerUsername
+              ].filter(Boolean) as string[];
+              friendsRealtimeService.subscribeToInvites(identifiers, (invite) => {
+                const myName = (playerName || '').trim().toLowerCase();
+                const myUser = (playerUsername || '').trim().toLowerCase().replace(/^@+/, '');
+                const hostN = (invite.hostName || '').trim().toLowerCase();
+                const hostU = (invite.hostUsername || '').trim().toLowerCase().replace(/^@+/, '');
+                if ((hostN && hostN === myName) || (hostU && hostU === myUser)) return;
+                setIncomingRoomInvite(invite);
+              });
+
+              setView('home');
+            }
+          })(payload);
         }
-      })
-      .on('broadcast', { event: 'room_completed' }, (_payload: any) => {
-        recordDailyGiftRoomMatch?.();
-        router.push('/challenge/results');
-        setView('group_game');
-      })
-      .on('broadcast', { event: 'question_advanced' }, ({ payload }: any) => {
-        if (!payload) return;
-        if (payload.isFinished || payload.status === 'FINISHED' || payload.room?.status === 'FINISHED') {
-          recordDailyGiftRoomMatch?.();
-          router.push('/challenge/results');
-          setView('group_game');
-          return;
-        }
-        if (payload.currentQuestionIndex !== undefined && payload.currentQuestionIndex > currentChallengeIndex) {
-          resetQuestionUIState(payload.currentQuestionIndex, payload.room);
-          if (payload.room) setRoom(payload.room);
-        }
-      })
-      .on('broadcast', { event: 'player_kicked' }, ({ payload }: any) => {
-        if (!payload) return;
-        const myIds = [
-          String(playerId || ''),
-          String(playerUsername || '').toLowerCase().replace(/^@+/, ''),
-          String(playerName || '').trim().toLowerCase(),
-          String(uniquePlayerId || '').toUpperCase()
-        ].filter(Boolean);
-
-        const kickedTargets = [
-          String(payload.playerId || ''),
-          String(payload.targetPlayerId || ''),
-          String(payload.playerUsername || '').toLowerCase().replace(/^@+/, ''),
-          String(payload.playerName || '').trim().toLowerCase()
-        ].filter(Boolean);
-
-        if (myIds.some(id => kickedTargets.includes(id))) {
-          toast.error('تم إخراجك من الغرفة من قِبل المنشئ');
-
-          // Full room state reset — ensures no stale state blocks incoming invite for same room
-          setRoom(null);
-          setSkillsType(null);
-          setSkillsFeedback(false);
-          setHasAnsweredCurrentQuestion(false);
-          setSelectedOption(null);
-          setMatchedIds(new Set());
-          setIsRoomLoading(false);
-          setIncomingRoomInvite(null);  // clear any stale invite modal
-          setChallenges([]);
-          setCurrentChallengeIndex(0);
-
-          localStorage.removeItem('activeRoomId');
-          localStorage.removeItem('currentRoomId');
-          sessionStorage.removeItem(`is_creator_${payload.roomId || ''}`);
-
-          // Re-subscribe invite channels in case the kick handler caused a re-render that
-          // dropped the callback. Channels themselves stay alive (singleton pattern).
-          const identifiers = [
-            playerId ? `user_${playerId}` : null,
-            uniquePlayerId,
-            playerUsername
-          ].filter(Boolean) as string[];
-          friendsRealtimeService.subscribeToInvites(identifiers, (invite) => {
-            const myName = (playerName || '').trim().toLowerCase();
-            const myUser = (playerUsername || '').trim().toLowerCase().replace(/^@+/, '');
-            const hostN = (invite.hostName || '').trim().toLowerCase();
-            const hostU = (invite.hostUsername || '').trim().toLowerCase().replace(/^@+/, '');
-            if ((hostN && hostN === myName) || (hostU && hostU === myUser)) return;
-            setIncomingRoomInvite(invite);
-          });
-
-          setView('home');
-        }
-      })
-      .subscribe((status, err) => {
-        if (err) console.warn('[Supabase Room Channel Error]:', err);
+      },
+      onStatus: (status: string) => {
+        if (!isCurrent) return;
         if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
           setIsReconnecting(true);
         } else if (status === 'SUBSCRIBED') {
@@ -4547,7 +4533,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           // (Re)subscribed: events sent while disconnected are lost, so read the real state.
           roomResyncRef.current('subscribed');
         }
-      });
+      },
+    }, { topic: `room_sync_app_${room.id}` });
 
     const handleOffline = () => setIsReconnecting(true);
     const handleOnline = () => {
@@ -4558,7 +4545,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     window.addEventListener('online', handleOnline);
 
     return () => {
-      supabase.removeChannel(channel);
+      isCurrent = false;
+      setIsReconnecting(false);
+      stopRoomChannel();
       window.removeEventListener('offline', handleOffline);
       window.removeEventListener('online', handleOnline);
     };
@@ -4911,43 +4900,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           };
 
           // Broadcast to room channel so host and participants immediately remove player and reset invite status
-          try {
-            const existingChannel = supabase.getChannels().find(c => c.topic === `realtime:room_sync_${roomId}`);
-            if (existingChannel && existingChannel.state === 'joined') {
-              existingChannel.send({
-                type: 'broadcast',
-                event: 'player_left',
-                payload: leavePayload
-              }).catch(() => {});
-              existingChannel.send({
-                type: 'broadcast',
-                event: 'participant_removed',
-                payload: leavePayload
-              }).catch(() => {});
-            } else {
-              const ch = supabase.channel(`room_sync_${roomId}`);
-              ch.subscribe((status) => {
-                if (status === 'SUBSCRIBED') {
-                  ch.send({
-                    type: 'broadcast',
-                    event: 'player_left',
-                    payload: leavePayload
-                  }).catch(() => {});
-                  ch.send({
-                    type: 'broadcast',
-                    event: 'participant_removed',
-                    payload: leavePayload
-                  }).finally(() => {
-                    try {
-                      supabase.removeChannel(ch);
-                    } catch (_) {}
-                  });
-                }
-              });
-            }
-          } catch (bErr) {
-            console.warn('[Broadcast leave event warn]:', bErr);
-          }
+          // (never subscribe / remove the shared room channel just to send).
+          sendRoomBroadcast(supabase, roomId, 'player_left', leavePayload);
+          sendRoomBroadcast(supabase, roomId, 'participant_removed', leavePayload);
 
           // If this player joined via an invite with senderTarget, notify the sender directly
           const senderTarget = (room as any)?.senderTarget || (room as any)?.hostUsername || (room as any)?.hostName;

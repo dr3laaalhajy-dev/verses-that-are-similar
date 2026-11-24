@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { startLeaveGuard } from '../lib/leaveGuard';
 import { supabase } from '../services/supabase';
+import { sendRoomBroadcast } from '../lib/roomChannel';
 import { router } from '../services/router';
 import { isAnswerCorrect } from '../utils/normalizeArabic';
 import './WhoAmIGame.css';
@@ -352,18 +353,8 @@ export default function WhoAmIGame({
             .update({ status: 'completed' })
             .eq('id', roomId)
             .then(() => {
-              const ch = supabase.channel(`room_sync_${roomId}`);
-              ch.subscribe((status) => {
-                if (status === 'SUBSCRIBED') {
-                  ch.send({
-                    type: 'broadcast',
-                    event: 'room_completed',
-                    payload: { roomId }
-                  }).finally(() => {
-                    try { supabase.removeChannel(ch); } catch (_) {}
-                  });
-                }
-              });
+              // No subscribe / remove of the shared room channel just to send one message.
+              sendRoomBroadcast(supabase, roomId, 'room_completed', { roomId });
             });
         } catch (_) {}
         setIsRoomCompleted(true);

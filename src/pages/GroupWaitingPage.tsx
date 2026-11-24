@@ -11,6 +11,7 @@ import { LiveReactionsOverlay } from '../components/LiveReactionsOverlay';
 import { GroupCreatePage } from './GroupCreatePage';
 import { friendsRealtimeService } from '../services/friendsRealtimeService';
 import { supabase } from '../services/supabase';
+import { joinRoomChannel } from '../lib/roomChannel';
 import { useApp, toast } from '../contexts/AppContext';
 
 export interface FriendInviteStateItem {
@@ -302,8 +303,8 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
     }
 
     // B) Direct Supabase channel listener for `room_sync_${room.id}`
-    const channelName = `room_sync_${room.id}`;
-    const roomChannel = supabase.channel(channelName);
+    // Shared room channel (one per room for all pages; see lib/roomChannel).
+    const broadcastHandlers: Record<string, (message: any) => void> = {};
 
     // Helper: given a new rooms row, rebuild the participants array by merging
     // existing participants with any new player IDs found in playersProgress.
@@ -363,8 +364,23 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
       });
     };
 
-    roomChannel
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms', filter: `id=eq.${room.id}` }, async (payload: any) => {
+    // The host is rooms.player1Id. When it changes (play again: the original host is back), the
+    // old player1 object must not survive, or the previous host would keep the host controls.
+    const hostObject = (prev: any, newRow: any, participants: any[]) => {
+      if (newRow?.player1Id === undefined || String(newRow.player1Id) === String(prev?.player1Id ?? prev?.player1?.id)) {
+        return prev?.player1 || newRow?.player1;
+      }
+      return newRow?.player1 || (participants || []).find((p: any) => String(p.id) === String(newRow.player1Id)) || { id: newRow.player1Id };
+    };
+
+    // Server: leadership moved (play again). Take the server's room as it is.
+    broadcastHandlers['host_changed'] = ({ payload }: any) => {
+      const next = payload?.room;
+      if (!next || String(next.id) !== String(room.id)) return;
+      setRoom((prev: any) => prev ? { ...prev, ...next } : prev);
+    };
+
+    const onRoomChange = async (payload: any) => {
         if (!payload?.new) return;
         const newRow = payload.new;
 
@@ -376,7 +392,7 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
             setRoom((p: any) => p ? {
               ...p,
               ...newRow,
-              player1: p?.player1 || newRow.player1,
+              player1: hostObject(p, newRow, updatedParticipants),
               participants: updatedParticipants
             } : p);
           })();
@@ -384,20 +400,20 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
           return prev ? {
             ...prev,
             ...newRow,
-            player1: prev?.player1 || newRow.player1,
+            player1: hostObject(prev, newRow, prev?.participants || []),
             participants: prev?.participants || []
           } : prev;
         });
-      })
-      .on('broadcast', { event: 'room_settings_updated' }, ({ payload }) => {
+      };
+    broadcastHandlers['room_settings_updated'] = ({ payload }: any) => {
         if (!payload) return;
         setRoom((prev: any) => prev ? {
           ...prev,
           ...payload
         } : prev);
         toast.info('قام المنشئ بتحديث إعدادات الغرفة');
-      })
-      .on('broadcast', { event: 'player_joined' }, ({ payload }) => {
+      };
+    broadcastHandlers['player_joined'] = ({ payload }: any) => {
         // A player accepted invite and joined — add them to participants immediately
         if (!payload) return;
         const joinedId   = payload.playerId   || payload.userId;
@@ -435,8 +451,8 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
             return next;
           });
         }
-      })
-      .on('broadcast', { event: 'player_left' }, ({ payload }) => {
+      };
+    broadcastHandlers['player_left'] = ({ payload }: any) => {
         if (!payload) return;
         const leftId = payload.playerId || payload.friendId || payload.userId;
         const leftName = payload.playerName || payload.friendName || payload.name;
@@ -465,8 +481,8 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
             return next;
           });
         }
-      })
-      .on('broadcast', { event: 'participant_removed' }, ({ payload }) => {
+      };
+    broadcastHandlers['participant_removed'] = ({ payload }: any) => {
         if (!payload) return;
         const leftId = payload.playerId || payload.friendId || payload.userId;
         const leftName = payload.playerName || payload.friendName || payload.name;
@@ -482,8 +498,8 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
             return next;
           });
         }
-      })
-      .on('broadcast', { event: 'player_kicked' }, ({ payload }) => {
+      };
+    broadcastHandlers['player_kicked'] = ({ payload }: any) => {
         if (!payload) return;
         const myIds = [
           String(app?.playerId || ''),
@@ -531,20 +547,12 @@ export const GroupWaitingPage: React.FC<GroupWaitingPageProps> = ({
             return next;
           });
         }
-      })
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          console.log(`[GroupWaitingPage] تم الاتصال بالغرفة بنجاح: ${channelName}`);
-        }
-      });
+      };
 
-    return () => {
-      try {
-        if (roomChannel) {
-          supabase.removeChannel(roomChannel);
-        }
-      } catch (e) { }
-    };
+    return joinRoomChannel(supabase, room.id, {
+      onRoomChange,
+      onBroadcast: (event: string, message: any) => broadcastHandlers[event]?.(message),
+    });
   }, [room?.id, (room as any)?.lastReaction, (room as any)?.playersProgress?.__lastReaction, friendsList]);
 
   const fetchFriends = useCallback(async (isInitial = false) => {

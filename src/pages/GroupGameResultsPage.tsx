@@ -6,6 +6,7 @@ import WhoAmIGame from '../components/WhoAmIGame';
 import { LiveReactionsOverlay } from '../components/LiveReactionsOverlay';
 import { useApp } from '../contexts/AppContext';
 import { supabase } from '../services/supabase';
+import { joinRoomChannel } from '../lib/roomChannel';
 
 export interface GroupGameResultsPageProps {
   room: any;
@@ -192,9 +193,6 @@ export const GroupGameResultsPage: React.FC<GroupGameResultsPageProps> = ({
   useEffect(() => {
     if (!room?.id) return;
 
-    const channelName = `room_sync_${room.id}`;
-    const channel = supabase.channel(channelName);
-
     const onRematchDiscovered = (incomingNextRoomId: string, users?: any[]) => {
       if (!incomingNextRoomId) return;
       setNextRoomId(incomingNextRoomId);
@@ -208,44 +206,28 @@ export const GroupGameResultsPage: React.FC<GroupGameResultsPageProps> = ({
       }
     };
 
-    channel
-      .on('broadcast', { event: 'play_again_updated' }, (payload: any) => {
-        const data = payload?.payload || payload;
-        if (data?.playAgainUsers) setPlayAgainUsers(data.playAgainUsers);
-        if (data?.nextRoomId) onRematchDiscovered(data.nextRoomId, data.playAgainUsers);
-      })
-      .on('broadcast', { event: 'rematch_created' }, (payload: any) => {
-        const data = payload?.payload || payload;
-        if (data?.playAgainUsers) setPlayAgainUsers(data.playAgainUsers);
-        if (data?.nextRoomId) onRematchDiscovered(data.nextRoomId, data.playAgainUsers);
-      })
-      .on('postgres_changes', {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'rooms',
-        filter: `id=eq.${room.id}`
-      }, (payload: any) => {
-        const newDoc = payload?.new;
-        if (newDoc) {
-          const rematchInfo = newDoc.playersProgress?.__rematch || {};
-          const incomingId = newDoc.nextRoomId || rematchInfo.nextRoomId;
-          const incomingUsers = newDoc.playAgainUsers || rematchInfo.playAgainUsers;
-
-          if (incomingUsers) {
-            setPlayAgainUsers(incomingUsers);
-          }
-          if (incomingId) {
-            onRematchDiscovered(incomingId, incomingUsers);
-          }
-        }
-      })
-      .subscribe();
-
-    return () => {
-      try {
-        supabase.removeChannel(channel);
-      } catch (_) {}
+    const onRematchData = (data: any) => {
+      if (data?.playAgainUsers) setPlayAgainUsers(data.playAgainUsers);
+      if (data?.nextRoomId) onRematchDiscovered(data.nextRoomId, data.playAgainUsers);
     };
+
+    // Shared room channel (one per room for all pages; see lib/roomChannel).
+    return joinRoomChannel(supabase, room.id, {
+      onBroadcast: (event: string, message: any) => {
+        if (event === 'play_again_updated' || event === 'rematch_created') {
+          onRematchData(message?.payload || message);
+        }
+      },
+      onRoomChange: (change: any) => {
+        const newDoc = change?.new;
+        if (!newDoc) return;
+        const rematchInfo = newDoc.playersProgress?.__rematch || {};
+        const incomingId = newDoc.nextRoomId || rematchInfo.nextRoomId;
+        const incomingUsers = newDoc.playAgainUsers || rematchInfo.playAgainUsers;
+        if (incomingUsers) setPlayAgainUsers(incomingUsers);
+        if (incomingId) onRematchDiscovered(incomingId, incomingUsers);
+      },
+    });
   }, [room?.id]);
 
   const isCurrentUserInPlayAgain = playAgainUsers.some(

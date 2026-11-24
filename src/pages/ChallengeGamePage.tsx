@@ -11,6 +11,7 @@ import { LiveReactionsOverlay } from '../components/LiveReactionsOverlay';
 import { useApp } from '../contexts/AppContext';
 import { router } from '../services/router';
 import { supabase } from '../services/supabase';
+import { joinRoomChannel, sendRoomBroadcast } from '../lib/roomChannel';
 
 export interface ChallengeGamePageProps {
   currentChallenge: any;
@@ -290,59 +291,41 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
       }
     };
 
-    const channelName = `room_sync_${room.id}`;
-    const existingChannel = supabase.getChannels().find(ch => ch.topic === `realtime:${channelName}`);
-    if (existingChannel) {
-      try {
-        supabase.removeChannel(existingChannel);
-      } catch (_) {}
-    }
-
-    const channel = supabase.channel(channelName);
-    channel
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${room.id}` }, (payload: any) => {
-        handleRoomUpdate(payload?.new);
-      })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'Room', filter: `id=eq.${room.id}` }, (payload: any) => {
-        handleRoomUpdate(payload?.new);
-      })
-      .on('broadcast', { event: 'room_completed' }, handleRoomFinish)
-      .on('broadcast', { event: 'question_advanced' }, (payload: any) => {
-        const advData = payload?.payload || payload;
-        if (advData?.isFinished || advData?.room?.status === 'FINISHED' || advData?.room?.status === 'completed') {
+    // Shared room channel (one per room for all pages; never removed under another page's feet).
+    return joinRoomChannel(supabase, room.id, {
+      onRoomChange: (change: any) => {
+        if (change?.eventType && change.eventType !== 'UPDATE') return;
+        handleRoomUpdate(change?.new);
+      },
+      onBroadcast: (event: string, payload: any) => {
+        if (event === 'room_completed') {
           handleRoomFinish();
-          return;
-        }
-        const nextQ = advData?.currentQuestionIndex;
-        if (nextQ !== undefined && nextQ > currentQuestionIdx) {
-          advancingQuestionRef.current = null;
-          app?.resetQuestionUIState?.(nextQ, advData?.room);
-          if (advData?.room) {
-            setRoom(advData.room);
+        } else if (event === 'question_advanced') {
+          const advData = payload?.payload || payload;
+          if (advData?.isFinished || advData?.room?.status === 'FINISHED' || advData?.room?.status === 'completed') {
+            handleRoomFinish();
+            return;
+          }
+          const nextQ = advData?.currentQuestionIndex;
+          if (nextQ !== undefined && nextQ > currentQuestionIdx) {
+            advancingQuestionRef.current = null;
+            app?.resetQuestionUIState?.(nextQ, advData?.room);
+            if (advData?.room) {
+              setRoom(advData.room);
+            }
+          }
+        } else if (event === 'player_answered') {
+          const ansData = payload?.payload || payload;
+          if (ansData?.currentAnswers) {
+            setRoom((prev: any) => prev ? ({
+              ...prev,
+              currentAnswers: ansData.currentAnswers,
+              playersProgress: ansData.playersProgress || prev.playersProgress
+            }) : prev);
           }
         }
-      })
-      .on('broadcast', { event: 'player_answered' }, (payload: any) => {
-        const ansData = payload?.payload || payload;
-        if (ansData?.currentAnswers) {
-          setRoom((prev: any) => prev ? ({
-            ...prev,
-            currentAnswers: ansData.currentAnswers,
-            playersProgress: ansData.playersProgress || prev.playersProgress
-          }) : prev);
-        }
-      })
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          console.log(`[ChallengeGamePage] تم الاشتراك في قناة الغرفة بنجاح: ${channelName}`);
-        }
-      });
-
-    return () => {
-      try {
-        supabase.removeChannel(channel);
-      } catch (_) {}
-    };
+      },
+    });
   }, [room?.id, setView, app, currentQuestionIdx, setRoom]);
 
   const handleEndRoom = async () => {
@@ -384,33 +367,8 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
       console.warn('[ChallengeGamePage] Supabase rooms update warning:', sbErr);
     }
 
-    try {
-      const existingChannel = supabase.getChannels().find(ch => ch.topic === `realtime:room_sync_${room.id}`);
-      if (existingChannel && existingChannel.state === 'joined') {
-        existingChannel.send({
-          type: 'broadcast',
-          event: 'room_completed',
-          payload: { roomId: room.id, status: 'completed' }
-        }).catch(() => {});
-      } else {
-        const sendCh = supabase.channel(`room_sync_${room.id}`);
-        sendCh.subscribe((status) => {
-          if (status === 'SUBSCRIBED') {
-            sendCh.send({
-              type: 'broadcast',
-              event: 'room_completed',
-              payload: { roomId: room.id, status: 'completed' }
-            }).finally(() => {
-              try {
-                supabase.removeChannel(sendCh);
-              } catch (_) {}
-            });
-          }
-        });
-      }
-    } catch (bErr) {
-      console.warn('[ChallengeGamePage] Broadcast warning:', bErr);
-    }
+    // Tell everyone, without subscribing / removing the shared room channel.
+    sendRoomBroadcast(supabase, room.id, 'room_completed', { roomId: room.id, status: 'completed' });
 
     appRef.current?.recordDailyGiftRoomMatch?.();
     router.push('/challenge/results');
@@ -480,18 +438,12 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
               isTransitioningRef.current = false;
               appRef.current?.resetQuestionUIState?.(data.currentQuestionIndex, data);
               setRoom(data);
-              try {
-                supabase.channel(`room_sync_${room.id}`).send({
-                  type: 'broadcast',
-                  event: 'question_advanced',
-                  payload: {
-                    roomId: room.id,
-                    currentQuestionIndex: data.currentQuestionIndex,
-                    isFinished: false,
-                    room: data
-                  }
-                }).catch(() => {});
-              } catch (_) {}
+              sendRoomBroadcast(supabase, room.id, 'question_advanced', {
+                roomId: room.id,
+                currentQuestionIndex: data.currentQuestionIndex,
+                isFinished: false,
+                room: data
+              });
             } else {
               advancingQuestionRef.current = null;
               isTransitioningRef.current = false;
