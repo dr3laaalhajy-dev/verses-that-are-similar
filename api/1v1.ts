@@ -1620,37 +1620,34 @@ async function handleSubmitProgress(req: VercelRequest, res: VercelResponse) {
     const player = await findPlayer(playerId)
     if (!player) return res.status(404).json({ message: 'Player not found' })
 
-    let playersProgress = room.playersProgress as any || {}
-    if (!playersProgress[player.id]) playersProgress[player.id] = { name: player.name }
-    
-    playersProgress[player.id].progress = progress
-    if (typeof score === 'number') {
-      playersProgress[player.id].score = score
-    }
-    
-    const updateData: any = { playersProgress }
-    
-    if (isFinished) {
-      const finishTime = Date.now()
-      playersProgress[player.id].finishTime = playersProgress[player.id].finishTime || finishTime
-      playersProgress[player.id].progress = 100
-      playersProgress[player.id].answersCount = room.questionCount || 5
-
-      const allFinished = roomPlayerEntries(playersProgress)
-        .every(([_, p]: [string, any]) => p && (p.finishTime || p.isAbandoned || p.status === 'abandoned' || p.isResigned))
-      const { updatedProgress, winnerId } = calculateResults(room, playersProgress)
-      updateData.playersProgress = updatedProgress
-
-      if (allFinished) {
-        updateData.status = 'FINISHED'
-        await applyRoomTrophies(null, room, updatedProgress)
+    // Safe read-modify-write: never erases other keys written meanwhile (__rematch, answers...).
+    let finishedNow = false
+    let winner: any = null
+    const saved = await updatePlayersProgress(room.id, (playersProgress, fresh) => {
+      if (!playersProgress[player.id]) playersProgress[player.id] = { name: player.name }
+      playersProgress[player.id].progress = progress
+      if (typeof score === 'number') {
+        playersProgress[player.id].score = score
       }
-      if (winnerId) {
-        updateData.winnerId = winnerId
+      finishedNow = false
+      winner = null
+      if (isFinished) {
+        playersProgress[player.id].finishTime = playersProgress[player.id].finishTime || Date.now()
+        playersProgress[player.id].progress = 100
+        playersProgress[player.id].answersCount = fresh.questionCount || 5
+        finishedNow = roomPlayerEntries(playersProgress)
+          .every(([_, p]: [string, any]) => p && (p.finishTime || p.isAbandoned || p.status === 'abandoned' || p.isResigned))
+        const { updatedProgress, winnerId } = calculateResults(fresh, playersProgress)
+        Object.assign(playersProgress, updatedProgress)
+        winner = winnerId
       }
+    }, () => ({
+      ...(finishedNow ? { status: 'FINISHED' } : {}),
+      ...(winner ? { winnerId: winner } : {})
+    }))
+    if (saved && finishedNow) {
+      await applyRoomTrophies(null, saved.room, saved.progress)
     }
-
-    await supabaseAdmin.from('rooms').update(updateData).eq('id', room.id)
 
     const fullRoom = await getFullRoom(room.id)
     return res.status(200).json(fullRoom)
@@ -1801,25 +1798,24 @@ async function handlePresence(req: VercelRequest, res: VercelResponse) {
     if (!room) return res.status(404).json({ message: 'Room not found' })
 
     const pIdStr = String(player.id)
-    const playersProgress = (room.playersProgress as any) || {}
-    if (!playersProgress[pIdStr]) {
-      playersProgress[pIdStr] = { name: player.name }
-    }
-
     const onlineStatus = isOnline !== false
-    // awaySince (server clock): when the player became away; the absent-player wait counts from it.
-    if (!onlineStatus && playersProgress[pIdStr].isOnline !== false) playersProgress[pIdStr].awaySince = Date.now()
-    if (onlineStatus) delete playersProgress[pIdStr].awaySince
-    playersProgress[pIdStr].isOnline = onlineStatus
-    playersProgress[pIdStr].lastSeen = Date.now()
+    // Safe read-modify-write: never erases other keys written meanwhile (__rematch, answers...).
+    await updatePlayersProgress(room.id, (playersProgress) => {
+      if (!playersProgress[pIdStr]) {
+        playersProgress[pIdStr] = { name: player.name }
+      }
+      // awaySince (server clock): when the player became away; the absent-player wait counts from it.
+      if (!onlineStatus && playersProgress[pIdStr].isOnline !== false) playersProgress[pIdStr].awaySince = Date.now()
+      if (onlineStatus) delete playersProgress[pIdStr].awaySince
+      playersProgress[pIdStr].isOnline = onlineStatus
+      playersProgress[pIdStr].lastSeen = Date.now()
+    })
 
     // Note: Do NOT cancel WAITING rooms if the host goes offline!
     // Rooms are only cancelled when the host explicitly clicks "إلغاء الغرفة"
     // or when the 10-minute TTL expires while in WAITING status.
     // Temporary window blur / tab switches / app pauses do NOT advance or forfeit the round.
     // Progression is strictly governed by all active participants answering OR timer expiration.
-
-    await supabaseAdmin.from('rooms').update({ playersProgress }).eq('id', room.id)
 
     const fullRoom = await getFullRoom(room.id)
     return res.status(200).json(fullRoom)
@@ -2270,14 +2266,10 @@ async function handleReaction(req: VercelRequest, res: VercelResponse) {
       timestamp: Date.now()
     }
 
-    const playersProgress: any = (room.playersProgress as any) || {}
-    playersProgress.__lastReaction = reactionData
-
-    const updateData: any = {
-      playersProgress
-    }
-
-    await supabaseAdmin.from('rooms').update(updateData).eq('id', String(roomId))
+    // Safe read-modify-write: never erases other keys written meanwhile (__rematch, answers...).
+    await updatePlayersProgress(room.id, (playersProgress) => {
+      playersProgress.__lastReaction = reactionData
+    })
 
     return res.status(200).json({ success: true, reaction: reactionData })
   } catch (err: any) {
@@ -2407,8 +2399,10 @@ async function handleSendInviteAPI(req: VercelRequest, res: VercelResponse) {
         const wasKicked = receiverIdentifiers.some(ident => kickedList.includes(ident))
         if (wasKicked) {
           // Host is re-inviting a previously kicked player → pardon them
-          prog.__kicked = kickedList.filter(k => !receiverIdentifiers.includes(k))
-          await supabaseAdmin.from('rooms').update({ playersProgress: prog }).eq('id', room.id)
+          await updatePlayersProgress(room.id, (progress) => {
+            const list: string[] = Array.isArray(progress.__kicked) ? progress.__kicked : []
+            progress.__kicked = list.filter(k => !receiverIdentifiers.includes(k))
+          })
           console.log(`[Invite] Pardoned kicked player ${receiverPlayer.id} from room ${room.id} via host re-invite`)
         }
       }
@@ -2523,7 +2517,8 @@ async function handleRematch(req: VercelRequest, res: VercelResponse) {
     playAgainUsers = [userInfo];
     const claimedProgress = {
       ...roomProgress,
-      __rematch: { nextRoomId: newRoomId, playAgainUsers, originalHostId }
+      __rematch: { nextRoomId: newRoomId, playAgainUsers, originalHostId },
+      __v: randomUUID() // writers that read before this claim must re-read (updatePlayersProgress)
     };
     let claim = supabaseAdmin.from('rooms').update({ playersProgress: claimedProgress }).eq('id', room.id);
     claim = deadNextRoomId
@@ -2646,6 +2641,34 @@ export async function findOrphanRematchRooms(waitingRooms: any[], now: number = 
   return orphans
 }
 
+/**
+ * Read-modify-write of rooms.playersProgress that never erases another writer's change (for example
+ * __rematch, the play-again link): compare-and-set on playersProgress.__v (metadata), re-read and
+ * re-apply on conflict. `mutate` changes the fresh copy (return false to write nothing); `extra`
+ * adds other columns to the same update. Returns the written progress, or null.
+ */
+export async function updatePlayersProgress(
+  roomId: string,
+  mutate: (progress: any, room: any) => void | false,
+  extra?: (room: any, progress: any) => Record<string, any>
+): Promise<{ room: any; progress: any } | null> {
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const { data: room } = await supabaseAdmin.from('rooms').select('*').eq('id', String(roomId)).maybeSingle()
+    if (!room) return null
+    const current = (room.playersProgress as any) || {}
+    const version = current.__v ?? null
+    const next = JSON.parse(JSON.stringify(current))
+    if (mutate(next, room) === false) return { room, progress: current }
+    next.__v = randomUUID()
+    let write = supabaseAdmin.from('rooms').update({ ...(extra ? extra(room, next) : {}), playersProgress: next }).eq('id', room.id)
+    write = version === null ? write.is('playersProgress->__v', null) : write.eq('playersProgress->>__v', version)
+    const { data: written } = await write.select('id')
+    if (Array.isArray(written) && written.length > 0) return { room: { ...room, playersProgress: next }, progress: next }
+    await new Promise((r) => setTimeout(r, 10 + Math.floor(Math.random() * 40)))
+  }
+  return null
+}
+
 /** Question type family: the types a room's question can be shown as. */
 export function questionTypeFamily(q: any): string {
   const t = String(q?.type ?? '').toUpperCase()
@@ -2756,13 +2779,15 @@ async function joinExistingRematchRoom(
   );
   if (!alreadyInList) {
     playAgainUsers.push(userInfo);
-    const updatedOldProgress = {
-      ...roomProgress,
-      __rematch: { ...(roomProgress.__rematch || {}), nextRoomId: targetNextRoomId, playAgainUsers, originalHostId: rematchOriginalHostId(oldRoom) }
-    };
-    await supabaseAdmin.from('rooms').update({
-      playersProgress: updatedOldProgress
-    }).eq('id', oldRoom.id);
+    // Safe read-modify-write on the finished room: add this player to the list, keep the link.
+    const saved = await updatePlayersProgress(oldRoom.id, (progress) => {
+      const info = progress.__rematch || {}
+      if (info.nextRoomId && String(info.nextRoomId) !== String(targetNextRoomId)) return false
+      const list: any[] = Array.isArray(info.playAgainUsers) ? info.playAgainUsers : []
+      if (list.some((u: any) => String(u.id) === String(player.id))) return false
+      progress.__rematch = { ...info, nextRoomId: targetNextRoomId, playAgainUsers: [...list, userInfo], originalHostId: info.originalHostId ?? rematchOriginalHostId(oldRoom) }
+    });
+    if (saved?.progress?.__rematch?.playAgainUsers) playAgainUsers = saved.progress.__rematch.playAgainUsers;
 
     try {
       supabaseAdmin.channel(`room_sync_${oldRoom.id}`).send({
@@ -2892,10 +2917,12 @@ async function handlePurchasePowerup(req: VercelRequest, res: VercelResponse) {
           .maybeSingle();
 
         if (room && room.playersProgress) {
-          const pProg = room.playersProgress[player.id] || room.playersProgress[String(player.id)] || {};
-          pProg.spentPoints = (pProg.spentPoints || 0) + cost;
-          room.playersProgress[player.id] = pProg;
-          await supabaseAdmin.from('rooms').update({ playersProgress: room.playersProgress }).eq('id', room.id);
+          // Safe read-modify-write: never erases other keys written meanwhile.
+          await updatePlayersProgress(room.id, (progress) => {
+            const pProg = progress[player.id] || progress[String(player.id)] || {};
+            pProg.spentPoints = (pProg.spentPoints || 0) + cost;
+            progress[player.id] = pProg;
+          });
         }
       } catch (rErr) {
         console.warn('[PurchasePowerup] Room spentPoints update warning:', rErr);

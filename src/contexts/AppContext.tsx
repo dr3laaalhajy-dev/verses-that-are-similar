@@ -947,6 +947,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // 1v1 State
   const roomRef = useRef<any>(null);
+  /**
+   * A room response that arrived after a wait belongs to the room still on screen. A late answer
+   * for the previous room (play again: results -> new room) must never bring it back or jump to
+   * its results.
+   */
+  const isCurrentRoomResponse = (data: any) => Boolean(data?.id) && String(data.id) === String(roomRef.current?.id ?? '');
   const [room, _setRoom] = useState<any>(null);
   const setRoom = (val: any) => {
     roomRef.current = val;
@@ -1889,6 +1895,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [challengeMode, setChallengeMode] = useState<'daily' | 'normal'>('normal');
   const [currentChallengeIndex, setCurrentChallengeIndex] = useState(0);
+  // The question on screen right now, for long-lived listeners (the room channel subscribes once per
+  // room, so a closure would keep the index of the moment it subscribed).
+  const currentChallengeIndexRef = useRef(0);
+  currentChallengeIndexRef.current = currentChallengeIndex;
   const [dailyCompleted, setDailyCompleted] = useState(false);
   const [timeLeft, setTimeLeft] = useState('');
 
@@ -3899,7 +3909,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
         const data = await res.json();
         isAdvancingRef.current = false;
-        if (res.ok && data) {
+        if (res.ok && data && isCurrentRoomResponse(data)) {
           setRoom(data);
           if (data.status === 'FINISHED' || data.status === 'completed') {
             recordDailyGiftRoomMatch();
@@ -3929,6 +3939,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const playerIdParam = encodeURIComponent(playerUsername || playerName || '');
         const res = await fetch(`/api/1v1?action=poll&roomId=${room.id}&playerId=${playerIdParam}`);
         const data = await res.json();
+        // Late answer for a room that is no longer on screen (e.g. the finished room after "play
+        // again"): ignore it. It used to set that room back and jump to its results.
+        if (!isCurrentRoomResponse(data)) return;
         if (res.ok) {
           prevParticipantsCount.current = data.participants?.length || 0;
 
@@ -4140,7 +4153,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                         .then(endedData => {
                           isAdvancingRef.current = false;
                           // Refused (409 TOO_EARLY) or failed: stay on the question.
-                          if (endedData && (endedData.status === 'FINISHED' || endedData.status === 'completed')) {
+                          if (endedData && isCurrentRoomResponse(endedData) && (endedData.status === 'FINISHED' || endedData.status === 'completed')) {
                             setRoom(endedData);
                             recordDailyGiftRoomMatch?.();
                             router.push('/challenge/results');
@@ -4167,7 +4180,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                       .then(res => res.json())
                       .then(advData => {
                         isAdvancingRef.current = false;
-                        if (advData) {
+                        if (advData && isCurrentRoomResponse(advData)) {
                           if (advData.status === 'completed' || advData.status === 'FINISHED' || advData.currentQuestionIndex >= totalQ) {
                             recordDailyGiftRoomMatch?.();
                             router.push('/challenge/results');
@@ -4516,7 +4529,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           recordDailyGiftRoomMatch?.();
           router.push('/challenge/results');
           setView('group_game');
-        } else if (payload?.new?.currentQuestionIndex !== undefined && payload.new.currentQuestionIndex > currentChallengeIndex) {
+        } else if (payload?.new?.currentQuestionIndex !== undefined && payload.new.currentQuestionIndex > currentChallengeIndexRef.current) {
+          // Only a real new question resets the question UI. (With the subscribe-time index, every
+          // room update, such as another player's answer, cleared this player's choice.)
           resetQuestionUIState(payload.new.currentQuestionIndex, payload.new);
           setRoom(payload.new);
         }
@@ -4536,7 +4551,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               setView('group_game');
               return;
             }
-            if (payload.currentQuestionIndex !== undefined && payload.currentQuestionIndex > currentChallengeIndex) {
+            if (payload.currentQuestionIndex !== undefined && payload.currentQuestionIndex > currentChallengeIndexRef.current) {
               resetQuestionUIState(payload.currentQuestionIndex, payload.room);
               if (payload.room) setRoom(payload.room);
             }
@@ -5736,7 +5751,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             awayFlag: away,
             timestamp: Date.now()
           })).then(({ data }) => {
-            if (data && data.status) {
+            if (data && data.status && isCurrentRoomResponse(data)) {
               setRoom(data);
             }
           });
@@ -5765,7 +5780,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           })
         }).then(res => res.json()).then(data => {
           if (data?.code === 'STALE_QUESTION') { roomResyncRef.current('stale'); return; } // late answer: re-sync
-          if (data && data.status) {
+          if (data && data.status && isCurrentRoomResponse(data)) {
             setRoom(data);
             if (!isLastQ && data.currentQuestionIndex !== undefined && data.currentQuestionIndex > currentChallengeIndex) {
               resetQuestionUIState(data.currentQuestionIndex, data);
@@ -5953,7 +5968,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           score: newCumulativeScore,
           timestamp: Date.now()
         })).then(({ data }) => {
-          if (data && data.status) {
+          if (data && data.status && isCurrentRoomResponse(data)) {
             setRoom(data);
           }
         });
@@ -5987,7 +6002,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         })
       }).then(res => res.json()).then(data => {
         if (data?.code === 'STALE_QUESTION') { roomResyncRef.current('stale'); return; } // late answer: re-sync
-        if (data && data.status) {
+        if (data && data.status && isCurrentRoomResponse(data)) {
           setRoom(data);
           if (!isLastQ && data.currentQuestionIndex !== undefined && data.currentQuestionIndex > currentChallengeIndex) {
             resetQuestionUIState(data.currentQuestionIndex, data);
@@ -6076,7 +6091,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           isCorrect: false,
           timestamp: Date.now()
         })).then(({ data }) => {
-          if (data && data.status) {
+          if (data && data.status && isCurrentRoomResponse(data)) {
             setRoom(data);
           }
         });
@@ -6104,7 +6119,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         })
       }).then(res => res.json()).then(data => {
         if (data?.code === 'STALE_QUESTION') { roomResyncRef.current('stale'); return; } // late answer: re-sync
-        if (data && data.status) {
+        if (data && data.status && isCurrentRoomResponse(data)) {
           setRoom(data);
           if (!isLastQ && data.currentQuestionIndex !== undefined && data.currentQuestionIndex > currentChallengeIndex) {
             resetQuestionUIState(data.currentQuestionIndex, data);
