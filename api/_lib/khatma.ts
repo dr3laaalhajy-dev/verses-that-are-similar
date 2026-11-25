@@ -16,8 +16,11 @@ export function requiredSeconds(page: number): number {
 
 /** At most this many new pages per player per (UTC) day. */
 export const KHATMA_DAILY_CAP = 300;
-/** Reading time a single report may claim at most (also after a long pause / offline). */
-export const KHATMA_MAX_BUDGET_SECONDS = 600;
+/**
+ * Most reading time one report may claim since the last accepted one (a player who read offline
+ * can catch up to this much at once; the rest follows in later reports). Daily cap still applies.
+ */
+export const KHATMA_MAX_CATCHUP_MS = 60 * 60 * 1000;
 /** Clock / network margin added to the reading time budget. */
 export const KHATMA_SLACK_SECONDS = 30;
 
@@ -44,7 +47,7 @@ export const utcDay = (now: number) => new Date(now).toISOString().slice(0, 10);
 
 /**
  * Which reported pages are accepted now. Reading time budget = seconds since the last accepted
- * report (capped at KHATMA_MAX_BUDGET_SECONDS; no report yet = the cap) + KHATMA_SLACK_SECONDS;
+ * report (capped at KHATMA_MAX_CATCHUP_MS; no report yet = the cap) + KHATMA_SLACK_SECONDS;
  * pages are accepted in order while the sum of their requiredSeconds fits. Daily cap
  * KHATMA_DAILY_CAP new pages.
  */
@@ -65,8 +68,9 @@ export function decideKhatmaPages(row: KhatmaRow | null, reported: unknown, now:
   }
 
   const last = row?.last_report_at ? new Date(row.last_report_at).getTime() : NaN;
-  const elapsed = Number.isFinite(last) ? Math.max(0, (now - last) / 1000) : KHATMA_MAX_BUDGET_SECONDS;
-  const budget = Math.min(elapsed, KHATMA_MAX_BUDGET_SECONDS) + KHATMA_SLACK_SECONDS;
+  const maxCatchup = KHATMA_MAX_CATCHUP_MS / 1000;
+  const elapsed = Number.isFinite(last) ? Math.max(0, (now - last) / 1000) : maxCatchup;
+  const budget = Math.min(elapsed, maxCatchup) + KHATMA_SLACK_SECONDS;
   const usedToday = row?.day === utcDay(now) ? Number(row?.day_pages) || 0 : 0;
 
   const accepted: number[] = [];

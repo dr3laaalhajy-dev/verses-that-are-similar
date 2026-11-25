@@ -12,8 +12,12 @@ import {
   type KhatmaView,
 } from '../lib/khatma';
 
-/** Most pages sent in one batch (the server accepts what the reading time allows; the rest waits). */
-const MAX_BATCH = 30;
+/**
+ * Most pages sent in one batch (≈ 400 bytes). Large enough for the server's whole catch-up
+ * allowance (KHATMA_MAX_CATCHUP_MS = 60 min ≈ 80 pages) in ONE report: the server restarts the
+ * reading-time budget after each accepted report, so splitting it would lose allowance.
+ */
+const MAX_BATCH = 100;
 
 const listeners = new Set<() => void>();
 const notify = () => listeners.forEach((l) => l());

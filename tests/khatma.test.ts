@@ -221,9 +221,21 @@ describe('server checks (decideKhatmaPages)', () => {
     assert.deepEqual(d.accepted, [1, 2], '15 + 30 = 45 s: 20 + 20');
   });
 
-  it('a long pause / offline does not allow hundreds of pages at once (budget capped)', () => {
+  it('read offline: up to 60 min of reading is accepted at once, the rest follows later', () => {
+    assert.equal(server.KHATMA_MAX_CATCHUP_MS, 60 * 60 * 1000);
+    // 6 h offline, 100 pages queued: 60 min + 30 s = 3630 s -> 80 normal pages now
     const d = server.decideKhatmaPages({ read_pages: [], last_report_at: ago(6 * 3600) }, Array.from({ length: 100 }, (_, i) => i + 3), now);
-    assert.equal(d.accepted.length, Math.floor((server.KHATMA_MAX_BUDGET_SECONDS + server.KHATMA_SLACK_SECONDS) / 45));
+    assert.equal(d.accepted.length, Math.floor((server.KHATMA_MAX_CATCHUP_MS / 1000 + server.KHATMA_SLACK_SECONDS) / 45));
+    assert.equal(d.accepted.length, 80);
+    assert.equal(d.deferred.length, 20);
+    // 30 min since the last report: only 30 min (+30 s) worth
+    const half = server.decideKhatmaPages({ read_pages: [], last_report_at: ago(1800) }, Array.from({ length: 100 }, (_, i) => i + 3), now);
+    assert.equal(half.accepted.length, Math.floor((1800 + 30) / 45));
+  });
+
+  it('the daily cap still applies after catching up', () => {
+    const d = server.decideKhatmaPages({ read_pages: [], last_report_at: ago(6 * 3600), day: server.utcDay(now), day_pages: 250 }, Array.from({ length: 100 }, (_, i) => i + 3), now);
+    assert.equal(d.accepted.length, 50);
   });
 
   it('daily cap: 300 new pages per day', () => {
@@ -388,6 +400,12 @@ describe('wiring (app)', () => {
     assert.match(modal, /data-testid="profile-khatma"/);
     assert.match(modal, /الورد القرآني اليومي/);
   });
+  it('one batch can carry the whole 60-minute catch-up (80 pages)', () => {
+    const hook = read('../src/hooks/useKhatma.ts');
+    const m = hook.match(/const MAX_BATCH = (\d+);/);
+    assert.ok(m && Number(m[1]) >= Math.ceil((server.KHATMA_MAX_CATCHUP_MS / 1000 + server.KHATMA_SLACK_SECONDS) / server.PAGE_READ_SECONDS));
+  });
+
   it('batches: every few pages, every few minutes, on hide / close / back online (no per-second sends)', () => {
     const hook = read('../src/hooks/useKhatma.ts');
     assert.match(hook, /if \(markKhatmaPageRead\(key, p\) >= KHATMA_FLUSH_PAGES\) syncKhatma\(key, playerId\);/);
