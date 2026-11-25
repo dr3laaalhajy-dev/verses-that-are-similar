@@ -112,7 +112,7 @@ const seedFinished = (n = 3, hostId = 1) => {
     pp[String(i)] = { name: 'P' + i, score: i, finishTime: Date.now() };
   }
   db.rows('rooms').push({ id: 'old', code: 'OLD111', status: 'FINISHED', player1Id: hostId, playersProgress: pp, currentAnswers: {},
-    questionCount: 5, challengeIds: [], gameMode: 'SURAH', transitionMode: 'SYNC', timePerQuestion: 20, name: 'غرفة',
+    questionCount: 2, challengeIds: [{ id: 50001, type: 'SURAH', keyword: 'a' }, { id: 50002, type: 'SURAH', keyword: 'b' }], gameMode: 'SURAH', transitionMode: 'SYNC', timePerQuestion: 20, name: 'غرفة',
     createdAt: new Date().toISOString() });
 };
 const room = (id: string) => db.rows('rooms').find((r) => r.id === id)!;

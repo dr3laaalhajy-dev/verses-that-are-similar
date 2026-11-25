@@ -471,32 +471,13 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
 
         const { data: allMatching, error: matchErr } = await query;
 
+        // No questions of the chosen types: say so. (The old fallback took any challenges, so a
+        // "complete the verse" room could get audio questions; its result was also overwritten
+        // below, leaving the room with no questions at all.)
         if (matchErr || !allMatching || allMatching.length === 0) {
-          // If the mode is SURAH or COMPLETION, fallback to Quran challenges from STANDARD or any available pool
-          if (typeConditions.includes('SURAH') || typeConditions.includes('COMPLETION')) {
-            const { data: fallbackChallenges } = await supabaseAdmin
-              .from('challenges')
-              .select('*')
-              .limit(maxQuestions);
-            if (fallbackChallenges && fallbackChallenges.length > 0) {
-              selectedChallenges = fallbackChallenges.map((c: any) => {
-                if (typeConditions.includes('SURAH')) {
-                  const surahs = Array.isArray(c.verses) ? Array.from(new Set(c.verses.map((v: any) => v.surah).filter(Boolean))) : [];
-                  return {
-                    ...c,
-                    type: 'SURAH',
-                    correctText: JSON.stringify(surahs.length > 0 ? surahs : [c.category || ''])
-                  };
-                }
-                return c;
-              });
-            }
-          }
-          if (selectedChallenges.length === 0) {
-            return res.status(400).json({ 
-              message: 'لا توجد تحديات متوفرة تطابق هذا التصنيف أو النمط. يرجى اختيار تصنيف آخر.' 
-            })
-          }
+          return res.status(400).json({
+            message: 'لا توجد أسئلة كافية من الأنواع المختارة. يرجى تقليل العدد أو اختيار نوع آخر.'
+          })
         }
 
         const shuffledIds = allMatching.map(c => c.id).sort(() => Math.random() - 0.5)
@@ -2507,44 +2488,13 @@ async function handleRematch(req: VercelRequest, res: VercelResponse) {
     // ─────────────────────────────────────────────────────────────────
     // CASE B: First Player Clicks — Create Brand New Rematch Room
     // ─────────────────────────────────────────────────────────────────
-    const maxQuestions = Number(room.questionCount) || 5;
-
-    let query = supabaseAdmin.from('challenges').select('id');
-    const cats = Array.isArray(room.surahFilters) && room.surahFilters.length > 0
-      ? room.surahFilters
-      : (room.categoryFilter && room.categoryFilter !== "" ? [room.categoryFilter] : []);
-    if (cats.length > 0) {
-      query = query.in('category', cats);
-    }
-
-    const modesList: string[] = room.gameMode ? [room.gameMode] : [];
-    const typeConditions: string[] = [];
-    for (const m of modesList) {
-      const upper = String(m).toUpperCase();
-      if (upper === 'COMPLETION' || upper === 'COMPLETE') typeConditions.push('COMPLETION');
-      else if (upper === 'SURAH') typeConditions.push('SURAH');
-      else if (upper === 'STANDARD' || upper === 'AUDIO') typeConditions.push('STANDARD', 'AUDIO', '');
-    }
-    if (typeConditions.length > 0) {
-      query = query.in('type', Array.from(new Set(typeConditions)));
-    }
-
-    const { data: allMatching } = await query;
-    let selectedIds: any[] = [];
-    const oldIds = new Set(Array.isArray(room.challengeIds) ? room.challengeIds : []);
-
-    if (allMatching && allMatching.length > 0) {
-      const freshPool = allMatching.filter((c: any) => !oldIds.has(c.id));
-      const poolToUse = freshPool.length >= maxQuestions ? freshPool : allMatching;
-      const shuffled = poolToUse.map((c: any) => c.id).sort(() => Math.random() - 0.5);
-      selectedIds = shuffled.slice(0, maxQuestions);
-    }
-
+    // The new round has exactly the types and counts of the round that just finished (the host's
+    // choice). The old code queried the challenges table by gameMode: for a mixed room ('MIXED')
+    // there was no type filter at all, and with no match it fell back to any challenges, mostly
+    // audio (STANDARD).
+    const selectedIds = await buildRematchQuestions(room);
     if (selectedIds.length === 0) {
-      const { data: fallback } = await supabaseAdmin.from('challenges').select('id').limit(maxQuestions * 3);
-      if (fallback && fallback.length > 0) {
-        selectedIds = fallback.map((c: any) => c.id).sort(() => Math.random() - 0.5).slice(0, maxQuestions);
-      }
+      return res.status(409).json({ success: false, message: 'تعذّر تجهيز أسئلة الجولة الجديدة، يرجى إنشاء غرفة جديدة' });
     }
 
     let code = '';
@@ -2595,7 +2545,7 @@ async function handleRematch(req: VercelRequest, res: VercelResponse) {
       status: 'WAITING',
       surahFilters: room.surahFilters || [],
       categoryFilter: room.categoryFilter || "",
-      questionCount: selectedIds.length || maxQuestions,
+      questionCount: selectedIds.length,
       maxPlayers: 999,
       gameMode: room.gameMode || "STANDARD",
       transitionMode: room.transitionMode || "SYNC",
@@ -2694,6 +2644,64 @@ export async function findOrphanRematchRooms(waitingRooms: any[], now: number = 
     if (ids.every(inBiggerRoom)) orphans.add(String(r.id))
   }
   return orphans
+}
+
+/** Question type family: the types a room's question can be shown as. */
+export function questionTypeFamily(q: any): string {
+  const t = String(q?.type ?? '').toUpperCase()
+  if (t === 'STANDARD' || t === 'AUDIO' || t === '') return 'AUDIO'
+  return t
+}
+
+const shuffled = <T,>(list: T[]): T[] => [...list].sort(() => Math.random() - 0.5)
+
+/**
+ * Questions for a "play again" round: the same types and the same count per type as the room's
+ * previous round, never another type. Fresh questions of the same type come from the challenges
+ * table where that is safe (audio; "complete the verse" / "surah name" only when the room has no
+ * juz/surah scope, which the server cannot apply); the rest are the previous round's questions of
+ * that type, reshuffled. Returns question objects (getFullRoom serves them as they are).
+ */
+export async function buildRematchQuestions(room: any): Promise<any[]> {
+  // The previous round's questions (objects as the app built them, or ids of the challenges table).
+  let previous: any[] = Array.isArray(room?.challengeIds) ? room.challengeIds : []
+  if (previous.length > 0 && typeof previous[0] !== 'object') {
+    const { data } = await supabaseAdmin.from('challenges').select('*').in('id', previous as any[])
+    const byId = new Map((data || []).map((c: any) => [String(c.id), c]))
+    previous = previous.map((id: any) => byId.get(String(id))).filter(Boolean)
+  }
+  previous = previous.filter((q: any) => q && typeof q === 'object')
+  if (previous.length === 0) return []
+
+  const filters: any = room?.surahFilters && typeof room.surahFilters === 'object' && !Array.isArray(room.surahFilters) ? room.surahFilters : {}
+  const scopeActive = (Array.isArray(filters.selected_surahs) && filters.selected_surahs.length > 0) ||
+    (Array.isArray(filters.selected_juz) && filters.selected_juz.length > 0 && filters.selected_juz.length < 30)
+  const freshTypes: Record<string, string[]> = { AUDIO: ['STANDARD', 'AUDIO'] }
+  if (!scopeActive) {
+    freshTypes.COMPLETION = ['COMPLETION']
+    freshTypes.SURAH = ['SURAH']
+  }
+
+  const groups = new Map<string, any[]>()
+  for (const q of previous) {
+    const family = questionTypeFamily(q)
+    if (!groups.has(family)) groups.set(family, [])
+    groups.get(family)!.push(q)
+  }
+
+  const usedIds = new Set(previous.map((q: any) => String(q.id)))
+  const result: any[] = []
+  for (const [family, list] of groups) {
+    const count = list.length
+    let fresh: any[] = []
+    if (freshTypes[family]) {
+      const { data } = await supabaseAdmin.from('challenges').select('*').in('type', freshTypes[family])
+      fresh = shuffled((data || []).filter((c: any) => questionTypeFamily(c) === family && !usedIds.has(String(c.id)))).slice(0, count)
+    }
+    fresh.forEach((c: any) => usedIds.add(String(c.id)))
+    result.push(...fresh, ...shuffled(list).slice(0, count - fresh.length))
+  }
+  return shuffled(result)
 }
 
 /** How long a player who lost the claim waits for the winner's room to appear. */

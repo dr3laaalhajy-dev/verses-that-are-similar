@@ -2848,7 +2848,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setRoom(data);
         setPrivateRoomModal({ isOpen: false, room: null, password: '', error: undefined });
         if (data.status === 'PLAYING') {
-          const roomMode = data.gameMode === 'STANDARD' ? 'audio' : (data.gameMode === 'COMPLETION' || data.gameMode === 'ISLAMIC') ? 'complete' : 'surah';
+          // The current question's own type decides the screen (a mixed room has no single mode).
+          const curQType = String(((data.challenges || [])[data.currentQuestionIndex || 0] || {}).type || '').toUpperCase();
+          const roomMode = curQType === 'SURAH' ? 'surah'
+            : (curQType === 'STANDARD' || curQType === 'AUDIO') ? 'audio'
+            : curQType ? 'complete'
+            : data.gameMode === 'STANDARD' ? 'audio' : (data.gameMode === 'COMPLETION' || data.gameMode === 'ISLAMIC') ? 'complete' : 'surah';
           if (
             (roomMode === 'audio' && systemSettings.hideAudioChallenge) ||
             (roomMode === 'complete' && systemSettings.hideCompletionChallenge) ||
@@ -2984,6 +2989,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const count = totalConfiguredQuestions;
 
       let customChallenges: any[] = [];
+      // A type that does not have enough questions is reported, never filled with another type.
+      const shortages: string[] = [];
 
       // 1. Audio challenges
       if (effectiveGameModes.includes('audio') && !systemSettings.hideAudioChallenge) {
@@ -2994,6 +3001,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             return t === 'STANDARD' || t === 'AUDIO' || t === '';
           });
           const picked = [...pool].sort(() => Math.random() - 0.5).slice(0, audioCount);
+          if (picked.length < audioCount) shortages.push(`التحدي الصوتي: المتاح ${picked.length} من ${audioCount}`);
           customChallenges.push(...picked);
         }
       }
@@ -3107,7 +3115,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           });
         }
         const islamicQs = getTargetedIslamicQuestions(allocations, effectiveIslamicLevels, effectiveIslamicCategories);
+        const islamicWanted = Object.values(allocations).reduce((a, b) => a + b, 0);
+        if (islamicQs.length < islamicWanted) shortages.push(`الأسئلة الإسلامية: المتاح ${islamicQs.length} من ${islamicWanted}`);
         customChallenges.push(...islamicQs);
+      }
+
+      if (shortages.length > 0) {
+        const msg = `لا توجد أسئلة كافية: ${shortages.join('، ')}. يرجى تقليل العدد.`;
+        setV1Error(msg);
+        toast.error(msg);
+        return;
       }
 
       // 5. Shuffle all questions randomly
@@ -3391,6 +3408,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         const isIslamicIncluded = effectiveGameModes.includes('islamic');
         let customChallenges: any[] = [];
+        // A type that does not have enough questions is reported, never filled with another type.
+        const shortages: string[] = [];
 
         // 1. Audio
         if (effectiveGameModes.includes('audio') && !systemSettings.hideAudioChallenge) {
@@ -3401,6 +3420,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               return t === 'STANDARD' || t === 'AUDIO' || t === '';
             });
             const picked = [...pool].sort(() => Math.random() - 0.5).slice(0, audioCount);
+          if (picked.length < audioCount) shortages.push(`التحدي الصوتي: المتاح ${picked.length} من ${audioCount}`);
             customChallenges.push(...picked);
           }
         }
@@ -3514,7 +3534,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             });
           }
           const islamicQs = getTargetedIslamicQuestions(allocations, effectiveIslamicLevels, effectiveIslamicCategories);
+          const islamicWanted = Object.values(allocations).reduce((a, b) => a + b, 0);
+          if (islamicQs.length < islamicWanted) shortages.push(`الأسئلة الإسلامية: المتاح ${islamicQs.length} من ${islamicWanted}`);
           customChallenges.push(...islamicQs);
+        }
+
+        if (shortages.length > 0) {
+          toast.error(`لا توجد أسئلة كافية: ${shortages.join('، ')}. يرجى تقليل العدد.`);
+          return false;
         }
 
         // Shuffle
