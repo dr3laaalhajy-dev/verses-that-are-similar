@@ -2,15 +2,17 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence, Variants } from 'framer-motion';
 import { RotateCcw, ZoomIn, ZoomOut } from 'lucide-react';
 import QuranAyahOverlay from './QuranAyahOverlay';
+import { pageTurnTravel, swipePageTurn } from '../lib/mushafSwipe';
 
-// 3D Realistic Page Flip Variants (Arabic RTL Oriented)
+// 3D Realistic Page Flip Variants (Arabic RTL Oriented): the page travels the way the finger
+// moves (next = to the right, previous = to the left), see lib/mushafSwipe.
 const pageFlipVariants: Variants = {
   enter: (direction: 'next' | 'prev') => ({
-    rotateY: direction === 'next' ? 65 : -65,
-    x: direction === 'next' ? 35 : -35,
+    rotateY: -65 * pageTurnTravel(direction),
+    x: -35 * pageTurnTravel(direction),
     opacity: 0,
     scale: 0.95,
-    transformOrigin: direction === 'next' ? 'left center' : 'right center',
+    transformOrigin: direction === 'next' ? 'right center' : 'left center',
     filter: 'brightness(0.8) drop-shadow(0 15px 30px rgba(0,0,0,0.35))',
   }),
   center: {
@@ -26,11 +28,11 @@ const pageFlipVariants: Variants = {
     },
   },
   exit: (direction: 'next' | 'prev') => ({
-    rotateY: direction === 'next' ? -65 : 65,
-    x: direction === 'next' ? -35 : 35,
+    rotateY: 65 * pageTurnTravel(direction),
+    x: 35 * pageTurnTravel(direction),
     opacity: 0,
     scale: 0.95,
-    transformOrigin: direction === 'next' ? 'right center' : 'left center',
+    transformOrigin: direction === 'next' ? 'left center' : 'right center',
     filter: 'brightness(0.65) drop-shadow(0 20px 35px rgba(0,0,0,0.45))',
     transition: {
       duration: 0.38,
@@ -211,16 +213,11 @@ export const QuranZoomViewer: React.FC<QuranZoomViewerProps> = ({
         const touch = e.changedTouches[0];
         const dx = touch.clientX - dragStartRef.current.x;
         const dy = touch.clientY - dragStartRef.current.y;
-        const swipeThreshold = 40;
-
-        if (Math.abs(dx) > swipeThreshold && Math.abs(dx) > Math.abs(dy) * 1.3) {
-          if (dx < 0) {
-            // Swipe left (toward left arrow) -> Next page in Arabic RTL
-            if (pageNumber < 604) onPageTurn?.('next');
-          } else {
-            // Swipe right (toward right arrow) -> Prev page in Arabic RTL
-            if (pageNumber > 1) onPageTurn?.('prev');
-          }
+        // Arabic book: pull the left edge to the right = next, right to left = previous.
+        const turn = swipePageTurn(dx, dy, 40);
+        if (turn) {
+          if (turn === 'next' && pageNumber < 604) onPageTurn?.('next');
+          if (turn === 'prev' && pageNumber > 1) onPageTurn?.('prev');
           return;
         }
       }
@@ -283,16 +280,11 @@ export const QuranZoomViewer: React.FC<QuranZoomViewerProps> = ({
       if (scale <= 1.05) {
         const dx = e.clientX - dragStartRef.current.x;
         const dy = e.clientY - dragStartRef.current.y;
-        const swipeThreshold = 50;
-
-        if (Math.abs(dx) > swipeThreshold && Math.abs(dx) > Math.abs(dy) * 1.3) {
-          if (dx < 0) {
-            // Drag left -> Next page in Arabic RTL
-            if (pageNumber < 604) onPageTurn?.('next');
-          } else {
-            // Drag right -> Prev page in Arabic RTL
-            if (pageNumber > 1) onPageTurn?.('prev');
-          }
+        // Same rule as touch: drag to the right = next, to the left = previous.
+        const turn = swipePageTurn(dx, dy, 50);
+        if (turn) {
+          if (turn === 'next' && pageNumber < 604) onPageTurn?.('next');
+          if (turn === 'prev' && pageNumber > 1) onPageTurn?.('prev');
           return;
         }
       }
