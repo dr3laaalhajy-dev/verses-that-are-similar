@@ -11,6 +11,12 @@
 
 export const ROOM_RESYNC_INTERVAL_MS = 5000;
 
+/**
+ * Safety net outside the game screen: the waiting room (start) and the results page while the room
+ * is still playing (finish) re-read the room this often, in case a realtime event was missed.
+ */
+export const ROOM_SAFETY_POLL_MS = 4000;
+
 type DocLike = Pick<Document, 'addEventListener' | 'removeEventListener'> & { visibilityState: DocumentVisibilityState | string };
 type WinLike = Pick<Window, 'addEventListener' | 'removeEventListener'>;
 

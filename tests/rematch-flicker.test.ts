@@ -162,7 +162,9 @@ describe('app: late answers for an old room and same-question updates', () => {
   const ctx = readFileSync(fileURLToPath(new URL('../src/contexts/AppContext.tsx', import.meta.url)), 'utf8');
 
   it('a late poll answer for a room that is no longer on screen is ignored', () => {
-    assert.match(ctx, /const isCurrentRoomResponse = \(data: any\) => Boolean\(data\?\.id\) && String\(data\.id\) === String\(roomRef\.current\?\.id \?\? ''\);/);
+    assert.match(ctx, /const isCurrentRoomResponse = \(data: any\) => isCurrentRoom\(roomRef, data\);/);
+    const roomState = readFileSync(fileURLToPath(new URL('../src/lib/roomState.ts', import.meta.url)), 'utf8');
+    assert.match(roomState, /return Boolean\(data\?\.id\) && String\(data\.id\) === String\(ref\.current\?\.id \?\? ''\);/);
     assert.match(ctx, /action=poll&roomId=\$\{room\.id\}&playerId=\$\{playerIdParam\}`\);\n\s+const data = await res\.json\(\);\n(\s+\/\/.*\n)+\s+if \(!isCurrentRoomResponse\(data\)\) return;/);
   });
 

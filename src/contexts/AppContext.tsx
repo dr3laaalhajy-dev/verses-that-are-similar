@@ -8,7 +8,7 @@ import {
   Clock, RefreshCw, Globe, Plus, Gamepad2, Trash2, Play, ShoppingBag
 } from 'lucide-react';
 import { presenceWithGrace } from '../lib/leaveGuard';
-import { createSerialQueue, isQuestionTimeUp, postWithRetry, startRoomResync } from '../lib/roomSync';
+import { createSerialQueue, isQuestionTimeUp, postWithRetry, startRoomResync, ROOM_SAFETY_POLL_MS } from '../lib/roomSync';
 import { clearPlayerSession, logoutPlayerSession, replacePlayerSession, setSessionEndedStateReset, takeSessionEndedMessage } from '../lib/playerSession';
 import { quranData } from '../services/QuranRepository';
 import { HADITHS, Hadith } from '../services/HadithRepository';
@@ -83,6 +83,7 @@ import { GoogleGenAI } from '@google/genai';
 import { supabase } from '../services/supabase';
 import { joinRoomChannel, sendRoomBroadcast } from '../lib/roomChannel';
 import { createAwayTracker, AWAY_NO_SCORE_MS, ABSENT_WAIT_MS, type AwayTracker } from '../lib/roomRules';
+import { createRoomSetter, isCurrentRoom } from '../lib/roomState';
 import { friendsRealtimeService } from '../services/friendsRealtimeService';
 import { getRandomIslamicRoomQuestions, getTargetedIslamicQuestions, getTotalIslamicAvailableCount, getIslamicTopicAvailableCount } from '../utils/islamicChallengeHelper';
 import { islamicCategoriesList } from '../data/islamicCategories';
@@ -952,21 +953,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
    * for the previous room (play again: results -> new room) must never bring it back or jump to
    * its results.
    */
-  const isCurrentRoomResponse = (data: any) => Boolean(data?.id) && String(data.id) === String(roomRef.current?.id ?? '');
+  const isCurrentRoomResponse = (data: any) => isCurrentRoom(roomRef, data);
   const [room, _setRoom] = useState<any>(null);
-  const setRoom = (val: any) => {
-    roomRef.current = val;
-    _setRoom(val);
-    if (val && val.id) {
-      try {
-        localStorage.setItem('activeRoomId', String(val.id));
-      } catch (e) { }
-    } else if (!val) {
-      try {
-        localStorage.removeItem('activeRoomId');
-      } catch (e) { }
-    }
-  };
+  // roomRef always holds the room object, also after setRoom(prev => next) (see lib/roomState).
+  const setRoom = createRoomSetter(_setRoom, roomRef);
   // Room sync (see src/lib/roomSync.ts): one serial send queue per player, and the latest resync
   // function (re-assigned every render so it never uses stale state).
   const roomSendQueueRef = useRef(createSerialQueue());
@@ -3926,6 +3916,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  // Safety net: while waiting for the host to start, or on the results page while the others are
+  // still playing, re-run the room poll below every ROOM_SAFETY_POLL_MS (a missed realtime event
+  // would otherwise need a refresh). Stops anywhere else and while the page is hidden.
+  const [roomPollTick, setRoomPollTick] = useState(0);
+  useEffect(() => {
+    if (!room?.id || challengeMode === 'daily') return;
+    const waitingToStart = view === 'group_waiting' && room.status === 'WAITING';
+    const waitingForResults = view === 'group_game' && room.status === 'PLAYING';
+    if (!waitingToStart && !waitingForResults) return;
+    const timer = setInterval(() => {
+      if (typeof document === 'undefined' || document.visibilityState !== 'hidden') setRoomPollTick(n => n + 1);
+    }, ROOM_SAFETY_POLL_MS);
+    return () => clearInterval(timer);
+  }, [room?.id, room?.status, view, challengeMode]);
+
   // Sync room status via Supabase Realtime — legacy HTTP polling replaced with one-time fetch on mount
   // The setInterval was removed: real-time updates now come from postgres_changes / broadcast channels
   useEffect(() => {
@@ -4214,7 +4219,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // Single fetch on effect run — Realtime handles ongoing updates
     poll();
-  }, [room?.id, view, room?.status, currentChallengeIndex, playerName, playerUsername, hasAnsweredCurrentQuestion, challenges, resetQuestionUIState, roomPresenceOnlineIds, playerId, uniquePlayerId, challengeMode]);
+  }, [room?.id, view, room?.status, currentChallengeIndex, playerName, playerUsername, hasAnsweredCurrentQuestion, challenges, resetQuestionUIState, roomPresenceOnlineIds, playerId, uniquePlayerId, challengeMode, roomPollTick]);
 
   // Presence & Connection Management: Track online/offline status & background lifecycle
   useEffect(() => {

@@ -879,7 +879,11 @@ describe('daily left open, then a group room (fix 7)', () => {
     const ctx = await ctxSrc();
     const setView = body(ctx, 'const setView = useCallback', 1500);
     assert.doesNotMatch(setView, /setChallengeMode/);
-    const setRoom = body(ctx, 'const setRoom = (val: any) => {', 500);
-    assert.doesNotMatch(setRoom, /setChallengeMode/);
+    // setRoom is createRoomSetter (src/lib/roomState.ts): it must not switch the mode either.
+    assert.match(ctx, /const setRoom = createRoomSetter\(_setRoom, roomRef\);/);
+    const { readFileSync } = await import('node:fs');
+    const { fileURLToPath } = await import('node:url');
+    const roomState = readFileSync(fileURLToPath(new URL('../src/lib/roomState.ts', import.meta.url)), 'utf8');
+    assert.doesNotMatch(roomState, /setChallengeMode/);
   });
 });
