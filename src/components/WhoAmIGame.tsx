@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { startLeaveGuard } from '../lib/leaveGuard';
 import { supabase } from '../services/supabase';
 import { sendRoomBroadcast } from '../lib/roomChannel';
 import { router } from '../services/router';
@@ -58,19 +57,8 @@ export default function WhoAmIGame({
   const revealingRef = useRef<string | null>(null);
   const queueRef = useRef<any[]>([]);
 
-  // ── Anti-Cheat System with Grace Period (LEAVE_GRACE_MS) ──
-  // Only a really hidden page counts; blur never does. Back within LEAVE_GRACE_MS = nothing happens.
-  const onWithdrawRef = useRef(onWithdraw);
-  onWithdrawRef.current = onWithdraw;
-
-  useEffect(() => {
-    if (!roomId) return;
-    return startLeaveGuard({
-      onLeave: () => {
-        if (typeof onWithdrawRef.current === 'function') onWithdrawRef.current();
-      },
-    });
-  }, [roomId]);
+  // No automatic withdrawal when the player leaves the screen (owner's decision); the manual
+  // withdraw button (onWithdraw) is unchanged.
 
   const round = rounds[rounds.length - 1] || null;
   const roundId = round?.id;

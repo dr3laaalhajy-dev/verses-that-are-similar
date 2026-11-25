@@ -399,8 +399,8 @@ describe('wiring', () => {
     assert.match(ctx, /action: 'advance-question',\s*roomId: roomIdAtTimeout/);
   });
 
-  test('the leave check itself is untouched', async () => {
+  test('no automatic withdrawal when leaving the screen (owner decision; see away-rules tests)', async () => {
     const page = await read('../src/pages/ChallengeGamePage.tsx');
-    assert.match(page, /startLeaveGuard\(/);
+    assert.doesNotMatch(page, /startLeaveGuard\(/);
   });
 });

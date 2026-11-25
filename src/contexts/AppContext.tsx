@@ -82,6 +82,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { GoogleGenAI } from '@google/genai';
 import { supabase } from '../services/supabase';
 import { joinRoomChannel, sendRoomBroadcast } from '../lib/roomChannel';
+import { createAwayTracker, AWAY_NO_SCORE_MS, ABSENT_WAIT_MS, type AwayTracker } from '../lib/roomRules';
 import { friendsRealtimeService } from '../services/friendsRealtimeService';
 import { getRandomIslamicRoomQuestions, getTargetedIslamicQuestions, getTotalIslamicAvailableCount, getIslamicTopicAvailableCount } from '../utils/islamicChallengeHelper';
 import { islamicCategoriesList } from '../data/islamicCategories';
@@ -963,6 +964,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Room sync (see src/lib/roomSync.ts): one serial send queue per player, and the latest resync
   // function (re-assigned every render so it never uses stale state).
   const roomSendQueueRef = useRef(createSerialQueue());
+  // Room questions: was the page hidden longer than AWAY_NO_SCORE_MS during the current one?
+  const awayTrackerRef = useRef<AwayTracker | null>(null);
+  /** This question scores zero (page hidden too long while it was on screen). Rooms only. */
+  const isAwayThisQuestion = () => Boolean(roomRef.current?.id && awayTrackerRef.current?.isAway());
+  const notifyAwayNoScore = () => toast.info(`لم تُحتسب نقاط هذا السؤال لأنك غادرت الشاشة أكثر من ${Math.round(AWAY_NO_SCORE_MS / 1000)} ثوانٍ`);
   const roomResyncRef = useRef<(reason: string) => void>(() => {});
   const roomResyncInFlightRef = useRef(false);
   const prevParticipantsCount = useRef<number>(0);
@@ -3742,6 +3748,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return startRoomResync({ onResync: (reason) => roomResyncRef.current(reason) });
   }, [room?.id, view, room?.status, challengeMode]);
 
+  // Away tracking for the "hidden > AWAY_NO_SCORE_MS = this question scores zero" rule.
+  useEffect(() => {
+    if (!room?.id || view !== 'challenge' || challengeMode === 'daily') return;
+    const tracker = createAwayTracker();
+    awayTrackerRef.current = tracker;
+    return () => {
+      tracker.stop();
+      if (awayTrackerRef.current === tracker) awayTrackerRef.current = null;
+    };
+  }, [room?.id, view, challengeMode]);
+  useEffect(() => {
+    awayTrackerRef.current?.newQuestion();
+  }, [currentChallengeIndex, room?.id]);
+
+  // SYNC: I answered and the only players left are away -> ask the server again once the
+  // absent-player wait (ABSENT_WAIT_MS) is over; the server decides with its own clock.
+  const absentNudgeKey = (() => {
+    if (!room?.id || room.transitionMode === 'ASYNC' || room.status !== 'PLAYING' || !hasAnsweredCurrentQuestion) return '';
+    const answers: any = room.currentAnswers || {};
+    const missingAway = Object.entries((room.playersProgress as any) || {})
+      .filter(([k, p]: [string, any]) => !k.startsWith('__') && k !== '_firstCorrectUserId' && p && typeof p === 'object' &&
+        !p.hasLeft && !p.isResigned && !p.isAbandoned && p.status !== 'abandoned' && !answers[k])
+    if (missingAway.length === 0 || !missingAway.every(([, p]: [string, any]) => p.isOnline === false)) return '';
+    return `${room.id}:${room.currentQuestionIndex}:${missingAway.map(([k]) => k).join(',')}`;
+  })();
+  useEffect(() => {
+    if (!absentNudgeKey) return;
+    const t = setTimeout(() => roomResyncRef.current('interval'), ABSENT_WAIT_MS + 500);
+    return () => clearTimeout(t);
+  }, [absentNudgeKey]);
+
   const handleRoomTimeout = async () => {
     if (!room?.id) return;
     if (room.transitionMode === 'ASYNC') {
@@ -4171,8 +4208,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     window.addEventListener('beforeunload', handleBeforeUnload);
 
+    // Page hidden (other app / tab, screen off) = away; visible / app resumed = back. The server
+    // keeps awaySince for the absent-player wait (ABSENT_WAIT_MS). Never a withdrawal.
+    const handleVisibility = () => sendPresence(document.visibilityState !== 'hidden');
+    const handleResume = () => sendPresence(true);
+    document.addEventListener('visibilitychange', handleVisibility);
+    document.addEventListener('resume', handleResume);
+
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      document.removeEventListener('resume', handleResume);
     };
   }, [room?.id, view, playerName, playerUsername]);
 
@@ -5562,14 +5608,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       const isCorrect = isObjectCorrect || isTextMatch;
       const answer = rawSelected || "لم يتم اختيار إجابة (انتهى الوقت)";
+      // Room: page hidden too long during this question -> it scores zero (only this one).
+      const away = isAwayThisQuestion();
+      if (away && isCorrect) notifyAwayNoScore();
 
       if (isCorrect) {
         setSessionCorrect(prev => prev + 1);
-        setSessionScore(prev => prev + 1);
-        setScore(prev => prev + 1);
+        if (!away) {
+          setSessionScore(prev => prev + 1);
+          setScore(prev => prev + 1);
 
-        // توحيد منح النقاط: نقطة واحدة فقط (+1) عبر الدالة المركزية
-        addPoint({ challengeId: currentQuestion?.id, roomId: room?.id });
+          // توحيد منح النقاط: نقطة واحدة فقط (+1) عبر الدالة المركزية
+          addPoint({ challengeId: currentQuestion?.id, roomId: room?.id });
+        }
 
         setSessionMistakes(prev => [...prev, {
           challenge: currentQuestion,
@@ -5579,12 +5630,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           correctText: rawCorrect,
           type: currentQuestion.type || 'COMPLETION',
           isFullyCorrect: true,
-          pointsEarned: 1,
+          pointsEarned: away ? 0 : 1,
           totalPossible: 1
         }]);
 
         if (view === 'group_game') {
-          syncGroupProgress(false, sessionScore + 1);
+          syncGroupProgress(false, sessionScore + (away ? 0 : 1));
         }
         if (window.navigator.vibrate) window.navigator.vibrate(50);
 
@@ -5655,6 +5706,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             playerId: playerUsername || playerName,
             questionIndex: currentChallengeIndex,
             isCorrect,
+            awayFlag: away,
             timestamp: Date.now()
           })).then(({ data }) => {
             if (data && data.status) {
@@ -5681,6 +5733,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             playerId: playerUsername || playerName,
             questionIndex: room.currentQuestionIndex ?? currentChallengeIndex,
             isCorrect,
+            awayFlag: away,
             timestamp: Date.now()
           })
         }).then(res => res.json()).then(data => {
@@ -5778,15 +5831,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     });
 
+    // Room: page hidden too long during this question -> it scores zero (only this one).
+    const away = isAwayThisQuestion();
     // 1. Unified Base Points: 1 point per correct in-range surah answer
-    const basePoints = matchedRequiredCount * 1;
+    const basePoints = away ? 0 : matchedRequiredCount * 1;
     // 2. Bonus Points: 2 points per correct out-of-range surah (multiplayer ONLY, 0 in solo)
-    const bonusPoints = isMultiplayer ? newlyDiscoveredBonusCount * 2 : 0;
+    const bonusPoints = away ? 0 : (isMultiplayer ? newlyDiscoveredBonusCount * 2 : 0);
     // 3. Question Total Score = (correctRequiredCount * 1) + (correctBonusCount * 2)
     const questionScore = basePoints + bonusPoints;
 
     // Completion condition: all required answers answered (Bonus is strictly decoupled & optional)
     const isFullyCorrect = normalizedRequired.length > 0 && matchedRequiredCount === normalizedRequired.length;
+    if (away && (isFullyCorrect || matchedRequiredCount > 0 || newlyDiscoveredBonusCount > 0)) notifyAwayNoScore();
 
     if (isFullyCorrect) {
       setSessionCorrect(prev => prev + 1);
@@ -5863,6 +5919,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           playerId: playerUsername || playerName,
           questionIndex: currentChallengeIndex,
           isCorrect: isFullyCorrect,
+          awayFlag: away,
           pointsEarned: questionScore,
           basePoints: basePoints,
           bonusPoints: bonusPoints,
@@ -5894,6 +5951,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           playerId: playerUsername || playerName,
           questionIndex: room.currentQuestionIndex ?? currentChallengeIndex,
           isCorrect: isFullyCorrect,
+          awayFlag: away,
           pointsEarned: questionScore,
           basePoints: basePoints,
           bonusPoints: bonusPoints,
@@ -6906,8 +6964,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         startListening();
       }, 400);
 
-      addPoint({ challengeId: currentChallenge?.id, roomId: room?.id });
-      setScore(prev => prev + 1);
+      // Room: no points for a question during which the page stayed hidden too long.
+      if (!isAwayThisQuestion()) {
+        addPoint({ challengeId: currentChallenge?.id, roomId: room?.id });
+        setScore(prev => prev + 1);
+      }
     }
   }, [transcript, targetVerses, matchedIds, KEYWORD, difficulty, wordStates, stopListening, resetTranscript, startListening, keywordWordCount, distinguishingWordCounts]);
 

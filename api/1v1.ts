@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { supabaseAdmin } from './_lib/supabaseAdmin.js'
 import { findPlayerRow, toSafePlayer, selectByAnyEq } from './_lib/playerSecurity.js'
 import { enforcePlayerActor, enforceRoomOwner, getActingPlayer, rejectUnlistedAction, type ActorSpec } from './_lib/playerAuth.js'
+import { ABSENT_WAIT_MS } from './_lib/roomRules.js'
 
 // Actions that act on behalf of a player: with REQUIRE_PLAYER_TOKEN on, the acting player comes
 // from the token; these fields (naming the actor, never another player) must match it.
@@ -143,6 +144,32 @@ export function isRoomPlayerKey(key: string): boolean {
 /** The players of playersProgress (metadata removed). */
 export function roomPlayerEntries(progress: any): [string, any][] {
   return Object.entries(progress || {}).filter(([k, v]) => isRoomPlayerKey(k) && v && typeof v === 'object' && !Array.isArray(v))
+}
+
+/**
+ * SYNC: everyone present answered and the only players without an answer are away (presence
+ * reported offline, playersProgress[id].isOnline === false). Once ABSENT_WAIT_MS has passed
+ * (server clock) since the last answer and since they left, the room may move on; they simply
+ * have no answer for this question and stay in the room. A player who comes back in time is no
+ * longer away and is waited for. Needs at least one present player who answered.
+ */
+export function absentWaitIsOver(room: any, now: number = Date.now()): boolean {
+  if (!room || room.transitionMode === 'ASYNC') return false
+  const curQ = room.currentQuestionIndex || 0
+  const answers: Record<string, any> = (room.currentAnswers as any) || {}
+  const active = roomPlayerEntries(room.playersProgress)
+    .filter(([, p]: [string, any]) => !p.hasLeft && !p.isResigned && !p.isAbandoned && p.status !== 'abandoned')
+  const answerOf = (id: string) => {
+    const a = answers[id]
+    return a && (a.questionIndex === undefined || a.questionIndex === curQ) ? a : null
+  }
+  const answered = active.filter(([id]) => answerOf(id))
+  const missing = active.filter(([id]) => !answerOf(id))
+  if (missing.length === 0 || answered.length === 0) return false
+  if (!missing.every(([, p]: [string, any]) => p.isOnline === false)) return false
+  const lastAnswerAt = Math.max(...answered.map(([id]) => Number(answerOf(id).serverTime ?? answerOf(id).timestamp) || 0))
+  const leftAt = Math.max(...missing.map(([, p]: [string, any]) => Number(p.awaySince ?? p.lastSeen) || 0))
+  return now - Math.max(lastAnswerAt, leftAt) >= ABSENT_WAIT_MS
 }
 
 /** True when every non-withdrawn player has an answer stored for the current SYNC question. */
@@ -1197,7 +1224,8 @@ async function handlePoll(req: VercelRequest, res: VercelResponse) {
 
       // Per player, not a count: currentAnswers also holds '_firstCorrectUserId', which used to be
       // counted as an answer (2 players, the first correct answer => "everyone answered").
-      const allActiveAnswered = haveAllActivePlayersAnswered(room)
+      // Everyone answered, or the only ones missing are away and ABSENT_WAIT_MS has passed.
+      const allActiveAnswered = haveAllActivePlayersAnswered(room) || absentWaitIsOver(room)
       const totalQ = room.questionCount || 5
       const isLastQuestion = curQ >= totalQ - 1
 
@@ -1237,10 +1265,17 @@ async function handleStart(req: VercelRequest, res: VercelResponse) {
 }
 
 async function handleSubmitAnswer(req: VercelRequest, res: VercelResponse) {
-  const { roomId, playerId, questionIndex, isCorrect, timestamp, pointsEarned, basePoints, bonusPoints, score } = req.body
+  const { roomId, playerId, questionIndex, timestamp, score } = req.body
   if (!roomId || !playerId || questionIndex === undefined) {
     return res.status(400).json({ message: 'Missing fields' })
   }
+  // The page stayed hidden longer than AWAY_NO_SCORE_MS during this question: it scores zero
+  // (no points, not correct, no speed bonus). Nothing else happens; the next questions count.
+  const away = req.body?.awayFlag === true
+  const isCorrect = away ? false : req.body?.isCorrect
+  const pointsEarned = away ? 0 : req.body?.pointsEarned
+  const basePoints = away ? 0 : req.body?.basePoints
+  const bonusPoints = away ? 0 : req.body?.bonusPoints
 
   try {
     const player = await findPlayer(playerId)
@@ -1282,7 +1317,9 @@ async function handleSubmitAnswer(req: VercelRequest, res: VercelResponse) {
           questionIndex: Number(questionIndex),
           pointsEarned: qTotal,
           basePoints: qBase,
-          bonusPoints: qBonus
+          bonusPoints: qBonus,
+          ...(away ? { away: true, wasCorrect: Boolean(req.body?.isCorrect) } : {}),
+          serverTime: Date.now()
         }
 
         if (Boolean(isCorrect) || qTotal > 0) {
@@ -1352,7 +1389,9 @@ async function handleSubmitAnswer(req: VercelRequest, res: VercelResponse) {
           questionIndex: Number(questionIndex),
           pointsEarned: qTotal,
           basePoints: qBase,
-          bonusPoints: qBonus
+          bonusPoints: qBonus,
+          ...(away ? { away: true, wasCorrect: Boolean(req.body?.isCorrect) } : {}),
+          serverTime: Date.now()
         }
 
         if (Boolean(isCorrect) && !currentAnswers._firstCorrectUserId) {
@@ -1470,7 +1509,7 @@ async function handleAdvanceQuestion(req: VercelRequest, res: VercelResponse) {
 
     // SYNC: any player may ask, but only once everyone answered or the question's time is over
     // (server clock). Nobody is skipped earlier because they look offline.
-    if ((room as any).transitionMode !== 'ASYNC' && !isQuestionTimeUp(room) && !haveAllActivePlayersAnswered(room)) {
+    if ((room as any).transitionMode !== 'ASYNC' && !isQuestionTimeUp(room) && !haveAllActivePlayersAnswered(room) && !absentWaitIsOver(room)) {
       const fullRoom = await getFullRoom(roomId as string)
       return res.status(409).json({ accepted: false, code: 'TOO_EARLY', room: fullRoom })
     }
@@ -1787,6 +1826,9 @@ async function handlePresence(req: VercelRequest, res: VercelResponse) {
     }
 
     const onlineStatus = isOnline !== false
+    // awaySince (server clock): when the player became away; the absent-player wait counts from it.
+    if (!onlineStatus && playersProgress[pIdStr].isOnline !== false) playersProgress[pIdStr].awaySince = Date.now()
+    if (onlineStatus) delete playersProgress[pIdStr].awaySince
     playersProgress[pIdStr].isOnline = onlineStatus
     playersProgress[pIdStr].lastSeen = Date.now()
 

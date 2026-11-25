@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { LEAVE_GRACE_MS, startLeaveGuard } from '../lib/leaveGuard';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Zap, Loader2, Users, AlertCircle, Trophy, CheckCircle2, XCircle, Plus, ShoppingBag, Settings, LogOut, Trash2, X } from 'lucide-react';
 import { View } from '../types/challenges';
@@ -143,32 +142,9 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
   const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false);
   const isMultiplayer = Boolean(room?.id || (room as any)?.room_code || room?.host_id || (room as any)?.participants?.length);
 
-  // ── Anti-Cheat System with Grace Period (LEAVE_GRACE_MS) ──
-  // Only a really hidden page counts (tab switch, minimised window, app in background); blur,
-  // the notification shade or clicking another window never does. Coming back within
-  // LEAVE_GRACE_MS cancels everything; staying away longer withdraws the player from the room.
-  const leaveAppRef = useRef<any>(app);
-  leaveAppRef.current = app;
-
-  useEffect(() => {
-    // Only active during an in-progress multiplayer group challenge
-    if (!isMultiplayer || !room?.id || (room.status !== 'PLAYING' && room.status !== 'in-progress')) {
-      return;
-    }
-
-    return startLeaveGuard({
-      onLeave: () => {
-        const current = leaveAppRef.current;
-        current?.toast?.error?.(`تم اعتبارك منسحباً لمغادرتك شاشة التحدي لأكثر من ${Math.round(LEAVE_GRACE_MS / 1000)} ثوانٍ`);
-        if (typeof current?.handleWithdraw === 'function') {
-          current.handleWithdraw();
-        } else if (typeof current?.handleResignGroupChallenge === 'function') {
-          current.handleResignGroupChallenge();
-        }
-      },
-    });
-    // `app` is read through a ref: it changes on every render and must not reset the timer.
-  }, [isMultiplayer, room?.id, room?.status]);
+  // No automatic withdrawal when the player leaves the screen or loses the connection (owner's
+  // decision). Only the question during which the page stayed hidden longer than
+  // AWAY_NO_SCORE_MS scores zero (AppContext + server). Manual withdraw and kick are unchanged.
 
   const currentUserId = playerUsername || playerName;
   const isHost = Boolean(
@@ -912,9 +888,11 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
               );
 
               const initial = (p.name || p.username || 'ل').trim().charAt(0);
+              // Away (page hidden / app in background): only a label, never a penalty.
+              const isAway = !isMe && !isWithdrawn && !hasAns && pProg?.isOnline === false;
 
               return (
-                <div key={pId} className="relative flex flex-col items-center shrink-0" title={`${p.name || p.username}${isMe ? ' (أنت)' : ''}${isWithdrawn ? ' (منسحب)' : ''}`}>
+                <div key={pId} className="relative flex flex-col items-center shrink-0" title={`${p.name || p.username}${isMe ? ' (أنت)' : ''}${isWithdrawn ? ' (منسحب)' : ''}${isAway ? ' (غائب)' : ''}`}>
                   <div
                     className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center font-black text-xs border relative transition-all ${
                       isMe ? 'ring-2 ring-emerald-400 border-white' : 'border-white/20'
@@ -948,6 +926,9 @@ export const ChallengeGamePage: React.FC<ChallengeGamePageProps> = ({
                   <span className="text-[9px] text-slate-300 max-w-[42px] truncate mt-0.5 leading-none">
                     {p.name || p.username || 'لاعب'}
                   </span>
+                  {isAway && (
+                    <span className="text-[8px] font-black text-amber-300 leading-none mt-0.5">غائب</span>
+                  )}
                 </div>
               );
             })}
