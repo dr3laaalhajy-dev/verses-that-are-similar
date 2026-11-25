@@ -3,7 +3,8 @@ import { handleCors } from './_lib/cors.js';
 import { getOrGenerateUniquePlayerId } from './_lib/uniquePlayerId.js';
 import { supabaseAdmin } from './_lib/supabaseAdmin.js';
 import { isUsableLookupValue, escapeLikePattern, searchContains } from './_lib/playerSecurity.js';
-import { enforcePlayerActor, rejectUnlistedAction, type ActorSpec } from './_lib/playerAuth.js';
+import { enforcePlayerActor, getActingPlayer, rejectUnlistedAction, type ActorSpec } from './_lib/playerAuth.js';
+import { decideKhatmaPages, khatmaSummary, utcDay, type KhatmaRow } from './_lib/khatma.js';
 
 // Actions that act on behalf of a player (REQUIRE_PLAYER_TOKEN on): the acting player comes from
 // the token and these fields (naming the actor, never the other player) must match it.
@@ -12,6 +13,8 @@ export const ACTOR_SPECS: Record<string, ActorSpec> = {
   'respond-request': { fields: { viewerId: 'id' } },
   'remove-friend': { fields: { viewerId: 'id' } },
   list: { fields: { viewerId: 'id' } },
+  // Khatma progress is always the token's player (playerId is replaced by the token's id).
+  'khatma-progress': { fields: { playerId: 'id' } },
 };
 
 // Actions that need no player token. Anything not here and not in ACTOR_SPECS is refused when
@@ -210,6 +213,46 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    // ========================================================
+    // 0. KHATMA (Quran reading progress)
+    // ========================================================
+    // POST { action: 'khatma-progress', playerId, pages: number[] }: pages read since the last
+    // report (an empty list just returns the player's own progress, page list included). The server checks them (1..604, not already read, reading-time budget since the last
+    // accepted report, daily cap) and merges the accepted ones atomically (khatma_add_pages).
+    if (action === 'khatma-progress') {
+      const acting = getActingPlayer(req);
+      const player = acting ? acting.row : await resolvePlayer(req.body?.playerId);
+      if (!player?.id) return res.status(404).json({ error: 'Player not found' });
+
+      const { data: row } = await supabaseAdmin
+        .from('player_khatma')
+        .select('*')
+        .eq('player_id', player.id)
+        .maybeSingle();
+      const now = Date.now();
+      const decision = decideKhatmaPages(row as KhatmaRow | null, req.body?.pages, now);
+
+      let saved: KhatmaRow | null = row as KhatmaRow | null;
+      if (decision.accepted.length > 0) {
+        const { data, error } = await supabaseAdmin.rpc('khatma_add_pages', {
+          p_player: player.id,
+          p_pages: decision.accepted,
+          p_day: utcDay(now),
+        });
+        if (error) {
+          console.error('[Khatma] khatma_add_pages failed:', error.message);
+          return res.status(500).json({ error: 'تعذّر حفظ تقدّم الختمة' });
+        }
+        saved = (Array.isArray(data) ? data[0] : data) as KhatmaRow;
+      }
+      return res.status(200).json({
+        accepted: decision.accepted,
+        deferred: decision.deferred,
+        dropped: decision.dropped,
+        khatma: khatmaSummary(saved),
+      });
+    }
+
     // ========================================================
     // 1. SEARCH PLAYERS
     // ========================================================
@@ -733,6 +776,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           createdAt: target.createdAt || target.created_at
         },
         wird: wirdStats,
+        khatma: await (async () => {
+          try {
+            const { data: row } = await supabaseAdmin
+              .from('player_khatma')
+              .select('read_pages, completed_count, cycle')
+              .eq('player_id', target.id)
+              .maybeSingle();
+            const { readPages: _list, ...summary } = khatmaSummary(row as KhatmaRow | null);
+            return summary; // counts only: the page list stays private
+          } catch {
+            return null; // table not created yet (SQL 04 not run): the card shows nothing
+          }
+        })(),
         earnedCertificates,
         friendshipStatus,
         friendshipId,

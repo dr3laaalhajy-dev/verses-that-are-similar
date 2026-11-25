@@ -94,6 +94,7 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
       let fetchedPlayer: any = null;
       let fetchedCertificates: any[] = [];
       let fetchedWird: any = null;
+      let fetchedKhatma: any = null;
       let friendshipStatus = (targetPlayer as any).status || 'NONE';
       let friendshipId = null;
 
@@ -160,6 +161,9 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
           if (data?.wird) {
             fetchedWird = data.wird;
           }
+          if (data?.khatma) {
+            fetchedKhatma = data.khatma;
+          }
           if (data?.friendshipStatus) {
             friendshipStatus = data.friendshipStatus;
           }
@@ -192,6 +196,7 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
       setProfileData({
         player: finalPlayer,
         wird: fetchedWird,
+        khatma: fetchedKhatma,
         earnedCertificates: fetchedCertificates,
         friendshipStatus,
         friendshipId,
@@ -468,6 +473,7 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
 
   const player = profileData?.player || targetPlayer;
   const wird = profileData?.wird;
+  const khatma = profileData?.khatma;
   const friendshipStatus = profileData?.friendshipStatus || 'NONE';
   const activeFrame = player?.activeFrame;
 
@@ -651,12 +657,40 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
                   )}
                 </div>
 
-                {/* Quran Wird Progress Card */}
+                {/* Khatma (Quran reading progress): pages really read, separate from the wird schedule */}
+                <div className="bg-white dark:bg-slate-900/80 rounded-xl shadow-sm border border-gray-100 dark:border-slate-800 p-4 space-y-3" data-testid="profile-khatma">
+                  <div className="flex items-center gap-2 text-xs font-bold text-gray-800 dark:text-slate-200">
+                    <BookOpen className="w-4 h-4 text-teal-600" />
+                    <span>ختمة التلاوة</span>
+                  </div>
+                  {khatma ? (
+                    <div className="space-y-2.5">
+                      <div className="flex items-center justify-between text-xs font-bold text-gray-700 dark:text-slate-300">
+                        <span>الصفحات المقروءة: <strong className="font-black text-teal-700 dark:text-teal-400">{khatma.pagesRead}</strong> من {khatma.totalPages}</span>
+                        <span className="text-[11px] text-gray-400">الختمات المكتملة: <strong className="font-black text-gray-700 dark:text-slate-200">{khatma.completedCount}</strong></span>
+                      </div>
+                      <div className="w-full bg-gray-100 dark:bg-slate-700 h-2.5 rounded-full overflow-hidden">
+                        <div
+                          className="bg-gradient-to-r from-teal-500 to-emerald-400 h-full rounded-full transition-all duration-500"
+                          style={{ width: `${khatma.percentage}%` }}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] font-bold text-gray-500 dark:text-gray-400">
+                        <span>نسبة الإنجاز في الختمة الحالية</span>
+                        <span className="font-extrabold text-gray-800 dark:text-slate-200 font-mono">{khatma.percentage}%</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-gray-400 font-bold py-1">لا يوجد تقدّم مسجّل في الختمة بعد</p>
+                  )}
+                </div>
+
+                {/* Quran Wird Progress Card (the daily reading schedule, not the khatma) */}
                 <div className="bg-white dark:bg-slate-900/80 rounded-xl shadow-sm border border-gray-100 dark:border-slate-800 p-4 space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 text-xs font-bold text-gray-800 dark:text-slate-200">
                       <BookOpen className="w-4 h-4 text-emerald-600" />
-                      <span>الورد القرآني وختمة التلاوة</span>
+                      <span>الورد القرآني اليومي</span>
                     </div>
                     {wird?.isActive && (
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200/60">
@@ -681,7 +715,7 @@ export const PublicProfileModal: React.FC<PublicProfileModalProps> = ({
                       </div>
 
                       <div className="flex items-center justify-between text-[11px] font-bold text-gray-500 dark:text-gray-400">
-                        <span>نسبة الإنجاز في الختمة</span>
+                        <span>موضع جدول الورد</span>
                         <span className="font-extrabold text-gray-800 dark:text-slate-200 font-mono">{wird.completionPercentage}%</span>
                       </div>
                     </div>
