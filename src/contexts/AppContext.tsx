@@ -2554,7 +2554,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       } else if (sbRes && !sbRes.error && Array.isArray(sbRes.data)) {
         const formatted = sbRes.data.map((r: any) => {
           const progress = (r.playersProgress as any) || {};
-          const participantCount = Object.keys(progress).length || 1;
+          // Players only: playersProgress also holds __lastReaction / __kicked / __rematch.
+          const participantCount = Object.keys(progress).filter(k => !k.startsWith('__') && k !== '_firstCorrectUserId').length || 1;
           return {
             id: r.id,
             name: r.name || 'غرفة التحدي',

@@ -131,14 +131,26 @@ export function isQuestionTimeUp(room: any, now: number = Date.now()): boolean {
   return now - startedAt >= seconds * 1000 + QUESTION_EXPIRY_SLACK_MS
 }
 
+/**
+ * playersProgress holds players (keyed by player id) and room metadata: __lastReaction, __kicked,
+ * __rematch (play again) and _firstCorrectUserId. Metadata is never a player.
+ */
+export function isRoomPlayerKey(key: string): boolean {
+  return !String(key).startsWith('__') && key !== '_firstCorrectUserId'
+}
+
+/** The players of playersProgress (metadata removed). */
+export function roomPlayerEntries(progress: any): [string, any][] {
+  return Object.entries(progress || {}).filter(([k, v]) => isRoomPlayerKey(k) && v && typeof v === 'object' && !Array.isArray(v))
+}
+
 /** True when every non-withdrawn player has an answer stored for the current SYNC question. */
 export function haveAllActivePlayersAnswered(room: any): boolean {
   const curQ = room?.currentQuestionIndex || 0
   const answers: Record<string, any> = (room?.currentAnswers as any) || {}
   const progress: Record<string, any> = (room?.playersProgress as any) || {}
-  const active = Object.entries(progress).filter(([id, p]: [string, any]) =>
-    id !== '__lastReaction' && id !== '_firstCorrectUserId' &&
-    p && !p.hasLeft && !p.isResigned && !p.isAbandoned && p.status !== 'abandoned')
+  const active = roomPlayerEntries(progress).filter(([, p]: [string, any]) =>
+    !p.hasLeft && !p.isResigned && !p.isAbandoned && p.status !== 'abandoned')
   return active.length > 0 && active.every(([id]) => {
     const a = answers[id]
     return Boolean(a && (a.questionIndex === undefined || a.questionIndex === curQ))
@@ -285,6 +297,7 @@ async function getFullRoom(roomId: string) {
   const curQIndex = room.currentQuestionIndex || 0;
   const validAnswers: Record<string, any> = {};
   for (const [k, v] of Object.entries(answers)) {
+    if (!isRoomPlayerKey(k)) continue // '_firstCorrectUserId' is not an answer
     if (v && (v.questionIndex === undefined || v.questionIndex === curQIndex)) {
       validAnswers[k] = v;
     }
@@ -735,7 +748,7 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
 
       const formattedRooms = (rooms || []).map(r => {
         const progress = (r.playersProgress as any) || {}
-        const participantCount = Object.keys(progress).length || 1
+        const participantCount = Object.keys(progress).filter(isRoomPlayerKey).length || 1
         const host = hostMap.get(r.player1Id)
         return {
           id: r.id,
@@ -790,7 +803,7 @@ function calculateResults(room: any, playersProgress: Record<string, any>) {
   // player.answersCount === room.totalQuestions (or roundHistory.length === totalQuestions or progress === 100)
   // Any player marked as abandoned, resigned, or who did not complete all questions is disqualified: 0 cups, 0 points!
   for (const [pIdStr, pData] of Object.entries(updatedProgress)) {
-    if (pIdStr === '__lastReaction' || !pData || typeof pData !== 'object') continue
+    if (!isRoomPlayerKey(pIdStr) || !pData || typeof pData !== 'object') continue
 
     const isAbandoned = Boolean(
       pData.status === 'abandoned' ||
@@ -840,7 +853,7 @@ function calculateResults(room: any, playersProgress: Record<string, any>) {
   // 2. Award Conditional Early Completion Bonus (+10 pts)
   // Strictly to the first qualified (non-disqualified) finisher with accuracy > 70%
   const finishers = Object.entries(updatedProgress)
-    .filter(([pIdStr, p]) => pIdStr !== '__lastReaction' && !p.isDisqualified && !p.isAbandoned && p.finishTime && typeof p.finishTime === 'number')
+    .filter(([pIdStr, p]) => isRoomPlayerKey(pIdStr) && p && !p.isDisqualified && !p.isAbandoned && p.finishTime && typeof p.finishTime === 'number')
     .sort(([_, a], [__, b]) => (a.finishTime || 0) - (b.finishTime || 0))
 
   for (const [_, p] of finishers) {
@@ -854,7 +867,7 @@ function calculateResults(room: any, playersProgress: Record<string, any>) {
 
   // 3. Compute final total score
   for (const [pIdStr, pData] of Object.entries(updatedProgress)) {
-    if (pIdStr === '__lastReaction' || !pData || typeof pData !== 'object') continue
+    if (!isRoomPlayerKey(pIdStr) || !pData || typeof pData !== 'object') continue
     if (pData.isDisqualified || pData.isAbandoned) {
       pData.score = 0
       pData.finalTotalScore = 0
@@ -872,7 +885,7 @@ function calculateResults(room: any, playersProgress: Record<string, any>) {
 
   // 4. Determine winner by highest final total score among qualified players only!
   const ranked = Object.entries(updatedProgress)
-    .filter(([pIdStr, p]) => pIdStr !== '__lastReaction' && !p.isDisqualified && !p.isAbandoned && p.status !== 'abandoned')
+    .filter(([pIdStr, p]) => isRoomPlayerKey(pIdStr) && p && !p.isDisqualified && !p.isAbandoned && p.status !== 'abandoned')
     .map(([id, p]: [string, any]) => ({
       id: parseInt(id),
       score: p.finalTotalScore || p.score || 0,
@@ -893,7 +906,7 @@ function calculateResults(room: any, playersProgress: Record<string, any>) {
 
   // Ensure all disqualified or abandoned players have 0 trophies and 0 score
   for (const [pIdStr, pData] of Object.entries(updatedProgress)) {
-    if (pIdStr === '__lastReaction' || !pData || typeof pData !== 'object') continue
+    if (!isRoomPlayerKey(pIdStr) || !pData || typeof pData !== 'object') continue
     if (pData.isDisqualified || pData.isAbandoned || pData.status === 'abandoned') {
       pData.trophiesAwarded = 0
       pData.score = 0
@@ -915,7 +928,7 @@ async function applyRoomTrophies(_tx: any, room: any, progress: Record<string, a
   const totalQuestions = room.questionCount || room.totalQuestions || 1;
   const ranked = Object.entries(progress)
     .filter(([id, p]: [string, any]) => {
-      if (id === '__lastReaction' || !p || typeof p !== 'object') return false;
+      if (!isRoomPlayerKey(id) || !p || typeof p !== 'object') return false;
       const isAbandoned = Boolean(
         p.status === 'abandoned' ||
         p.isAbandoned === true ||
@@ -1012,6 +1025,7 @@ function evaluateQuestionScores(
   const updatedProgress: Record<string, any> = { ...playersProgress }
 
   for (const [pIdStr, pData] of Object.entries(updatedProgress)) {
+    if (!isRoomPlayerKey(pIdStr) || !pData || typeof pData !== 'object') continue
     const numId = parseInt(pIdStr)
     const ans = currentAnswers[pIdStr]
 
@@ -1068,7 +1082,7 @@ async function advanceRoomToNextQuestionTx(_tx: any, room: any, currentAnswers: 
   // Requirement 3: Default Wrong Answer for all registered participants without an answer
   // (including disconnected/offline players) so their records remain synchronized.
   const completeAnswers: Record<string, any> = { ...currentAnswers }
-  for (const [pIdStr, pData] of Object.entries(playersProgress)) {
+  for (const [pIdStr, pData] of roomPlayerEntries(playersProgress)) {
     if (!completeAnswers[pIdStr]) {
       completeAnswers[pIdStr] = {
         playerId: parseInt(pIdStr),
@@ -1096,7 +1110,7 @@ async function advanceRoomToNextQuestionTx(_tx: any, room: any, currentAnswers: 
 
   if (isFinished) {
     for (const [pIdStr, ans] of Object.entries(completeAnswers)) {
-      if (finalProgress[pIdStr]) {
+      if (isRoomPlayerKey(pIdStr) && finalProgress[pIdStr]) {
         finalProgress[pIdStr].finishTime = Number(ans?.timestamp) || now
         finalProgress[pIdStr].progress = 100
       }
@@ -1295,9 +1309,9 @@ async function handleSubmitAnswer(req: VercelRequest, res: VercelResponse) {
         }
       }
 
-      const totalParticipants = Object.keys(playersProgress).filter(k => k !== '__lastReaction').length
-      const allFinished = totalParticipants > 0 &&
-        Object.values(playersProgress).every((p: any) => p && (p.finishTime || p.isAbandoned || p.status === 'abandoned' || p.isResigned))
+      const asyncPlayers = roomPlayerEntries(playersProgress)
+      const allFinished = asyncPlayers.length > 0 &&
+        asyncPlayers.every(([, p]: [string, any]) => p.finishTime || p.isAbandoned || p.status === 'abandoned' || p.isResigned)
 
       const { updatedProgress, winnerId } = finalizeRoomScores(room, playersProgress)
 
@@ -1377,13 +1391,12 @@ async function handleSubmitAnswer(req: VercelRequest, res: VercelResponse) {
       // Check if all active online players have now answered the current question
       const curQ = Number(questionIndex)
       const validAnswers = Object.entries(currentAnswers).filter(([k, a]: [string, any]) => {
-        if (k === '__lastReaction' || k === '_firstCorrectUserId') return false
+        if (!isRoomPlayerKey(k)) return false
         return a && (a.questionIndex === undefined || a.questionIndex === curQ)
       })
 
-      const activePlayers = Object.entries(playersProgress).filter(([id, p]: [string, any]) => {
-        if (id === '__lastReaction' || id === '_firstCorrectUserId') return false
-        return p && !p.hasLeft && !p.isResigned && !p.isAbandoned && p.status !== 'abandoned'
+      const activePlayers = roomPlayerEntries(playersProgress).filter(([, p]: [string, any]) => {
+        return !p.hasLeft && !p.isResigned && !p.isAbandoned && p.status !== 'abandoned'
       })
 
       const allActiveAnswered = activePlayers.length > 0 && validAnswers.length >= activePlayers.length
@@ -1516,7 +1529,7 @@ async function handleEndRoom(req: VercelRequest, res: VercelResponse) {
     // Ensure all players have an answer entry for the final question
     const completeAnswers: Record<string, any> = { ...currentAnswers }
     for (const [pIdStr, pData] of Object.entries(playersProgress)) {
-      if (pIdStr === '__lastReaction') continue
+      if (!isRoomPlayerKey(pIdStr)) continue
       if (!completeAnswers[pIdStr]) {
         completeAnswers[pIdStr] = {
           playerId: parseInt(pIdStr),
@@ -1533,7 +1546,7 @@ async function handleEndRoom(req: VercelRequest, res: VercelResponse) {
     const updatedProgress = evaluateQuestionScores(playersProgress, completeAnswers, firstCorrectId)
 
     for (const [pIdStr, ans] of Object.entries(completeAnswers)) {
-      if (pIdStr === '__lastReaction') continue
+      if (!isRoomPlayerKey(pIdStr)) continue
       if (updatedProgress[pIdStr]) {
         updatedProgress[pIdStr].finishTime = Number(ans?.timestamp) || now
         updatedProgress[pIdStr].progress = 100
@@ -1595,8 +1608,7 @@ async function handleSubmitProgress(req: VercelRequest, res: VercelResponse) {
       playersProgress[player.id].progress = 100
       playersProgress[player.id].answersCount = room.questionCount || 5
 
-      const allFinished = Object.entries(playersProgress)
-        .filter(([k]) => k !== '__lastReaction')
+      const allFinished = roomPlayerEntries(playersProgress)
         .every(([_, p]: [string, any]) => p && (p.finishTime || p.isAbandoned || p.status === 'abandoned' || p.isResigned))
       const { updatedProgress, winnerId } = calculateResults(room, playersProgress)
       updateData.playersProgress = updatedProgress
@@ -1964,8 +1976,8 @@ async function handleResign(req: VercelRequest, res: VercelResponse) {
     await supabaseAdmin.from('room_participants').delete().match({ room_id: room.id, name: player.name })
 
     // فحص اللاعبين النشطين المتبقين (الذين لم ينسحبوا)
-    const remainingActivePlayers = Object.entries(playersProgress).filter(([id, p]: [string, any]) => {
-      if (id === '__lastReaction' || id === String(player.id)) return false
+    const remainingActivePlayers = roomPlayerEntries(playersProgress).filter(([id, p]: [string, any]) => {
+      if (id === String(player.id)) return false
       const isPlayerAbandoned = Boolean(
         p?.isAbandoned ||
         p?.status === 'abandoned' ||

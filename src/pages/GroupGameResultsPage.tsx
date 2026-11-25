@@ -250,17 +250,16 @@ export const GroupGameResultsPage: React.FC<GroupGameResultsPageProps> = ({
       // استعلام مباشر للتأكد من عدم وجود غرفة أُنشئت في أجزاء الثانية الماضية
       const { data: liveRoomData } = await supabase
         .from('rooms')
-        .select('nextRoomId, playersProgress, playAgainUsers')
+        .select('playersProgress')
         .eq('id', room.id)
         .maybeSingle();
 
-      const liveNextRoomId =
-        liveRoomData?.nextRoomId ||
-        (liveRoomData?.playersProgress as any)?.__rematch?.nextRoomId ||
-        nextRoomId;
+      // rooms has no nextRoomId / playAgainUsers columns: play-again data lives in playersProgress.__rematch.
+      const liveRematch = (liveRoomData?.playersProgress as any)?.__rematch;
+      const liveNextRoomId = liveRematch?.nextRoomId || nextRoomId;
 
-      if (liveRoomData?.playAgainUsers) {
-        setPlayAgainUsers(liveRoomData.playAgainUsers);
+      if (Array.isArray(liveRematch?.playAgainUsers)) {
+        setPlayAgainUsers(liveRematch.playAgainUsers);
       }
 
       // إذا وُجد nextRoomId: قم بإضافة اللاعب فوراً كمنضم (Joined) وانقله لهذه الغرفة

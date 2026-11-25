@@ -399,3 +399,90 @@ describe('wiring', () => {
     assert.doesNotMatch(src, /player1: prev\?\.player1 \|\| newRow\.player1/);
   });
 });
+
+// ---------------------------------------------------------------------------
+// playersProgress metadata (__rematch, __kicked, __lastReaction, _firstCorrectUserId) is never a player
+// ---------------------------------------------------------------------------
+describe('playersProgress metadata is never counted as a player', () => {
+  let server: any;
+  before(async () => { server = await import('../api/1v1.ts'); });
+
+  const META = () => ({
+    __rematch: { nextRoomId: 'x', playAgainUsers: [{ id: 9, name: 'Z' }], originalHostId: '1' },
+    __kicked: ['p7'],
+    __lastReaction: { type: 'r', emoji: '👍', timestamp: 1 },
+  });
+  /** Room 'g' with players 1 and 2 + all metadata keys. */
+  const seedGame = (extra: Row = {}) => {
+    db = new Db();
+    db.rows('players').push({ id: 1, name: 'P1', username: 'p1' }, { id: 2, name: 'P2', username: 'p2' });
+    db.rows('rooms').push({ id: 'g', code: 'GGG111', status: 'PLAYING', transitionMode: 'SYNC', player1Id: 1, questionCount: 2,
+      currentQuestionIndex: 1, currentAnswers: {}, challengeIds: [], timePerQuestion: 0, createdAt: new Date().toISOString(),
+      playersProgress: { '1': { name: 'P1', score: 0 }, '2': { name: 'P2', score: 0 }, ...META() }, ...extra });
+  };
+  const g = () => room('g');
+  const metaUntouched = () => assert.deepEqual(
+    { __rematch: g().playersProgress.__rematch, __kicked: g().playersProgress.__kicked, __lastReaction: g().playersProgress.__lastReaction },
+    META(), 'metadata left as it was (no score / trophy / answer fields written into it)');
+
+  it('isRoomPlayerKey', () => {
+    for (const k of ['__rematch', '__kicked', '__lastReaction', '_firstCorrectUserId']) assert.equal(server.isRoomPlayerKey(k), false, k);
+    for (const k of ['1', '42', 'ali']) assert.equal(server.isRoomPlayerKey(k), true, k);
+  });
+
+  it('haveAllActivePlayersAnswered ignores metadata', () => {
+    seedGame();
+    g().currentAnswers = { '1': { questionIndex: 1 }, '2': { questionIndex: 1 } };
+    assert.equal(server.haveAllActivePlayersAnswered(g()), true);
+    g().currentAnswers = { '1': { questionIndex: 1 }, _firstCorrectUserId: 1 };
+    assert.equal(server.haveAllActivePlayersAnswered(g()), false);
+  });
+
+  it('SYNC last question: both answer -> results; the winner is a real player; metadata untouched', async () => {
+    seedGame();
+    await call({ action: 'submit-answer', roomId: 'g', playerId: 1, questionIndex: 1, isCorrect: true, score: 1 });
+    assert.equal(g().status, 'PLAYING');
+    await call({ action: 'submit-answer', roomId: 'g', playerId: 2, questionIndex: 1, isCorrect: false });
+    assert.equal(g().status, 'completed');
+    assert.ok(['1', '2'].includes(String(g().winnerId)), `winner ${g().winnerId}`);
+    metaUntouched();
+  });
+
+  it('the room shows "answered 1 of 2" after one correct answer (not 2: _firstCorrectUserId)', async () => {
+    seedGame();
+    const r = await call({ action: 'submit-answer', roomId: 'g', playerId: 1, questionIndex: 1, isCorrect: true });
+    assert.equal(r.body.answeredCount, 1);
+    assert.equal(r.body.participants.length, 2);
+  });
+
+  it('ASYNC: everyone finished -> FINISHED (metadata without finishTime no longer blocks it)', async () => {
+    seedGame({ transitionMode: 'ASYNC', currentQuestionIndex: 0 });
+    for (const pid of [1, 2]) {
+      for (const q of [0, 1]) await call({ action: 'submit-answer', roomId: 'g', playerId: pid, questionIndex: q, isCorrect: true });
+    }
+    assert.equal(g().status, 'FINISHED');
+    metaUntouched();
+  });
+
+  it('results recalculated on a finished room that has __rematch (submit-progress) leave __rematch alone', async () => {
+    seedGame({ status: 'completed' });
+    await call({ action: 'submit-progress', roomId: 'g', playerId: 1, progress: 100, isFinished: true, score: 3 });
+    metaUntouched();
+  });
+
+  it('all real players withdraw -> the game ends (__kicked / __rematch are not "remaining players")', async () => {
+    seedGame();
+    await call({ action: 'resign', roomId: 'g', playerId: 1 });
+    assert.equal(g().status, 'PLAYING');
+    await call({ action: 'resign', roomId: 'g', playerId: 2 });
+    assert.equal(g().status, 'FINISHED');
+  });
+
+  it('advancing a question gives default answers to players only', async () => {
+    seedGame({ currentQuestionIndex: 0, timePerQuestion: 20, questionStartTime: Date.now() - 60_000 });
+    const r = await call({ action: 'advance-question', roomId: 'g', playerId: 1, questionIndex: 0 });
+    assert.equal(r.statusCode, 200);
+    assert.equal(g().currentQuestionIndex, 1);
+    metaUntouched();
+  });
+});
