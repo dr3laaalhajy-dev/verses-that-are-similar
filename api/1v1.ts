@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
+import { randomUUID } from 'node:crypto'
 import { supabaseAdmin } from './_lib/supabaseAdmin.js'
 import { findPlayerRow, toSafePlayer, selectByAnyEq } from './_lib/playerSecurity.js'
 import { enforcePlayerActor, enforceRoomOwner, getActingPlayer, rejectUnlistedAction, type ActorSpec } from './_lib/playerAuth.js'
@@ -736,7 +737,14 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
         return res.status(500).json({ message: 'فشل جلب قائمة الغرف', error: roomsErr.message });
       }
 
-      const hostIds = Array.from(new Set((rooms || []).map(r => r.player1Id).filter(Boolean)));
+      // Orphan play-again rooms (left by the old create-then-delete code): cancelled and hidden.
+      const orphanIds = await findOrphanRematchRooms(rooms || [])
+      if (orphanIds.size > 0) {
+        await supabaseAdmin.from('rooms').update({ status: 'CANCELLED' }).in('id', [...orphanIds]).eq('status', 'WAITING')
+      }
+      const visibleRooms = (rooms || []).filter(r => !orphanIds.has(String(r.id)))
+
+      const hostIds = Array.from(new Set(visibleRooms.map(r => r.player1Id).filter(Boolean)));
       let hostMap = new Map<number, any>();
       if (hostIds.length > 0) {
         const { data: hosts } = await supabaseAdmin
@@ -746,7 +754,7 @@ async function handleCreate(req: VercelRequest, res: VercelResponse) {
         (hosts || []).forEach(h => hostMap.set(h.id, h));
       }
 
-      const formattedRooms = (rooms || []).map(r => {
+      const formattedRooms = visibleRooms.map(r => {
         const progress = (r.playersProgress as any) || {}
         const participantCount = Object.keys(progress).filter(isRoomPlayerKey).length || 1
         const host = hostMap.get(r.player1Id)
@@ -2443,7 +2451,11 @@ async function handleRematch(req: VercelRequest, res: VercelResponse) {
     let deadNextRoomId: string | null = null;
     if (nextRoomId) {
       const { data: nextRow } = await supabaseAdmin.from('rooms').select('id, status').eq('id', nextRoomId).maybeSingle();
-      if (nextRow && nextRow.status === 'WAITING') {
+      if (!nextRow) {
+        // Claimed but not inserted yet: the winner is creating it right now. Wait for it.
+        return await joinWinnerRematchRoom(room.id, player, userInfo, res);
+      }
+      if (nextRow.status === 'WAITING') {
         return await joinExistingRematchRoom(nextRoomId, room, player, userInfo, res);
       }
       deadNextRoomId = String(nextRoomId);
@@ -2509,7 +2521,29 @@ async function handleRematch(req: VercelRequest, res: VercelResponse) {
 
     const baseName = (room.name || 'غرفة التحدي').replace(/\s*\(جولة.*?\)/, '').trim();
     const originalHostId = rematchOriginalHostId(room);
+
+    // Claim the finished room FIRST (atomic: the update only matches while nobody else has set
+    // __rematch, or while it still points to the dead room we replace), with the new room's id
+    // chosen here. Only the winner creates a room; everyone else joins it. (The old code created
+    // a room per press and deleted the losers' rooms afterwards; when that delete failed (its
+    // error was never checked, supabase-js does not throw) the losers' rooms stayed as orphans.)
+    const newRoomId = randomUUID();
+    playAgainUsers = [userInfo];
+    const claimedProgress = {
+      ...roomProgress,
+      __rematch: { nextRoomId: newRoomId, playAgainUsers, originalHostId }
+    };
+    let claim = supabaseAdmin.from('rooms').update({ playersProgress: claimedProgress }).eq('id', room.id);
+    claim = deadNextRoomId
+      ? claim.eq('playersProgress->__rematch->>nextRoomId', deadNextRoomId)
+      : claim.is('playersProgress->__rematch', null);
+    const { data: claimed } = await claim.select('id');
+    if (!Array.isArray(claimed) || claimed.length === 0) {
+      return await joinWinnerRematchRoom(room.id, player, userInfo, res);
+    }
+
     const newRoomInsert: any = {
+      id: newRoomId,
       code,
       name: `${baseName} (جولة جديدة)`,
       isPrivate: Boolean(room.isPrivate),
@@ -2543,35 +2577,12 @@ async function handleRematch(req: VercelRequest, res: VercelResponse) {
 
     if (createError || !newRoom) {
       console.error('Failed to create rematch room:', createError);
+      // Give the claim back (only if it is still ours) so the next press can try again.
+      const { __rematch: _ours, ...withoutClaim } = claimedProgress as any;
+      const restored = roomProgress.__rematch ? { ...withoutClaim, __rematch: roomProgress.__rematch } : withoutClaim;
+      await supabaseAdmin.from('rooms').update({ playersProgress: restored })
+        .eq('id', room.id).eq('playersProgress->__rematch->>nextRoomId', newRoomId);
       return res.status(500).json({ message: 'Failed to create rematch room', error: createError?.message });
-    }
-
-    // Claim the finished room for this play-again room, atomically: the update only matches while
-    // nobody else has set __rematch (or while it still points to the dead room we replace). Two
-    // players pressing at the same moment: one wins, the other's room is deleted and they join
-    // the winner's room. (The old code wrote non-existent columns, so nothing was saved at all.)
-    playAgainUsers = [userInfo];
-    nextRoomId = newRoom.id;
-    const updatedOldProgress = {
-      ...roomProgress,
-      __rematch: { nextRoomId, playAgainUsers, originalHostId }
-    };
-    let claim = supabaseAdmin.from('rooms').update({ playersProgress: updatedOldProgress }).eq('id', room.id);
-    claim = deadNextRoomId
-      ? claim.eq('playersProgress->__rematch->>nextRoomId', deadNextRoomId)
-      : claim.is('playersProgress->__rematch', null);
-    const { data: claimed } = await claim.select('id');
-
-    if (!Array.isArray(claimed) || claimed.length === 0) {
-      try {
-        await supabaseAdmin.from('rooms').delete().eq('id', newRoom.id);
-      } catch (_) {}
-      const { data: winnerOld } = await supabaseAdmin.from('rooms').select('*').eq('id', room.id).maybeSingle();
-      const winnerNextId = (winnerOld?.playersProgress as any)?.__rematch?.nextRoomId;
-      if (!winnerNextId) {
-        return res.status(409).json({ success: false, message: 'حاول مرة أخرى' });
-      }
-      return await joinExistingRematchRoom(winnerNextId, winnerOld, player, userInfo, res);
     }
 
     try {
@@ -2599,6 +2610,73 @@ async function handleRematch(req: VercelRequest, res: VercelResponse) {
     console.error('Error in handleRematch:', err);
     return res.status(500).json({ message: 'Internal Server Error', error: err.message });
   }
+}
+
+/** A play-again room this old with nobody really in it is an orphan. */
+export const ORPHAN_REMATCH_AGE_MS = 60_000
+
+/**
+ * Orphan play-again rooms among `waitingRooms`. Deliberately narrow, so no real room is touched:
+ *  - a play-again room (named "... (جولة جديدة)"), still WAITING, older than ORPHAN_REMATCH_AGE_MS;
+ *  - and nobody is really in it: no players, or every player listed in it is also a player of
+ *    another WAITING / PLAYING room with MORE players (they went to the room everyone joined).
+ *    Two one-player rooms of the same player are both kept (we cannot tell which one is real).
+ * A host waiting alone in their own play-again room is NOT an orphan (they are in no other room).
+ */
+export async function findOrphanRematchRooms(waitingRooms: any[], now: number = Date.now()): Promise<Set<string>> {
+  const candidates = (waitingRooms || []).filter((r: any) =>
+    r && r.status === 'WAITING' &&
+    /\(جولة جديدة\)\s*$/.test(String(r.name || '')) &&
+    r.createdAt && now - new Date(r.createdAt).getTime() > ORPHAN_REMATCH_AGE_MS)
+  const orphans = new Set<string>()
+  if (candidates.length === 0) return orphans
+
+  const activePlayers = (r: any) => roomPlayerEntries(r.playersProgress)
+    .filter(([, p]: [string, any]) => !p.hasLeft && !p.isResigned && !p.isAbandoned && p.status !== 'abandoned')
+    .map(([id]) => id)
+
+  const since = new Date(now - 30 * 60 * 1000).toISOString()
+  const { data: active } = await supabaseAdmin
+    .from('rooms')
+    .select('id, status, playersProgress')
+    .in('status', ['WAITING', 'PLAYING'])
+    .gte('createdAt', since)
+    .limit(500)
+  for (const r of candidates) {
+    const ids = activePlayers(r)
+    const inBiggerRoom = (pid: string) => (active || []).some((o: any) => {
+      if (String(o.id) === String(r.id)) return false
+      const others = activePlayers(o)
+      return others.includes(pid) && others.length > ids.length
+    })
+    if (ids.every(inBiggerRoom)) orphans.add(String(r.id))
+  }
+  return orphans
+}
+
+/** How long a player who lost the claim waits for the winner's room to appear. */
+export const REMATCH_WAIT = { tries: 12, delayMs: 250 }
+
+/**
+ * Someone else claimed the finished room: join their play-again room, waiting briefly while it is
+ * being created. Never creates a room.
+ */
+async function joinWinnerRematchRoom(oldRoomId: string, player: any, userInfo: any, res: VercelResponse) {
+  for (let attempt = 0; attempt < REMATCH_WAIT.tries; attempt++) {
+    const { data: oldRow } = await supabaseAdmin.from('rooms').select('*').eq('id', oldRoomId).maybeSingle()
+    const winnerId = (oldRow?.playersProgress as any)?.__rematch?.nextRoomId
+    if (winnerId) {
+      const { data: winnerRoom } = await supabaseAdmin.from('rooms').select('id, status').eq('id', winnerId).maybeSingle()
+      if (winnerRoom) {
+        if (winnerRoom.status !== 'WAITING') {
+          return res.status(409).json({ success: false, message: 'بدأت الجولة الجديدة بالفعل' })
+        }
+        return await joinExistingRematchRoom(winnerId, oldRow, player, userInfo, res)
+      }
+    }
+    await new Promise((r) => setTimeout(r, REMATCH_WAIT.delayMs))
+  }
+  return res.status(409).json({ success: false, message: 'حاول مرة أخرى' })
 }
 
 async function joinExistingRematchRoom(
@@ -2650,20 +2728,38 @@ async function joinExistingRematchRoom(
     } catch (_) {}
   }
 
-  const nextProg = (existingNextRoom.playersProgress as any) || {};
-  if (!nextProg[player.id]) {
-    nextProg[player.id] = {
+  // Add the player with a compare-and-set on playersProgress.__v (a version stamp; metadata,
+  // never a player): players joining at the same moment would otherwise each write the whole
+  // playersProgress and drop one another. A write that lost the race matches no row: re-read, retry.
+  let joinedNow = false;
+  let current: any = existingNextRoom;
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const prog = { ...((current?.playersProgress as any) || {}) };
+    if (prog[player.id]) break;
+    const version = prog.__v ?? null;
+    prog[player.id] = {
       progress: 0,
       name: player.name,
       joinedAt: Date.now(),
       status: 'joined',
       isOnline: true
     };
-    await supabaseAdmin.from('rooms').update({
-      playersProgress: nextProg,
-      player2Id: existingNextRoom.player2Id || (existingNextRoom.player1Id !== player.id ? player.id : existingNextRoom.player2Id)
+    prog.__v = randomUUID();
+    let write = supabaseAdmin.from('rooms').update({
+      playersProgress: prog,
+      player2Id: current.player2Id || (current.player1Id !== player.id ? player.id : current.player2Id)
     }).eq('id', existingNextRoom.id);
-
+    write = version === null ? write.is('playersProgress->__v', null) : write.eq('playersProgress->>__v', version);
+    const { data: written } = await write.select('id');
+    if (Array.isArray(written) && written.length > 0) {
+      joinedNow = true;
+      break;
+    }
+    await new Promise((r) => setTimeout(r, 20 + Math.floor(Math.random() * 60)));
+    const { data: reread } = await supabaseAdmin.from('rooms').select('*').eq('id', existingNextRoom.id).maybeSingle();
+    current = reread || current;
+  }
+  if (joinedNow) {
     try {
       supabaseAdmin.channel(`room_sync_${existingNextRoom.id}`).send({
         type: 'broadcast',

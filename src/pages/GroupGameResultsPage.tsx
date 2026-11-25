@@ -18,6 +18,9 @@ export interface GroupGameResultsPageProps {
   onWithdraw?: () => void;
 }
 
+/** After a failed "play again", the button stays disabled this long (no rapid re-presses). */
+export const PLAY_AGAIN_COOLDOWN_MS = 3000;
+
 export const GroupGameResultsPage: React.FC<GroupGameResultsPageProps> = ({
   room,
   playerUsername,
@@ -138,6 +141,8 @@ export const GroupGameResultsPage: React.FC<GroupGameResultsPageProps> = ({
   });
   const [isWaitingForRematch, setIsWaitingForRematch] = useState(false);
   const isWaitingForRematchRef = useRef(false);
+  // A "play again" request of this player is on its way (see handlePlayAgain).
+  const rematchInFlightRef = useRef(false);
   const hasNavigatedRef = useRef(false);
 
   useEffect(() => {
@@ -201,7 +206,9 @@ export const GroupGameResultsPage: React.FC<GroupGameResultsPageProps> = ({
       }
 
       // إذا كان اللاعب الحالي قد ضغط مسبقاً على الزر (isWaitingForRematch === true) يتم نقله فوراً
-      if (isWaitingForRematchRef.current && !hasNavigatedRef.current) {
+      // Not while our own request is on its way: the server's answer places this player (a second,
+      // parallel join could overwrite the room's player list).
+      if (isWaitingForRematchRef.current && !hasNavigatedRef.current && !rematchInFlightRef.current) {
         navigateToRematchRoom(incomingNextRoomId);
       }
     };
@@ -238,38 +245,19 @@ export const GroupGameResultsPage: React.FC<GroupGameResultsPageProps> = ({
   );
 
   // دالة النقر على 'العب مرة أخرى'
+  // One request per press, never two: the lock is a ref (set before React re-renders, so a double
+  // tap cannot send a second request). The server joins the play-again room or creates it (only
+  // one player can create it) and waits while it is being created; on failure the button stays
+  // disabled for PLAY_AGAIN_COOLDOWN_MS.
   const handlePlayAgain = async () => {
-    if (isWaitingForRematch || hasNavigatedRef.current || !room?.id) return;
-
-    // 1. فصل النقر عن الانتقال (Decouple Click from Navigation)
-    // تغيير حالة الزر فوراً إلى loading ومنع أي نقرات أخرى
+    if (rematchInFlightRef.current || hasNavigatedRef.current || !room?.id) return;
+    rematchInFlightRef.current = true;
+    isWaitingForRematchRef.current = true;
     setIsWaitingForRematch(true);
+    const startedAt = Date.now();
+    let arrived = false;
 
     try {
-      // 2. التحقق المباشر من قاعدة البيانات (Live DB Check)
-      // استعلام مباشر للتأكد من عدم وجود غرفة أُنشئت في أجزاء الثانية الماضية
-      const { data: liveRoomData } = await supabase
-        .from('rooms')
-        .select('playersProgress')
-        .eq('id', room.id)
-        .maybeSingle();
-
-      // rooms has no nextRoomId / playAgainUsers columns: play-again data lives in playersProgress.__rematch.
-      const liveRematch = (liveRoomData?.playersProgress as any)?.__rematch;
-      const liveNextRoomId = liveRematch?.nextRoomId || nextRoomId;
-
-      if (Array.isArray(liveRematch?.playAgainUsers)) {
-        setPlayAgainUsers(liveRematch.playAgainUsers);
-      }
-
-      // إذا وُجد nextRoomId: قم بإضافة اللاعب فوراً كمنضم (Joined) وانقله لهذه الغرفة
-      if (liveNextRoomId) {
-        setNextRoomId(liveNextRoomId);
-        await navigateToRematchRoom(liveNextRoomId);
-        return;
-      }
-
-      // إذا لم يُوجد: قم بطلب إنشاء الغرفة الجديدة من الخادم (والذي يضمن تحديث nextRoomId ذرّياً)
       const res = await fetch('/api/1v1', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -281,7 +269,7 @@ export const GroupGameResultsPage: React.FC<GroupGameResultsPageProps> = ({
         })
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => null);
       if (data && data.success && data.nextRoomId) {
         setNextRoomId(data.nextRoomId);
         if (data.playAgainUsers) {
@@ -296,12 +284,19 @@ export const GroupGameResultsPage: React.FC<GroupGameResultsPageProps> = ({
         } else {
           await navigateToRematchRoom(data.nextRoomId);
         }
-      } else {
-        setIsWaitingForRematch(false);
+        arrived = true;
       }
     } catch (err) {
       console.error('[Rematch] Error initiating rematch:', err);
-      setIsWaitingForRematch(false);
+    } finally {
+      if (!arrived) {
+        const wait = Math.max(0, PLAY_AGAIN_COOLDOWN_MS - (Date.now() - startedAt));
+        setTimeout(() => {
+          rematchInFlightRef.current = false;
+          isWaitingForRematchRef.current = false;
+          setIsWaitingForRematch(false);
+        }, wait);
+      }
     }
   };
 
@@ -535,7 +530,7 @@ export const GroupGameResultsPage: React.FC<GroupGameResultsPageProps> = ({
                     <RotateCcw className={`w-4 h-4 md:w-5 md:h-5 ${isWaitingForRematch ? 'animate-spin' : ''}`} />
                     <span>
                       {isWaitingForRematch
-                        ? 'جاري تجهيز الغرفة...'
+                        ? 'جارٍ الانضمام…'
                         : nextRoomId && !isCurrentUserInPlayAgain
                           ? 'انضم للتحدي الجديد 🚀'
                           : isCurrentUserInPlayAgain

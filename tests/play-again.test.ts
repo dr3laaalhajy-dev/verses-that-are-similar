@@ -26,6 +26,8 @@ type Row = Record<string, any>;
 const clone = (x: any) => (x === undefined ? x : JSON.parse(JSON.stringify(x)));
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 let maxDelay = 0;
+/** When true, deleting a room "fails" like a real DB error would: { data: null, error }, no throw. */
+let failRoomDeletes = false;
 let broadcasts: { topic: string; event: string; payload: any }[] = [];
 let seq = 0;
 
@@ -52,7 +54,9 @@ class Q {
   in(c: string, vs: any[]) { const s = (vs || []).map(String); this.f.push((r) => s.includes(String(r[c]))); return this; }
   ilike(c: string, v: any) { this.f.push((r) => String(r[c] ?? '').toLowerCase() === String(v).toLowerCase()); return this; }
   limit(n: number) { this.lim = n; return this; }
-  order() { return this; } or() { return this; } neq() { return this; } lt() { return this; } gt() { return this; }
+  lt(c: string, v: any) { this.f.push((r) => String(r[c]) < String(v)); return this; }
+  gte(c: string, v: any) { this.f.push((r) => String(r[c]) >= String(v)); return this; }
+  order() { return this; } or() { return this; } neq() { return this; } gt() { return this; }
   update(p: any) { this.op = 'update'; this.p = p; return this; }
   insert(p: any) { this.op = 'insert'; this.p = p; return this; }
   delete() { this.op = 'delete'; return this; }
@@ -66,7 +70,10 @@ class Q {
     }
     const m = rows.filter((r) => this.f.every((f) => f(r))).slice(0, this.lim);
     if (this.op === 'update') m.forEach((r) => Object.assign(r, clone(this.p)));
-    if (this.op === 'delete') this.db.tables[this.t] = rows.filter((r) => !m.includes(r));
+    if (this.op === 'delete') {
+      if (failRoomDeletes && this.t === 'rooms') return { data: null, error: { message: 'delete failed (e.g. a row still references this room)' } };
+      this.db.tables[this.t] = rows.filter((r) => !m.includes(r));
+    }
     return { data: clone(m), error: null };
   }
   async maybeSingle() { const r = await this.run(); return { data: r.data[0] ?? null, error: null }; }
@@ -86,7 +93,7 @@ before(async () => {
   handler = (await import('../api/1v1.ts')).default;
   playerAuth = await import('../api/_lib/playerAuth.ts');
 });
-beforeEach(() => { delete process.env.REQUIRE_PLAYER_TOKEN; maxDelay = 0; broadcasts = []; });
+beforeEach(() => { delete process.env.REQUIRE_PLAYER_TOKEN; maxDelay = 0; failRoomDeletes = false; broadcasts = []; });
 
 const call = async (body: any) => {
   const res: any = { statusCode: 200, body: null, status(c: number) { this.statusCode = c; return this; }, json(b: any) { this.body = b; return this; }, setHeader() {} };
@@ -109,6 +116,8 @@ const seedFinished = (n = 3, hostId = 1) => {
     createdAt: new Date().toISOString() });
 };
 const room = (id: string) => db.rows('rooms').find((r) => r.id === id)!;
+/** Player ids in a room's playersProgress (metadata such as __v / __rematch left out). */
+const playerKeys = (r: Row) => Object.keys(r.playersProgress || {}).filter((k) => !k.startsWith('__')).sort();
 const oldInfo = () => room('old').playersProgress.__rematch;
 const rematch = (pid: number) => call({ action: 'rematch', roomId: 'old', playerId: pid });
 const join = (roomId: string, pid: number) => call({ action: 'join', roomId, player2Id: pid });
@@ -151,7 +160,7 @@ describe('play again: who leads (rooms.player1Id)', () => {
     assert.equal(cancelByB.statusCode, 403);
     assert.equal(room(id).status, 'WAITING');
     // everybody is in the room
-    assert.deepEqual(Object.keys(room(id).playersProgress).sort(), ['1', '2', '3']);
+    assert.deepEqual(playerKeys(room(id)), ['1', '2', '3']);
   });
 
   it('the original leader never comes back -> the temporary leader stays', async () => {
@@ -195,6 +204,78 @@ describe('play again: who leads (rooms.player1Id)', () => {
   });
 });
 
+describe('play again: no orphan rooms', () => {
+  /** WAITING rooms as list-rooms shows them. */
+  const listed = async () => (await call({ action: 'list-rooms' })).body.rooms as any[];
+
+  for (const n of [2, 3]) {
+    it(`${n} players press at the same moment, deleting a room would fail -> still ONE room, no orphans`, async () => {
+      for (let round = 0; round < 10; round++) {
+        seedFinished(4);
+        failRoomDeletes = true; // the old code relied on deleting the loser's room
+        maxDelay = 6;
+        const presses = await Promise.all([2, 3, 4].slice(0, n).map((pid) => rematch(pid)));
+        maxDelay = 0;
+        const ids = new Set(presses.map((r) => r.body.nextRoomId));
+        assert.equal(ids.size, 1, 'everyone in one room');
+        const waiting = db.rows('rooms').filter((r) => r.status === 'WAITING');
+        assert.equal(waiting.length, 1, `exactly one room was created (got ${waiting.length})`);
+        assert.equal(playerKeys(waiting[0]).length, n, 'nobody lost by simultaneous joins');
+        assert.equal((await listed()).length, 1, 'list-rooms shows one room');
+      }
+    });
+  }
+});
+
+describe('orphan play-again rooms: cleanup in list-rooms', () => {
+  const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
+  const roomRow = (id: string, name: string, players: number[], ageMs: number, status = 'WAITING') => ({
+    id, code: id.toUpperCase(), name, status, player1Id: players[0] ?? 1, createdAt: ago(ageMs), challengeIds: [],
+    playersProgress: Object.fromEntries(players.map((p) => [String(p), { name: 'P' + p, status: 'joined' }])),
+  });
+  const seedLobby = () => {
+    db = new Db();
+    for (let i = 1; i <= 9; i++) db.rows('players').push({ id: i, name: 'P' + i, username: 'p' + i });
+    db.rows('rooms').push(
+      roomRow('w', 'غرفة (جولة جديدة)', [2, 3, 4], 120_000),          // the real play-again room
+      roomRow('o1', 'غرفة (جولة جديدة)', [3], 120_000),                 // orphan: P3 is in "w"
+      roomRow('o2', 'غرفة (جولة جديدة)', [4], 120_000),                 // orphan: P4 is in "w"
+      roomRow('o3', 'غرفة (جولة جديدة)', [], 120_000),                  // orphan: nobody
+      roomRow('lone', 'غرفة (جولة جديدة)', [5], 120_000),               // host waiting alone: real
+      roomRow('fresh', 'غرفة (جولة جديدة)', [2], 10_000),               // too new to judge
+      roomRow('normal', 'غرفة أحمد', [], 120_000),                      // not a play-again room
+      roomRow('s1', 'غرفة (جولة جديدة)', [6], 120_000),                 // same player, two
+      roomRow('s2', 'غرفة (جولة جديدة)', [6], 120_000),                 //   one-player rooms: keep both
+      roomRow('p', 'غرفة (جولة جديدة)', [7, 8], 120_000, 'PLAYING'),
+      roomRow('o4', 'غرفة (جولة جديدة)', [8], 120_000),                 // orphan: P8 plays in "p"
+    );
+  };
+
+  it('orphans are cancelled and hidden; real rooms are untouched', async () => {
+    seedLobby();
+    const r = await call({ action: 'list-rooms' });
+    assert.equal(r.statusCode, 200);
+    const shown = (r.body.rooms as any[]).map((x) => x.id).sort();
+    assert.deepEqual(shown, ['fresh', 'lone', 'normal', 's1', 's2', 'w'].sort());
+    for (const id of ['o1', 'o2', 'o3', 'o4']) assert.equal(room(id).status, 'CANCELLED', id);
+    for (const id of ['w', 'lone', 'fresh', 'normal', 's1', 's2']) assert.equal(room(id).status, 'WAITING', id);
+    assert.equal(room('p').status, 'PLAYING');
+  });
+
+  it('a room with a player in it and in no bigger room is never cleaned', async () => {
+    seedLobby();
+    const orphans = await (await import('../api/1v1.ts')).findOrphanRematchRooms(db.rows('rooms').filter((x) => x.status === 'WAITING'));
+    for (const id of ['w', 'lone', 's1', 's2', 'fresh', 'normal']) assert.equal(orphans.has(id), false, id);
+  });
+
+  it('players who left (hasLeft) do not keep an orphan alive', async () => {
+    seedLobby();
+    room('o1').playersProgress['9'] = { name: 'P9', hasLeft: true };
+    await call({ action: 'list-rooms' });
+    assert.equal(room('o1').status, 'CANCELLED');
+  });
+});
+
 describe('play again: edge cases', () => {
   it('two players press at the same moment -> one room, both in it, the extra room is deleted', async () => {
     for (let round = 0; round < 15; round++) {
@@ -208,7 +289,7 @@ describe('play again: edge cases', () => {
       const id = a.body.nextRoomId;
       const waiting = db.rows('rooms').filter((r) => r.status === 'WAITING');
       assert.equal(waiting.length, 1, 'no orphan room');
-      assert.deepEqual(Object.keys(room(id).playersProgress).sort(), ['2', '3']);
+      assert.deepEqual(playerKeys(room(id)), ['2', '3']);
       assert.ok(['2', '3'].includes(String(room(id).player1Id)));
       // and the original leader still takes over
       await rematch(1);
@@ -484,5 +565,31 @@ describe('playersProgress metadata is never counted as a player', () => {
     assert.equal(r.statusCode, 200);
     assert.equal(g().currentQuestionIndex, 1);
     metaUntouched();
+  });
+});
+
+describe('play again button (results page)', () => {
+  const src = readFileSync(fileURLToPath(new URL('../src/pages/GroupGameResultsPage.tsx', import.meta.url)), 'utf8');
+  const handler = src.slice(src.indexOf('const handlePlayAgain = async'), src.indexOf("if (room?.gameMode === 'WHO_AM_I')"));
+
+  it('a double tap sends one request: the lock is a ref, taken before any await', () => {
+    assert.match(handler, /if \(rematchInFlightRef\.current \|\| hasNavigatedRef\.current \|\| !room\?\.id\) return;\n\s+rematchInFlightRef\.current = true;/);
+    assert.equal((handler.match(/action: 'rematch'/g) || []).length, 1);
+  });
+
+  it('only the server decides (no direct DB read / join that could race a room being created)', () => {
+    assert.doesNotMatch(handler, /supabase\s*\.from\('rooms'\)/);
+    assert.doesNotMatch(handler, /navigateToRematchRoom\(liveNextRoomId\)/);
+  });
+
+  it('shows "جارٍ الانضمام…" and keeps the button disabled for a few seconds after a failure', () => {
+    assert.match(src, /'جارٍ الانضمام…'/);
+    assert.match(src, /disabled=\{isWaitingForRematch\}/);
+    assert.match(src, /export const PLAY_AGAIN_COOLDOWN_MS = 3000;/);
+    assert.match(handler, /PLAY_AGAIN_COOLDOWN_MS - \(Date\.now\(\) - startedAt\)/);
+  });
+
+  it('a broadcast does not start a second join while our own request is on its way', () => {
+    assert.match(src, /isWaitingForRematchRef\.current && !hasNavigatedRef\.current && !rematchInFlightRef\.current/);
   });
 });
