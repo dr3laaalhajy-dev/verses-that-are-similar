@@ -361,6 +361,22 @@ BEGIN
 END
 $do$;
 
+-- ختمة القراءة (نفس supabase/hotfix/04-player-khatma.sql)
+CREATE TABLE IF NOT EXISTS public.player_khatma (
+  player_id       integer     NOT NULL,
+  read_pages      smallint[]  NOT NULL DEFAULT '{}',
+  pages_read      integer     NOT NULL DEFAULT 0,
+  completed_count integer     NOT NULL DEFAULT 0,
+  cycle           integer     NOT NULL DEFAULT 1,
+  last_report_at  timestamptz,
+  day             date,
+  day_pages       integer     NOT NULL DEFAULT 0,
+  updated_at      timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT player_khatma_pkey PRIMARY KEY (player_id),
+  CONSTRAINT player_khatma_player_id_fkey FOREIGN KEY (player_id)
+    REFERENCES public.players(id) ON DELETE CASCADE
+);
+
 -- ربط الـ sequences بأعمدتها (مثل الإنتاج: owned_by)
 ALTER SEQUENCE public.admin_codes_id_seq        OWNED BY public.admin_codes.id;
 ALTER SEQUENCE public.admins_id_seq             OWNED BY public.admins.id;
@@ -426,6 +442,45 @@ end $function$;
 
 GRANT EXECUTE ON FUNCTION public.server_now() TO anon, authenticated, service_role;
 
+-- ختمة القراءة: دمج ذرّي للصفحات (نفس supabase/hotfix/04-player-khatma.sql)
+CREATE OR REPLACE FUNCTION public.khatma_add_pages(p_player integer, p_pages smallint[], p_day date)
+ RETURNS public.player_khatma
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path = public
+AS $function$
+declare
+  r      public.player_khatma;
+  merged smallint[];
+  added  integer;
+begin
+  insert into public.player_khatma (player_id) values (p_player) on conflict (player_id) do nothing;
+  select * into r from public.player_khatma where player_id = p_player for update;
+  select coalesce(array_agg(distinct p order by p), '{}') into merged
+    from unnest(r.read_pages || coalesce(p_pages, '{}'::smallint[])) as p
+   where p between 1 and 604;
+  added := coalesce(array_length(merged, 1), 0) - coalesce(array_length(r.read_pages, 1), 0);
+  if r.day is distinct from p_day then
+    r.day := p_day;
+    r.day_pages := 0;
+  end if;
+  r.day_pages := r.day_pages + greatest(added, 0);
+  if coalesce(array_length(merged, 1), 0) >= 604 then
+    r.completed_count := r.completed_count + 1;
+    r.cycle := r.cycle + 1;
+    merged := '{}';
+  end if;
+  update public.player_khatma
+     set read_pages = merged, pages_read = coalesce(array_length(merged, 1), 0),
+         completed_count = r.completed_count, cycle = r.cycle, day = r.day, day_pages = r.day_pages,
+         last_report_at = now(), updated_at = now()
+   where player_id = p_player
+  returning * into r;
+  return r;
+end $function$;
+REVOKE ALL ON FUNCTION public.khatma_add_pages(integer, smallint[], date) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.khatma_add_pages(integer, smallint[], date) TO service_role;
+
 DROP TRIGGER IF EXISTS trg_who_am_i_mark_submitted ON public.who_am_i_answers;
 CREATE TRIGGER trg_who_am_i_mark_submitted
   AFTER INSERT ON public.who_am_i_answers
@@ -455,6 +510,7 @@ ALTER TABLE public.who_am_i_questions   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.who_am_i_rounds      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.who_am_i_submissions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.player_sessions      ENABLE ROW LEVEL SECURITY;  -- بدون أي سياسة عمداً
+ALTER TABLE public.player_khatma        ENABLE ROW LEVEL SECURITY;  -- بدون أي سياسة عمداً
 
 -- ---------------------------------------------------------------------
 -- 7) السياسات (Policies) — نسخة مطابقة لسياسات الإنتاج (متساهلة كما هي اليوم)
@@ -552,6 +608,7 @@ GRANT  ALL ON ALL TABLES IN SCHEMA public TO service_role;
 -- admins و admin_codes و app_testers: لا شيء لـ anon/authenticated (مثل الإنتاج).
 -- player_sessions: لا شيء لـ anon/authenticated (السيرفر فقط عبر service_role).
 REVOKE ALL ON public.player_sessions FROM PUBLIC;
+REVOKE ALL ON public.player_khatma FROM PUBLIC;
 
 GRANT SELECT, INSERT, UPDATE         ON public.certificates         TO anon, authenticated;
 GRANT SELECT, INSERT, UPDATE         ON public.challenge_progress   TO anon, authenticated;

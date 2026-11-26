@@ -13,6 +13,7 @@ import QuranZoomViewer from "../components/QuranZoomViewer";
 import AyahActionSheet from "../components/AyahActionSheet";
 import UserWirdModal from "../components/UserWirdModal";
 import { useApp } from "../contexts/AppContext";
+import { useKhatmaReading } from "../hooks/useKhatma";
 import { router } from "../services/router";
 
 // أسماء الأجزاء الثلاثين باللغة العربية
@@ -96,6 +97,8 @@ export const MushafPage: React.FC<MushafPageProps> = ({
   setView
 }) => {
   const app = useApp();
+  // Khatma: the page on screen counts as read after requiredSeconds(page) while visible.
+  useKhatmaReading(app, isPageModeActive ? currentPage : null);
   const mushafContainerRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [areFsControlsVisible, setAreFsControlsVisible] = useState(false);

@@ -13,6 +13,7 @@ import { useApp } from '../contexts/AppContext';
 import { getNearestOccasion } from '../services/IslamicOccasionsService';
 import { quranData } from '../services/QuranRepository';
 import { pageBoundaries, juzStartPages } from '../services/PageRepository';
+import { useKhatmaView } from '../hooks/useKhatma';
 
 export interface HomePageProps {
   activeRunningRoom: any;
@@ -270,9 +271,11 @@ export const HomePage: React.FC<HomePageProps> = ({
     }
   };
 
-  // Khatmah Tracker Data
+  // Khatmah: real progress = pages read (lib/khatma), not the last page opened. The last page
+  // opened (currentPage, quran_last_read_page) is only "where to continue".
   const currentPage = app.currentPage || 1;
-  const khatmahPercentage = Math.min(100, Math.max(1, Math.round((currentPage / 604) * 100)));
+  const khatma = useKhatmaView(app);
+  const khatmahPercentage = khatma.percentage;
 
   const currentBoundary = useMemo(() => {
     return pageBoundaries.find((b) => b.page === currentPage) || pageBoundaries[0];
@@ -295,9 +298,9 @@ export const HomePage: React.FC<HomePageProps> = ({
     return (juzNum - 1) * 2 + (currentPage - startOfJuz >= 10 ? 2 : 1);
   }, [currentJuz, currentPage]);
 
-  // Deep Link Resume Reading Wird Handler
-  const handleResumeReadingWird = () => {
-    const targetPage = currentPage || 1;
+  // Deep Link Resume Reading Wird Handler (default: the last page opened)
+  const handleResumeReadingWird = (page?: number) => {
+    const targetPage = page || currentPage || 1;
     if (app.openWird) {
       app.openWird(targetPage);
     } else {
@@ -600,6 +603,20 @@ export const HomePage: React.FC<HomePageProps> = ({
                 <span className="text-[9px] text-slate-400 dark:text-regalGold-300/70 font-semibold block mt-0.5 truncate font-mono">
                   الجزء {toArabicIndic(currentJuz)} • ص {toArabicIndic(currentPage)}
                 </span>
+                <span className="text-[9px] text-emerald-700 dark:text-holyEmerald-400 font-bold block mt-0.5 truncate font-mono" data-testid="khatma-pages">
+                  قُرئ {toArabicIndic(khatma.pagesRead)} من {toArabicIndic(khatma.totalPages)} صفحة
+                  {khatma.completedCount > 0 ? ` • ختمات: ${toArabicIndic(khatma.completedCount)}` : ''}
+                </span>
+                {currentPage >= khatma.totalPages && khatma.remaining > 0 && khatma.firstUnread !== null && (
+                  <button
+                    type="button"
+                    onClick={() => handleResumeReadingWird(khatma.firstUnread!)}
+                    className="text-[9px] font-black text-amber-700 dark:text-amber-300 underline block mt-0.5 text-right cursor-pointer"
+                    data-testid="khatma-remaining"
+                  >
+                    باقي {toArabicIndic(khatma.remaining)} صفحات • إلى ص {toArabicIndic(khatma.firstUnread)}
+                  </button>
+                )}
               </div>
 
               {/* Left: Compact Circular Progress Ring */}
@@ -631,7 +648,7 @@ export const HomePage: React.FC<HomePageProps> = ({
             {/* Bottom: Action Button */}
             <button
               type="button"
-              onClick={handleResumeReadingWird}
+              onClick={() => handleResumeReadingWird()}
               className="w-full py-1.5 px-2.5 rounded-xl bg-brand-emerald hover:bg-[#033628] dark:bg-holyEmerald-600 dark:hover:bg-holyEmerald-500 text-white dark:text-obsidian-950 font-black text-[10px] sm:text-[11px] flex items-center justify-center gap-1 shadow-2xs active:scale-95 transition-all cursor-pointer mt-auto"
             >
               <BookOpen className="w-3 h-3 fill-current" />
