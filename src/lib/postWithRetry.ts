@@ -1,5 +1,5 @@
 /**
- * Same as postWithRetry in src/lib/roomSync.ts on the room branches (unify after merging).
+ * The app's only postWithRetry (room requests via src/lib/roomSync.ts re-export, khatma sync).
  */
 export interface PostResult {
   ok: boolean;
@@ -8,7 +8,8 @@ export interface PostResult {
 }
 
 /**
- * POSTs JSON and retries on network errors and 5xx (not on 4xx: those are real answers). Never throws.
+ * POSTs JSON and retries on network errors and 5xx (not on 4xx: those are real answers such as
+ * STALE_QUESTION). Never throws.
  */
 export async function postWithRetry(
   url: string,

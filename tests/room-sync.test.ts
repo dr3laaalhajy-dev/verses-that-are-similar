@@ -305,6 +305,16 @@ describe('serial queue + retry', () => {
     assert.equal(c, 3);
     assert.equal(r.ok, false);
   });
+
+  it('one shared postWithRetry: rooms (roomSync) and khatma use the same function', async () => {
+    const shared = await import('../src/lib/postWithRetry.ts');
+    assert.equal(postWithRetry, shared.postWithRetry);
+    const { readFileSync } = await import('node:fs');
+    const { fileURLToPath } = await import('node:url');
+    const src = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
+    assert.doesNotMatch(src('../src/lib/roomSync.ts'), /function postWithRetry/);
+    assert.match(src('../src/hooks/useKhatma.ts'), /from '\.\.\/lib\/postWithRetry'/);
+  });
 });
 
 describe('resync triggers', () => {
